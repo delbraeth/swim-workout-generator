@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Swim Workout Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { background: #0f172a; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+    /* Slider styling */
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 3px; outline: none; cursor: pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #3b82f6; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+    input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #3b82f6; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+
+    /* Default visibility for the print/screen helper classes */
+    .print-only { display: none; }
+
+    /* ────────────────────────────────────────────────────────────
+       PRINT STYLES — clean, high-contrast, 8.5×11 B&W
+       Hides all interactive UI, strips backgrounds and colors,
+       and uses serif typography for readable swim-deck output.
+       ──────────────────────────────────────────────────────────── */
+    @media print {
+      @page { size: letter portrait; margin: 0.55in 0.5in; }
+
+      html, body {
+        background: #fff !important;
+        color: #000 !important;
+        font-family: Georgia, "Times New Roman", serif !important;
+        font-size: 11pt !important;
+        line-height: 1.35 !important;
+      }
+
+      /* Strip every background, shadow, and color so output is pure B&W */
+      *, *::before, *::after {
+        background: #fff !important;
+        background-color: #fff !important;
+        background-image: none !important;
+        color: #000 !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+        border-color: #000 !important;
+      }
+
+      .screen-only { display: none !important; }
+      .print-only  { display: block !important; }
+
+      /* Print header — workout title, type, date, totals */
+      .print-header {
+        border-bottom: 2.5pt solid #000 !important;
+        padding-bottom: 8pt !important;
+        margin-bottom: 14pt !important;
+      }
+      .print-title {
+        font-size: 22pt !important;
+        font-weight: 700 !important;
+        margin: 0 !important;
+        letter-spacing: -0.01em !important;
+      }
+      .print-subtitle {
+        font-size: 11pt !important;
+        margin: 4pt 0 0 0 !important;
+        font-style: italic !important;
+      }
+      .print-meta {
+        margin-top: 6pt !important;
+        font-size: 11pt !important;
+      }
+      .print-meta span { margin-right: 18pt !important; }
+      .print-meta b { font-weight: 700 !important; }
+
+      /* Workout block — keep section together on one page when possible */
+      .workout-block {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        border: 1.5pt solid #000 !important;
+        border-radius: 0 !important;
+        margin-bottom: 10pt !important;
+      }
+      .workout-block-header {
+        border-bottom: 1pt solid #000 !important;
+        padding: 5pt 9pt !important;
+        font-size: 11.5pt !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+      }
+      .workout-block-header > div > span:first-child { display: none !important; } /* hide colored dot */
+
+      /* Tables */
+      .workout-block table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+      }
+      .workout-block thead tr { border-bottom: 1pt solid #000 !important; }
+      .workout-block th {
+        padding: 4pt 7pt !important;
+        font-size: 8.5pt !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.04em !important;
+        text-align: left !important;
+        font-family: Georgia, serif !important;
+      }
+      .workout-block td {
+        padding: 5pt 7pt !important;
+        font-size: 10pt !important;
+        font-style: normal !important;
+        border-top: 0.5pt solid #555 !important;
+        font-family: Georgia, serif !important;
+        vertical-align: top !important;
+      }
+      .workout-block td:nth-child(1) { font-weight: 700 !important; white-space: nowrap !important; width: 11% !important; }
+      .workout-block td:nth-child(2) { font-weight: 700 !important; white-space: nowrap !important; width: 12% !important; }
+      .workout-block td:nth-child(3) { width: 42% !important; }
+      .workout-block td:nth-child(4) { font-family: "Courier New", monospace !important; white-space: nowrap !important; width: 12% !important; }
+      .workout-block td:nth-child(5) { font-style: italic !important; width: 23% !important; }
+
+      /* Equipment badges hidden — equipment is in description text */
+      .equipment-badges { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useCallback, useMemo, useEffect } = React;
+
+    // ═══════════════════════════════════════════════════════════════
+    //  HISTORY BACKEND CONFIG — same origin as the page, so all paths
+    //  are relative. The Node server (see server.js + Dockerfile)
+    //  handles GitHub commits server-side; no secrets in this file.
+    // ═══════════════════════════════════════════════════════════════
+    const API_BASE = "/api";                  // same origin
+    const HISTORY_LOCAL_KEY = "swim-workout-history-v1";
+
+    function loadLocalHistory() {
+      try { const raw = localStorage.getItem(HISTORY_LOCAL_KEY); return raw ? JSON.parse(raw) : []; }
+      catch (_) { return []; }
+    }
+    function saveLocalHistory(entries) {
+      try { localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify(entries)); } catch (_) {}
+    }
+    // Merge two entry lists by id (b wins on conflict), then sort newest-first by dateCompleted.
+    function mergeById(a, b) {
+      const map = new Map();
+      for (const e of a) if (e && e.id) map.set(e.id, e);
+      for (const e of b) if (e && e.id) map.set(e.id, e);
+      return [...map.values()].sort((x, y) => (y.dateCompleted || "").localeCompare(x.dateCompleted || ""));
+    }
+    function makeEntryId() {
+      return "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  WORKOUT TYPE METADATA
+    // ═══════════════════════════════════════════════════════════════
+    const WORKOUT_TYPES = [
+      { id: "im",        label: "IM Focus",   emoji: "🦋", description: "All four strokes — fly, back, breast, free",
+        selBg: "#7c3aed", border: "#c4b5fd", badge: "#ede9fe", badgeText: "#5b21b6" },
+      { id: "distance",  label: "Distance",   emoji: "🏊", description: "Longer swims, building aerobic base",
+        selBg: "#2563eb", border: "#93c5fd", badge: "#dbeafe", badgeText: "#1e40af" },
+      { id: "sprint",    label: "Sprint",     emoji: "⚡", description: "Short, fast swims with full recovery",
+        selBg: "#dc2626", border: "#fca5a5", badge: "#fee2e2", badgeText: "#991b1b" },
+      { id: "endurance", label: "Endurance",  emoji: "💪", description: "Steady-state, long continuous swims",
+        selBg: "#16a34a", border: "#86efac", badge: "#dcfce7", badgeText: "#166534" },
+      { id: "technique", label: "Technique",  emoji: "🎯", description: "Drills, kick sets, and stroke refinement",
+        selBg: "#0d9488", border: "#5eead4", badge: "#ccfbf1", badgeText: "#115e59" },
+      { id: "mixed",     label: "Mixed",      emoji: "🔀", description: "Sprints, distance, and drills combined",
+        selBg: "#ea580c", border: "#fdba74", badge: "#ffedd5", badgeText: "#9a3412" },
+    ];
+
+    const SECTION_STYLES = {
+      warmup:   { bg: "#f0f9ff", border: "#bae6fd", headerBg: "#e0f2fe", headerText: "#075985", dot: "#0ea5e9" },
+      drill:    { bg: "#f0fdfa", border: "#99f6e4", headerBg: "#ccfbf1", headerText: "#134e4a", dot: "#14b8a6" },
+      main:     { bg: "#f8fafc", border: "#e2e8f0", headerBg: "#334155", headerText: "#ffffff", dot: "#64748b" },
+      cooldown: { bg: "#f9fafb", border: "#e5e7eb", headerBg: "#f3f4f6", headerText: "#374151", dot: "#9ca3af" },
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    //  WORKOUT DATA — all options as flat arrays
+    //  Every totalYards value is verified: sum of (reps × dist)
+    // ═══════════════════════════════════════════════════════════════
+
+    const WARMUP_OPTIONS = [
+      { totalYards: 400, sets: [
+          { reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, steady breathing" },
+        ]},
+      { totalYards: 400, sets: [
+          { reps: 1, dist: 200, desc: "Easy Freestyle", interval: "No interval", focus: "Settle into rhythm" },
+          { reps: 4, dist:  50, desc: "25 Drill / 25 Easy Swim (stroke choice)", interval: "On :60", focus: "Feel for the water" },
+        ]},
+      { totalYards: 400, sets: [
+          { reps: 1, dist: 300, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Gradually wake up" },
+          { reps: 4, dist:  25, desc: "Kick (no board, streamlined)", interval: "On :40", focus: "Loosen hips and ankles" },
+        ]},
+      { totalYards: 500, sets: [
+          { reps: 1, dist: 400, desc: "Freestyle — easy, focus on long stroke", interval: "No interval", focus: "Prime the aerobic engine" },
+          { reps: 4, dist:  25, desc: "Backstroke — easy, open the shoulders", interval: "On :45", focus: "Counter the freestyle pull" },
+        ]},
+    ];
+
+    const DRILL_OPTIONS = {
+      im: [
+        { totalYards: 300, sets: [
+            { reps: 4, dist: 75, desc: "25 Fly Drill / 25 Back Drill / 25 Breast Drill", interval: "On 1:45", focus: "Feel each IM stroke before the main set" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 8, dist: 25, desc: "Stroke drills — 2 each: fly, back, breast, free", interval: "On :40",  focus: "Isolate technique per stroke" },
+            { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:10", focus: "Kick rhythm for each stroke", eq: "kick" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:10", focus: "Wake up legs across IM strokes",   eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — alternate 50 free / 50 stroke choice", interval: "On 1:55", focus: "Upper-body warm-up before IM main set", eq: "pull" },
+          ]},
+      ],
+      distance: [
+        { totalYards: 300, sets: [
+            { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 1:55", focus: "Prime the pull pattern before distance work", eq: "pull" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 1:50", focus: "Upper body endurance, long stroke", eq: "pull" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 6, dist: 50, desc: "Kick — moderate effort (board optional)",  interval: "On 1:10", focus: "Leg conditioning and body position", eq: "kick" },
+            { reps: 2, dist: 50, desc: "Freestyle — build from easy to moderate",  interval: "On 1:00", focus: "Prime aerobic engine for main set" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — moderate, focus on body position (board optional)", interval: "On 1:10", focus: "Leg conditioning before distance work", eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — long stroke, focus on catch",              interval: "On 1:55", focus: "Upper-body endurance setup",            eq: "pull" },
+          ]},
+      ],
+      sprint: [
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "25 Easy / 25 Build (NOT all-out yet)", interval: "On 1:15", focus: "Activate fast-twitch, save energy for main set" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 4, dist: 50, desc: "Underwater kick off wall (10m), easy swim out", interval: "On 1:00", focus: "Streamline and underwaters", eq: "underkick" },
+            { reps: 4, dist: 25, desc: "Tempo build — easy to fast (not all out)",       interval: "On :45",  focus: "Turnover prep, no sprinting yet" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — sharp tempo build (board optional)",   interval: "On 1:10", focus: "Activate sprint leg drive",   eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — fast build, focus on hand speed", interval: "On 1:50", focus: "Activate upper-body power",   eq: "pull" },
+          ]},
+      ],
+      endurance: [
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Pull (buoy) — easy/moderate, relaxed stroke", interval: "On 1:55", focus: "Aerobic priming, conserve energy", eq: "pull" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 1, dist: 300, desc: "Kick — choice of stroke, easy pace (board optional)", interval: "No interval", focus: "Leg warm-up, build base endurance", eq: "kick" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — easy/moderate, focus on rhythm (board optional)", interval: "On 1:10", focus: "Aerobic leg priming",        eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — relaxed stroke, long extension",          interval: "On 1:55", focus: "Aerobic upper-body warm-up", eq: "pull" },
+          ]},
+      ],
+      technique: [
+        { totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "25 Drill / 25 Easy Swim — same stroke each rep (your choice)", interval: "On 1:05", focus: "Feel the drill translate into the swim" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 (same stroke)", interval: "On 1:40", focus: "Layered skill building — kick → drill → apply", eq: "kickPart" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — slow, focus on stroke alignment (board optional)", interval: "On 1:10", focus: "Isolate leg technique",     eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — high-elbow catch, long stroke",            interval: "On 1:55", focus: "Isolate upper-body technique", eq: "pull" },
+          ]},
+      ],
+      mixed: [
+        { totalYards: 300, sets: [
+            { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 — stroke choice", interval: "On 1:40", focus: "All-around activation before varied main set", eq: "kickPart" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 6, dist: 50, desc: "Drill/Swim by 25 — your stroke choice",    interval: "On 1:00", focus: "Skill warm-up" },
+            { reps: 4, dist: 25, desc: "Fast tempo (not all out) — choice stroke",  interval: "On :45",  focus: "Activate speed system" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — moderate, choice of stroke (board optional)", interval: "On 1:10", focus: "Leg activation",                eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — moderate, smooth rotation",           interval: "On 1:50", focus: "Upper-body warm-up before mix", eq: "pull" },
+          ]},
+      ],
+    };
+
+    const MAIN_OPTIONS = {
+      im: [
+        { label: "IM Descend", totalYards: 1000, sets: [
+            { reps: 2, dist: 200, desc: "IM — easy effort, focus on stroke order",       interval: "On 4:00", focus: "Smooth fly→back→breast→free transitions" },
+            { reps: 4, dist: 100, desc: "IM — moderate to strong, descend 1→4",          interval: "On 2:10", focus: "Each rep a little faster" },
+            { reps: 4, dist:  50, desc: "IM — fast effort, hold technique under fatigue", interval: "On 1:15", focus: "Power through each stroke" },
+          ]},
+        { label: "Stroke Focus + IM", totalYards: 1100, sets: [
+            { reps: 4, dist: 100, desc: "IM — moderate, smooth transitions",                       interval: "On 2:15", focus: "Establish stroke order under load" },
+            { reps: 8, dist:  50, desc: "2 each stroke: fly/back/breast/free, descend each pair",  interval: "On 1:10", focus: "Individual stroke speed" },
+            { reps: 4, dist:  75, desc: "50 IM + 25 Free strong",                                  interval: "On 1:40", focus: "Combine strokes, finish fast" },
+          ]},
+        { label: "IM Pyramid", totalYards: 1000, sets: [
+            { reps: 1, dist: 100, desc: "IM — easy",              interval: "On 2:30", focus: "Set your baseline" },
+            { reps: 1, dist: 200, desc: "IM — moderate",          interval: "On 4:30", focus: "Build into it" },
+            { reps: 1, dist: 400, desc: "IM — strong, sustained", interval: "On 8:30", focus: "Test your aerobic fitness" },
+            { reps: 1, dist: 200, desc: "IM — moderate",          interval: "On 4:30", focus: "Hang on — tired strokes" },
+            { reps: 1, dist: 100, desc: "IM — ALL OUT finish",    interval: "On 3:00", focus: "Empty the tank" },
+          ]},
+        { label: "Broken IM 200s", totalYards: 1100, sets: [
+            { reps: 4, dist: 200, desc: "Broken IM — 50 fly :10R, 50 back :10R, 50 breast :10R, 50 free", interval: "On 5:00", focus: "Hold race pace through each stroke with mini-rests" },
+            { reps: 4, dist:  75, desc: "IM transitions — 50 IM + 25 Free strong",                        interval: "On 1:40", focus: "Sharpen the change-overs between strokes" },
+          ]},
+        { label: "IM Stroke Rotation", totalYards: 1200, sets: [
+            { reps: 4, dist: 100, desc: "Choice non-free stroke — strong, hold form",       interval: "On 2:15", focus: "Pick your weakest stroke for extra work" },
+            { reps: 4, dist: 100, desc: "100 IM — moderate, smooth transitions",            interval: "On 2:10", focus: "Apply per-stroke quality to the full IM" },
+            { reps: 4, dist: 100, desc: "Freestyle — strong, descend 1→4 (close the set)",  interval: "On 1:50", focus: "Finish the set with speed in the legs" },
+          ]},
+        { label: "Pull + IM Combo", totalYards: 1100, sets: [
+            { reps: 3, dist: 200, desc: "Pull (buoy) — alternate strokes by 50 (free / non-free)", interval: "On 3:45", focus: "Long-stroke pull pattern across IM strokes", eq: "pull" },
+            { reps: 5, dist: 100, desc: "IM — moderate to fast, descend 1→5",                       interval: "On 2:10", focus: "Build from controlled to strong, smooth transitions" },
+          ]},
+      ],
+      distance: [
+        { label: "200s Descend", totalYards: 1000, sets: [
+            { reps: 5, dist: 200, desc: "Freestyle — descend 1→5 (each one faster)", interval: "On 3:30", focus: "Find your pace early, build the whole way through" },
+          ]},
+        { label: "400s Descend", totalYards: 1200, sets: [
+            { reps: 3, dist: 400, desc: "Freestyle — descend 1→3 (each one faster than the last)", interval: "On 7:30", focus: "Negative split within each; fastest on #3" },
+          ]},
+        { label: "200s + 100s", totalYards: 1200, sets: [
+            { reps: 4, dist: 200, desc: "Freestyle — moderate to strong, descend 1→4", interval: "On 3:30", focus: "Hold form as pace increases" },
+            { reps: 4, dist: 100, desc: "Freestyle — fast (near threshold)",            interval: "On 1:50", focus: "Maintain stroke length at speed" },
+          ]},
+        { label: "Distance Ladder", totalYards: 1100, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — aerobic/moderate",        interval: "On 8:00", focus: "Long steady effort, build pace" },
+            { reps: 2, dist: 200, desc: "Freestyle — moderate/fast, descend",  interval: "On 3:45", focus: "Find race pace, each one faster" },
+            { reps: 3, dist: 100, desc: "Freestyle — fast, under threshold",   interval: "On 1:55", focus: "Sustain speed under accumulated load" },
+          ]},
+        { label: "Broken 500s", totalYards: 1200, sets: [
+            { reps: 2, dist: 500, desc: "Broken 500 free — 5×100 with :15 rest, hold target pace", interval: "On 11:00", focus: "Race-pace simulation across long distance" },
+            { reps: 2, dist: 100, desc: "Easy freestyle — active recovery between blocks",         interval: "On 2:00",  focus: "Clear lactate, get ready for next block" },
+          ]},
+        { label: "Pull + Swim Threshold", totalYards: 1200, sets: [
+            { reps: 4, dist: 200, desc: "Pull (buoy) — strong, hold technique under load", interval: "On 3:45", focus: "Upper-body endurance at threshold pace", eq: "pull" },
+            { reps: 4, dist: 100, desc: "Freestyle swim — match the pull pace",             interval: "On 1:50", focus: "Translate pull strength into full stroke" },
+          ]},
+        { label: "Long Aerobic Build", totalYards: 1200, sets: [
+            { reps: 1, dist: 800, desc: "Freestyle — negative split (second 400 faster than first)", interval: "On 14:30", focus: "Pace control over distance, build gradually" },
+            { reps: 4, dist: 100, desc: "Freestyle — strong, finish the workout",                     interval: "On 1:55",  focus: "Hold form despite fatigue" },
+          ]},
+      ],
+      sprint: [
+        { label: "Sprint Ladder", totalYards: 1000, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — 75 easy + last 25 ALL OUT",    interval: "On 2:30", focus: "Save energy, unleash on last length" },
+            { reps: 8, dist:  50, desc: "Choice of stroke — 25 easy + 25 ALL OUT",  interval: "On 1:45", focus: "Maximum speed on second 25" },
+            { reps: 8, dist:  25, desc: "Freestyle — ALL OUT sprint",               interval: "On 1:00", focus: "Top-end speed — best times of the workout" },
+          ]},
+        { label: "Pure Speed", totalYards: 1050, sets: [
+            { reps: 10, dist:  50, desc: "Choice of stroke — ALL OUT every rep",        interval: "On 2:00", focus: "Full effort every rep — if it isn't hard, go harder" },
+            { reps:  4, dist: 100, desc: "Freestyle — easy/moderate (active recovery)", interval: "On 2:00", focus: "Keep moving, clear the lactic acid" },
+            { reps:  6, dist:  25, desc: "Choice of stroke — sprint to the wall",       interval: "On :55",  focus: "Hold top-end speed even as fatigue builds" },
+          ]},
+        { label: "Race Pace Blocks", totalYards: 1000, sets: [
+            { reps: 6, dist:  50, desc: "Choice — build to ALL OUT by final 25",    interval: "On 2:00",               focus: "Race simulation — explosive finish" },
+            { reps: 1, dist: 200, desc: "Easy recovery freestyle",                   interval: "4:00 rest before next", focus: "Full recovery" },
+            { reps: 8, dist:  50, desc: "Choice — ALL OUT (full recovery between)",  interval: "On 2:30",               focus: "Max velocity — no holding back" },
+            { reps: 4, dist:  25, desc: "Choice — absolute sprint to finish",        interval: "On 1:00",               focus: "End on pure speed" },
+          ]},
+        { label: "Sprint Pyramid Up & Down", totalYards: 1000, sets: [
+            { reps: 1, dist:  25, desc: "Choice stroke — ALL OUT",                            interval: "On :45",  focus: "Wake up top-end speed" },
+            { reps: 1, dist:  50, desc: "Choice stroke — ALL OUT",                            interval: "On 1:30", focus: "Build the ladder" },
+            { reps: 1, dist:  75, desc: "Choice stroke — ALL OUT",                            interval: "On 2:15", focus: "Hold longer" },
+            { reps: 1, dist: 100, desc: "Choice stroke — ALL OUT",                            interval: "On 3:00", focus: "Peak of pyramid" },
+            { reps: 1, dist:  75, desc: "Choice stroke — ALL OUT",                            interval: "On 2:15", focus: "Speed under fatigue" },
+            { reps: 1, dist:  50, desc: "Choice stroke — ALL OUT",                            interval: "On 1:30", focus: "Find top speed again" },
+            { reps: 1, dist:  25, desc: "Choice stroke — ALL OUT (best 25 of the workout)",   interval: "On :45",  focus: "Final blast" },
+            { reps: 1, dist: 200, desc: "Easy choice — full recovery before second block",    interval: "On 4:00", focus: "Active recovery" },
+            { reps: 4, dist: 100, desc: "Freestyle — 75 easy + last 25 ALL OUT",              interval: "On 2:00", focus: "Finish with controlled speed work" },
+          ]},
+        { label: "Anaerobic Capacity", totalYards: 1000, sets: [
+            { reps: 8, dist:  50, desc: "Choice stroke — ALL OUT, short rest (test the system)", interval: "On 1:15", focus: "Max effort with limited recovery — no holding back" },
+            { reps: 4, dist: 100, desc: "Easy freestyle — between sprint blocks",                 interval: "On 2:00", focus: "Clear lactate, regroup" },
+            { reps: 4, dist:  50, desc: "Choice stroke — ALL OUT, longer rest",                   interval: "On 2:00", focus: "Pure speed after fatigue accumulated" },
+          ]},
+        { label: "Sprint Pull Power", totalYards: 1000, sets: [
+            { reps: 6, dist:  50, desc: "Pull (buoy) — fast, drive arm speed", interval: "On 1:15", focus: "Upper-body sprint mechanics, max stroke rate", eq: "pull" },
+            { reps: 1, dist: 200, desc: "Easy freestyle — recovery",            interval: "On 4:00", focus: "Reset between blocks" },
+            { reps: 8, dist:  25, desc: "Freestyle — ALL OUT, max turnover",    interval: "On :45",  focus: "Apply pull power into full sprint" },
+            { reps: 6, dist:  50, desc: "Choice — fast, descend 1→6",           interval: "On 1:30", focus: "Each one faster, finish strongest" },
+          ]},
+      ],
+      endurance: [
+        { label: "Aerobic Ladder", totalYards: 1000, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — easy (RPE 5/10)",      interval: "On 8:00", focus: "Settle in, controlled breathing" },
+            { reps: 1, dist: 300, desc: "Freestyle — moderate (RPE 6/10)",  interval: "On 5:45", focus: "Find your sustainable tempo" },
+            { reps: 1, dist: 200, desc: "Freestyle — strong (RPE 7/10)",    interval: "On 3:45", focus: "Push the pace — hold your form" },
+            { reps: 1, dist: 100, desc: "Freestyle — near max (RPE 8+/10)", interval: "On 2:00", focus: "Empty the aerobic tank" },
+          ]},
+        { label: "Long Steady State", totalYards: 1200, sets: [
+            { reps: 2, dist: 600, desc: "Freestyle — steady aerobic pace (RPE 6/10), no intervals", interval: "On 11:30", focus: "Comfortable effort you can sustain 20+ min" },
+          ]},
+        { label: "Progressive Build", totalYards: 1200, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — easy (RPE 5/10)",       interval: "On 8:00", focus: "Aerobic base — controlled breathing" },
+            { reps: 1, dist: 400, desc: "Freestyle — moderate (RPE 6-7/10)", interval: "On 7:45", focus: "Find your tempo" },
+            { reps: 1, dist: 400, desc: "Freestyle — strong (RPE 7-8/10)",   interval: "On 7:30", focus: "Push lactate threshold — hold stroke form" },
+          ]},
+        { label: "Threshold Tempo", totalYards: 1200, sets: [
+            { reps: 4, dist: 300, desc: "Freestyle — threshold pace (RPE 7-8/10). Hold SAME pace all 4 reps.", interval: "On 5:30", focus: "Aerobic ceiling — maintain form under sustained effort" },
+          ]},
+        { label: "Pull Endurance", totalYards: 1200, sets: [
+            { reps: 1, dist: 600, desc: "Pull (buoy) — steady aerobic, focus on long stroke", interval: "On 11:00", focus: "Build pull endurance, smooth and rhythmic", eq: "pull" },
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate, descend 1→4",                 interval: "On 2:00",  focus: "Add intensity to the same pull pattern",   eq: "pull" },
+            { reps: 1, dist: 200, desc: "Freestyle swim — apply pull catch into full stroke",  interval: "On 3:45",  focus: "Carry the catch over to swimming" },
+          ]},
+        { label: "Mile Pace Builder", totalYards: 1200, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — find your mile pace (RPE 7/10)", interval: "On 7:30", focus: "Establish your sustainable race pace" },
+            { reps: 1, dist: 100, desc: "Easy backstroke — recovery",                  interval: "On 2:00", focus: "Reset between efforts" },
+            { reps: 1, dist: 400, desc: "Freestyle — match the first 400 pace",        interval: "On 7:30", focus: "Repeat the same effort fatigued" },
+            { reps: 1, dist: 100, desc: "Easy backstroke — recovery",                  interval: "On 2:00", focus: "Final reset" },
+            { reps: 2, dist: 100, desc: "Freestyle — slightly faster than 400 pace",   interval: "On 1:55", focus: "Practice closing speed at the end of a mile" },
+          ]},
+        { label: "Aerobic Capacity Set", totalYards: 1300, sets: [
+            { reps: 6, dist: 150, desc: "Freestyle — strong aerobic effort (RPE 7-8/10)", interval: "On 2:45", focus: "Sustained mid-distance work, hold form throughout" },
+            { reps: 4, dist: 100, desc: "Freestyle — finish strong (RPE 8/10)",            interval: "On 1:50", focus: "Push lactate threshold under accumulated fatigue" },
+          ]},
+      ],
+      technique: [
+        { label: "Kick + Drill + Swim", totalYards: 1000, sets: [
+            { reps: 8, dist:  75, desc: "25 Kick / 25 Drill / 25 Swim — same stroke each rep (your choice)", interval: "On 1:45", focus: "Apply the drill directly into the swim", eq: "kickPart" },
+            { reps: 4, dist: 100, desc: "Pull (buoy) — focus on high-elbow catch, long stroke",              interval: "On 1:55", focus: "Sculpt the perfect pull pattern", eq: "pull" },
+          ]},
+        { label: "Freestyle Drill Progression", totalYards: 1000, sets: [
+            { reps: 4, dist:  50, desc: "Kick only — no board, streamlined off wall",     interval: "On 1:15", focus: "Core rotation, balanced two-beat kick" },
+            { reps: 4, dist:  50, desc: "Single-arm drill (alternate arms by 25)",         interval: "On 1:10", focus: "Lead arm extension, shoulder-driven rotation" },
+            { reps: 4, dist:  50, desc: "Catch-up drill — touch hands at extension",       interval: "On 1:05", focus: "Full extension before pulling" },
+            { reps: 4, dist: 100, desc: "Freestyle swim — integrate all drilled elements", interval: "On 1:50", focus: "Swim slowly, feel everything" },
+          ]},
+        { label: "All-Stroke Technique", totalYards: 1100, sets: [
+            { reps: 4, dist: 100, desc: "Choice of stroke — SLOW, perfect form over speed",              interval: "On 2:30", focus: "No rushing — technique over pace" },
+            { reps: 8, dist:  50, desc: "2 each: fly drill / back drill / breast drill / free drill",    interval: "On 1:10", focus: "Key isolation drill for each stroke" },
+            { reps: 4, dist:  75, desc: "25 Drill + 50 Swim (same stroke — apply what you drilled)",    interval: "On 1:40", focus: "Bridge drill into real swimming" },
+          ]},
+        { label: "Kick-Heavy Day", totalYards: 1100, sets: [
+            { reps: 8, dist:  50, desc: "Kick — alternate stroke choice every 50",         interval: "On 1:30", focus: "Develop kick across all strokes",     eq: "kick" },
+            { reps: 4, dist:  75, desc: "25 Kick / 25 Drill / 25 Swim — same stroke",       interval: "On 1:40", focus: "Translate kick rhythm into swim",      eq: "kickPart" },
+            { reps: 4, dist: 100, desc: "Freestyle — relaxed swim, apply leg work",         interval: "On 2:00", focus: "Apply leg conditioning into the stroke" },
+          ]},
+        { label: "Catch + Pull Focus", totalYards: 1100, sets: [
+            { reps: 4, dist:  50, desc: "Sculling drill — head-first, focus on hand pressure", interval: "On 1:15", focus: "Feel the water against your forearm" },
+            { reps: 4, dist: 100, desc: "Pull (buoy) — count strokes per 25, minimize",         interval: "On 1:55", focus: "Long efficient pull, max distance per stroke", eq: "pull" },
+            { reps: 4, dist:  75, desc: "25 Pull + 50 Swim — carry the catch into the stroke",  interval: "On 1:40", focus: "Bridge pull mechanics into full freestyle",     eq: "pull" },
+            { reps: 2, dist: 100, desc: "Freestyle — relaxed, smooth, apply everything",         interval: "On 2:00", focus: "Integrate the work into normal swimming" },
+          ]},
+        { label: "Stroke Count Awareness", totalYards: 1000, sets: [
+            { reps: 4, dist:  50, desc: "Freestyle — count strokes per 25, set baseline",          interval: "On 1:10", focus: "Establish your normal stroke count" },
+            { reps: 4, dist:  50, desc: "Freestyle — same speed, REDUCE strokes by 1-2",           interval: "On 1:10", focus: "Reach further, swim taller" },
+            { reps: 4, dist:  50, desc: "Freestyle — go FASTER without adding strokes",             interval: "On 1:10", focus: "Faster turnover, same length" },
+            { reps: 4, dist: 100, desc: "Freestyle — apply the count target across longer swim",    interval: "On 1:50", focus: "Sustain efficiency over distance" },
+          ]},
+      ],
+      mixed: [
+        { label: "Compact Mix", totalYards: 1000, sets: [
+            { reps: 3, dist: 200, desc: "Freestyle — aerobic, descend 1→3",         interval: "On 3:30", focus: "Distance base at controlled effort" },
+            { reps: 4, dist: 100, desc: "IM or choice — moderate to fast, descend",  interval: "On 2:00", focus: "Mix strokes, build intensity" },
+          ]},
+        { label: "Speed + Distance Mix", totalYards: 1400, sets: [
+            { reps: 4, dist: 200, desc: "Freestyle — moderate to strong, descend 1→4",  interval: "On 3:45",               focus: "Distance base — stay aerobic" },
+            { reps: 1, dist: 200, desc: "Easy backstroke — active recovery",             interval: "4:00 before next block", focus: "Recover while moving" },
+            { reps: 8, dist:  50, desc: "Choice of stroke — ALL OUT sprint",             interval: "On 1:45",               focus: "Speed work after accumulated fatigue" },
+          ]},
+        { label: "3-Part Mix", totalYards: 1200, sets: [
+            { reps: 3, dist: 200, desc: "Freestyle — strong aerobic",                          interval: "On 3:30", focus: "Build aerobic capacity" },
+            { reps: 6, dist:  50, desc: "25 Drill / 25 Swim — stroke choice",                  interval: "On 1:05", focus: "Technique reset mid-workout" },
+            { reps: 3, dist: 100, desc: "IM or stroke choice — moderate to fast, descend 1→3", interval: "On 2:00", focus: "Finish strong on the last one" },
+          ]},
+        { label: "Mixed Pyramid", totalYards: 1400, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — aerobic, controlled effort",  interval: "On 7:30", focus: "Establish aerobic base" },
+            { reps: 2, dist: 200, desc: "Choice of stroke — moderate to fast",     interval: "On 3:30", focus: "Pick up the pace, find threshold" },
+            { reps: 4, dist: 100, desc: "IM or choice — hard effort",              interval: "On 2:00", focus: "Push lactate threshold" },
+            { reps: 4, dist:  50, desc: "Sprint — choice stroke, ALL OUT",         interval: "On 1:30", focus: "Top-end speed" },
+          ]},
+        { label: "Pull + Kick Mix", totalYards: 1100, sets: [
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate, focus on catch",  interval: "On 1:55", focus: "Upper-body block",                               eq: "pull" },
+            { reps: 1, dist: 100, desc: "Easy freestyle — transition",              interval: "On 2:00", focus: "Reset between blocks" },
+            { reps: 4, dist:  50, desc: "Kick — moderate effort (board optional)",  interval: "On 1:10", focus: "Lower-body block",                               eq: "kick" },
+            { reps: 4, dist: 100, desc: "Freestyle — strong, integrate both",       interval: "On 1:55", focus: "Apply pull + kick into full stroke" },
+          ]},
+        { label: "Sprint Recovery Cycles", totalYards: 1200, sets: [
+            { reps: 6, dist: 100, desc: "50 ALL OUT / 50 easy (immediately)",          interval: "On 2:00", focus: "Practice rapid recovery between hard efforts" },
+            { reps: 1, dist: 200, desc: "Easy backstroke — full recovery",              interval: "On 4:00", focus: "Active recovery between blocks" },
+            { reps: 4, dist: 100, desc: "Freestyle — strong, hold near-threshold pace", interval: "On 1:55", focus: "Sustained effort with the lactate already there" },
+          ]},
+        { label: "IM-Free-Choice Triplets", totalYards: 1200, sets: [
+            { reps: 4, dist: 100, desc: "IM — moderate, focus on transitions",          interval: "On 2:10", focus: "Smooth stroke order under control" },
+            { reps: 4, dist: 100, desc: "Freestyle — descend 1→4 (each faster)",         interval: "On 1:50", focus: "Build pace round to round" },
+            { reps: 4, dist: 100, desc: "Choice stroke (non-free) — strong, hold form", interval: "On 2:10", focus: "Pick your weakest stroke for variety" },
+          ]},
+      ],
+    };
+
+    const COOLDOWN_OPTIONS = [
+      { totalYards: 200, sets: [
+          { reps: 1, dist: 200, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Bring heart rate down, flush the muscles" },
+        ]},
+      { totalYards: 250, sets: [
+          { reps: 1, dist: 150, desc: "Easy Backstroke or choice",           interval: "No interval", focus: "Let lactic acid clear, open the chest" },
+          { reps: 1, dist: 100, desc: "Easy Freestyle — progressively slower", interval: "No interval", focus: "Full cool-down — slowest laps of the day" },
+        ]},
+      { totalYards: 200, sets: [
+          { reps: 4, dist: 50, desc: "Easy alternating: Freestyle / Backstroke (swap each length)", interval: "On 1:20", focus: "Gentle recovery — no effort, just move" },
+        ]},
+    ];
+
+    // ═══════════════════════════════════════════════════════════════
+    //  BUDGET-AWARE GENERATOR
+    //  Filters options so the workout stays within [1900, maxYards]
+    // ═══════════════════════════════════════════════════════════════
+
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const MIN_YARDS = 1900;
+
+    // Minimum yards each section can contribute
+    const MIN_WARMUP   = Math.min(...WARMUP_OPTIONS.map(o => o.totalYards));   // 400
+    const MIN_DRILL    = 300;  // smallest drill option across types
+    const MIN_MAIN     = 1000; // smallest main set
+    const MIN_COOLDOWN = 200;  // smallest cooldown
+
+    // Each checked equipment item must be satisfied by ≥ 1 set in the drill+main blocks.
+    // satisfiedBy lists the eq tags whose presence counts for that equipment.
+    const EQUIP_REQUIREMENTS = {
+      kickboard: ["kick", "kickPart"],
+      fins:      ["kick", "kickPart", "underkick"],
+      paddles:   ["pull"],
+      pullBuoy:  ["pull"],
+    };
+
+    function eqTagsIn(option) {
+      return new Set(option.sets.filter(s => s.eq).map(s => s.eq));
+    }
+
+    function combinationSatisfies(dr, ma, equipment) {
+      if (!equipment) return true;
+      const tags = new Set([...eqTagsIn(dr), ...eqTagsIn(ma)]);
+      for (const k of Object.keys(EQUIP_REQUIREMENTS)) {
+        if (equipment[k] && !EQUIP_REQUIREMENTS[k].some(t => tags.has(t))) return false;
+      }
+      return true;
+    }
+
+    function generateWorkout(typeId, maxYards, equipment) {
+      const drillList = DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed;
+      const mainList  = MAIN_OPTIONS[typeId]  || MAIN_OPTIONS.mixed;
+      const hasEquipReq = equipment && Object.values(EQUIP_REQUIREMENTS).length > 0
+                         && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
+
+      // Up to 60 attempts to find a valid combination (more attempts when equipment
+      // requirements are added since fewer combinations satisfy)
+      const attempts = hasEquipReq ? 60 : 30;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        // 1. Pick warmup — must leave room for min drill + min main + min cooldown
+        const validWarmups = WARMUP_OPTIONS.filter(o =>
+          o.totalYards <= maxYards - MIN_DRILL - MIN_MAIN - MIN_COOLDOWN
+        );
+        if (!validWarmups.length) break;
+        const wu = pick(validWarmups);
+
+        // 2. Pick drill — must leave room for min main + min cooldown
+        const validDrills = drillList.filter(o =>
+          o.totalYards <= maxYards - wu.totalYards - MIN_MAIN - MIN_COOLDOWN
+        );
+        if (!validDrills.length) continue;
+        const dr = pick(validDrills);
+
+        // 3. Pick main — must leave room for min cooldown
+        const validMain = mainList.filter(o =>
+          o.totalYards <= maxYards - wu.totalYards - dr.totalYards - MIN_COOLDOWN
+        );
+        if (!validMain.length) continue;
+        const ma = pick(validMain);
+
+        // 4. Equipment satisfaction check — every checked item needs a matching set
+        if (hasEquipReq && !combinationSatisfies(dr, ma, equipment)) continue;
+
+        // 5. Pick cooldown — must fit within remaining budget
+        const remaining = maxYards - wu.totalYards - dr.totalYards - ma.totalYards;
+        const validCooldowns = COOLDOWN_OPTIONS.filter(o => o.totalYards <= remaining);
+        if (!validCooldowns.length) continue;
+        const cd = pick(validCooldowns);
+
+        const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
+        if (total >= MIN_YARDS && total <= maxYards) {
+          return buildWorkout(typeId, wu, dr, ma, cd, total);
+        }
+      }
+
+      // Fallback: use smallest valid combination, preferring equipment-satisfying drills
+      const wu = WARMUP_OPTIONS[0]; // 400
+      let drillCandidates = drillList.filter(o => o.totalYards <= maxYards - wu.totalYards - MIN_MAIN - MIN_COOLDOWN);
+      if (!drillCandidates.length) drillCandidates = drillList;
+      if (hasEquipReq) {
+        // Prefer the first drill option that, when paired with any main, would satisfy
+        const eqPreferred = drillCandidates.filter(d =>
+          mainList.some(m =>
+            m.totalYards <= maxYards - wu.totalYards - d.totalYards - MIN_COOLDOWN &&
+            combinationSatisfies(d, m, equipment)
+          )
+        );
+        if (eqPreferred.length) drillCandidates = eqPreferred;
+      }
+      const dr = drillCandidates[0];
+      let mainCandidates = mainList.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - MIN_COOLDOWN);
+      if (!mainCandidates.length) mainCandidates = mainList;
+      if (hasEquipReq) {
+        const eqMain = mainCandidates.filter(m => combinationSatisfies(dr, m, equipment));
+        if (eqMain.length) mainCandidates = eqMain;
+      }
+      const ma = mainCandidates[0];
+      const cd = COOLDOWN_OPTIONS[0];
+      const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
+      return buildWorkout(typeId, wu, dr, ma, cd, total);
+    }
+
+    function buildWorkout(typeId, wu, dr, ma, cd, total) {
+      const blocks = [
+        { name: "Warm-Up",              section: "warmup",   ...wu },
+        { name: "Drill / Pre-Main Set", section: "drill",    ...dr },
+        { name: `Main Set — ${ma.label}`,section: "main",    ...ma },
+        { name: "Cool-Down",            section: "cooldown", ...cd },
+      ];
+      const mainYdPerMin = { sprint: 28, im: 32, distance: 36, endurance: 36, technique: 30, mixed: 33 };
+      const estimatedMin =
+        Math.round(wu.totalYards / 35) +
+        Math.round(dr.totalYards / 32) +
+        Math.round(ma.totalYards / (mainYdPerMin[typeId] || 33)) +
+        Math.round(cd.totalYards / 35);
+      return { blocks, totalYards: total, estimatedMin, typeId };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  EQUIPMENT — checkbox state shapes set descriptions at render time
+    //  (yardage, intervals, and focus are unchanged — equipment is a
+    //   "what gear you use" detail, not a different exercise)
+    // ═══════════════════════════════════════════════════════════════
+
+    const EQUIPMENT_LIST = [
+      { id: "kickboard", label: "Kickboard", icon: "🟦", description: "Use a board for kick sets" },
+      { id: "fins",      label: "Fins",      icon: "🐬", description: "Add fins to kick & underwater sets" },
+      { id: "paddles",   label: "Paddles",   icon: "🤚", description: "Add paddles to pull sets" },
+      { id: "pullBuoy",  label: "Pull Buoy", icon: "🛟", description: "Confirms buoy use on pull sets" },
+    ];
+
+    // Returns the equipment items (in display order) that apply to a given set
+    // based on the set's `eq` tag and the user's current checkbox state.
+    function equipmentForSet(set, equip) {
+      if (!set.eq) return [];
+      const items = [];
+      if (set.eq === "kick" || set.eq === "kickPart") {
+        if (equip.kickboard) items.push("kickboard");
+        if (equip.fins)      items.push("fins");
+      } else if (set.eq === "underkick") {
+        // Underwater kick is from streamline — kickboard doesn't apply, fins do
+        if (equip.fins)      items.push("fins");
+      } else if (set.eq === "pull") {
+        if (equip.paddles)   items.push("paddles");
+        if (equip.pullBuoy)  items.push("buoy");
+      }
+      return items;
+    }
+
+    // Rewrite a set's description based on which compatible equipment is checked.
+    // Yardage and intervals never change — only the prose updates to be explicit
+    // about which gear to grab.
+    function enhanceDesc(set, equip) {
+      const items = equipmentForSet(set, equip);
+      if (items.length === 0) return set.desc;
+      const eqText = items.join(" + ");
+      if (set.eq === "kick") {
+        return set.desc
+          .replace(/\s*\(board optional\)/i, "")
+          .replace(/^IM order kick\b/, `IM order kick with ${eqText}`)
+          .replace(/^Kick\b/, `Kick with ${eqText}`);
+      }
+      if (set.eq === "underkick") {
+        return set.desc.replace(/^Underwater kick\b/, `Underwater kick with ${eqText}`);
+      }
+      if (set.eq === "kickPart") {
+        // Multi-part set ("Kick 25 / Drill 25 / Swim 25") — annotate kick portions
+        return `${set.desc}  ·  kick portions with ${eqText}`;
+      }
+      if (set.eq === "pull") {
+        return set.desc.replace(/Pull\s*\(buoy\)/i, `Pull with ${eqText}`);
+      }
+      return set.desc;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  COMPONENTS
+    // ═══════════════════════════════════════════════════════════════
+
+    function EquipmentBadge({ name }) {
+      const colors = {
+        kickboard: { bg: "#dbeafe", fg: "#1e40af" },
+        fins:      { bg: "#cffafe", fg: "#155e75" },
+        paddles:   { bg: "#fef3c7", fg: "#92400e" },
+        buoy:      { bg: "#fce7f3", fg: "#9d174d" },
+      };
+      const c = colors[name] || { bg: "#e2e8f0", fg: "#334155" };
+      return (
+        <span style={{ background: c.bg, color: c.fg, fontSize: 10, fontWeight: 700,
+                       padding: "2px 7px", borderRadius: 999, marginRight: 4,
+                       textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          {name}
+        </span>
+      );
+    }
+
+    function SetRow({ set, idx, equipment }) {
+      const eqItems = equipmentForSet(set, equipment);
+      const desc = enhanceDesc(set, equipment);
+      return (
+        <tr style={{ background: idx % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
+          <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#334155", whiteSpace: "nowrap" }}>
+            {set.reps > 1 ? `${set.reps} × ${set.dist}` : `${set.dist}`}
+          </td>
+          <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: "#1e293b", whiteSpace: "nowrap" }}>
+            {(set.reps * set.dist).toLocaleString()} yds
+          </td>
+          <td style={{ padding: "10px 16px", fontSize: 13, color: "#334155" }}>
+            {desc}
+            {eqItems.length > 0 && (
+              <div className="equipment-badges" style={{ marginTop: 6 }}>
+                {eqItems.map(e => <EquipmentBadge key={e} name={e} />)}
+              </div>
+            )}
+          </td>
+          <td style={{ padding: "10px 16px", fontSize: 12, color: "#64748b", fontFamily: "monospace" }}>{set.interval}</td>
+          <td style={{ padding: "10px 16px", fontSize: 12, color: "#64748b", fontStyle: "italic" }}>{set.focus}</td>
+        </tr>
+      );
+    }
+
+    function EquipmentPicker({ equipment, onChange }) {
+      return (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 8, marginTop: 0 }}>
+            Equipment Available
+            <span style={{ color: "#64748b", textTransform: "none", letterSpacing: 0, fontWeight: 400, marginLeft: 8 }}>
+              (check what you'll use — kick & pull sets adjust accordingly)
+            </span>
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+            {EQUIPMENT_LIST.map(eq => {
+              const isOn = !!equipment[eq.id];
+              return (
+                <label key={eq.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "12px 14px", borderRadius: 10,
+                    border: `2px solid ${isOn ? "#3b82f6" : "#334155"}`,
+                    background: isOn ? "#1e3a5f" : "#1e293b",
+                    cursor: "pointer", userSelect: "none",
+                    transition: "all 0.15s",
+                  }}>
+                  <input type="checkbox"
+                    checked={isOn}
+                    onChange={e => onChange(eq.id, e.target.checked)}
+                    style={{
+                      width: 18, height: 18, cursor: "pointer", margin: 0,
+                      accentColor: "#3b82f6",
+                    }} />
+                  <span style={{ fontSize: 18 }}>{eq.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: isOn ? "#fff" : "#e2e8f0" }}>
+                      {eq.label}
+                    </div>
+                    <div style={{ fontSize: 10, color: isOn ? "#bfdbfe" : "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {eq.description}
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function WorkoutBlock({ block, equipment }) {
+      const s = SECTION_STYLES[block.section];
+      return (
+        <div className="workout-block" style={{ borderRadius: 12, border: `1px solid ${s.border}`, overflow: "hidden", marginBottom: 16 }}>
+          <div className="workout-block-header" style={{ background: s.headerBg, color: s.headerText, padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.dot, display: "inline-block" }} />
+              <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.name}</span>
+            </div>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} yds</span>
+          </div>
+          <div style={{ background: s.bg, overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                  {["Reps × Dist", "Total", "Description", "Interval", "Focus"].map(h => (
+                    <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {block.sets.map((set, i) => <SetRow key={i} set={set} idx={i} equipment={equipment} />)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── Max Yardage Slider ──────────────────────────────────────────
+    // Compute the minimum possible total yards for a given type
+    function minYardsForType(typeId) {
+      const drillList = DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed;
+      const mainList  = MAIN_OPTIONS[typeId]  || MAIN_OPTIONS.mixed;
+      const minWarmup   = Math.min(...WARMUP_OPTIONS.map(o => o.totalYards));
+      const minDrill    = Math.min(...drillList.map(o => o.totalYards));
+      const minMain     = Math.min(...mainList.map(o => o.totalYards));
+      const minCooldown = Math.min(...COOLDOWN_OPTIONS.map(o => o.totalYards));
+      return minWarmup + minDrill + minMain + minCooldown;
+    }
+
+    function YardageSlider({ value, onChange, selectedType }) {
+      const SLIDER_MIN = 1900;
+      const SLIDER_MAX = 2500;
+      const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN) * 100).toFixed(1);
+
+      const typeMin = selectedType ? minYardsForType(selectedType) : null;
+      const tooLow  = typeMin !== null && value < typeMin;
+
+      return (
+        <div style={{ background: "#1e293b", border: `1px solid ${tooLow ? "#7f1d1d" : "#334155"}`, borderRadius: 12, padding: "18px 20px", marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+            <div>
+              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" }}>Max Yardage</span>
+              <span style={{ color: "#64748b", fontSize: 11, marginLeft: 8 }}>(min locked at 1,900 yds)</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+              <span style={{ color: "#ffffff", fontSize: 26, fontWeight: 900 }}>{value.toLocaleString()}</span>
+              <span style={{ color: "#94a3b8", fontSize: 12 }}>yds</span>
+            </div>
+          </div>
+
+          {/* Visual track + invisible native input on top */}
+          <div style={{ position: "relative", marginBottom: 4 }}>
+            <div style={{ height: 6, borderRadius: 3, background: "#334155", position: "relative" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${pct}%`,
+                            background: tooLow ? "linear-gradient(90deg,#ef4444,#f87171)" : "linear-gradient(90deg,#3b82f6,#60a5fa)",
+                            borderRadius: 3 }} />
+            </div>
+            <input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={50} value={value}
+              onChange={e => onChange(Number(e.target.value))}
+              style={{ position: "absolute", top: -4, left: 0, width: "100%", opacity: 0, height: 14, cursor: "pointer", margin: 0 }} />
+          </div>
+
+          {/* Tick labels */}
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+            {[1900,2000,2100,2200,2300,2400,2500].map(v => (
+              <span key={v} onClick={() => onChange(v)}
+                style={{ fontSize: 10, cursor: "pointer",
+                          color: v === value ? "#60a5fa" : v < (typeMin||0) ? "#7f1d1d" : "#475569",
+                          fontWeight: v === value ? 700 : 400 }}>
+                {v === 1900 ? "1.9k" : v === 2000 ? "2.0k" : v === 2100 ? "2.1k" : v === 2200 ? "2.2k" : v === 2300 ? "2.3k" : v === 2400 ? "2.4k" : "2.5k"}
+              </span>
+            ))}
+          </div>
+
+          {/* Status row */}
+          {tooLow ? (
+            <div style={{ background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 16 }}>⚠️</span>
+              <div>
+                <span style={{ color: "#fca5a5", fontSize: 12, fontWeight: 600 }}>
+                  This workout type needs at least {typeMin.toLocaleString()} yds.
+                </span>
+                <span style={{ color: "#ef4444", fontSize: 12 }}> Raise the max or choose a different type.</span>
+              </div>
+            </div>
+          ) : typeMin !== null ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, color: "#64748b" }}>Workout range:</span>
+              <span style={{ fontSize: 11, color: "#34d399", background: "#064e3b", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>
+                {typeMin.toLocaleString()} – {value.toLocaleString()} yds ✓
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 11, color: "#64748b" }}>Select a workout type to see its yardage range.</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SAVE-TO-HISTORY FORM — appears below a freshly generated workout
+    // ═══════════════════════════════════════════════════════════════
+    function SaveToHistoryForm({ dateDraft, setDateDraft, noteDraft, setNoteDraft, saveStatus, saveError, onSave }) {
+      const isSaved  = saveStatus === "saved";
+      const isSaving = saveStatus === "saving";
+      return (
+        <div className="screen-only" style={{ marginTop: 20, background: "#1e293b", borderRadius: 12, padding: 18, border: "1px solid #334155" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>📒 Log this workout</span>
+            <span style={{ fontSize: 11, color: "#64748b" }}>(saves to your history)</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 12, alignItems: "start" }}>
+            <div>
+              <label style={{ display: "block", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Date Performed</label>
+              <input type="date" value={dateDraft} onChange={e => setDateDraft(e.target.value)} disabled={isSaving}
+                style={{ width: "100%", padding: "8px 10px", background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, fontFamily: "inherit", colorScheme: "dark" }} />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Notes (optional)</label>
+              <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} disabled={isSaving}
+                placeholder="How did it go? Anything to remember?"
+                rows={2}
+                style={{ width: "100%", padding: "8px 10px", background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, fontFamily: "inherit", resize: "vertical" }} />
+            </div>
+          </div>
+          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button onClick={onSave} disabled={isSaving}
+              style={{
+                padding: "9px 20px", borderRadius: 8, border: "none",
+                background: isSaved ? "#16a34a" : "#3b82f6", color: "#fff",
+                fontWeight: 700, fontSize: 13,
+                cursor: isSaving ? "wait" : "pointer", opacity: isSaving ? 0.8 : 1,
+              }}>
+              {isSaving ? "Saving…" : isSaved ? "✓ Saved" : "💾 Save to History"}
+            </button>
+            {isSaved && (
+              <span style={{ color: "#86efac", fontSize: 12 }}>
+                Logged. (commit may take ~30–60s to appear in the repo)
+              </span>
+            )}
+            {saveStatus === "error" && (
+              <span style={{ color: "#fca5a5", fontSize: 12 }}>
+                Save failed: {saveError}. Click Save again to retry.
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
+    // ═══════════════════════════════════════════════════════════════
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint }) {
+      const [filterType,   setFilterType]   = useState("all");
+      const [editingId,    setEditingId]    = useState(null);
+      const [editingNotes, setEditingNotes] = useState("");
+      const [expandedId,   setExpandedId]   = useState(null);
+
+      const filtered = useMemo(
+        () => history.filter(e => filterType === "all" || e.type === filterType),
+        [history, filterType]
+      );
+
+      const stats = useMemo(() => {
+        const sessions = filtered.length;
+        const yards    = filtered.reduce((s, e) => s + (e.totalYards || 0), 0);
+        const avg      = sessions ? Math.round(yards / sessions) : 0;
+        return { sessions, yards, avg };
+      }, [filtered]);
+
+      if (!historyLoaded) {
+        return <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>Loading history…</div>;
+      }
+      if (history.length === 0) {
+        return (
+          <div style={{ textAlign: "center", color: "#64748b", padding: 50 }}>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>📜</div>
+            <p style={{ fontSize: 16, color: "#94a3b8", margin: 0 }}>No workouts logged yet.</p>
+            <p style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>Generate a workout, swim it, then click <b>Save to History</b> to log it here.</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="screen-only">
+          {/* Filter chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+            {[{ id: "all", label: "All", emoji: "📋" }, ...WORKOUT_TYPES].map(t => {
+              const active = filterType === t.id;
+              return (
+                <button key={t.id} onClick={() => setFilterType(t.id)}
+                  style={{
+                    padding: "6px 12px", borderRadius: 999, border: "none",
+                    background: active ? "#3b82f6" : "#1e293b",
+                    color: active ? "#fff" : "#94a3b8",
+                    fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}>
+                  {t.emoji} {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Stats summary */}
+          <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", gap: 32, flexWrap: "wrap" }}>
+            {[
+              ["Sessions",   stats.sessions.toLocaleString()],
+              ["Total Yards", stats.yards.toLocaleString()],
+              ["Avg / Session", stats.avg.toLocaleString()],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>{k}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>{v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Entries */}
+          {filtered.map(entry => {
+            const meta       = WORKOUT_TYPES.find(t => t.id === entry.type);
+            const isExpanded = expandedId === entry.id;
+            const isEditing  = editingId === entry.id;
+            const eqList     = entry.equipment ? Object.entries(entry.equipment).filter(([, v]) => v).map(([k]) => k) : [];
+            return (
+              <div key={entry.id} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, color: "#cbd5e1", fontVariantNumeric: "tabular-nums" }}>{entry.dateCompleted || "—"}</span>
+                    {meta && (
+                      <span style={{ background: meta.badge, color: meta.badgeText, borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>
+                        {meta.emoji} {meta.label}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} yds</span>
+                    {entry.estimatedMin && <span style={{ fontSize: 11, color: "#64748b" }}>~{entry.estimatedMin} min</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button onClick={() => setExpandedId(isExpanded ? null : entry.id)}
+                      style={{ padding: "4px 10px", background: "transparent", color: "#93c5fd", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                      {isExpanded ? "Hide" : "View"}
+                    </button>
+                    <button onClick={() => { setEditingId(entry.id); setEditingNotes(entry.notes || ""); }}
+                      style={{ padding: "4px 10px", background: "transparent", color: "#cbd5e1", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                      Notes
+                    </button>
+                    <button onClick={() => onLoadAndPrint(entry)}
+                      style={{ padding: "4px 10px", background: "transparent", color: "#cbd5e1", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                      🖨 Print
+                    </button>
+                    <button onClick={() => { if (window.confirm("Delete this workout from history?")) onDelete(entry.id); }}
+                      style={{ padding: "4px 10px", background: "transparent", color: "#fca5a5", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                {eqList.length > 0 && (
+                  <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {eqList.map(k => (
+                      <span key={k} style={{ background: "#334155", color: "#cbd5e1", padding: "2px 8px", borderRadius: 999, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>{k}</span>
+                    ))}
+                  </div>
+                )}
+
+                {isEditing ? (
+                  <div style={{ marginTop: 12 }}>
+                    <textarea value={editingNotes} onChange={e => setEditingNotes(e.target.value)} rows={2}
+                      style={{ width: "100%", padding: 8, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, fontFamily: "inherit", resize: "vertical" }} />
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <button onClick={() => { onUpdateNotes(entry.id, editingNotes); setEditingId(null); }}
+                        style={{ padding: "5px 14px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Save Notes</button>
+                      <button onClick={() => setEditingId(null)}
+                        style={{ padding: "5px 14px", background: "transparent", color: "#94a3b8", border: "1px solid #334155", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : entry.notes ? (
+                  <div style={{ marginTop: 8, color: "#cbd5e1", fontSize: 13, fontStyle: "italic", lineHeight: 1.4 }}>
+                    “{entry.notes}”
+                  </div>
+                ) : null}
+
+                {isExpanded && entry.blocks && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #334155" }}>
+                    {entry.blocks.map((b, i) => <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} />)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  MAIN APP
+    // ═══════════════════════════════════════════════════════════════
+
+    function App() {
+      const [selectedType, setSelectedType] = useState(null);
+      const [maxYards, setMaxYards]         = useState(2400);
+      const [workout, setWorkout]           = useState(null);
+      const [hover, setHover]               = useState(null);
+      const [equipment, setEquipment]       = useState({
+        kickboard: false, fins: false, paddles: false, pullBuoy: false,
+      });
+
+      // History state
+      const [view, setView]                       = useState("generator"); // "generator" | "history"
+      const [history, setHistory]                 = useState(() => loadLocalHistory());
+      const [historyLoaded, setHistoryLoaded]     = useState(false);
+      const [loadedFromHistoryId, setLoadedFromHistoryId] = useState(null);
+      const [saveStatus, setSaveStatus]           = useState(null); // null | "saving" | "saved" | "error"
+      const [saveError, setSaveError]             = useState(null);
+      const [dateDraft, setDateDraft]             = useState(() => new Date().toISOString().slice(0, 10));
+      const [noteDraft, setNoteDraft]             = useState("");
+
+      // On mount: fetch live history from the API, merge with localStorage cache
+      useEffect(() => {
+        let cancelled = false;
+        fetch(`${API_BASE}/workouts`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(remote => {
+            if (cancelled) return;
+            const merged = mergeById(loadLocalHistory(), Array.isArray(remote) ? remote : []);
+            setHistory(merged);
+            saveLocalHistory(merged);
+            setHistoryLoaded(true);
+          })
+          .catch(() => { if (!cancelled) setHistoryLoaded(true); });
+        return () => { cancelled = true; };
+      }, []);
+
+      const handleGenerate = useCallback(() => {
+        if (!selectedType) return;
+        setWorkout(generateWorkout(selectedType, maxYards, equipment));
+        setLoadedFromHistoryId(null);
+        setSaveStatus(null); setSaveError(null);
+        setDateDraft(new Date().toISOString().slice(0, 10));
+        setNoteDraft("");
+      }, [selectedType, maxYards, equipment]);
+
+      const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); };
+      const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); };
+      const handleEquipChange = (id, on) => {
+        setEquipment(prev => ({ ...prev, [id]: on }));
+        setWorkout(null);
+        setLoadedFromHistoryId(null);
+        setSaveStatus(null);
+      };
+
+      // Save the current workout to history (POST to worker, optimistic local update)
+      const handleSave = useCallback(async () => {
+        if (!workout || !selectedType) return;
+        setSaveStatus("saving"); setSaveError(null);
+        const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
+        const entry = {
+          id: makeEntryId(),
+          savedAt: new Date().toISOString(),
+          dateCompleted: dateDraft,
+          type: selectedType,
+          typeLabel: meta ? meta.label : selectedType,
+          totalYards: workout.totalYards,
+          estimatedMin: workout.estimatedMin,
+          maxYardsCap: maxYards,
+          equipment: { ...equipment },
+          blocks: workout.blocks.map(b => ({
+            name: b.name, section: b.section, totalYards: b.totalYards,
+            sets: b.sets.map(s => ({ ...s })),
+          })),
+          notes: (noteDraft || "").trim(),
+        };
+        // Optimistic: add to local cache and state immediately
+        setHistory(prev => {
+          const next = mergeById(prev, [entry]);
+          saveLocalHistory(next);
+          return next;
+        });
+        try {
+          const res = await fetch(`${API_BASE}/log-workout`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(entry),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || `HTTP ${res.status}`);
+          }
+          setSaveStatus("saved");
+          setNoteDraft("");
+        } catch (err) {
+          setSaveStatus("error");
+          setSaveError(err.message || String(err));
+        }
+      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft]);
+
+      const handleUpdateNotes = useCallback(async (id, notes) => {
+        setHistory(prev => {
+          const next = prev.map(e => e.id === id ? { ...e, notes } : e);
+          saveLocalHistory(next);
+          return next;
+        });
+        try {
+          await fetch(`${API_BASE}/workouts/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notes }),
+          });
+        } catch (err) { console.error("Failed to update notes:", err); }
+      }, []);
+
+      const handleDelete = useCallback(async (id) => {
+        setHistory(prev => {
+          const next = prev.filter(e => e.id !== id);
+          saveLocalHistory(next);
+          return next;
+        });
+        try {
+          await fetch(`${API_BASE}/workouts/${id}`, { method: "DELETE" });
+        } catch (err) { console.error("Failed to delete entry:", err); }
+      }, []);
+
+      // Load a past workout into the generator view and trigger Print
+      const handleLoadAndPrint = useCallback((entry) => {
+        setSelectedType(entry.type);
+        setMaxYards(entry.maxYardsCap || 2400);
+        setEquipment(entry.equipment || { kickboard: false, fins: false, paddles: false, pullBuoy: false });
+        // Reconstruct a workout-shaped object from the saved entry
+        setWorkout({
+          blocks: entry.blocks,
+          totalYards: entry.totalYards,
+          estimatedMin: entry.estimatedMin,
+          typeId: entry.type,
+        });
+        setLoadedFromHistoryId(entry.id);
+        setSaveStatus(null);
+        setView("generator");
+        // Wait for the next paint, then open the print dialog
+        setTimeout(() => window.print(), 150);
+      }, []);
+
+      const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
+      const sectionColors = ["#38bdf8", "#2dd4bf", "#3b82f6", "#94a3b8"];
+      const typeMin = selectedType ? minYardsForType(selectedType) : 0;
+      const canGenerate = selectedType && maxYards >= typeMin;
+
+      return (
+        <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)" }}>
+          {/* Header */}
+          <div className="screen-only" style={{ background: "#0f172a", borderBottom: "1px solid #1e40af", boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
+            <div style={{ maxWidth: 940, margin: "0 auto", padding: "20px 24px", display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 36 }}>🏊‍♂️</span>
+              <div style={{ flex: 1 }}>
+                <h1 style={{ fontSize: 26, fontWeight: 900, color: "#fff", margin: 0, letterSpacing: "-0.02em" }}>Swim Workout Generator</h1>
+                <p style={{ color: "#93c5fd", fontSize: 13, margin: "2px 0 0" }}>~60 min · Masters / Competitive Swimmer</p>
+              </div>
+              <button onClick={() => setView(v => v === "generator" ? "history" : "generator")}
+                style={{
+                  padding: "8px 14px", borderRadius: 8,
+                  border: "1px solid #334155", background: "#1e293b",
+                  color: "#e2e8f0", fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+                }}>
+                {view === "generator" ? "📜 History" : "⏎ Generator"}
+                {view === "generator" && history.length > 0 && (
+                  <span style={{ background: "#3b82f6", color: "#fff", borderRadius: 999, padding: "1px 8px", fontSize: 10, fontWeight: 700 }}>
+                    {history.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
+
+            {view === "history" && (
+              <HistoryView
+                history={history}
+                historyLoaded={historyLoaded}
+                onUpdateNotes={handleUpdateNotes}
+                onDelete={handleDelete}
+                onLoadAndPrint={handleLoadAndPrint}
+              />
+            )}
+
+            {view === "generator" && <>
+
+            {/* Workout type selector */}
+            <p className="screen-only" style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
+              Select Workout Type
+            </p>
+            <div className="screen-only" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+              {WORKOUT_TYPES.map(t => {
+                const isSel = selectedType === t.id;
+                const isHov = hover === t.id;
+                return (
+                  <button key={t.id}
+                    onClick={() => handleTypeSelect(t.id)}
+                    onMouseEnter={() => setHover(t.id)}
+                    onMouseLeave={() => setHover(null)}
+                    style={{
+                      borderRadius: 12, border: `2px solid ${isSel ? t.selBg : t.border}`,
+                      padding: 16, textAlign: "left", cursor: "pointer",
+                      background: isSel ? t.selBg : "#1e293b",
+                      color: isSel ? "#fff" : "#e2e8f0",
+                      transform: isSel ? "scale(1.02)" : isHov ? "scale(1.01)" : "scale(1)",
+                      transition: "all 0.15s",
+                      boxShadow: isSel ? "0 8px 24px rgba(0,0,0,0.35)" : "none",
+                      outline: "none",
+                    }}>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>{t.emoji}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{t.label}</div>
+                    <div style={{ fontSize: 11, marginTop: 2, opacity: 0.75 }}>{t.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="screen-only">
+              {/* Equipment checkboxes */}
+              <EquipmentPicker equipment={equipment} onChange={handleEquipChange} />
+
+              {/* Max Yardage Slider */}
+              <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} />
+
+              {/* Generate Button */}
+              <button
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                style={{
+                  width: "100%", padding: "14px 0", borderRadius: 12, border: "none",
+                  fontWeight: 700, fontSize: 15, cursor: canGenerate ? "pointer" : "not-allowed",
+                  background: canGenerate ? meta.selBg : "#334155",
+                  color: canGenerate ? "#fff" : "#64748b",
+                  boxShadow: canGenerate ? "0 8px 24px rgba(0,0,0,0.3)" : "none",
+                  transition: "all 0.15s", marginBottom: 32, outline: "none",
+                }}>
+                {workout ? "🔄 Generate New Workout" : "🏊 Generate Workout"}
+              </button>
+            </div>
+
+            {/* Workout display */}
+            {workout && (
+              <div>
+                {/* Summary bar (screen) */}
+                <div className="screen-only" style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 20, marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 24, alignItems: "center" }}>
+                  <span style={{ background: meta.badge, color: meta.badgeText, borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700 }}>
+                    {meta.emoji} {meta.label}
+                  </span>
+                  {[
+                    ["Total Yardage",  `${workout.totalYards.toLocaleString()} yards`],
+                    ["Est. Duration",   `~${workout.estimatedMin} min`],
+                    ["Target Range",   `1,900 – ${maxYards.toLocaleString()} yds`],
+                  ].map(([label, val]) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+                      <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>
+                        {val.split(" ")[0]}
+                        <span style={{ fontSize: 12, fontWeight: 400, color: "#94a3b8" }}> {val.split(" ").slice(1).join(" ")}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => window.print()}
+                    style={{
+                      marginLeft: "auto", padding: "10px 16px", borderRadius: 8,
+                      border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0",
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                    }}
+                    title="Print a clean B&W 8.5×11 version of this workout">
+                    🖨 Print Workout
+                  </button>
+                </div>
+
+                {/* Print-only header */}
+                <div className="print-only print-header">
+                  <h1 className="print-title">{meta.label} Swim Workout</h1>
+                  <p className="print-subtitle">{meta.description}</p>
+                  <div className="print-meta">
+                    <span><b>Date:</b> {new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
+                    <span><b>Total:</b> {workout.totalYards.toLocaleString()} yds</span>
+                    <span><b>Duration:</b> ~{workout.estimatedMin} min</span>
+                    <span><b>Pace target:</b> ~1:35–1:45 / 100 yds</span>
+                  </div>
+                </div>
+
+                {/* Section breakdown bar (screen only) */}
+                <div className="screen-only" style={{ display: "flex", gap: 3, height: 10, borderRadius: 999, overflow: "hidden", marginBottom: 8 }}>
+                  {workout.blocks.map((b, i) => (
+                    <div key={i}
+                      style={{ width: `${(b.totalYards / workout.totalYards * 100).toFixed(1)}%`, background: sectionColors[i] }}
+                      title={`${b.name}: ${b.totalYards} yds`}
+                    />
+                  ))}
+                </div>
+                <div className="screen-only" style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+                  {workout.blocks.map((b, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: sectionColors[i], display: "inline-block" }} />
+                      <span style={{ color: sectionColors[i] }}>{b.name}</span>
+                      <span>({b.totalYards} yds)</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Workout blocks */}
+                {workout.blocks.map((block, i) => <WorkoutBlock key={i} block={block} equipment={equipment} />)}
+
+                {/* Coach note (screen only — user opted not to include in print) */}
+                <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid #334155", color: "#94a3b8", fontSize: 13 }}>
+                  <span style={{ fontWeight: 600, color: "#cbd5e1" }}>📋 Coach's Note: </span>
+                  Intervals assume a moderate masters pace (~1:35–1:45/100 yds). Adjust ±10–15 sec to match your base.
+                  Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets.
+                </div>
+
+                {/* Save-to-history form (only for freshly generated workouts) */}
+                {!loadedFromHistoryId && (
+                  <SaveToHistoryForm
+                    dateDraft={dateDraft} setDateDraft={setDateDraft}
+                    noteDraft={noteDraft} setNoteDraft={setNoteDraft}
+                    saveStatus={saveStatus} saveError={saveError}
+                    onSave={handleSave}
+                  />
+                )}
+
+                {/* Banner for workouts loaded from history */}
+                {loadedFromHistoryId && (
+                  <div className="screen-only" style={{ marginTop: 20, background: "#1e293b", border: "1px dashed #475569", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#94a3b8" }}>
+                    📜 Loaded from history. To save a new workout, click <b>Generate New Workout</b> above.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!workout && (
+              <div className="screen-only" style={{ textAlign: "center", padding: "60px 0", color: "#475569" }}>
+                <div style={{ fontSize: 56, marginBottom: 12 }}>🌊</div>
+                <p style={{ fontSize: 18, fontWeight: 500, color: "#94a3b8", margin: 0 }}>Pick a type, set your max yardage, and generate</p>
+                <p style={{ fontSize: 13, marginTop: 4, color: "#475569" }}>Each press produces a fresh workout within your range</p>
+              </div>
+            )}
+
+            </>}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
