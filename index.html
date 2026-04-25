@@ -15,6 +15,117 @@
     input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 3px; outline: none; cursor: pointer; }
     input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #3b82f6; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
     input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #3b82f6; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+
+    /* Default visibility for the print/screen helper classes */
+    .print-only { display: none; }
+
+    /* ────────────────────────────────────────────────────────────
+       PRINT STYLES — clean, high-contrast, 8.5×11 B&W
+       Hides all interactive UI, strips backgrounds and colors,
+       and uses serif typography for readable swim-deck output.
+       ──────────────────────────────────────────────────────────── */
+    @media print {
+      @page { size: letter portrait; margin: 0.55in 0.5in; }
+
+      html, body {
+        background: #fff !important;
+        color: #000 !important;
+        font-family: Georgia, "Times New Roman", serif !important;
+        font-size: 11pt !important;
+        line-height: 1.35 !important;
+      }
+
+      /* Strip every background, shadow, and color so output is pure B&W */
+      *, *::before, *::after {
+        background: #fff !important;
+        background-color: #fff !important;
+        background-image: none !important;
+        color: #000 !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+        border-color: #000 !important;
+      }
+
+      .screen-only { display: none !important; }
+      .print-only  { display: block !important; }
+
+      /* Print header — workout title, type, date, totals */
+      .print-header {
+        border-bottom: 2.5pt solid #000 !important;
+        padding-bottom: 8pt !important;
+        margin-bottom: 14pt !important;
+      }
+      .print-title {
+        font-size: 22pt !important;
+        font-weight: 700 !important;
+        margin: 0 !important;
+        letter-spacing: -0.01em !important;
+      }
+      .print-subtitle {
+        font-size: 11pt !important;
+        margin: 4pt 0 0 0 !important;
+        font-style: italic !important;
+      }
+      .print-meta {
+        margin-top: 6pt !important;
+        font-size: 11pt !important;
+      }
+      .print-meta span { margin-right: 18pt !important; }
+      .print-meta b { font-weight: 700 !important; }
+
+      /* Workout block — keep section together on one page when possible */
+      .workout-block {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        border: 1.5pt solid #000 !important;
+        border-radius: 0 !important;
+        margin-bottom: 10pt !important;
+      }
+      .workout-block-header {
+        border-bottom: 1pt solid #000 !important;
+        padding: 5pt 9pt !important;
+        font-size: 11.5pt !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+      }
+      .workout-block-header > div > span:first-child { display: none !important; } /* hide colored dot */
+
+      /* Tables */
+      .workout-block table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+      }
+      .workout-block thead tr { border-bottom: 1pt solid #000 !important; }
+      .workout-block th {
+        padding: 4pt 7pt !important;
+        font-size: 8.5pt !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.04em !important;
+        text-align: left !important;
+        font-family: Georgia, serif !important;
+      }
+      .workout-block td {
+        padding: 5pt 7pt !important;
+        font-size: 10pt !important;
+        font-style: normal !important;
+        border-top: 0.5pt solid #555 !important;
+        font-family: Georgia, serif !important;
+        vertical-align: top !important;
+      }
+      .workout-block td:nth-child(1) { font-weight: 700 !important; white-space: nowrap !important; width: 11% !important; }
+      .workout-block td:nth-child(2) { font-weight: 700 !important; white-space: nowrap !important; width: 12% !important; }
+      .workout-block td:nth-child(3) { width: 42% !important; }
+      .workout-block td:nth-child(4) { font-family: "Courier New", monospace !important; white-space: nowrap !important; width: 12% !important; }
+      .workout-block td:nth-child(5) { font-style: italic !important; width: 23% !important; }
+
+      /* Equipment badges hidden — equipment is in description text */
+      .equipment-badges { display: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -78,19 +189,27 @@
           ]},
         { totalYards: 400, sets: [
             { reps: 8, dist: 25, desc: "Stroke drills — 2 each: fly, back, breast, free", interval: "On :40",  focus: "Isolate technique per stroke" },
-            { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:10", focus: "Kick rhythm for each stroke" },
+            { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:10", focus: "Kick rhythm for each stroke", eq: "kick" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:10", focus: "Wake up legs across IM strokes",   eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — alternate 50 free / 50 stroke choice", interval: "On 1:55", focus: "Upper-body warm-up before IM main set", eq: "pull" },
           ]},
       ],
       distance: [
         { totalYards: 300, sets: [
-            { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 1:55", focus: "Prime the pull pattern before distance work" },
+            { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 1:55", focus: "Prime the pull pattern before distance work", eq: "pull" },
           ]},
         { totalYards: 400, sets: [
-            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 1:50", focus: "Upper body endurance, long stroke" },
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 1:50", focus: "Upper body endurance, long stroke", eq: "pull" },
           ]},
         { totalYards: 400, sets: [
-            { reps: 6, dist: 50, desc: "Kick — moderate effort (board optional)",  interval: "On 1:10", focus: "Leg conditioning and body position" },
+            { reps: 6, dist: 50, desc: "Kick — moderate effort (board optional)",  interval: "On 1:10", focus: "Leg conditioning and body position", eq: "kick" },
             { reps: 2, dist: 50, desc: "Freestyle — build from easy to moderate",  interval: "On 1:00", focus: "Prime aerobic engine for main set" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — moderate, focus on body position (board optional)", interval: "On 1:10", focus: "Leg conditioning before distance work", eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — long stroke, focus on catch",              interval: "On 1:55", focus: "Upper-body endurance setup",            eq: "pull" },
           ]},
       ],
       sprint: [
@@ -98,16 +217,24 @@
             { reps: 6, dist: 50, desc: "25 Easy / 25 Build (NOT all-out yet)", interval: "On 1:15", focus: "Activate fast-twitch, save energy for main set" },
           ]},
         { totalYards: 300, sets: [
-            { reps: 4, dist: 50, desc: "Underwater kick off wall (10m), easy swim out", interval: "On 1:00", focus: "Streamline and underwaters" },
+            { reps: 4, dist: 50, desc: "Underwater kick off wall (10m), easy swim out", interval: "On 1:00", focus: "Streamline and underwaters", eq: "underkick" },
             { reps: 4, dist: 25, desc: "Tempo build — easy to fast (not all out)",       interval: "On :45",  focus: "Turnover prep, no sprinting yet" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — sharp tempo build (board optional)",   interval: "On 1:10", focus: "Activate sprint leg drive",   eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — fast build, focus on hand speed", interval: "On 1:50", focus: "Activate upper-body power",   eq: "pull" },
           ]},
       ],
       endurance: [
         { totalYards: 400, sets: [
-            { reps: 4, dist: 100, desc: "Pull (buoy) — easy/moderate, relaxed stroke", interval: "On 1:55", focus: "Aerobic priming, conserve energy" },
+            { reps: 4, dist: 100, desc: "Pull (buoy) — easy/moderate, relaxed stroke", interval: "On 1:55", focus: "Aerobic priming, conserve energy", eq: "pull" },
           ]},
         { totalYards: 300, sets: [
-            { reps: 1, dist: 300, desc: "Kick — choice of stroke, easy pace (board optional)", interval: "No interval", focus: "Leg warm-up, build base endurance" },
+            { reps: 1, dist: 300, desc: "Kick — choice of stroke, easy pace (board optional)", interval: "No interval", focus: "Leg warm-up, build base endurance", eq: "kick" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — easy/moderate, focus on rhythm (board optional)", interval: "On 1:10", focus: "Aerobic leg priming",        eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — relaxed stroke, long extension",          interval: "On 1:55", focus: "Aerobic upper-body warm-up", eq: "pull" },
           ]},
       ],
       technique: [
@@ -115,16 +242,24 @@
             { reps: 8, dist: 50, desc: "25 Drill / 25 Easy Swim — same stroke each rep (your choice)", interval: "On 1:05", focus: "Feel the drill translate into the swim" },
           ]},
         { totalYards: 300, sets: [
-            { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 (same stroke)", interval: "On 1:40", focus: "Layered skill building — kick → drill → apply" },
+            { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 (same stroke)", interval: "On 1:40", focus: "Layered skill building — kick → drill → apply", eq: "kickPart" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — slow, focus on stroke alignment (board optional)", interval: "On 1:10", focus: "Isolate leg technique",     eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — high-elbow catch, long stroke",            interval: "On 1:55", focus: "Isolate upper-body technique", eq: "pull" },
           ]},
       ],
       mixed: [
         { totalYards: 300, sets: [
-            { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 — stroke choice", interval: "On 1:40", focus: "All-around activation before varied main set" },
+            { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 — stroke choice", interval: "On 1:40", focus: "All-around activation before varied main set", eq: "kickPart" },
           ]},
         { totalYards: 400, sets: [
             { reps: 6, dist: 50, desc: "Drill/Swim by 25 — your stroke choice",    interval: "On 1:00", focus: "Skill warm-up" },
             { reps: 4, dist: 25, desc: "Fast tempo (not all out) — choice stroke",  interval: "On :45",  focus: "Activate speed system" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Kick — moderate, choice of stroke (board optional)", interval: "On 1:10", focus: "Leg activation",                eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — moderate, smooth rotation",           interval: "On 1:50", focus: "Upper-body warm-up before mix", eq: "pull" },
           ]},
       ],
     };
@@ -205,8 +340,8 @@
       ],
       technique: [
         { label: "Kick + Drill + Swim", totalYards: 1000, sets: [
-            { reps: 8, dist:  75, desc: "25 Kick / 25 Drill / 25 Swim — same stroke each rep (your choice)", interval: "On 1:45", focus: "Apply the drill directly into the swim" },
-            { reps: 4, dist: 100, desc: "Pull (buoy) — focus on high-elbow catch, long stroke",              interval: "On 1:55", focus: "Sculpt the perfect pull pattern" },
+            { reps: 8, dist:  75, desc: "25 Kick / 25 Drill / 25 Swim — same stroke each rep (your choice)", interval: "On 1:45", focus: "Apply the drill directly into the swim", eq: "kickPart" },
+            { reps: 4, dist: 100, desc: "Pull (buoy) — focus on high-elbow catch, long stroke",              interval: "On 1:55", focus: "Sculpt the perfect pull pattern", eq: "pull" },
           ]},
         { label: "Freestyle Drill Progression", totalYards: 1000, sets: [
             { reps: 4, dist:  50, desc: "Kick only — no board, streamlined off wall",     interval: "On 1:15", focus: "Core rotation, balanced two-beat kick" },
@@ -271,17 +406,43 @@
     const MIN_MAIN     = 1000; // smallest main set
     const MIN_COOLDOWN = 200;  // smallest cooldown
 
-    function generateWorkout(typeId, maxYards) {
+    // Each checked equipment item must be satisfied by ≥ 1 set in the drill+main blocks.
+    // satisfiedBy lists the eq tags whose presence counts for that equipment.
+    const EQUIP_REQUIREMENTS = {
+      kickboard: ["kick", "kickPart"],
+      fins:      ["kick", "kickPart", "underkick"],
+      paddles:   ["pull"],
+      pullBuoy:  ["pull"],
+    };
+
+    function eqTagsIn(option) {
+      return new Set(option.sets.filter(s => s.eq).map(s => s.eq));
+    }
+
+    function combinationSatisfies(dr, ma, equipment) {
+      if (!equipment) return true;
+      const tags = new Set([...eqTagsIn(dr), ...eqTagsIn(ma)]);
+      for (const k of Object.keys(EQUIP_REQUIREMENTS)) {
+        if (equipment[k] && !EQUIP_REQUIREMENTS[k].some(t => tags.has(t))) return false;
+      }
+      return true;
+    }
+
+    function generateWorkout(typeId, maxYards, equipment) {
       const drillList = DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed;
       const mainList  = MAIN_OPTIONS[typeId]  || MAIN_OPTIONS.mixed;
+      const hasEquipReq = equipment && Object.values(EQUIP_REQUIREMENTS).length > 0
+                         && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
 
-      // Up to 30 attempts to find a valid combination
-      for (let attempt = 0; attempt < 30; attempt++) {
+      // Up to 60 attempts to find a valid combination (more attempts when equipment
+      // requirements are added since fewer combinations satisfy)
+      const attempts = hasEquipReq ? 60 : 30;
+      for (let attempt = 0; attempt < attempts; attempt++) {
         // 1. Pick warmup — must leave room for min drill + min main + min cooldown
         const validWarmups = WARMUP_OPTIONS.filter(o =>
           o.totalYards <= maxYards - MIN_DRILL - MIN_MAIN - MIN_COOLDOWN
         );
-        if (!validWarmups.length) break; // maxYards too small (shouldn't happen at ≥1900)
+        if (!validWarmups.length) break;
         const wu = pick(validWarmups);
 
         // 2. Pick drill — must leave room for min main + min cooldown
@@ -298,7 +459,10 @@
         if (!validMain.length) continue;
         const ma = pick(validMain);
 
-        // 4. Pick cooldown — must fit within remaining budget
+        // 4. Equipment satisfaction check — every checked item needs a matching set
+        if (hasEquipReq && !combinationSatisfies(dr, ma, equipment)) continue;
+
+        // 5. Pick cooldown — must fit within remaining budget
         const remaining = maxYards - wu.totalYards - dr.totalYards - ma.totalYards;
         const validCooldowns = COOLDOWN_OPTIONS.filter(o => o.totalYards <= remaining);
         if (!validCooldowns.length) continue;
@@ -310,12 +474,28 @@
         }
       }
 
-      // Fallback: use smallest valid combination
+      // Fallback: use smallest valid combination, preferring equipment-satisfying drills
       const wu = WARMUP_OPTIONS[0]; // 400
-      const dr = (drillList.filter(o => o.totalYards <= maxYards - wu.totalYards - MIN_MAIN - MIN_COOLDOWN)[0])
-              || drillList[0];
-      const validMain = mainList.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - MIN_COOLDOWN);
-      const ma = validMain.length ? validMain[0] : mainList[0];
+      let drillCandidates = drillList.filter(o => o.totalYards <= maxYards - wu.totalYards - MIN_MAIN - MIN_COOLDOWN);
+      if (!drillCandidates.length) drillCandidates = drillList;
+      if (hasEquipReq) {
+        // Prefer the first drill option that, when paired with any main, would satisfy
+        const eqPreferred = drillCandidates.filter(d =>
+          mainList.some(m =>
+            m.totalYards <= maxYards - wu.totalYards - d.totalYards - MIN_COOLDOWN &&
+            combinationSatisfies(d, m, equipment)
+          )
+        );
+        if (eqPreferred.length) drillCandidates = eqPreferred;
+      }
+      const dr = drillCandidates[0];
+      let mainCandidates = mainList.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - MIN_COOLDOWN);
+      if (!mainCandidates.length) mainCandidates = mainList;
+      if (hasEquipReq) {
+        const eqMain = mainCandidates.filter(m => combinationSatisfies(dr, m, equipment));
+        if (eqMain.length) mainCandidates = eqMain;
+      }
+      const ma = mainCandidates[0];
       const cd = COOLDOWN_OPTIONS[0];
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       return buildWorkout(typeId, wu, dr, ma, cd, total);
@@ -338,10 +518,86 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  EQUIPMENT — checkbox state shapes set descriptions at render time
+    //  (yardage, intervals, and focus are unchanged — equipment is a
+    //   "what gear you use" detail, not a different exercise)
+    // ═══════════════════════════════════════════════════════════════
+
+    const EQUIPMENT_LIST = [
+      { id: "kickboard", label: "Kickboard", icon: "🟦", description: "Use a board for kick sets" },
+      { id: "fins",      label: "Fins",      icon: "🐬", description: "Add fins to kick & underwater sets" },
+      { id: "paddles",   label: "Paddles",   icon: "🤚", description: "Add paddles to pull sets" },
+      { id: "pullBuoy",  label: "Pull Buoy", icon: "🛟", description: "Confirms buoy use on pull sets" },
+    ];
+
+    // Returns the equipment items (in display order) that apply to a given set
+    // based on the set's `eq` tag and the user's current checkbox state.
+    function equipmentForSet(set, equip) {
+      if (!set.eq) return [];
+      const items = [];
+      if (set.eq === "kick" || set.eq === "kickPart") {
+        if (equip.kickboard) items.push("kickboard");
+        if (equip.fins)      items.push("fins");
+      } else if (set.eq === "underkick") {
+        // Underwater kick is from streamline — kickboard doesn't apply, fins do
+        if (equip.fins)      items.push("fins");
+      } else if (set.eq === "pull") {
+        if (equip.paddles)   items.push("paddles");
+        if (equip.pullBuoy)  items.push("buoy");
+      }
+      return items;
+    }
+
+    // Rewrite a set's description based on which compatible equipment is checked.
+    // Yardage and intervals never change — only the prose updates to be explicit
+    // about which gear to grab.
+    function enhanceDesc(set, equip) {
+      const items = equipmentForSet(set, equip);
+      if (items.length === 0) return set.desc;
+      const eqText = items.join(" + ");
+      if (set.eq === "kick") {
+        return set.desc
+          .replace(/\s*\(board optional\)/i, "")
+          .replace(/^IM order kick\b/, `IM order kick with ${eqText}`)
+          .replace(/^Kick\b/, `Kick with ${eqText}`);
+      }
+      if (set.eq === "underkick") {
+        return set.desc.replace(/^Underwater kick\b/, `Underwater kick with ${eqText}`);
+      }
+      if (set.eq === "kickPart") {
+        // Multi-part set ("Kick 25 / Drill 25 / Swim 25") — annotate kick portions
+        return `${set.desc}  ·  kick portions with ${eqText}`;
+      }
+      if (set.eq === "pull") {
+        return set.desc.replace(/Pull\s*\(buoy\)/i, `Pull with ${eqText}`);
+      }
+      return set.desc;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  COMPONENTS
     // ═══════════════════════════════════════════════════════════════
 
-    function SetRow({ set, idx }) {
+    function EquipmentBadge({ name }) {
+      const colors = {
+        kickboard: { bg: "#dbeafe", fg: "#1e40af" },
+        fins:      { bg: "#cffafe", fg: "#155e75" },
+        paddles:   { bg: "#fef3c7", fg: "#92400e" },
+        buoy:      { bg: "#fce7f3", fg: "#9d174d" },
+      };
+      const c = colors[name] || { bg: "#e2e8f0", fg: "#334155" };
+      return (
+        <span style={{ background: c.bg, color: c.fg, fontSize: 10, fontWeight: 700,
+                       padding: "2px 7px", borderRadius: 999, marginRight: 4,
+                       textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          {name}
+        </span>
+      );
+    }
+
+    function SetRow({ set, idx, equipment }) {
+      const eqItems = equipmentForSet(set, equipment);
+      const desc = enhanceDesc(set, equipment);
       return (
         <tr style={{ background: idx % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
           <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#334155", whiteSpace: "nowrap" }}>
@@ -350,18 +606,71 @@
           <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: "#1e293b", whiteSpace: "nowrap" }}>
             {(set.reps * set.dist).toLocaleString()} yds
           </td>
-          <td style={{ padding: "10px 16px", fontSize: 13, color: "#334155" }}>{set.desc}</td>
+          <td style={{ padding: "10px 16px", fontSize: 13, color: "#334155" }}>
+            {desc}
+            {eqItems.length > 0 && (
+              <div className="equipment-badges" style={{ marginTop: 6 }}>
+                {eqItems.map(e => <EquipmentBadge key={e} name={e} />)}
+              </div>
+            )}
+          </td>
           <td style={{ padding: "10px 16px", fontSize: 12, color: "#64748b", fontFamily: "monospace" }}>{set.interval}</td>
           <td style={{ padding: "10px 16px", fontSize: 12, color: "#64748b", fontStyle: "italic" }}>{set.focus}</td>
         </tr>
       );
     }
 
-    function WorkoutBlock({ block }) {
+    function EquipmentPicker({ equipment, onChange }) {
+      return (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 8, marginTop: 0 }}>
+            Equipment Available
+            <span style={{ color: "#64748b", textTransform: "none", letterSpacing: 0, fontWeight: 400, marginLeft: 8 }}>
+              (check what you'll use — kick & pull sets adjust accordingly)
+            </span>
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+            {EQUIPMENT_LIST.map(eq => {
+              const isOn = !!equipment[eq.id];
+              return (
+                <label key={eq.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "12px 14px", borderRadius: 10,
+                    border: `2px solid ${isOn ? "#3b82f6" : "#334155"}`,
+                    background: isOn ? "#1e3a5f" : "#1e293b",
+                    cursor: "pointer", userSelect: "none",
+                    transition: "all 0.15s",
+                  }}>
+                  <input type="checkbox"
+                    checked={isOn}
+                    onChange={e => onChange(eq.id, e.target.checked)}
+                    style={{
+                      width: 18, height: 18, cursor: "pointer", margin: 0,
+                      accentColor: "#3b82f6",
+                    }} />
+                  <span style={{ fontSize: 18 }}>{eq.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: isOn ? "#fff" : "#e2e8f0" }}>
+                      {eq.label}
+                    </div>
+                    <div style={{ fontSize: 10, color: isOn ? "#bfdbfe" : "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {eq.description}
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function WorkoutBlock({ block, equipment }) {
       const s = SECTION_STYLES[block.section];
       return (
-        <div style={{ borderRadius: 12, border: `1px solid ${s.border}`, overflow: "hidden", marginBottom: 16 }}>
-          <div style={{ background: s.headerBg, color: s.headerText, padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="workout-block" style={{ borderRadius: 12, border: `1px solid ${s.border}`, overflow: "hidden", marginBottom: 16 }}>
+          <div className="workout-block-header" style={{ background: s.headerBg, color: s.headerText, padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.dot, display: "inline-block" }} />
               <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.name}</span>
@@ -378,7 +687,7 @@
                 </tr>
               </thead>
               <tbody>
-                {block.sets.map((set, i) => <SetRow key={i} set={set} idx={i} />)}
+                {block.sets.map((set, i) => <SetRow key={i} set={set} idx={i} equipment={equipment} />)}
               </tbody>
             </table>
           </div>
@@ -479,14 +788,21 @@
       const [maxYards, setMaxYards]         = useState(2400);
       const [workout, setWorkout]           = useState(null);
       const [hover, setHover]               = useState(null);
+      const [equipment, setEquipment]       = useState({
+        kickboard: false, fins: false, paddles: false, pullBuoy: false,
+      });
 
       const handleGenerate = useCallback(() => {
         if (!selectedType) return;
-        setWorkout(generateWorkout(selectedType, maxYards));
-      }, [selectedType, maxYards]);
+        setWorkout(generateWorkout(selectedType, maxYards, equipment));
+      }, [selectedType, maxYards, equipment]);
 
       const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); };
       const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); };
+      const handleEquipChange = (id, on) => {
+        setEquipment(prev => ({ ...prev, [id]: on }));
+        setWorkout(null); // changing equipment requires re-generation to honor constraints
+      };
 
       const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
       const sectionColors = ["#38bdf8", "#2dd4bf", "#3b82f6", "#94a3b8"];
@@ -496,7 +812,7 @@
       return (
         <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)" }}>
           {/* Header */}
-          <div style={{ background: "#0f172a", borderBottom: "1px solid #1e40af", boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
+          <div className="screen-only" style={{ background: "#0f172a", borderBottom: "1px solid #1e40af", boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
             <div style={{ maxWidth: 940, margin: "0 auto", padding: "20px 24px", display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontSize: 36 }}>🏊‍♂️</span>
               <div>
@@ -509,10 +825,10 @@
           <div style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
 
             {/* Workout type selector */}
-            <p style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
+            <p className="screen-only" style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
               Select Workout Type
             </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+            <div className="screen-only" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
               {WORKOUT_TYPES.map(t => {
                 const isSel = selectedType === t.id;
                 const isHov = hover === t.id;
@@ -539,29 +855,34 @@
               })}
             </div>
 
-            {/* Max Yardage Slider */}
-            <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} />
+            <div className="screen-only">
+              {/* Equipment checkboxes */}
+              <EquipmentPicker equipment={equipment} onChange={handleEquipChange} />
 
-            {/* Generate Button */}
-            <button
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              style={{
-                width: "100%", padding: "14px 0", borderRadius: 12, border: "none",
-                fontWeight: 700, fontSize: 15, cursor: canGenerate ? "pointer" : "not-allowed",
-                background: canGenerate ? meta.selBg : "#334155",
-                color: canGenerate ? "#fff" : "#64748b",
-                boxShadow: canGenerate ? "0 8px 24px rgba(0,0,0,0.3)" : "none",
-                transition: "all 0.15s", marginBottom: 32, outline: "none",
-              }}>
-              {workout ? "🔄 Generate New Workout" : "🏊 Generate Workout"}
-            </button>
+              {/* Max Yardage Slider */}
+              <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} />
+
+              {/* Generate Button */}
+              <button
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                style={{
+                  width: "100%", padding: "14px 0", borderRadius: 12, border: "none",
+                  fontWeight: 700, fontSize: 15, cursor: canGenerate ? "pointer" : "not-allowed",
+                  background: canGenerate ? meta.selBg : "#334155",
+                  color: canGenerate ? "#fff" : "#64748b",
+                  boxShadow: canGenerate ? "0 8px 24px rgba(0,0,0,0.3)" : "none",
+                  transition: "all 0.15s", marginBottom: 32, outline: "none",
+                }}>
+                {workout ? "🔄 Generate New Workout" : "🏊 Generate Workout"}
+              </button>
+            </div>
 
             {/* Workout display */}
             {workout && (
               <div>
-                {/* Summary bar */}
-                <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 20, marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 24, alignItems: "center" }}>
+                {/* Summary bar (screen) */}
+                <div className="screen-only" style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 20, marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 24, alignItems: "center" }}>
                   <span style={{ background: meta.badge, color: meta.badgeText, borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700 }}>
                     {meta.emoji} {meta.label}
                   </span>
@@ -578,10 +899,33 @@
                       </div>
                     </div>
                   ))}
+                  <button
+                    onClick={() => window.print()}
+                    style={{
+                      marginLeft: "auto", padding: "10px 16px", borderRadius: 8,
+                      border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0",
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                    }}
+                    title="Print a clean B&W 8.5×11 version of this workout">
+                    🖨 Print Workout
+                  </button>
                 </div>
 
-                {/* Section breakdown bar */}
-                <div style={{ display: "flex", gap: 3, height: 10, borderRadius: 999, overflow: "hidden", marginBottom: 8 }}>
+                {/* Print-only header */}
+                <div className="print-only print-header">
+                  <h1 className="print-title">{meta.label} Swim Workout</h1>
+                  <p className="print-subtitle">{meta.description}</p>
+                  <div className="print-meta">
+                    <span><b>Date:</b> {new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
+                    <span><b>Total:</b> {workout.totalYards.toLocaleString()} yds</span>
+                    <span><b>Duration:</b> ~{workout.estimatedMin} min</span>
+                    <span><b>Pace target:</b> ~1:35–1:45 / 100 yds</span>
+                  </div>
+                </div>
+
+                {/* Section breakdown bar (screen only) */}
+                <div className="screen-only" style={{ display: "flex", gap: 3, height: 10, borderRadius: 999, overflow: "hidden", marginBottom: 8 }}>
                   {workout.blocks.map((b, i) => (
                     <div key={i}
                       style={{ width: `${(b.totalYards / workout.totalYards * 100).toFixed(1)}%`, background: sectionColors[i] }}
@@ -589,7 +933,7 @@
                     />
                   ))}
                 </div>
-                <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+                <div className="screen-only" style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
                   {workout.blocks.map((b, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: sectionColors[i], display: "inline-block" }} />
@@ -600,10 +944,10 @@
                 </div>
 
                 {/* Workout blocks */}
-                {workout.blocks.map((block, i) => <WorkoutBlock key={i} block={block} />)}
+                {workout.blocks.map((block, i) => <WorkoutBlock key={i} block={block} equipment={equipment} />)}
 
-                {/* Coach note */}
-                <div style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid #334155", color: "#94a3b8", fontSize: 13 }}>
+                {/* Coach note (screen only — user opted not to include in print) */}
+                <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid #334155", color: "#94a3b8", fontSize: 13 }}>
                   <span style={{ fontWeight: 600, color: "#cbd5e1" }}>📋 Coach's Note: </span>
                   Intervals assume a moderate masters pace (~1:35–1:45/100 yds). Adjust ±10–15 sec to match your base.
                   Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets.
@@ -613,7 +957,7 @@
 
             {/* Empty state */}
             {!workout && (
-              <div style={{ textAlign: "center", padding: "60px 0", color: "#475569" }}>
+              <div className="screen-only" style={{ textAlign: "center", padding: "60px 0", color: "#475569" }}>
                 <div style={{ fontSize: 56, marginBottom: 12 }}>🌊</div>
                 <p style={{ fontSize: 18, fontWeight: 500, color: "#94a3b8", margin: 0 }}>Pick a type, set your max yardage, and generate</p>
                 <p style={{ fontSize: 13, marginTop: 4, color: "#475569" }}>Each press produces a fresh workout within your range</p>
