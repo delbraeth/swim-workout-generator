@@ -283,6 +283,19 @@
             { reps: 1, dist: 200, desc: "IM — moderate",          interval: "On 4:30", focus: "Hang on — tired strokes" },
             { reps: 1, dist: 100, desc: "IM — ALL OUT finish",    interval: "On 3:00", focus: "Empty the tank" },
           ]},
+        { label: "Broken IM 200s", totalYards: 1100, sets: [
+            { reps: 4, dist: 200, desc: "Broken IM — 50 fly :10R, 50 back :10R, 50 breast :10R, 50 free", interval: "On 5:00", focus: "Hold race pace through each stroke with mini-rests" },
+            { reps: 4, dist:  75, desc: "IM transitions — 50 IM + 25 Free strong",                        interval: "On 1:40", focus: "Sharpen the change-overs between strokes" },
+          ]},
+        { label: "IM Stroke Rotation", totalYards: 1200, sets: [
+            { reps: 4, dist: 100, desc: "Choice non-free stroke — strong, hold form",       interval: "On 2:15", focus: "Pick your weakest stroke for extra work" },
+            { reps: 4, dist: 100, desc: "100 IM — moderate, smooth transitions",            interval: "On 2:10", focus: "Apply per-stroke quality to the full IM" },
+            { reps: 4, dist: 100, desc: "Freestyle — strong, descend 1→4 (close the set)",  interval: "On 1:50", focus: "Finish the set with speed in the legs" },
+          ]},
+        { label: "Pull + IM Combo", totalYards: 1100, sets: [
+            { reps: 3, dist: 200, desc: "Pull (buoy) — alternate strokes by 50 (free / non-free)", interval: "On 3:45", focus: "Long-stroke pull pattern across IM strokes", eq: "pull" },
+            { reps: 5, dist: 100, desc: "IM — moderate to fast, descend 1→5",                       interval: "On 2:10", focus: "Build from controlled to strong, smooth transitions" },
+          ]},
       ],
       distance: [
         { label: "200s Descend", totalYards: 1000, sets: [
@@ -299,6 +312,18 @@
             { reps: 1, dist: 400, desc: "Freestyle — aerobic/moderate",        interval: "On 8:00", focus: "Long steady effort, build pace" },
             { reps: 2, dist: 200, desc: "Freestyle — moderate/fast, descend",  interval: "On 3:45", focus: "Find race pace, each one faster" },
             { reps: 3, dist: 100, desc: "Freestyle — fast, under threshold",   interval: "On 1:55", focus: "Sustain speed under accumulated load" },
+          ]},
+        { label: "Broken 500s", totalYards: 1200, sets: [
+            { reps: 2, dist: 500, desc: "Broken 500 free — 5×100 with :15 rest, hold target pace", interval: "On 11:00", focus: "Race-pace simulation across long distance" },
+            { reps: 2, dist: 100, desc: "Easy freestyle — active recovery between blocks",         interval: "On 2:00",  focus: "Clear lactate, get ready for next block" },
+          ]},
+        { label: "Pull + Swim Threshold", totalYards: 1200, sets: [
+            { reps: 4, dist: 200, desc: "Pull (buoy) — strong, hold technique under load", interval: "On 3:45", focus: "Upper-body endurance at threshold pace", eq: "pull" },
+            { reps: 4, dist: 100, desc: "Freestyle swim — match the pull pace",             interval: "On 1:50", focus: "Translate pull strength into full stroke" },
+          ]},
+        { label: "Long Aerobic Build", totalYards: 1200, sets: [
+            { reps: 1, dist: 800, desc: "Freestyle — negative split (second 400 faster than first)", interval: "On 14:30", focus: "Pace control over distance, build gradually" },
+            { reps: 4, dist: 100, desc: "Freestyle — strong, finish the workout",                     interval: "On 1:55",  focus: "Hold form despite fatigue" },
           ]},
       ],
       sprint: [
@@ -317,6 +342,28 @@
             { reps: 1, dist: 200, desc: "Easy recovery freestyle",                   interval: "4:00 rest before next", focus: "Full recovery" },
             { reps: 8, dist:  50, desc: "Choice — ALL OUT (full recovery between)",  interval: "On 2:30",               focus: "Max velocity — no holding back" },
             { reps: 4, dist:  25, desc: "Choice — absolute sprint to finish",        interval: "On 1:00",               focus: "End on pure speed" },
+          ]},
+        { label: "Sprint Pyramid Up & Down", totalYards: 1000, sets: [
+            { reps: 1, dist:  25, desc: "Choice stroke — ALL OUT",                            interval: "On :45",  focus: "Wake up top-end speed" },
+            { reps: 1, dist:  50, desc: "Choice stroke — ALL OUT",                            interval: "On 1:30", focus: "Build the ladder" },
+            { reps: 1, dist:  75, desc: "Choice stroke — ALL OUT",                            interval: "On 2:15", focus: "Hold longer" },
+            { reps: 1, dist: 100, desc: "Choice stroke — ALL OUT",                            interval: "On 3:00", focus: "Peak of pyramid" },
+            { reps: 1, dist:  75, desc: "Choice stroke — ALL OUT",                            interval: "On 2:15", focus: "Speed under fatigue" },
+            { reps: 1, dist:  50, desc: "Choice stroke — ALL OUT",                            interval: "On 1:30", focus: "Find top speed again" },
+            { reps: 1, dist:  25, desc: "Choice stroke — ALL OUT (best 25 of the workout)",   interval: "On :45",  focus: "Final blast" },
+            { reps: 1, dist: 200, desc: "Easy choice — full recovery before second block",    interval: "On 4:00", focus: "Active recovery" },
+            { reps: 4, dist: 100, desc: "Freestyle — 75 easy + last 25 ALL OUT",              interval: "On 2:00", focus: "Finish with controlled speed work" },
+          ]},
+        { label: "Anaerobic Capacity", totalYards: 1000, sets: [
+            { reps: 8, dist:  50, desc: "Choice stroke — ALL OUT, short rest (test the system)", interval: "On 1:15", focus: "Max effort with limited recovery — no holding back" },
+            { reps: 4, dist: 100, desc: "Easy freestyle — between sprint blocks",                 interval: "On 2:00", focus: "Clear lactate, regroup" },
+            { reps: 4, dist:  50, desc: "Choice stroke — ALL OUT, longer rest",                   interval: "On 2:00", focus: "Pure speed after fatigue accumulated" },
+          ]},
+        { label: "Sprint Pull Power", totalYards: 1000, sets: [
+            { reps: 6, dist:  50, desc: "Pull (buoy) — fast, drive arm speed", interval: "On 1:15", focus: "Upper-body sprint mechanics, max stroke rate", eq: "pull" },
+            { reps: 1, dist: 200, desc: "Easy freestyle — recovery",            interval: "On 4:00", focus: "Reset between blocks" },
+            { reps: 8, dist:  25, desc: "Freestyle — ALL OUT, max turnover",    interval: "On :45",  focus: "Apply pull power into full sprint" },
+            { reps: 6, dist:  50, desc: "Choice — fast, descend 1→6",           interval: "On 1:30", focus: "Each one faster, finish strongest" },
           ]},
       ],
       endurance: [
@@ -337,6 +384,22 @@
         { label: "Threshold Tempo", totalYards: 1200, sets: [
             { reps: 4, dist: 300, desc: "Freestyle — threshold pace (RPE 7-8/10). Hold SAME pace all 4 reps.", interval: "On 5:30", focus: "Aerobic ceiling — maintain form under sustained effort" },
           ]},
+        { label: "Pull Endurance", totalYards: 1200, sets: [
+            { reps: 1, dist: 600, desc: "Pull (buoy) — steady aerobic, focus on long stroke", interval: "On 11:00", focus: "Build pull endurance, smooth and rhythmic", eq: "pull" },
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate, descend 1→4",                 interval: "On 2:00",  focus: "Add intensity to the same pull pattern",   eq: "pull" },
+            { reps: 1, dist: 200, desc: "Freestyle swim — apply pull catch into full stroke",  interval: "On 3:45",  focus: "Carry the catch over to swimming" },
+          ]},
+        { label: "Mile Pace Builder", totalYards: 1200, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — find your mile pace (RPE 7/10)", interval: "On 7:30", focus: "Establish your sustainable race pace" },
+            { reps: 1, dist: 100, desc: "Easy backstroke — recovery",                  interval: "On 2:00", focus: "Reset between efforts" },
+            { reps: 1, dist: 400, desc: "Freestyle — match the first 400 pace",        interval: "On 7:30", focus: "Repeat the same effort fatigued" },
+            { reps: 1, dist: 100, desc: "Easy backstroke — recovery",                  interval: "On 2:00", focus: "Final reset" },
+            { reps: 2, dist: 100, desc: "Freestyle — slightly faster than 400 pace",   interval: "On 1:55", focus: "Practice closing speed at the end of a mile" },
+          ]},
+        { label: "Aerobic Capacity Set", totalYards: 1300, sets: [
+            { reps: 6, dist: 150, desc: "Freestyle — strong aerobic effort (RPE 7-8/10)", interval: "On 2:45", focus: "Sustained mid-distance work, hold form throughout" },
+            { reps: 4, dist: 100, desc: "Freestyle — finish strong (RPE 8/10)",            interval: "On 1:50", focus: "Push lactate threshold under accumulated fatigue" },
+          ]},
       ],
       technique: [
         { label: "Kick + Drill + Swim", totalYards: 1000, sets: [
@@ -353,6 +416,23 @@
             { reps: 4, dist: 100, desc: "Choice of stroke — SLOW, perfect form over speed",              interval: "On 2:30", focus: "No rushing — technique over pace" },
             { reps: 8, dist:  50, desc: "2 each: fly drill / back drill / breast drill / free drill",    interval: "On 1:10", focus: "Key isolation drill for each stroke" },
             { reps: 4, dist:  75, desc: "25 Drill + 50 Swim (same stroke — apply what you drilled)",    interval: "On 1:40", focus: "Bridge drill into real swimming" },
+          ]},
+        { label: "Kick-Heavy Day", totalYards: 1100, sets: [
+            { reps: 8, dist:  50, desc: "Kick — alternate stroke choice every 50",         interval: "On 1:30", focus: "Develop kick across all strokes",     eq: "kick" },
+            { reps: 4, dist:  75, desc: "25 Kick / 25 Drill / 25 Swim — same stroke",       interval: "On 1:40", focus: "Translate kick rhythm into swim",      eq: "kickPart" },
+            { reps: 4, dist: 100, desc: "Freestyle — relaxed swim, apply leg work",         interval: "On 2:00", focus: "Apply leg conditioning into the stroke" },
+          ]},
+        { label: "Catch + Pull Focus", totalYards: 1100, sets: [
+            { reps: 4, dist:  50, desc: "Sculling drill — head-first, focus on hand pressure", interval: "On 1:15", focus: "Feel the water against your forearm" },
+            { reps: 4, dist: 100, desc: "Pull (buoy) — count strokes per 25, minimize",         interval: "On 1:55", focus: "Long efficient pull, max distance per stroke", eq: "pull" },
+            { reps: 4, dist:  75, desc: "25 Pull + 50 Swim — carry the catch into the stroke",  interval: "On 1:40", focus: "Bridge pull mechanics into full freestyle",     eq: "pull" },
+            { reps: 2, dist: 100, desc: "Freestyle — relaxed, smooth, apply everything",         interval: "On 2:00", focus: "Integrate the work into normal swimming" },
+          ]},
+        { label: "Stroke Count Awareness", totalYards: 1000, sets: [
+            { reps: 4, dist:  50, desc: "Freestyle — count strokes per 25, set baseline",          interval: "On 1:10", focus: "Establish your normal stroke count" },
+            { reps: 4, dist:  50, desc: "Freestyle — same speed, REDUCE strokes by 1-2",           interval: "On 1:10", focus: "Reach further, swim taller" },
+            { reps: 4, dist:  50, desc: "Freestyle — go FASTER without adding strokes",             interval: "On 1:10", focus: "Faster turnover, same length" },
+            { reps: 4, dist: 100, desc: "Freestyle — apply the count target across longer swim",    interval: "On 1:50", focus: "Sustain efficiency over distance" },
           ]},
       ],
       mixed: [
@@ -375,6 +455,22 @@
             { reps: 2, dist: 200, desc: "Choice of stroke — moderate to fast",     interval: "On 3:30", focus: "Pick up the pace, find threshold" },
             { reps: 4, dist: 100, desc: "IM or choice — hard effort",              interval: "On 2:00", focus: "Push lactate threshold" },
             { reps: 4, dist:  50, desc: "Sprint — choice stroke, ALL OUT",         interval: "On 1:30", focus: "Top-end speed" },
+          ]},
+        { label: "Pull + Kick Mix", totalYards: 1100, sets: [
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate, focus on catch",  interval: "On 1:55", focus: "Upper-body block",                               eq: "pull" },
+            { reps: 1, dist: 100, desc: "Easy freestyle — transition",              interval: "On 2:00", focus: "Reset between blocks" },
+            { reps: 4, dist:  50, desc: "Kick — moderate effort (board optional)",  interval: "On 1:10", focus: "Lower-body block",                               eq: "kick" },
+            { reps: 4, dist: 100, desc: "Freestyle — strong, integrate both",       interval: "On 1:55", focus: "Apply pull + kick into full stroke" },
+          ]},
+        { label: "Sprint Recovery Cycles", totalYards: 1200, sets: [
+            { reps: 6, dist: 100, desc: "50 ALL OUT / 50 easy (immediately)",          interval: "On 2:00", focus: "Practice rapid recovery between hard efforts" },
+            { reps: 1, dist: 200, desc: "Easy backstroke — full recovery",              interval: "On 4:00", focus: "Active recovery between blocks" },
+            { reps: 4, dist: 100, desc: "Freestyle — strong, hold near-threshold pace", interval: "On 1:55", focus: "Sustained effort with the lactate already there" },
+          ]},
+        { label: "IM-Free-Choice Triplets", totalYards: 1200, sets: [
+            { reps: 4, dist: 100, desc: "IM — moderate, focus on transitions",          interval: "On 2:10", focus: "Smooth stroke order under control" },
+            { reps: 4, dist: 100, desc: "Freestyle — descend 1→4 (each faster)",         interval: "On 1:50", focus: "Build pace round to round" },
+            { reps: 4, dist: 100, desc: "Choice stroke (non-free) — strong, hold form", interval: "On 2:10", focus: "Pick your weakest stroke for variety" },
           ]},
       ],
     };
