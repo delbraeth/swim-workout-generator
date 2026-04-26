@@ -102,5 +102,110 @@
       }
     ],
     "notes": ""
+  },
+  {
+    "id": "wmof19j46srh3a1",
+    "savedAt": "2026-04-26T00:31:43.110Z",
+    "dateCompleted": "2026-04-26",
+    "type": "technique",
+    "typeLabel": "Technique",
+    "totalYards": 2150,
+    "estimatedMin": 68,
+    "maxYardsCap": 2400,
+    "equipment": {
+      "kickboard": false,
+      "fins": true,
+      "paddles": true,
+      "pullBuoy": true
+    },
+    "blocks": [
+      {
+        "name": "Warm-Up",
+        "section": "warmup",
+        "totalYards": 400,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 400,
+            "desc": "Easy Freestyle",
+            "interval": "No interval — swim easy",
+            "focus": "Loosen up, steady breathing"
+          }
+        ]
+      },
+      {
+        "name": "Drill / Pre-Main Set",
+        "section": "drill",
+        "totalYards": 400,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 50,
+            "desc": "Kick — slow, focus on stroke alignment (board optional)",
+            "interval": "On 1:10",
+            "focus": "Isolate leg technique",
+            "eq": "kick"
+          },
+          {
+            "reps": 2,
+            "dist": 100,
+            "desc": "Pull (buoy) — high-elbow catch, long stroke",
+            "interval": "On 1:55",
+            "focus": "Isolate upper-body technique",
+            "eq": "pull"
+          }
+        ]
+      },
+      {
+        "name": "Main Set — All-Stroke Technique",
+        "section": "main",
+        "totalYards": 1100,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 100,
+            "desc": "Choice of stroke — SLOW, perfect form over speed",
+            "interval": "On 2:30",
+            "focus": "No rushing — technique over pace"
+          },
+          {
+            "reps": 8,
+            "dist": 50,
+            "desc": "2 each: fly drill / back drill / breast drill / free drill",
+            "interval": "On 1:10",
+            "focus": "Key isolation drill for each stroke"
+          },
+          {
+            "reps": 4,
+            "dist": 75,
+            "desc": "25 Drill + 50 Swim (same stroke — apply what you drilled)",
+            "interval": "On 1:40",
+            "focus": "Bridge drill into real swimming"
+          }
+        ]
+      },
+      {
+        "name": "Cool-Down",
+        "section": "cooldown",
+        "totalYards": 250,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 150,
+            "desc": "Easy Backstroke or choice",
+            "interval": "No interval",
+            "focus": "Let lactic acid clear, open the chest"
+          },
+          {
+            "reps": 1,
+            "dist": 100,
+            "desc": "Easy Freestyle — progressively slower",
+            "interval": "No interval",
+            "focus": "Full cool-down — slowest laps of the day"
+          }
+        ]
+      }
+    ],
+    "notes": ""
   }
 ]
