@@ -1,1 +1,106 @@
-[]
+[
+  {
+    "id": "wmof0j24ganu9ru",
+    "savedAt": "2026-04-26T00:11:08.032Z",
+    "dateCompleted": "2026-04-26",
+    "type": "sprint",
+    "typeLabel": "Sprint",
+    "totalYards": 2000,
+    "estimatedMin": 65,
+    "maxYardsCap": 2400,
+    "equipment": {
+      "kickboard": false,
+      "fins": false,
+      "paddles": true,
+      "pullBuoy": false
+    },
+    "blocks": [
+      {
+        "name": "Warm-Up",
+        "section": "warmup",
+        "totalYards": 500,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 400,
+            "desc": "Freestyle — easy, focus on long stroke",
+            "interval": "No interval",
+            "focus": "Prime the aerobic engine"
+          },
+          {
+            "reps": 4,
+            "dist": 25,
+            "desc": "Backstroke — easy, open the shoulders",
+            "interval": "On :45",
+            "focus": "Counter the freestyle pull"
+          }
+        ]
+      },
+      {
+        "name": "Drill / Pre-Main Set",
+        "section": "drill",
+        "totalYards": 300,
+        "sets": [
+          {
+            "reps": 6,
+            "dist": 50,
+            "desc": "25 Easy / 25 Build (NOT all-out yet)",
+            "interval": "On 1:15",
+            "focus": "Activate fast-twitch, save energy for main set"
+          }
+        ]
+      },
+      {
+        "name": "Main Set — Sprint Pull Power",
+        "section": "main",
+        "totalYards": 1000,
+        "sets": [
+          {
+            "reps": 6,
+            "dist": 50,
+            "desc": "Pull (buoy) — fast, drive arm speed",
+            "interval": "On 1:15",
+            "focus": "Upper-body sprint mechanics, max stroke rate",
+            "eq": "pull"
+          },
+          {
+            "reps": 1,
+            "dist": 200,
+            "desc": "Easy freestyle — recovery",
+            "interval": "On 4:00",
+            "focus": "Reset between blocks"
+          },
+          {
+            "reps": 8,
+            "dist": 25,
+            "desc": "Freestyle — ALL OUT, max turnover",
+            "interval": "On :45",
+            "focus": "Apply pull power into full sprint"
+          },
+          {
+            "reps": 6,
+            "dist": 50,
+            "desc": "Choice — fast, descend 1→6",
+            "interval": "On 1:30",
+            "focus": "Each one faster, finish strongest"
+          }
+        ]
+      },
+      {
+        "name": "Cool-Down",
+        "section": "cooldown",
+        "totalYards": 200,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 200,
+            "desc": "Easy Freestyle — long, relaxed stroke",
+            "interval": "No interval",
+            "focus": "Bring heart rate down, flush the muscles"
+          }
+        ]
+      }
+    ],
+    "notes": ""
+  }
+]
