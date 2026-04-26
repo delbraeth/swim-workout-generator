@@ -164,18 +164,24 @@
     //  WORKOUT TYPE METADATA
     // ═══════════════════════════════════════════════════════════════
     const WORKOUT_TYPES = [
-      { id: "im",        label: "IM Focus",   emoji: "🦋", description: "All four strokes — fly, back, breast, free",
+      { id: "im",        label: "IM Focus",         emoji: "🔄", description: "All four strokes — fly, back, breast, free",
         selBg: "#7c3aed", border: "#c4b5fd", badge: "#ede9fe", badgeText: "#5b21b6" },
-      { id: "distance",  label: "Distance",   emoji: "🏊", description: "Longer swims, building aerobic base",
+      { id: "distance",  label: "Distance",         emoji: "🏊", description: "Longer swims, building aerobic base",
         selBg: "#2563eb", border: "#93c5fd", badge: "#dbeafe", badgeText: "#1e40af" },
-      { id: "sprint",    label: "Sprint",     emoji: "⚡", description: "Short, fast swims with full recovery",
+      { id: "sprint",    label: "Sprint",           emoji: "⚡", description: "Short, fast swims with full recovery",
         selBg: "#dc2626", border: "#fca5a5", badge: "#fee2e2", badgeText: "#991b1b" },
-      { id: "endurance", label: "Endurance",  emoji: "💪", description: "Steady-state, long continuous swims",
+      { id: "endurance", label: "Endurance",        emoji: "💪", description: "Steady-state, long continuous swims",
         selBg: "#16a34a", border: "#86efac", badge: "#dcfce7", badgeText: "#166534" },
-      { id: "technique", label: "Technique",  emoji: "🎯", description: "Drills, kick sets, and stroke refinement",
+      { id: "technique", label: "Technique",        emoji: "🎯", description: "Drills, kick sets, and stroke refinement",
         selBg: "#0d9488", border: "#5eead4", badge: "#ccfbf1", badgeText: "#115e59" },
-      { id: "mixed",     label: "Mixed",      emoji: "🔀", description: "Sprints, distance, and drills combined",
+      { id: "mixed",     label: "Mixed",            emoji: "🔀", description: "Sprints, distance, and drills combined",
         selBg: "#ea580c", border: "#fdba74", badge: "#ffedd5", badgeText: "#9a3412" },
+      { id: "back",      label: "Specialty Back",   emoji: "🔙", description: "Backstroke focus across drills and main set",
+        selBg: "#0891b2", border: "#67e8f9", badge: "#cffafe", badgeText: "#155e75" },
+      { id: "breast",    label: "Specialty Breast", emoji: "🐸", description: "Breaststroke focus across drills and main set",
+        selBg: "#db2777", border: "#f9a8d4", badge: "#fce7f3", badgeText: "#9d174d" },
+      { id: "fly",       label: "Specialty Fly",    emoji: "🦋", description: "Butterfly focus (with free recovery throughout)",
+        selBg: "#ca8a04", border: "#facc15", badge: "#fef9c3", badgeText: "#854d0e" },
     ];
 
     const SECTION_STYLES = {
@@ -286,6 +292,42 @@
         { totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — moderate, choice of stroke (board optional)", interval: "On 1:10", focus: "Leg activation",                eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — moderate, smooth rotation",           interval: "On 1:50", focus: "Upper-body warm-up before mix", eq: "pull" },
+          ]},
+      ],
+      back: [
+        { totalYards: 300, sets: [
+            { reps: 4, dist: 75, desc: "25 single-arm backstroke / 25 double-arm back drill / 25 backstroke swim", interval: "On 1:45", focus: "Lead arm extension and stroke timing in back" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Backstroke kick — 25 streamline (no board) / 25 with board", interval: "On 1:15", focus: "Body position on the back, hip drive", eq: "kick" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Backstroke kick — easy/moderate (board optional)", interval: "On 1:15", focus: "Leg conditioning for back",     eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — backstroke pull pattern, focus on catch", interval: "On 2:15", focus: "Upper-body work for back", eq: "pull" },
+          ]},
+      ],
+      breast: [
+        { totalYards: 300, sets: [
+            { reps: 4, dist: 75, desc: "25 breast pull-only (no kick) / 25 breast kick (board) / 25 breast swim", interval: "On 2:00", focus: "Isolate then integrate the breast components" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Breaststroke kick (board) — focus on power and recovery", interval: "On 1:30", focus: "Breast kick rhythm and power", eq: "kick" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Breaststroke kick (board) — moderate effort", interval: "On 1:30", focus: "Power kick",          eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — breaststroke pull pattern",     interval: "On 2:30", focus: "Strong pull-glide cycle", eq: "pull" },
+          ]},
+      ],
+      fly: [
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "25 fly drill (3-3-3 or single-arm) / 25 freestyle easy", interval: "On 1:30", focus: "Build fly tolerance with active recovery" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Dolphin kick — alternate streamline on stomach / on back", interval: "On 1:15", focus: "Dolphin rhythm without arm fatigue", eq: "kick" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 50, desc: "Dolphin kick (board) — focus on rhythm",                                 interval: "On 1:15", focus: "Sustained kick base for fly",       eq: "kick" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — 25 fly pull / 75 freestyle pull (recovery in arm pattern)", interval: "On 2:00", focus: "Build fly catch with free recovery", eq: "pull" },
           ]},
       ],
     };
@@ -809,6 +851,93 @@
             { reps: 3, dist: 100, desc: "Backstroke — moderate, smooth pace",     interval: "On 2:00", focus: "Back tempo" },
             { reps: 3, dist: 100, desc: "Breaststroke — moderate to strong",      interval: "On 2:30", focus: "Breast tempo" },
             { reps: 3, dist: 100, desc: "Freestyle — strong finishing pace",      interval: "On 1:55", focus: "Free endurance" },
+          ]},
+      ],
+      back: [
+        { label: "Back 100s", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Backstroke — moderate to strong, descend each pair (1-2, 3-4, etc.)", interval: "On 2:15", focus: "Build backstroke fitness across volume" },
+          ]},
+        { label: "Back Pyramid", totalYards: 1100, sets: [
+            { reps: 1, dist:  50, desc: "Backstroke — easy build",                              interval: "On 1:15", focus: "Open up" },
+            { reps: 1, dist: 100, desc: "Backstroke — moderate",                                interval: "On 2:15", focus: "Find your pace" },
+            { reps: 1, dist: 150, desc: "Backstroke — moderate to strong",                       interval: "On 3:15", focus: "Hold longer" },
+            { reps: 1, dist: 200, desc: "Backstroke — strong",                                   interval: "On 4:15", focus: "Apex of pyramid" },
+            { reps: 1, dist: 150, desc: "Backstroke — strong, match earlier 150 pace",           interval: "On 3:15", focus: "Same pace, fatigued" },
+            { reps: 1, dist: 100, desc: "Backstroke — fast",                                     interval: "On 2:15", focus: "Pick up pace" },
+            { reps: 1, dist:  50, desc: "Backstroke — ALL OUT",                                  interval: "On 1:15", focus: "Top speed" },
+            { reps: 1, dist: 300, desc: "Easy choice — recovery",                                interval: "On 6:00", focus: "Cool down" },
+          ]},
+        { label: "Back + Free Cycles", totalYards: 1000, sets: [
+            { reps: 8, dist: 100, desc: "50 backstroke strong / 50 freestyle easy", interval: "On 2:00", focus: "Hard back / easy free alternation for recovery" },
+            { reps: 4, dist:  50, desc: "Backstroke — fast finishing 50s",          interval: "On 1:15", focus: "Speed at the end" },
+          ]},
+        { label: "Back Pull Set", totalYards: 1000, sets: [
+            { reps: 6, dist: 100, desc: "Pull (buoy) — backstroke, focus on catch", interval: "On 2:15", focus: "Upper-body backstroke work",         eq: "pull" },
+            { reps: 1, dist: 100, desc: "Easy backstroke — recovery",                interval: "On 2:15", focus: "Reset" },
+            { reps: 6, dist:  50, desc: "Backstroke — strong, apply pull mechanics", interval: "On 1:15", focus: "Translate pull strength to swim" },
+          ]},
+        { label: "Back Sprint Set", totalYards: 1000, sets: [
+            { reps: 16, dist: 50, desc: "Backstroke — descend 1→4 within each set of 4",  interval: "On 1:15", focus: "Sprint backstroke with consistent rest" },
+            { reps:  4, dist: 50, desc: "Backstroke — ALL OUT, full recovery",             interval: "On 2:00", focus: "Top-end back speed" },
+          ]},
+      ],
+      breast: [
+        { label: "Breast 100s", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Breaststroke — moderate to strong, count strokes per 25", interval: "On 2:30", focus: "Sustain breast pace, monitor stroke count for efficiency" },
+          ]},
+        { label: "Breast Pyramid", totalYards: 1100, sets: [
+            { reps: 1, dist:  50, desc: "Breaststroke — easy build",                              interval: "On 1:30", focus: "Open up" },
+            { reps: 1, dist: 100, desc: "Breaststroke — moderate",                                interval: "On 2:30", focus: "Find your pace" },
+            { reps: 1, dist: 150, desc: "Breaststroke — moderate to strong",                       interval: "On 3:45", focus: "Hold longer" },
+            { reps: 1, dist: 200, desc: "Breaststroke — strong",                                   interval: "On 5:00", focus: "Apex of pyramid" },
+            { reps: 1, dist: 150, desc: "Breaststroke — strong, match earlier pace",               interval: "On 3:45", focus: "Same pace, fatigued" },
+            { reps: 1, dist: 100, desc: "Breaststroke — fast",                                     interval: "On 2:30", focus: "Pick up pace" },
+            { reps: 1, dist:  50, desc: "Breaststroke — ALL OUT",                                  interval: "On 1:30", focus: "Top speed" },
+            { reps: 1, dist: 300, desc: "Easy choice — recovery",                                  interval: "On 6:00", focus: "Cool down" },
+          ]},
+        { label: "Breast Kick Endurance", totalYards: 1000, sets: [
+            { reps: 1, dist: 300, desc: "Breaststroke kick (board) — long aerobic effort",  interval: "On 6:30", focus: "Build kick endurance",        eq: "kick" },
+            { reps: 4, dist: 100, desc: "Breaststroke kick — moderate, descend pace 1→4",    interval: "On 2:15", focus: "Build kick intensity",        eq: "kick" },
+            { reps: 3, dist: 100, desc: "Breaststroke swim — strong, drive with the kick",   interval: "On 2:30", focus: "Apply kick power to full stroke" },
+          ]},
+        { label: "Breast Pull Set", totalYards: 1000, sets: [
+            { reps: 6, dist: 100, desc: "Pull (buoy) — breaststroke pull, no kick (just glide)", interval: "On 2:30", focus: "Strong pull pattern",            eq: "pull" },
+            { reps: 1, dist: 100, desc: "Easy choice — recovery",                                  interval: "On 2:00", focus: "Reset" },
+            { reps: 6, dist:  50, desc: "Breaststroke — strong, integrate pull with kick",         interval: "On 1:30", focus: "Apply pull mechanics" },
+          ]},
+        { label: "Breast Sprint Set", totalYards: 1000, sets: [
+            { reps: 12, dist: 50, desc: "Breaststroke — descend 1→4 within each set of 4", interval: "On 1:30", focus: "Sprint breast with controlled cadence" },
+            { reps:  1, dist: 200, desc: "Easy choice — recovery",                          interval: "On 4:00", focus: "Reset" },
+            { reps:  4, dist: 50, desc: "Breaststroke — ALL OUT, fast turns",               interval: "On 1:45", focus: "Peak breast speed" },
+          ]},
+      ],
+      fly: [
+        { label: "Fly 25s with Free Recovery", totalYards: 1000, sets: [
+            { reps: 16, dist: 50, desc: "25 fly fast / 25 freestyle easy (immediate)",      interval: "On 1:15", focus: "Build fly tolerance with active recovery" },
+            { reps:  4, dist: 50, desc: "25 fly ALL OUT / 25 free easy",                     interval: "On 1:30", focus: "Maximum fly speed with recovery" },
+          ]},
+        { label: "Fly + Free Pattern 100s", totalYards: 1000, sets: [
+            { reps: 8, dist: 100, desc: "25 fly / 75 freestyle — recover into the free", interval: "On 2:00", focus: "Sustainable fly with free recovery built in" },
+            { reps: 4, dist:  50, desc: "Butterfly — fast (full stroke, no recovery)",   interval: "On 1:30", focus: "Pure fly speed at the end" },
+          ]},
+        { label: "Fly Sprint Pyramid", totalYards: 1100, sets: [
+            { reps: 1, dist:  25, desc: "Butterfly — fast",                                      interval: "On :45",  focus: "Open up" },
+            { reps: 2, dist:  25, desc: "Butterfly — fast",                                      interval: "On :45",  focus: "Build" },
+            { reps: 4, dist:  25, desc: "Butterfly — ALL OUT",                                   interval: "On :45",  focus: "Peak speed" },
+            { reps: 8, dist:  25, desc: "Butterfly — ALL OUT (this is the test)",                interval: "On 1:00", focus: "Maintain speed under fatigue" },
+            { reps: 4, dist:  25, desc: "Butterfly — ALL OUT",                                   interval: "On :45",  focus: "Hold the line" },
+            { reps: 2, dist:  25, desc: "Butterfly — ALL OUT",                                   interval: "On :45",  focus: "Find top speed" },
+            { reps: 1, dist:  25, desc: "Butterfly — ALL OUT (best 25 of the day)",              interval: "On :45",  focus: "Final blast" },
+            { reps: 1, dist: 550, desc: "Easy freestyle — full recovery",                        interval: "On 11:00", focus: "Aerobic close-out" },
+          ]},
+        { label: "Fly Pull Set", totalYards: 1000, sets: [
+            { reps: 8, dist: 100, desc: "Pull (buoy) — 25 fly pull / 75 freestyle pull", interval: "On 2:15", focus: "Build fly catch with free recovery", eq: "pull" },
+            { reps: 4, dist:  50, desc: "Butterfly — fast (apply pull mechanics)",        interval: "On 1:30", focus: "Translate pull strength to fly swim" },
+          ]},
+        { label: "Fly Kick + Swim", totalYards: 1100, sets: [
+            { reps: 1, dist: 300, desc: "Dolphin kick (board) — easy aerobic",            interval: "On 7:00", focus: "Long dolphin base",                       eq: "kick" },
+            { reps: 4, dist: 100, desc: "Dolphin kick — moderate, descend pace 1→4",       interval: "On 2:15", focus: "Build kick intensity",                    eq: "kick" },
+            { reps: 8, dist:  50, desc: "25 fly fast / 25 free easy",                       interval: "On 1:15", focus: "Apply dolphin rhythm to fly with active recovery" },
           ]},
       ],
     };
