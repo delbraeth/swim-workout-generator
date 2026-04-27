@@ -19,6 +19,9 @@
     /* Default visibility for the print/screen helper classes */
     .print-only { display: none; }
 
+    /* Equipment picker — responsive grid (auto-fits 4 cols on desktop, 2 on mobile) */
+    .equipment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+
     /* ────────────────────────────────────────────────────────────
        PRINT STYLES — clean, high-contrast, 8.5×11 B&W
        Hides all interactive UI, strips backgrounds and colors,
@@ -1192,7 +1195,7 @@
               (check what you'll use — kick & pull sets adjust accordingly)
             </span>
           </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+          <div className="equipment-grid">
             {EQUIPMENT_LIST.map(eq => {
               const isOn = !!equipment[eq.id];
               return (
@@ -1214,7 +1217,7 @@
                     }} />
                   <span style={{ fontSize: 18 }}>{eq.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: isOn ? "#fff" : "#e2e8f0" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: isOn ? "#fff" : "#e2e8f0", whiteSpace: "nowrap" }}>
                       {eq.label}
                     </div>
                     <div style={{ fontSize: 10, color: isOn ? "#bfdbfe" : "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
