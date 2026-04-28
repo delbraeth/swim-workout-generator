@@ -207,5 +207,110 @@
       }
     ],
     "notes": ""
+  },
+  {
+    "id": "wmoiy1jkxgtcxr2",
+    "savedAt": "2026-04-28T18:12:36.321Z",
+    "dateCompleted": "2026-04-28",
+    "type": "mixed",
+    "typeLabel": "Mixed",
+    "totalYards": 2200,
+    "estimatedMin": 66,
+    "maxYardsCap": 2200,
+    "equipment": {
+      "kickboard": true,
+      "fins": false,
+      "paddles": true,
+      "pullBuoy": true
+    },
+    "blocks": [
+      {
+        "name": "Warm-Up",
+        "section": "warmup",
+        "totalYards": 400,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 300,
+            "desc": "Freestyle — build from easy to moderate",
+            "interval": "No interval",
+            "focus": "Gradually wake up"
+          },
+          {
+            "reps": 4,
+            "dist": 25,
+            "desc": "Kick (no board, streamlined)",
+            "interval": "On :40",
+            "focus": "Loosen hips and ankles"
+          }
+        ]
+      },
+      {
+        "name": "Drill / Pre-Main Set",
+        "section": "drill",
+        "totalYards": 400,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 50,
+            "desc": "Kick — moderate, choice of stroke (board optional)",
+            "interval": "On 1:10",
+            "focus": "Leg activation",
+            "eq": "kick"
+          },
+          {
+            "reps": 2,
+            "dist": 100,
+            "desc": "Pull (buoy) — moderate, smooth rotation",
+            "interval": "On 1:50",
+            "focus": "Upper-body warm-up before mix",
+            "eq": "pull"
+          }
+        ]
+      },
+      {
+        "name": "Main Set — Aerobic + IM Combo",
+        "section": "main",
+        "totalYards": 1200,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 400,
+            "desc": "Freestyle — steady aerobic effort",
+            "interval": "On 7:30",
+            "focus": "Aerobic base"
+          },
+          {
+            "reps": 4,
+            "dist": 100,
+            "desc": "100 IM — moderate, smooth transitions",
+            "interval": "On 2:15",
+            "focus": "IM after aerobic load"
+          },
+          {
+            "reps": 4,
+            "dist": 100,
+            "desc": "Freestyle — descending pace 1→4",
+            "interval": "On 1:50",
+            "focus": "Build pace round to round"
+          }
+        ]
+      },
+      {
+        "name": "Cool-Down",
+        "section": "cooldown",
+        "totalYards": 200,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 50,
+            "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
+            "interval": "On 1:20",
+            "focus": "Gentle recovery — no effort, just move"
+          }
+        ]
+      }
+    ],
+    "notes": "Wil change the 400 in the main set to maybe either 4x100 or 2x200 with a breathing pattern"
   }
 ]
