@@ -144,6 +144,12 @@
     // ═══════════════════════════════════════════════════════════════
     const API_BASE = "/api";                  // same origin
     const HISTORY_LOCAL_KEY = "swim-workout-history-v1";
+    const USER_INITIALS_KEY = "swim-workout-user-initials-v1";
+
+    // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
+    function normalizeInitials(raw) {
+      return (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+    }
 
     function loadLocalHistory() {
       try { const raw = localStorage.getItem(HISTORY_LOCAL_KEY); return raw ? JSON.parse(raw) : []; }
@@ -1348,7 +1354,7 @@
     // ═══════════════════════════════════════════════════════════════
     //  SAVE-TO-HISTORY FORM — appears below a freshly generated workout
     // ═══════════════════════════════════════════════════════════════
-    function SaveToHistoryForm({ dateDraft, setDateDraft, noteDraft, setNoteDraft, saveStatus, saveError, onSave }) {
+    function SaveToHistoryForm({ dateDraft, setDateDraft, initialsDraft, setInitialsDraft, noteDraft, setNoteDraft, saveStatus, saveError, onSave }) {
       const isSaved  = saveStatus === "saved";
       const isSaving = saveStatus === "saving";
       return (
@@ -1357,11 +1363,20 @@
             <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>📒 Log this workout</span>
             <span style={{ fontSize: 11, color: "#64748b" }}>(saves to your history)</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 12, alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "150px 90px 1fr", gap: 12, alignItems: "start" }}>
             <div>
               <label style={{ display: "block", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Date Performed</label>
               <input type="date" value={dateDraft} onChange={e => setDateDraft(e.target.value)} disabled={isSaving}
                 style={{ width: "100%", padding: "8px 10px", background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, fontFamily: "inherit", colorScheme: "dark" }} />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Initials</label>
+              <input type="text" value={initialsDraft}
+                onChange={e => setInitialsDraft(normalizeInitials(e.target.value))}
+                disabled={isSaving}
+                placeholder="e.g. CD"
+                maxLength={4}
+                style={{ width: "100%", padding: "8px 10px", background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, fontFamily: "inherit", textTransform: "uppercase", letterSpacing: "0.05em" }} />
             </div>
             <div>
               <label style={{ display: "block", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Notes (optional)</label>
@@ -1401,14 +1416,47 @@
     // ═══════════════════════════════════════════════════════════════
     function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint }) {
       const [filterType,   setFilterType]   = useState("all");
+      const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | initials string
       const [editingId,    setEditingId]    = useState(null);
       const [editingNotes, setEditingNotes] = useState("");
       const [expandedId,   setExpandedId]   = useState(null);
 
+      // Distinct initials present in history (sorted), plus a flag for entries
+      // missing initials so we can render an "Unattributed" chip when relevant.
+      const userBuckets = useMemo(() => {
+        const set = new Set();
+        let hasUnattributed = false;
+        for (const e of history) {
+          const u = (e.userInitials || "").trim();
+          if (u) set.add(u);
+          else hasUnattributed = true;
+        }
+        return { users: [...set].sort(), hasUnattributed };
+      }, [history]);
+
+      // If the selected user filter no longer exists in history (last entry
+      // for that user was deleted), reset to "all" so the list isn't empty.
+      useEffect(() => {
+        if (filterUser === "all") return;
+        if (filterUser === "__unattributed__" && !userBuckets.hasUnattributed) setFilterUser("all");
+        else if (filterUser !== "__unattributed__" && !userBuckets.users.includes(filterUser)) setFilterUser("all");
+      }, [filterUser, userBuckets]);
+
       const filtered = useMemo(
-        () => history.filter(e => filterType === "all" || e.type === filterType),
-        [history, filterType]
+        () => history.filter(e => {
+          if (filterType !== "all" && e.type !== filterType) return false;
+          const u = (e.userInitials || "").trim();
+          if (filterUser === "all") return true;
+          if (filterUser === "__unattributed__") return !u;
+          return u === filterUser;
+        }),
+        [history, filterType, filterUser]
       );
+
+      // Show the user-filter row only when it would offer a meaningful choice:
+      // at least 2 distinct buckets among (users, unattributed).
+      const userBucketCount = userBuckets.users.length + (userBuckets.hasUnattributed ? 1 : 0);
+      const showUserFilter = userBucketCount > 1;
 
       const stats = useMemo(() => {
         const sessions = filtered.length;
@@ -1432,8 +1480,8 @@
 
       return (
         <div className="screen-only">
-          {/* Filter chips */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+          {/* Type filter chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: showUserFilter ? 8 : 14 }}>
             {[{ id: "all", label: "All", emoji: "📋" }, ...WORKOUT_TYPES].map(t => {
               const active = filterType === t.id;
               return (
@@ -1449,6 +1497,32 @@
               );
             })}
           </div>
+
+          {/* User filter chips — only shown when there's a meaningful choice. */}
+          {showUserFilter && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14, alignItems: "center" }}>
+              <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4 }}>Who:</span>
+              {[
+                { id: "all", label: "All" },
+                ...userBuckets.users.map(u => ({ id: u, label: u })),
+                ...(userBuckets.hasUnattributed ? [{ id: "__unattributed__", label: "Unattributed" }] : []),
+              ].map(u => {
+                const active = filterUser === u.id;
+                return (
+                  <button key={u.id} onClick={() => setFilterUser(u.id)}
+                    style={{
+                      padding: "6px 12px", borderRadius: 999, border: "none",
+                      background: active ? "#0ea5e9" : "#1e293b",
+                      color: active ? "#fff" : "#94a3b8",
+                      fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      fontVariantNumeric: "tabular-nums",
+                    }}>
+                    {u.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Stats summary */}
           <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", gap: 32, flexWrap: "wrap" }}>
@@ -1478,6 +1552,12 @@
                     {meta && (
                       <span style={{ background: meta.badge, color: meta.badgeText, borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>
                         {meta.emoji} {meta.label}
+                      </span>
+                    )}
+                    {entry.userInitials && (
+                      <span title="Logged by"
+                        style={{ background: "#0ea5e9", color: "#fff", borderRadius: 999, padding: "3px 9px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em" }}>
+                        {entry.userInitials}
                       </span>
                     )}
                     <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} yds</span>
@@ -1562,6 +1642,10 @@
       const [saveError, setSaveError]             = useState(null);
       const [dateDraft, setDateDraft]             = useState(() => new Date().toISOString().slice(0, 10));
       const [noteDraft, setNoteDraft]             = useState("");
+      const [initialsDraft, setInitialsDraft]     = useState(() => {
+        try { return normalizeInitials(localStorage.getItem(USER_INITIALS_KEY) || ""); }
+        catch (_) { return ""; }
+      });
 
       // On mount: fetch live history from the API, merge with localStorage cache
       useEffect(() => {
@@ -1602,6 +1686,11 @@
         if (!workout || !selectedType) return;
         setSaveStatus("saving"); setSaveError(null);
         const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
+        const cleanInitials = normalizeInitials(initialsDraft);
+        // Remember the last-used initials for next time (best-effort).
+        try {
+          if (cleanInitials) localStorage.setItem(USER_INITIALS_KEY, cleanInitials);
+        } catch (_) {}
         const entry = {
           id: makeEntryId(),
           savedAt: new Date().toISOString(),
@@ -1616,6 +1705,7 @@
             name: b.name, section: b.section, totalYards: b.totalYards,
             sets: b.sets.map(s => ({ ...s })),
           })),
+          userInitials: cleanInitials,
           notes: (noteDraft || "").trim(),
         };
         // Optimistic: add to local cache and state immediately
@@ -1640,7 +1730,7 @@
           setSaveStatus("error");
           setSaveError(err.message || String(err));
         }
-      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft]);
+      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft]);
 
       const handleUpdateNotes = useCallback(async (id, notes) => {
         setHistory(prev => {
@@ -1866,6 +1956,7 @@
                 {!loadedFromHistoryId && (
                   <SaveToHistoryForm
                     dateDraft={dateDraft} setDateDraft={setDateDraft}
+                    initialsDraft={initialsDraft} setInitialsDraft={setInitialsDraft}
                     noteDraft={noteDraft} setNoteDraft={setNoteDraft}
                     saveStatus={saveStatus} saveError={saveError}
                     onSave={handleSave}
