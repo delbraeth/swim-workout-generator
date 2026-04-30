@@ -1542,7 +1542,7 @@
     // ═══════════════════════════════════════════════════════════════
     //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
     // ═══════════════════════════════════════════════════════════════
-    function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint }) {
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint, onRepeat }) {
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | initials string
       const [editingId,    setEditingId]    = useState(null);
@@ -1699,6 +1699,11 @@
                     <button onClick={() => { setEditingId(entry.id); setEditingNotes(entry.notes || ""); }}
                       style={{ padding: "4px 10px", background: "transparent", color: "#cbd5e1", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                       Notes
+                    </button>
+                    <button onClick={() => onRepeat(entry)}
+                      title="Open this workout as a fresh, unsaved one to log again"
+                      style={{ padding: "4px 10px", background: "transparent", color: "#86efac", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                      🔁 Repeat
                     </button>
                     <button onClick={() => onLoadAndPrint(entry)}
                       style={{ padding: "4px 10px", background: "transparent", color: "#cbd5e1", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
@@ -1928,6 +1933,29 @@
         setTimeout(() => window.print(), 150);
       }, []);
 
+      // Repeat a historical workout as a fresh, unsaved one. Same blocks/type/
+      // equipment as the source entry, but loadedFromHistoryId stays null so
+      // the Save form appears with today's date and empty notes. Per-section
+      // regenerate buttons remain enabled — user can shuffle pieces before
+      // logging the repeat as its own history entry.
+      const handleRepeatFromHistory = useCallback((entry) => {
+        setSelectedType(entry.type);
+        setMaxYards(entry.maxYardsCap || 2400);
+        setEquipment(entry.equipment || { kickboard: false, fins: false, paddles: false, pullBuoy: false });
+        setWorkout({
+          blocks: entry.blocks,
+          totalYards: entry.totalYards,
+          estimatedMin: entry.estimatedMin,
+          typeId: entry.type,
+        });
+        setLoadedFromHistoryId(null);     // treat as fresh / unsaved
+        setSaveStatus(null); setSaveError(null);
+        setRegenError(null);
+        setDateDraft(new Date().toISOString().slice(0, 10));
+        setNoteDraft("");
+        setView("generator");
+      }, []);
+
       const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
       const sectionColors = ["#38bdf8", "#2dd4bf", "#3b82f6", "#94a3b8"];
       const typeMin = selectedType ? minYardsForType(selectedType) : 0;
@@ -1969,6 +1997,7 @@
                 onUpdateNotes={handleUpdateNotes}
                 onDelete={handleDelete}
                 onLoadAndPrint={handleLoadAndPrint}
+                onRepeat={handleRepeatFromHistory}
               />
             )}
 
