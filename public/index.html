@@ -1089,6 +1089,94 @@
       return { blocks, totalYards: total, estimatedMin, typeId };
     }
 
+    // ─── Per-section regeneration ────────────────────────────────────
+    // Replace ONE section of an existing workout. The other three sections
+    // are held fixed, so the new pick must (a) keep total yardage in
+    // [MIN_YARDS, maxYards] and (b) preserve the equipment-coverage invariant
+    // across drill+main if any equipment is checked.
+    const SECTION_KEYS = ["warmup", "drill", "main", "cooldown"];
+
+    // Stable signature so we can exclude the current pick when alternatives exist.
+    // Built from the full sets array so it matches across (a) fresh blocks
+    // (which spread the option, including `label`), (b) raw pool options, and
+    // (c) history-loaded blocks (which have `label` stripped by handleSave).
+    function sectionFingerprint(b) {
+      if (!b || !Array.isArray(b.sets)) return "";
+      const sig = b.sets.map(s => `${s.reps}x${s.dist}|${s.desc}`).join("/");
+      return `${b.totalYards}|${sig}`;
+    }
+
+    // Returns { workout, error }. On success, workout is a fresh object with the
+    // requested section replaced. On failure, error is a human-readable reason
+    // and the caller should keep the prior workout unchanged.
+    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment) {
+      if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
+        return { workout: null, error: "No workout to update." };
+      }
+      const idx = SECTION_KEYS.indexOf(sectionKey);
+      if (idx < 0) return { workout: null, error: "Unknown section." };
+
+      const blocks = workout.blocks;
+      const current = blocks[idx];
+      const others = blocks.reduce((sum, b, i) => i === idx ? sum : sum + b.totalYards, 0);
+      const lower = Math.max(0, MIN_YARDS - others);
+      const upper = maxYards - others;
+
+      let pool;
+      if (sectionKey === "warmup")        pool = WARMUP_OPTIONS;
+      else if (sectionKey === "cooldown") pool = COOLDOWN_OPTIONS;
+      else if (sectionKey === "drill")    pool = DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed;
+      else                                pool = MAIN_OPTIONS[typeId]  || MAIN_OPTIONS.mixed;
+
+      const hasEquipReq = equipment && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
+      const partnerDrill = blocks[1]; // used when regenerating main
+      const partnerMain  = blocks[2]; // used when regenerating drill
+
+      const passesEquip = (candidate) => {
+        if (!hasEquipReq) return true;
+        if (sectionKey === "drill") return combinationSatisfies(candidate, partnerMain, equipment);
+        if (sectionKey === "main")  return combinationSatisfies(partnerDrill, candidate, equipment);
+        return true; // warmup/cooldown carry no equipment tags
+      };
+
+      const fitsBudget = (o) => o.totalYards >= lower && o.totalYards <= upper;
+      const validAll = pool.filter(o => fitsBudget(o) && passesEquip(o));
+      if (!validAll.length) {
+        return { workout: null, error: hasEquipReq
+          ? "No option for this section fits the remaining yardage and your equipment selection."
+          : "No option for this section fits the remaining yardage budget." };
+      }
+
+      const curFp = sectionFingerprint(current);
+      const novel = validAll.filter(o => sectionFingerprint(o) !== curFp);
+      if (!novel.length) {
+        return { workout: null, error: "Only one option fits these constraints — adjust max yards or equipment for more variety." };
+      }
+      const picked = pick(novel);
+
+      const NAME_BY_SECTION = {
+        warmup:   "Warm-Up",
+        drill:    "Drill / Pre-Main Set",
+        cooldown: "Cool-Down",
+      };
+      const newBlock = sectionKey === "main"
+        ? { name: `Main Set — ${picked.label}`, section: "main", ...picked }
+        : { name: NAME_BY_SECTION[sectionKey], section: sectionKey, ...picked };
+
+      const newBlocks = blocks.map((b, i) => i === idx ? newBlock : b);
+      const total = newBlocks.reduce((s, b) => s + b.totalYards, 0);
+
+      const wu = newBlocks[0], dr = newBlocks[1], ma = newBlocks[2], cd = newBlocks[3];
+      const mainYdPerMin = { sprint: 28, im: 32, distance: 36, endurance: 36, technique: 30, mixed: 33 };
+      const estimatedMin =
+        Math.round(wu.totalYards / 35) +
+        Math.round(dr.totalYards / 32) +
+        Math.round(ma.totalYards / (mainYdPerMin[typeId] || 33)) +
+        Math.round(cd.totalYards / 35);
+
+      return { workout: { blocks: newBlocks, totalYards: total, estimatedMin, typeId }, error: null };
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  EQUIPMENT — checkbox state shapes set descriptions at render time
     //  (yardage, intervals, and focus are unchanged — equipment is a
@@ -1238,17 +1326,57 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError }) {
       const s = SECTION_STYLES[block.section];
+      // Light header text (e.g. main set on dark slate) → use white-tinted button.
+      // Dark header text → use dark-tinted button.
+      const isDarkHeader = s.headerText === "#ffffff";
+      const btnBg     = isDarkHeader ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.06)";
+      const btnHoverBg = isDarkHeader ? "rgba(255,255,255,0.20)" : "rgba(15,23,42,0.12)";
+      const btnBorder = isDarkHeader ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.15)";
+      const [hovered, setHovered] = useState(false);
       return (
         <div className="workout-block" style={{ borderRadius: 12, border: `1px solid ${s.border}`, overflow: "hidden", marginBottom: 16 }}>
-          <div className="workout-block-header" style={{ background: s.headerBg, color: s.headerText, padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="workout-block-header" style={{ background: s.headerBg, color: s.headerText, padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.dot, display: "inline-block" }} />
               <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.name}</span>
             </div>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} yds</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} yds</span>
+              {onRegenerate && (
+                <button
+                  type="button"
+                  className="screen-only"
+                  onClick={() => onRegenerate(block.section)}
+                  onMouseEnter={() => setHovered(true)}
+                  onMouseLeave={() => setHovered(false)}
+                  title={`Regenerate ${block.name} only`}
+                  aria-label={`Regenerate ${block.name}`}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    padding: "4px 9px", borderRadius: 6,
+                    background: hovered ? btnHoverBg : btnBg,
+                    color: s.headerText, border: `1px solid ${btnBorder}`,
+                    fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    lineHeight: 1, transition: "background 0.15s",
+                  }}>
+                  <span style={{ fontSize: 13 }}>🔄</span>
+                  <span>Regenerate</span>
+                </button>
+              )}
+            </div>
           </div>
+          {regenError && (
+            <div className="screen-only" role="alert" style={{
+              background: "#fef2f2", borderBottom: `1px solid ${s.border}`,
+              color: "#991b1b", fontSize: 12, padding: "8px 20px",
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <span>⚠️</span>
+              <span>{regenError}</span>
+            </div>
+          )}
           <div style={{ background: s.bg, overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
@@ -1646,6 +1774,8 @@
         try { return normalizeInitials(localStorage.getItem(USER_INITIALS_KEY) || ""); }
         catch (_) { return ""; }
       });
+      // Per-section regeneration error: { section: "warmup"|"drill"|"main"|"cooldown", message } | null
+      const [regenError, setRegenError]           = useState(null);
 
       // On mount: fetch live history from the API, merge with localStorage cache
       useEffect(() => {
@@ -1668,17 +1798,37 @@
         setWorkout(generateWorkout(selectedType, maxYards, equipment));
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
+        setRegenError(null);
         setDateDraft(new Date().toISOString().slice(0, 10));
         setNoteDraft("");
       }, [selectedType, maxYards, equipment]);
 
-      const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); };
-      const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); };
+      // Regenerate one section in place, holding the other three fixed.
+      // On failure (no valid alternative), keep the workout untouched and
+      // surface a per-section inline error.
+      const handleRegenerateSection = useCallback((sectionKey) => {
+        if (!workout || !selectedType) return;
+        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment);
+        if (result.error) {
+          setRegenError({ section: sectionKey, message: result.error });
+          return;
+        }
+        setWorkout(result.workout);
+        setRegenError(null);
+        // A single-section regen makes this a fresh, unsaved workout — even if
+        // it was previously loaded from history.
+        setLoadedFromHistoryId(null);
+        setSaveStatus(null); setSaveError(null);
+      }, [workout, selectedType, maxYards, equipment]);
+
+      const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
+      const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
       const handleEquipChange = (id, on) => {
         setEquipment(prev => ({ ...prev, [id]: on }));
         setWorkout(null);
         setLoadedFromHistoryId(null);
         setSaveStatus(null);
+        setRegenError(null);
       };
 
       // Save the current workout to history (POST to worker, optimistic local update)
@@ -1772,6 +1922,7 @@
         });
         setLoadedFromHistoryId(entry.id);
         setSaveStatus(null);
+        setRegenError(null);
         setView("generator");
         // Wait for the next paint, then open the print dialog
         setTimeout(() => window.print(), 150);
@@ -1943,7 +2094,15 @@
                 </div>
 
                 {/* Workout blocks */}
-                {workout.blocks.map((block, i) => <WorkoutBlock key={i} block={block} equipment={equipment} />)}
+                {workout.blocks.map((block, i) => (
+                  <WorkoutBlock
+                    key={i}
+                    block={block}
+                    equipment={equipment}
+                    onRegenerate={handleRegenerateSection}
+                    regenError={regenError && regenError.section === block.section ? regenError.message : null}
+                  />
+                ))}
 
                 {/* Coach note (screen only — user opted not to include in print) */}
                 <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid #334155", color: "#94a3b8", fontSize: 13 }}>
