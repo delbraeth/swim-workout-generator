@@ -3089,6 +3089,21 @@
     //  Tap a set card to step through reps with a live countdown.
     // ═══════════════════════════════════════════════════════════════
 
+    // Returns true when viewport is wider than it is tall (landscape).
+    function useIsLandscape() {
+      const [land, setLand] = useState(() => window.innerWidth > window.innerHeight);
+      useEffect(() => {
+        const update = () => setLand(window.innerWidth > window.innerHeight);
+        window.addEventListener("resize", update);
+        window.addEventListener("orientationchange", update);
+        return () => {
+          window.removeEventListener("resize", update);
+          window.removeEventListener("orientationchange", update);
+        };
+      }, []);
+      return land;
+    }
+
     // Parse "On 2:00", "On :45", "On 1:10" → seconds. "No interval" → null.
     function parseIntervalSeconds(str) {
       if (!str || /no interval/i.test(str)) return null;
@@ -3106,8 +3121,9 @@
     }
 
     function PaceClockView({ set, onClose }) {
-      const totalSecs = parseIntervalSeconds(set.interval);
-      const hasTimer  = totalSecs !== null;
+      const totalSecs  = parseIntervalSeconds(set.interval);
+      const hasTimer   = totalSecs !== null;
+      const isLandscape = useIsLandscape();
 
       const [repIdx,   setRepIdx]   = useState(0);
       const [secsLeft, setSecsLeft] = useState(totalSecs ?? 0);
@@ -3152,6 +3168,169 @@
 
       const isAtStart = repIdx === 0 && secsLeft === (totalSecs ?? 0) && !running;
 
+      // Rep dots shared between portrait and landscape
+      const repDots = set.reps <= 20 && (
+        <div style={{ display: "flex", gap: isLandscape ? 8 : 12, flexWrap: "wrap", justifyContent: "center" }}>
+          {Array.from({ length: set.reps }).map((_, i) => (
+            <div key={i} style={{
+              width: isLandscape ? 14 : 18, height: isLandscape ? 14 : 18,
+              borderRadius: "50%",
+              background: i < repIdx ? "#22c55e" : i === repIdx ? "#3b82f6" : "#1e293b",
+              border: `2px solid ${i < repIdx ? "#22c55e" : i === repIdx ? "#3b82f6" : "#334155"}`,
+              transition: "background 0.3s, border-color 0.3s",
+            }} />
+          ))}
+        </div>
+      );
+
+      // Controls shared between portrait and landscape
+      const controls = (
+        <div style={{ display: "flex", gap: isLandscape ? 10 : 14, width: "100%" }}>
+          {!finished && (
+            <>
+              {hasTimer ? (
+                <button onClick={() => setRunning(r => !r)} style={{
+                  flex: 2, padding: isLandscape ? "12px 0" : "22px 0",
+                  borderRadius: 16, border: "none",
+                  background: running ? "#dc2626" : "#3b82f6",
+                  color: "#fff", fontSize: isLandscape ? 20 : 26,
+                  fontWeight: 800, cursor: "pointer",
+                  minHeight: isLandscape ? 52 : 70,
+                }}>
+                  {running ? "⏸ Pause" : isAtStart ? "▶ Start" : "▶ Resume"}
+                </button>
+              ) : (
+                <button onClick={handleSkip} style={{
+                  flex: 2, padding: isLandscape ? "12px 0" : "22px 0",
+                  borderRadius: 16, border: "none", background: "#3b82f6",
+                  color: "#fff", fontSize: isLandscape ? 20 : 26,
+                  fontWeight: 800, cursor: "pointer",
+                  minHeight: isLandscape ? 52 : 70,
+                }}>
+                  {repIdx + 1 >= set.reps ? "Done ✓" : "Next Rep →"}
+                </button>
+              )}
+              {hasTimer && (
+                <button onClick={handleSkip} style={{
+                  flex: 1, padding: isLandscape ? "12px 0" : "22px 0",
+                  borderRadius: 16, border: "1px solid #334155", background: "#0f172a",
+                  color: "#64748b", fontSize: isLandscape ? 17 : 22,
+                  fontWeight: 700, cursor: "pointer",
+                  minHeight: isLandscape ? 52 : 70,
+                }}>
+                  Skip →
+                </button>
+              )}
+            </>
+          )}
+          <button onClick={finished ? onClose : handleReset} style={{
+            flex: finished ? 1 : undefined,
+            width: finished ? undefined : (isLandscape ? undefined : "100%"),
+            padding: isLandscape ? "12px 16px" : "18px 0",
+            borderRadius: 16, border: "1px solid #1e293b", background: "transparent",
+            color: "#475569", fontSize: isLandscape ? 17 : 22,
+            fontWeight: 600, cursor: "pointer",
+            minHeight: isLandscape ? 52 : undefined,
+          }}>
+            {finished ? "Back to Set" : "↺ Reset"}
+          </button>
+        </div>
+      );
+
+      if (isLandscape) {
+        // ── LANDSCAPE: two-column layout ──────────────────────────────
+        return (
+          <div style={{
+            position: "fixed", inset: 0, zIndex: 10000,
+            background: "#020617",
+            display: "flex", flexDirection: "column",
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          }}>
+            {/* Top bar */}
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "8px 16px", borderBottom: "1px solid #1e293b", flexShrink: 0,
+            }}>
+              <button onClick={onClose} style={{
+                background: "transparent", border: "none", color: "#94a3b8",
+                fontSize: 28, lineHeight: 1, cursor: "pointer",
+                padding: "4px 8px", borderRadius: 8, minWidth: 44, minHeight: 44,
+              }}>✕</button>
+              <div style={{ fontSize: 15, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                Pace Clock
+              </div>
+              <div style={{ minWidth: 44 }} />
+            </div>
+
+            {/* Two-column content */}
+            <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+
+              {/* Left: set info */}
+              <div style={{
+                flex: 1.1, display: "flex", flexDirection: "column",
+                justifyContent: "center", padding: "12px 20px",
+                borderRight: "1px solid #1e293b",
+              }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#e2e8f0", marginBottom: 6 }}>
+                  {set.reps} × {set.dist} yds
+                </div>
+                <div style={{ fontSize: 20, color: "#cbd5e1", lineHeight: 1.35, marginBottom: 6 }}>
+                  {set.desc}
+                </div>
+                <div style={{ fontSize: 17, color: "#475569", fontFamily: "monospace", marginBottom: 12 }}>
+                  {set.interval}
+                </div>
+                {repDots}
+              </div>
+
+              {/* Right: clock */}
+              <div style={{
+                flex: 1, display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", padding: "12px 16px",
+              }}>
+                {finished ? (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
+                    <div style={{ fontSize: 18, color: "#64748b", marginTop: 6 }}>
+                      {set.reps} rep{set.reps !== 1 ? "s" : ""} done
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: "#64748b", marginBottom: 8, letterSpacing: "0.06em" }}>
+                      REP <span style={{ color: "#e2e8f0" }}>{repIdx + 1}</span>
+                      {" "}<span style={{ color: "#334155" }}>OF</span>{" "}
+                      {set.reps}
+                    </div>
+                    {hasTimer ? (
+                      <div style={{
+                        fontSize: 80, fontWeight: 900,
+                        color: running ? "#ffffff" : "#334155",
+                        fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1,
+                        transition: "color 0.25s",
+                      }}>
+                        {fmtTime(secsLeft)}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 20, color: "#475569", fontStyle: "italic" }}>
+                        No interval — swim easy
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div style={{ padding: "10px 16px 14px", borderTop: "1px solid #1e293b", flexShrink: 0 }}>
+              {controls}
+            </div>
+          </div>
+        );
+      }
+
+      // ── PORTRAIT: original vertical layout ────────────────────────
       return (
         <div style={{
           position: "fixed", inset: 0, zIndex: 10000,
@@ -3205,102 +3384,33 @@
               </div>
             ) : (
               <>
-                {/* Rep indicator */}
-                <div style={{
-                  fontSize: 28, fontWeight: 700, color: "#64748b",
-                  marginBottom: 16, letterSpacing: "0.06em",
-                }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "#64748b", marginBottom: 16, letterSpacing: "0.06em" }}>
                   REP <span style={{ color: "#e2e8f0" }}>{repIdx + 1}</span>
                   {" "}<span style={{ color: "#334155" }}>OF</span>{" "}
                   {set.reps}
                 </div>
-
-                {/* Countdown or no-timer label */}
                 {hasTimer ? (
                   <div style={{
                     fontSize: 110, fontWeight: 900,
                     color: running ? "#ffffff" : "#334155",
                     fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1,
-                    marginBottom: 28,
-                    transition: "color 0.25s",
+                    marginBottom: 28, transition: "color 0.25s",
                   }}>
                     {fmtTime(secsLeft)}
                   </div>
                 ) : (
-                  <div style={{
-                    fontSize: 26, color: "#475569", marginBottom: 28,
-                    fontStyle: "italic",
-                  }}>
+                  <div style={{ fontSize: 26, color: "#475569", marginBottom: 28, fontStyle: "italic" }}>
                     No interval — swim easy
                   </div>
                 )}
-
-                {/* Rep progress dots (up to 20 reps) */}
-                {set.reps <= 20 && (
-                  <div style={{
-                    display: "flex", gap: 12, marginBottom: 8,
-                    flexWrap: "wrap", justifyContent: "center",
-                  }}>
-                    {Array.from({ length: set.reps }).map((_, i) => (
-                      <div key={i} style={{
-                        width: 18, height: 18, borderRadius: "50%",
-                        background: i < repIdx ? "#22c55e"
-                          : i === repIdx ? "#3b82f6"
-                          : "#1e293b",
-                        border: `2px solid ${i < repIdx ? "#22c55e"
-                          : i === repIdx ? "#3b82f6"
-                          : "#334155"}`,
-                        transition: "background 0.3s, border-color 0.3s",
-                      }} />
-                    ))}
-                  </div>
-                )}
+                <div style={{ marginBottom: 8 }}>{repDots}</div>
               </>
             )}
           </div>
 
           {/* Controls */}
           <div style={{ width: "100%", padding: "0 20px 40px", display: "flex", flexDirection: "column", gap: 14 }}>
-            {!finished && (
-              <div style={{ display: "flex", gap: 14 }}>
-                {hasTimer ? (
-                  <button onClick={() => setRunning(r => !r)} style={{
-                    flex: 2, padding: "22px 0", borderRadius: 16, border: "none",
-                    background: running ? "#dc2626" : "#3b82f6",
-                    color: "#fff", fontSize: 26, fontWeight: 800, cursor: "pointer",
-                    minHeight: 70,
-                  }}>
-                    {running ? "⏸ Pause" : isAtStart ? "▶ Start" : "▶ Resume"}
-                  </button>
-                ) : (
-                  <button onClick={handleSkip} style={{
-                    flex: 2, padding: "22px 0", borderRadius: 16, border: "none",
-                    background: "#3b82f6",
-                    color: "#fff", fontSize: 26, fontWeight: 800, cursor: "pointer",
-                    minHeight: 70,
-                  }}>
-                    {repIdx + 1 >= set.reps ? "Done ✓" : "Next Rep →"}
-                  </button>
-                )}
-                {hasTimer && (
-                  <button onClick={handleSkip} style={{
-                    flex: 1, padding: "22px 0", borderRadius: 16,
-                    border: "1px solid #334155", background: "#0f172a",
-                    color: "#64748b", fontSize: 22, fontWeight: 700, cursor: "pointer",
-                    minHeight: 70,
-                  }}>
-                    Skip →
-                  </button>
-                )}
-              </div>
-            )}
-            <button onClick={finished ? onClose : handleReset} style={{
-              width: "100%", padding: "18px 0", borderRadius: 16,
-              border: "1px solid #1e293b", background: "transparent",
-              color: "#475569", fontSize: 22, fontWeight: 600, cursor: "pointer",
-            }}>
-              {finished ? "Back to Set" : "↺ Reset"}
-            </button>
+            {controls}
           </div>
         </div>
       );
