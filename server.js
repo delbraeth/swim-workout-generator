@@ -30,6 +30,7 @@ const GITHUB_OWNER  = process.env.GITHUB_OWNER  || "delbraeth";
 const GITHUB_REPO   = process.env.GITHUB_REPO   || "swim-workout-generator";
 const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
 const GITHUB_PATH   = process.env.GITHUB_PATH   || "workouts.json";
+const ACCESS_CODE   = process.env.ACCESS_CODE   || "";
 
 const app = express();
 app.use(express.json({ limit: "500kb" }));
@@ -81,6 +82,16 @@ async function writeWorkouts(json, sha, message) {
   return result;
 }
 
+// ───── Access-code guard for mutating routes ─────────────────────────
+// If ACCESS_CODE env var is set, every POST/PATCH/DELETE must supply the
+// matching value in the x-access-code header. GET routes stay open.
+function checkCode(req, res, next) {
+  if (!ACCESS_CODE) return next();                          // not configured — open
+  const supplied = req.get("x-access-code") || "";
+  if (supplied === ACCESS_CODE) return next();
+  return res.status(401).json({ error: "invalid access code" });
+}
+
 // ───── Same-origin guard for mutating routes ─────────────────────────
 // Browsers always send Origin/Referer; checking that they match this host blocks
 // random cross-site scripts. Curl with no Origin header is rejected unless
@@ -101,6 +112,15 @@ function checkOrigin(req, res, next) {
 // ───── API routes ────────────────────────────────────────────────────
 app.get("/healthz", (req, res) => res.json({ ok: true, service: "swim-workout-generator" }));
 
+// Verify an access code without mutating anything.
+// Returns { ok: true } on success, { ok: false } on mismatch.
+// If no ACCESS_CODE is configured, always returns { ok: true }.
+app.post("/api/verify-code", (req, res) => {
+  if (!ACCESS_CODE) return res.json({ ok: true });
+  const { code } = req.body || {};
+  res.json({ ok: code === ACCESS_CODE });
+});
+
 app.get("/api/workouts", async (req, res) => {
   try {
     const { json } = await readWorkouts();
@@ -110,7 +130,7 @@ app.get("/api/workouts", async (req, res) => {
   }
 });
 
-app.post("/api/log-workout", checkOrigin, async (req, res) => {
+app.post("/api/log-workout", checkOrigin, checkCode, async (req, res) => {
   try {
     const entry = req.body;
     if (!entry || !entry.id) return res.status(400).json({ error: "entry must include an id" });
@@ -129,7 +149,7 @@ app.post("/api/log-workout", checkOrigin, async (req, res) => {
   }
 });
 
-app.patch("/api/workouts/:id", checkOrigin, async (req, res) => {
+app.patch("/api/workouts/:id", checkOrigin, checkCode, async (req, res) => {
   try {
     const { id } = req.params;
     const patch  = req.body || {};
@@ -145,7 +165,7 @@ app.patch("/api/workouts/:id", checkOrigin, async (req, res) => {
   }
 });
 
-app.delete("/api/workouts/:id", checkOrigin, async (req, res) => {
+app.delete("/api/workouts/:id", checkOrigin, checkCode, async (req, res) => {
   try {
     const { id } = req.params;
     const { json, sha } = await readWorkouts({ force: true });
@@ -178,5 +198,8 @@ app.listen(PORT, () => {
   console.log(`[swim-workout-generator] listening on :${PORT}`);
   if (!GITHUB_TOKEN) {
     console.warn("[swim-workout-generator] GITHUB_TOKEN not set — /api/* will fail until configured");
+  }
+  if (!ACCESS_CODE) {
+    console.warn("[swim-workout-generator] ACCESS_CODE not set — write endpoints are unprotected");
   }
 });

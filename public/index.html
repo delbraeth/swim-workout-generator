@@ -143,8 +143,9 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE = "/api";                  // same origin
-    const HISTORY_LOCAL_KEY = "swim-workout-history-v1";
-    const USER_INITIALS_KEY = "swim-workout-user-initials-v1";
+    const HISTORY_LOCAL_KEY  = "swim-workout-history-v1";
+    const USER_INITIALS_KEY  = "swim-workout-user-initials-v1";
+    const ACCESS_CODE_KEY    = "swim-access-code-v1";
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3557,6 +3558,91 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  ACCESS GATE
+    // ═══════════════════════════════════════════════════════════════
+
+    function AccessGate({ onSuccess }) {
+      const [code,    setCode]    = useState("");
+      const [error,   setError]   = useState(null);
+      const [loading, setLoading] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!code.trim()) return;
+        setLoading(true); setError(null);
+        try {
+          const res  = await fetch(`${API_BASE}/verify-code`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: code.trim() }),
+          });
+          const data = await res.json();
+          if (data.ok) {
+            onSuccess(code.trim());
+          } else {
+            setError("Incorrect code — try again.");
+            setCode("");
+          }
+        } catch (_) {
+          setError("Could not reach server. Check your connection.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div style={{
+          minHeight: "100vh",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          padding: "24px",
+        }}>
+          <div style={{ width: "100%", maxWidth: 380, textAlign: "center" }}>
+            <div style={{ fontSize: 56, marginBottom: 12 }}>🏊‍♂️</div>
+            <h1 style={{ fontSize: 24, fontWeight: 900, color: "#fff", margin: "0 0 6px", letterSpacing: "-0.02em" }}>
+              Swim Workout Generator
+            </h1>
+            <p style={{ color: "#64748b", fontSize: 14, margin: "0 0 32px" }}>
+              Enter your access code to continue
+            </p>
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <input
+                type="password"
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                placeholder="Access code"
+                autoFocus
+                style={{
+                  width: "100%", padding: "16px 18px", borderRadius: 12,
+                  border: `1.5px solid ${error ? "#ef4444" : "#334155"}`,
+                  background: "#1e293b", color: "#fff",
+                  fontSize: 18, fontFamily: "inherit", outline: "none",
+                  textAlign: "center", letterSpacing: "0.1em",
+                }}
+              />
+              {error && (
+                <div style={{ color: "#f87171", fontSize: 14 }}>{error}</div>
+              )}
+              <button
+                type="submit"
+                disabled={loading || !code.trim()}
+                style={{
+                  padding: "16px 0", borderRadius: 12, border: "none",
+                  background: code.trim() ? "#3b82f6" : "#334155",
+                  color: code.trim() ? "#fff" : "#64748b",
+                  fontSize: 16, fontWeight: 700, cursor: code.trim() ? "pointer" : "not-allowed",
+                  transition: "background 0.15s",
+                }}>
+                {loading ? "Checking…" : "Enter"}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  MAIN APP
     // ═══════════════════════════════════════════════════════════════
 
@@ -3586,6 +3672,31 @@
       const [regenError, setRegenError]           = useState(null);
       // Run Workout overlay: null when inactive, or the workout/entry object being stepped through
       const [runWorkout, setRunWorkout]           = useState(null);
+      // Auth: authChecked flips to true once we know whether a stored code is valid
+      const [accessCode,  setAccessCode]  = useState(null);
+      const [authChecked, setAuthChecked] = useState(false);
+
+      // On mount: verify any stored access code, then proceed
+      useEffect(() => {
+        const stored = localStorage.getItem(ACCESS_CODE_KEY);
+        if (!stored) { setAuthChecked(true); return; }
+        fetch(`${API_BASE}/verify-code`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: stored }),
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok) { setAccessCode(stored); }
+            else { localStorage.removeItem(ACCESS_CODE_KEY); }
+            setAuthChecked(true);
+          })
+          .catch(() => {
+            // Network error on verify — trust the stored code rather than locking out
+            setAccessCode(stored);
+            setAuthChecked(true);
+          });
+      }, []);
 
       // On mount: fetch live history from the API, merge with localStorage cache
       useEffect(() => {
@@ -3677,7 +3788,7 @@
         try {
           const res = await fetch(`${API_BASE}/log-workout`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "x-access-code": accessCode || "" },
             body: JSON.stringify(entry),
           });
           if (!res.ok) {
@@ -3701,7 +3812,7 @@
         try {
           await fetch(`${API_BASE}/workouts/${id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "x-access-code": accessCode || "" },
             body: JSON.stringify({ notes }),
           });
         } catch (err) { console.error("Failed to update notes:", err); }
@@ -3714,7 +3825,10 @@
           return next;
         });
         try {
-          await fetch(`${API_BASE}/workouts/${id}`, { method: "DELETE" });
+          await fetch(`${API_BASE}/workouts/${id}`, {
+            method: "DELETE",
+            headers: { "x-access-code": accessCode || "" },
+          });
         } catch (err) { console.error("Failed to delete entry:", err); }
       }, []);
 
@@ -3760,6 +3874,15 @@
         setNoteDraft("");
         setView("generator");
       }, []);
+
+      // Auth gate — render nothing while checking, show gate if no valid code
+      if (!authChecked) return null;
+      if (!accessCode) return (
+        <AccessGate onSuccess={code => {
+          localStorage.setItem(ACCESS_CODE_KEY, code);
+          setAccessCode(code);
+        }} />
+      );
 
       const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
       const sectionColors = ["#38bdf8", "#2dd4bf", "#3b82f6", "#94a3b8"];
