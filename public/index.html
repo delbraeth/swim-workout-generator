@@ -2866,7 +2866,7 @@
     // ═══════════════════════════════════════════════════════════════
     //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
     // ═══════════════════════════════════════════════════════════════
-    function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint, onRepeat }) {
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint, onRepeat, onRun }) {
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | initials string
       const [editingId,    setEditingId]    = useState(null);
@@ -3029,6 +3029,13 @@
                       style={{ padding: "4px 10px", background: "transparent", color: "#86efac", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                       🔁 Repeat
                     </button>
+                    {entry.blocks && (
+                      <button onClick={() => onRun(entry)}
+                        title="Step through this workout section by section"
+                        style={{ padding: "4px 10px", background: "transparent", color: "#93c5fd", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                        ▶ Run
+                      </button>
+                    )}
                     <button onClick={() => onLoadAndPrint(entry)}
                       style={{ padding: "4px 10px", background: "transparent", color: "#cbd5e1", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                       🖨 Print
@@ -3078,6 +3085,132 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  RUN WORKOUT OVERLAY
+    //  Full-screen step-through: one section at a time, iPhone-sized.
+    // ═══════════════════════════════════════════════════════════════
+
+    const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
+
+    function RunWorkoutOverlay({ workout, onClose }) {
+      const [idx, setIdx] = useState(0);
+      const blocks  = workout.blocks;
+      const block   = blocks[idx];
+      const total   = blocks.length;
+      const isFirst = idx === 0;
+      const isLast  = idx === total - 1;
+      const s       = SECTION_STYLES[block.section] || SECTION_STYLES.main;
+      const emoji   = SECTION_EMOJIS[block.section] || "🏊";
+
+      return (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "#0f172a", overflowY: "auto",
+          display: "flex", flexDirection: "column",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        }}>
+          {/* Top bar: close + progress dots + counter */}
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "16px 20px", borderBottom: "1px solid #1e293b",
+            position: "sticky", top: 0, background: "#0f172a", zIndex: 1,
+          }}>
+            <button onClick={onClose} style={{
+              background: "transparent", border: "none", color: "#94a3b8",
+              fontSize: 28, lineHeight: 1, cursor: "pointer",
+              padding: "4px 8px", borderRadius: 8, minWidth: 44, minHeight: 44,
+            }}>✕</button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {blocks.map((_, i) => (
+                <div key={i} style={{
+                  width: i === idx ? 28 : 8, height: 8, borderRadius: 999,
+                  background: i === idx ? "#3b82f6" : "#334155",
+                  transition: "width 0.2s",
+                }} />
+              ))}
+            </div>
+            <div style={{ fontSize: 13, color: "#64748b", fontWeight: 600, minWidth: 44, textAlign: "right" }}>
+              {idx + 1}/{total}
+            </div>
+          </div>
+
+          {/* Section header */}
+          <div style={{ background: s.headerBg, padding: "24px 20px 20px" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: s.headerText, textTransform: "uppercase", letterSpacing: "0.12em", opacity: 0.7, marginBottom: 6 }}>
+              Section {idx + 1} of {total}
+            </div>
+            <div style={{ fontSize: 34, fontWeight: 900, color: s.headerText, lineHeight: 1.1, marginBottom: 6 }}>
+              {emoji} {block.name}
+            </div>
+            <div style={{ fontSize: 15, color: s.headerText, opacity: 0.85, fontWeight: 600 }}>
+              {block.totalYards.toLocaleString()} yards
+            </div>
+          </div>
+
+          {/* Sets */}
+          <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {block.sets.map((set, i) => (
+              <div key={i} style={{
+                background: "#1e293b", borderRadius: 14,
+                border: `1px solid ${s.border}`, padding: "18px 18px 14px",
+              }}>
+                <div style={{ fontSize: 30, fontWeight: 900, color: "#fff", marginBottom: 8, letterSpacing: "-0.02em", lineHeight: 1 }}>
+                  {set.reps} <span style={{ color: "#475569", fontWeight: 400 }}>×</span> {set.dist}
+                  <span style={{ fontSize: 14, fontWeight: 500, color: "#64748b", marginLeft: 6 }}>yds</span>
+                </div>
+                <div style={{ fontSize: 16, color: "#e2e8f0", lineHeight: 1.45, marginBottom: 10 }}>
+                  {set.desc}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "baseline" }}>
+                  <span style={{
+                    background: "#0f172a", color: "#38bdf8",
+                    padding: "4px 12px", borderRadius: 999,
+                    fontSize: 13, fontWeight: 700, fontFamily: "monospace",
+                    whiteSpace: "nowrap",
+                  }}>
+                    ⏱ {set.interval}
+                  </span>
+                  <span style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic", lineHeight: 1.4 }}>
+                    {set.focus}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Navigation */}
+          <div style={{
+            display: "flex", gap: 12, padding: "16px 20px 36px",
+            borderTop: "1px solid #1e293b", background: "#0f172a",
+            position: "sticky", bottom: 0,
+          }}>
+            {!isFirst ? (
+              <button onClick={() => setIdx(i => i - 1)} style={{
+                flex: 1, padding: "17px 0", borderRadius: 14,
+                border: "1px solid #334155", background: "#1e293b",
+                color: "#e2e8f0", fontSize: 17, fontWeight: 700, cursor: "pointer",
+                minHeight: 54,
+              }}>
+                ← Previous
+              </button>
+            ) : (
+              <div style={{ flex: 1 }} />
+            )}
+            <button onClick={() => isLast ? onClose() : setIdx(i => i + 1)} style={{
+              flex: isFirst ? 2 : 1, padding: "17px 0", borderRadius: 14,
+              border: "none",
+              background: isLast ? "#16a34a" : "#3b82f6",
+              color: "#fff", fontSize: 17, fontWeight: 700, cursor: "pointer",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
+              minHeight: 54,
+            }}>
+              {isLast ? "✓ Finish" : "Next →"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  MAIN APP
     // ═══════════════════════════════════════════════════════════════
 
@@ -3105,6 +3238,8 @@
       });
       // Per-section regeneration error: { section: "warmup"|"drill"|"main"|"cooldown", message } | null
       const [regenError, setRegenError]           = useState(null);
+      // Run Workout overlay: null when inactive, or the workout/entry object being stepped through
+      const [runWorkout, setRunWorkout]           = useState(null);
 
       // On mount: fetch live history from the API, merge with localStorage cache
       useEffect(() => {
@@ -3322,6 +3457,7 @@
                 onDelete={handleDelete}
                 onLoadAndPrint={handleLoadAndPrint}
                 onRepeat={handleRepeatFromHistory}
+                onRun={entry => setRunWorkout(entry)}
               />
             )}
 
@@ -3402,17 +3538,30 @@
                       </div>
                     </div>
                   ))}
-                  <button
-                    onClick={() => window.print()}
-                    style={{
-                      marginLeft: "auto", padding: "10px 16px", borderRadius: 8,
-                      border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0",
-                      fontSize: 13, fontWeight: 700, cursor: "pointer",
-                      display: "inline-flex", alignItems: "center", gap: 6,
-                    }}
-                    title="Print a clean B&W 8.5×11 version of this workout">
-                    🖨 Print Workout
-                  </button>
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => setRunWorkout(workout)}
+                      style={{
+                        padding: "10px 16px", borderRadius: 8,
+                        border: "1px solid #3b82f6", background: "#1e3a5f", color: "#93c5fd",
+                        fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                      }}
+                      title="Step through this workout section by section">
+                      ▶ Run
+                    </button>
+                    <button
+                      onClick={() => window.print()}
+                      style={{
+                        padding: "10px 16px", borderRadius: 8,
+                        border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0",
+                        fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                      }}
+                      title="Print a clean B&W 8.5×11 version of this workout">
+                      🖨 Print Workout
+                    </button>
+                  </div>
                 </div>
 
                 {/* Print-only header */}
@@ -3495,6 +3644,9 @@
 
             </>}
           </div>
+          {runWorkout && (
+            <RunWorkoutOverlay workout={runWorkout} onClose={() => setRunWorkout(null)} />
+          )}
         </div>
       );
     }
