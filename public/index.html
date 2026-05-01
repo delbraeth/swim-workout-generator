@@ -3167,24 +3167,24 @@
           }}>
             <button onClick={onClose} style={{
               background: "transparent", border: "none", color: "#94a3b8",
-              fontSize: 28, lineHeight: 1, cursor: "pointer",
-              padding: "4px 8px", borderRadius: 8, minWidth: 44, minHeight: 44,
+              fontSize: 36, lineHeight: 1, cursor: "pointer",
+              padding: "4px 8px", borderRadius: 8, minWidth: 52, minHeight: 52,
             }}>✕</button>
-            <div style={{ fontSize: 12, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            <div style={{ fontSize: 18, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
               Pace Clock
             </div>
-            <div style={{ minWidth: 44 }} />
+            <div style={{ minWidth: 52 }} />
           </div>
 
           {/* Set description + interval label */}
           <div style={{ width: "100%", padding: "20px 24px 0", textAlign: "center" }}>
-            <div style={{ fontSize: 18, color: "#e2e8f0", lineHeight: 1.4, marginBottom: 6 }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "#e2e8f0", lineHeight: 1.3, marginBottom: 8 }}>
               {set.reps} × {set.dist} yds
             </div>
-            <div style={{ fontSize: 15, color: "#cbd5e1", lineHeight: 1.4, marginBottom: 4 }}>
+            <div style={{ fontSize: 22, color: "#cbd5e1", lineHeight: 1.4, marginBottom: 8 }}>
               {set.desc}
             </div>
-            <div style={{ fontSize: 14, color: "#475569", fontFamily: "monospace" }}>
+            <div style={{ fontSize: 20, color: "#475569", fontFamily: "monospace" }}>
               {set.interval}
             </div>
           </div>
@@ -3197,9 +3197,9 @@
           }}>
             {finished ? (
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 64, marginBottom: 12 }}>✅</div>
-                <div style={{ fontSize: 30, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
-                <div style={{ fontSize: 17, color: "#64748b", marginTop: 10 }}>
+                <div style={{ fontSize: 72, marginBottom: 16 }}>✅</div>
+                <div style={{ fontSize: 38, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
+                <div style={{ fontSize: 24, color: "#64748b", marginTop: 12 }}>
                   {set.reps} rep{set.reps !== 1 ? "s" : ""} done
                 </div>
               </div>
@@ -3207,8 +3207,8 @@
               <>
                 {/* Rep indicator */}
                 <div style={{
-                  fontSize: 20, fontWeight: 700, color: "#64748b",
-                  marginBottom: 12, letterSpacing: "0.06em",
+                  fontSize: 28, fontWeight: 700, color: "#64748b",
+                  marginBottom: 16, letterSpacing: "0.06em",
                 }}>
                   REP <span style={{ color: "#e2e8f0" }}>{repIdx + 1}</span>
                   {" "}<span style={{ color: "#334155" }}>OF</span>{" "}
@@ -3218,17 +3218,17 @@
                 {/* Countdown or no-timer label */}
                 {hasTimer ? (
                   <div style={{
-                    fontSize: 92, fontWeight: 900,
+                    fontSize: 110, fontWeight: 900,
                     color: running ? "#ffffff" : "#334155",
                     fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1,
-                    marginBottom: 24,
+                    marginBottom: 28,
                     transition: "color 0.25s",
                   }}>
                     {fmtTime(secsLeft)}
                   </div>
                 ) : (
                   <div style={{
-                    fontSize: 20, color: "#475569", marginBottom: 24,
+                    fontSize: 26, color: "#475569", marginBottom: 28,
                     fontStyle: "italic",
                   }}>
                     No interval — swim easy
@@ -3238,12 +3238,12 @@
                 {/* Rep progress dots (up to 20 reps) */}
                 {set.reps <= 20 && (
                   <div style={{
-                    display: "flex", gap: 10, marginBottom: 8,
+                    display: "flex", gap: 12, marginBottom: 8,
                     flexWrap: "wrap", justifyContent: "center",
                   }}>
                     {Array.from({ length: set.reps }).map((_, i) => (
                       <div key={i} style={{
-                        width: 14, height: 14, borderRadius: "50%",
+                        width: 18, height: 18, borderRadius: "50%",
                         background: i < repIdx ? "#22c55e"
                           : i === repIdx ? "#3b82f6"
                           : "#1e293b",
@@ -3260,34 +3260,34 @@
           </div>
 
           {/* Controls */}
-          <div style={{ width: "100%", padding: "0 20px 36px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ width: "100%", padding: "0 20px 40px", display: "flex", flexDirection: "column", gap: 14 }}>
             {!finished && (
-              <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ display: "flex", gap: 14 }}>
                 {hasTimer ? (
                   <button onClick={() => setRunning(r => !r)} style={{
-                    flex: 2, padding: "18px 0", borderRadius: 14, border: "none",
+                    flex: 2, padding: "22px 0", borderRadius: 16, border: "none",
                     background: running ? "#dc2626" : "#3b82f6",
-                    color: "#fff", fontSize: 20, fontWeight: 800, cursor: "pointer",
-                    minHeight: 58,
+                    color: "#fff", fontSize: 26, fontWeight: 800, cursor: "pointer",
+                    minHeight: 70,
                   }}>
                     {running ? "⏸ Pause" : isAtStart ? "▶ Start" : "▶ Resume"}
                   </button>
                 ) : (
                   <button onClick={handleSkip} style={{
-                    flex: 2, padding: "18px 0", borderRadius: 14, border: "none",
+                    flex: 2, padding: "22px 0", borderRadius: 16, border: "none",
                     background: "#3b82f6",
-                    color: "#fff", fontSize: 20, fontWeight: 800, cursor: "pointer",
-                    minHeight: 58,
+                    color: "#fff", fontSize: 26, fontWeight: 800, cursor: "pointer",
+                    minHeight: 70,
                   }}>
                     {repIdx + 1 >= set.reps ? "Done ✓" : "Next Rep →"}
                   </button>
                 )}
                 {hasTimer && (
                   <button onClick={handleSkip} style={{
-                    flex: 1, padding: "18px 0", borderRadius: 14,
+                    flex: 1, padding: "22px 0", borderRadius: 16,
                     border: "1px solid #334155", background: "#0f172a",
-                    color: "#64748b", fontSize: 16, fontWeight: 700, cursor: "pointer",
-                    minHeight: 58,
+                    color: "#64748b", fontSize: 22, fontWeight: 700, cursor: "pointer",
+                    minHeight: 70,
                   }}>
                     Skip →
                   </button>
@@ -3295,9 +3295,9 @@
               </div>
             )}
             <button onClick={finished ? onClose : handleReset} style={{
-              width: "100%", padding: "14px 0", borderRadius: 14,
+              width: "100%", padding: "18px 0", borderRadius: 16,
               border: "1px solid #1e293b", background: "transparent",
-              color: "#475569", fontSize: 15, fontWeight: 600, cursor: "pointer",
+              color: "#475569", fontSize: 22, fontWeight: 600, cursor: "pointer",
             }}>
               {finished ? "Back to Set" : "↺ Reset"}
             </button>
