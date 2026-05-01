@@ -3085,6 +3085,228 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  PACE CLOCK
+    //  Tap a set card to step through reps with a live countdown.
+    // ═══════════════════════════════════════════════════════════════
+
+    // Parse "On 2:00", "On :45", "On 1:10" → seconds. "No interval" → null.
+    function parseIntervalSeconds(str) {
+      if (!str || /no interval/i.test(str)) return null;
+      const full = str.match(/(\d+):(\d{2})/);
+      if (full) return parseInt(full[1], 10) * 60 + parseInt(full[2], 10);
+      const sec  = str.match(/:(\d{2})/);
+      if (sec)  return parseInt(sec[1], 10);
+      return null;
+    }
+
+    function fmtTime(secs) {
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return `${m}:${String(s).padStart(2, "0")}`;
+    }
+
+    function PaceClockView({ set, onClose }) {
+      const totalSecs = parseIntervalSeconds(set.interval);
+      const hasTimer  = totalSecs !== null;
+
+      const [repIdx,   setRepIdx]   = useState(0);
+      const [secsLeft, setSecsLeft] = useState(totalSecs ?? 0);
+      const [running,  setRunning]  = useState(false);
+      const [finished, setFinished] = useState(false);
+
+      // Tick down every second while running
+      useEffect(() => {
+        if (!running || !hasTimer) return;
+        const id = setInterval(() => setSecsLeft(s => Math.max(0, s - 1)), 1000);
+        return () => clearInterval(id);
+      }, [running, hasTimer]);
+
+      // When countdown hits zero, advance rep or finish
+      useEffect(() => {
+        if (!running || !hasTimer || secsLeft !== 0) return;
+        if (repIdx + 1 >= set.reps) {
+          setRunning(false);
+          setFinished(true);
+        } else {
+          setRepIdx(r => r + 1);
+          setSecsLeft(totalSecs);
+        }
+      }, [secsLeft, running, hasTimer]);
+
+      const handleReset = () => {
+        setRunning(false);
+        setFinished(false);
+        setRepIdx(0);
+        setSecsLeft(totalSecs ?? 0);
+      };
+
+      const handleSkip = () => {
+        if (repIdx + 1 >= set.reps) {
+          setRunning(false);
+          setFinished(true);
+        } else {
+          setRepIdx(r => r + 1);
+          setSecsLeft(totalSecs ?? 0);
+        }
+      };
+
+      const isAtStart = repIdx === 0 && secsLeft === (totalSecs ?? 0) && !running;
+
+      return (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 10000,
+          background: "#020617",
+          display: "flex", flexDirection: "column", alignItems: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        }}>
+          {/* Top bar */}
+          <div style={{
+            width: "100%", display: "flex", justifyContent: "space-between",
+            alignItems: "center", padding: "16px 20px",
+            borderBottom: "1px solid #1e293b",
+          }}>
+            <button onClick={onClose} style={{
+              background: "transparent", border: "none", color: "#94a3b8",
+              fontSize: 28, lineHeight: 1, cursor: "pointer",
+              padding: "4px 8px", borderRadius: 8, minWidth: 44, minHeight: 44,
+            }}>✕</button>
+            <div style={{ fontSize: 12, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              Pace Clock
+            </div>
+            <div style={{ minWidth: 44 }} />
+          </div>
+
+          {/* Set description + interval label */}
+          <div style={{ width: "100%", padding: "20px 24px 0", textAlign: "center" }}>
+            <div style={{ fontSize: 18, color: "#e2e8f0", lineHeight: 1.4, marginBottom: 6 }}>
+              {set.reps} × {set.dist} yds
+            </div>
+            <div style={{ fontSize: 15, color: "#cbd5e1", lineHeight: 1.4, marginBottom: 4 }}>
+              {set.desc}
+            </div>
+            <div style={{ fontSize: 14, color: "#475569", fontFamily: "monospace" }}>
+              {set.interval}
+            </div>
+          </div>
+
+          {/* Clock area */}
+          <div style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            width: "100%", padding: "0 24px",
+          }}>
+            {finished ? (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 64, marginBottom: 12 }}>✅</div>
+                <div style={{ fontSize: 30, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
+                <div style={{ fontSize: 17, color: "#64748b", marginTop: 10 }}>
+                  {set.reps} rep{set.reps !== 1 ? "s" : ""} done
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Rep indicator */}
+                <div style={{
+                  fontSize: 20, fontWeight: 700, color: "#64748b",
+                  marginBottom: 12, letterSpacing: "0.06em",
+                }}>
+                  REP <span style={{ color: "#e2e8f0" }}>{repIdx + 1}</span>
+                  {" "}<span style={{ color: "#334155" }}>OF</span>{" "}
+                  {set.reps}
+                </div>
+
+                {/* Countdown or no-timer label */}
+                {hasTimer ? (
+                  <div style={{
+                    fontSize: 92, fontWeight: 900,
+                    color: running ? "#ffffff" : "#334155",
+                    fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1,
+                    marginBottom: 24,
+                    transition: "color 0.25s",
+                  }}>
+                    {fmtTime(secsLeft)}
+                  </div>
+                ) : (
+                  <div style={{
+                    fontSize: 20, color: "#475569", marginBottom: 24,
+                    fontStyle: "italic",
+                  }}>
+                    No interval — swim easy
+                  </div>
+                )}
+
+                {/* Rep progress dots (up to 20 reps) */}
+                {set.reps <= 20 && (
+                  <div style={{
+                    display: "flex", gap: 10, marginBottom: 8,
+                    flexWrap: "wrap", justifyContent: "center",
+                  }}>
+                    {Array.from({ length: set.reps }).map((_, i) => (
+                      <div key={i} style={{
+                        width: 14, height: 14, borderRadius: "50%",
+                        background: i < repIdx ? "#22c55e"
+                          : i === repIdx ? "#3b82f6"
+                          : "#1e293b",
+                        border: `2px solid ${i < repIdx ? "#22c55e"
+                          : i === repIdx ? "#3b82f6"
+                          : "#334155"}`,
+                        transition: "background 0.3s, border-color 0.3s",
+                      }} />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Controls */}
+          <div style={{ width: "100%", padding: "0 20px 36px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {!finished && (
+              <div style={{ display: "flex", gap: 12 }}>
+                {hasTimer ? (
+                  <button onClick={() => setRunning(r => !r)} style={{
+                    flex: 2, padding: "18px 0", borderRadius: 14, border: "none",
+                    background: running ? "#dc2626" : "#3b82f6",
+                    color: "#fff", fontSize: 20, fontWeight: 800, cursor: "pointer",
+                    minHeight: 58,
+                  }}>
+                    {running ? "⏸ Pause" : isAtStart ? "▶ Start" : "▶ Resume"}
+                  </button>
+                ) : (
+                  <button onClick={handleSkip} style={{
+                    flex: 2, padding: "18px 0", borderRadius: 14, border: "none",
+                    background: "#3b82f6",
+                    color: "#fff", fontSize: 20, fontWeight: 800, cursor: "pointer",
+                    minHeight: 58,
+                  }}>
+                    {repIdx + 1 >= set.reps ? "Done ✓" : "Next Rep →"}
+                  </button>
+                )}
+                {hasTimer && (
+                  <button onClick={handleSkip} style={{
+                    flex: 1, padding: "18px 0", borderRadius: 14,
+                    border: "1px solid #334155", background: "#0f172a",
+                    color: "#64748b", fontSize: 16, fontWeight: 700, cursor: "pointer",
+                    minHeight: 58,
+                  }}>
+                    Skip →
+                  </button>
+                )}
+              </div>
+            )}
+            <button onClick={finished ? onClose : handleReset} style={{
+              width: "100%", padding: "14px 0", borderRadius: 14,
+              border: "1px solid #1e293b", background: "transparent",
+              color: "#475569", fontSize: 15, fontWeight: 600, cursor: "pointer",
+            }}>
+              {finished ? "Back to Set" : "↺ Reset"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  RUN WORKOUT OVERLAY
     //  Full-screen step-through: one section at a time, iPhone-sized.
     // ═══════════════════════════════════════════════════════════════
@@ -3092,7 +3314,8 @@
     const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
 
     function RunWorkoutOverlay({ workout, onClose }) {
-      const [idx, setIdx] = useState(0);
+      const [idx, setIdx]               = useState(0);
+      const [activePaceSet, setActivePaceSet] = useState(null);
       const blocks  = workout.blocks;
       const block   = blocks[idx];
       const total   = blocks.length;
@@ -3146,16 +3369,24 @@
             </div>
           </div>
 
-          {/* Sets */}
+          {/* Sets — tap any card to open the pace clock */}
           <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
             {block.sets.map((set, i) => (
-              <div key={i} style={{
-                background: "#1e293b", borderRadius: 14,
-                border: `1px solid ${s.border}`, padding: "18px 18px 14px",
-              }}>
-                <div style={{ fontSize: 30, fontWeight: 900, color: "#fff", marginBottom: 8, letterSpacing: "-0.02em", lineHeight: 1 }}>
-                  {set.reps} <span style={{ color: "#475569", fontWeight: 400 }}>×</span> {set.dist}
-                  <span style={{ fontSize: 16, fontWeight: 500, color: "#64748b", marginLeft: 6 }}>yds</span>
+              <div key={i}
+                onClick={() => setActivePaceSet(set)}
+                style={{
+                  background: "#1e293b", borderRadius: 14,
+                  border: `1px solid ${s.border}`, padding: "18px 18px 14px",
+                  cursor: "pointer", WebkitTapHighlightColor: "transparent",
+                }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ fontSize: 30, fontWeight: 900, color: "#fff", marginBottom: 8, letterSpacing: "-0.02em", lineHeight: 1 }}>
+                    {set.reps} <span style={{ color: "#475569", fontWeight: 400 }}>×</span> {set.dist}
+                    <span style={{ fontSize: 16, fontWeight: 500, color: "#64748b", marginLeft: 6 }}>yds</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: "#334155", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", paddingTop: 4 }}>
+                    ▶ pace
+                  </span>
                 </div>
                 <div style={{ fontSize: 19, color: "#e2e8f0", lineHeight: 1.45, marginBottom: 10 }}>
                   {set.desc}
@@ -3176,6 +3407,11 @@
               </div>
             ))}
           </div>
+
+          {/* Pace clock — rendered over this overlay when a set is tapped */}
+          {activePaceSet && (
+            <PaceClockView set={activePaceSet} onClose={() => setActivePaceSet(null)} />
+          )}
 
           {/* Navigation */}
           <div style={{
