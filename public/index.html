@@ -3672,6 +3672,8 @@
       const [regenError, setRegenError]           = useState(null);
       // Run Workout overlay: null when inactive, or the workout/entry object being stepped through
       const [runWorkout, setRunWorkout]           = useState(null);
+      // Print dialog: show "save before printing?" prompt for unsaved workouts
+      const [showPrintDialog, setShowPrintDialog] = useState(false);
       // Auth: authChecked flips to true once we know whether a stored code is valid
       const [accessCode,  setAccessCode]  = useState(null);
       const [authChecked, setAuthChecked] = useState(false);
@@ -4020,7 +4022,15 @@
                       ▶ Run
                     </button>
                     <button
-                      onClick={() => window.print()}
+                      onClick={() => {
+                        if (loadedFromHistoryId) {
+                          // Already saved — print directly
+                          window.print();
+                        } else {
+                          // Unsaved fresh workout — ask first
+                          setShowPrintDialog(true);
+                        }
+                      }}
                       style={{
                         padding: "10px 16px", borderRadius: 8,
                         border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0",
@@ -4113,6 +4123,57 @@
 
             </>}
           </div>
+          {showPrintDialog && (
+            <div style={{
+              position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+              display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+            }}
+              onClick={() => setShowPrintDialog(false)}>
+              <div style={{
+                background: "#1e293b", border: "1px solid #334155", borderRadius: 12,
+                padding: "28px 32px", maxWidth: 400, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+              }}
+                onClick={e => e.stopPropagation()}>
+                <div style={{ fontSize: 22, marginBottom: 8 }}>🖨 Print Workout</div>
+                <p style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 24px 0", lineHeight: 1.5 }}>
+                  Would you like to save this workout to your history before printing?
+                </p>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button
+                    onClick={async () => {
+                      setShowPrintDialog(false);
+                      await handleSave();
+                      setTimeout(() => window.print(), 150);
+                    }}
+                    style={{
+                      flex: 1, padding: "10px 16px", borderRadius: 8,
+                      border: "none", background: "#2563eb", color: "#fff",
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    }}>
+                    Save &amp; Print
+                  </button>
+                  <button
+                    onClick={() => { setShowPrintDialog(false); window.print(); }}
+                    style={{
+                      flex: 1, padding: "10px 16px", borderRadius: 8,
+                      border: "1px solid #475569", background: "transparent", color: "#cbd5e1",
+                      fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    }}>
+                    Print Without Saving
+                  </button>
+                  <button
+                    onClick={() => setShowPrintDialog(false)}
+                    style={{
+                      width: "100%", padding: "8px 16px", borderRadius: 8,
+                      border: "1px solid #334155", background: "transparent", color: "#64748b",
+                      fontSize: 13, cursor: "pointer", marginTop: 2,
+                    }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {runWorkout && (
             <RunWorkoutOverlay workout={runWorkout} onClose={() => setRunWorkout(null)} />
           )}
