@@ -3171,10 +3171,10 @@
 
       // Rep dots shared between portrait and landscape
       const repDots = set.reps <= 20 && (
-        <div style={{ display: "flex", gap: isLandscape ? 8 : 12, flexWrap: "wrap", justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: isLandscape ? 16 : 12, flexWrap: "wrap", justifyContent: "center" }}>
           {Array.from({ length: set.reps }).map((_, i) => (
             <div key={i} style={{
-              width: isLandscape ? 14 : 18, height: isLandscape ? 14 : 18,
+              width: isLandscape ? 28 : 18, height: isLandscape ? 28 : 18,
               borderRadius: "50%",
               background: i < repIdx ? "#22c55e" : i === repIdx ? "#3b82f6" : "#1e293b",
               border: `2px solid ${i < repIdx ? "#22c55e" : i === repIdx ? "#3b82f6" : "#334155"}`,
@@ -3272,13 +3272,13 @@
                 justifyContent: "center", padding: "12px 20px",
                 borderRight: "1px solid #1e293b",
               }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#e2e8f0", marginBottom: 6 }}>
+                <div style={{ fontSize: 88, fontWeight: 800, color: "#e2e8f0", marginBottom: 6 }}>
                   {set.reps} × {set.dist} yds
                 </div>
-                <div style={{ fontSize: 20, color: "#cbd5e1", lineHeight: 1.35, marginBottom: 6 }}>
+                <div style={{ fontSize: 80, color: "#cbd5e1", lineHeight: 1.35, marginBottom: 6 }}>
                   {set.desc}
                 </div>
-                <div style={{ fontSize: 17, color: "#475569", fontFamily: "monospace", marginBottom: 12 }}>
+                <div style={{ fontSize: 70, color: "#475569", fontFamily: "monospace", marginBottom: 12 }}>
                   {set.interval}
                 </div>
                 {repDots}
