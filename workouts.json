@@ -6,7 +6,7 @@
     "type": "sprint",
     "typeLabel": "Sprint",
     "totalYards": 2000,
-    "estimatedMin": 65,
+    "estimatedMin": 55,
     "maxYardsCap": 2400,
     "equipment": {
       "kickboard": false,
@@ -67,7 +67,7 @@
             "reps": 1,
             "dist": 200,
             "desc": "Easy freestyle — recovery",
-            "interval": "On 4:00",
+            "interval": "On 4:30",
             "focus": "Reset between blocks"
           },
           {
@@ -110,7 +110,7 @@
     "type": "technique",
     "typeLabel": "Technique",
     "totalYards": 2150,
-    "estimatedMin": 68,
+    "estimatedMin": 60,
     "maxYardsCap": 2400,
     "equipment": {
       "kickboard": false,
@@ -142,7 +142,7 @@
             "reps": 4,
             "dist": 50,
             "desc": "Kick — slow, focus on stroke alignment (board optional)",
-            "interval": "On 1:10",
+            "interval": "On 1:45",
             "focus": "Isolate leg technique",
             "eq": "kick"
           },
@@ -150,7 +150,7 @@
             "reps": 2,
             "dist": 100,
             "desc": "Pull (buoy) — high-elbow catch, long stroke",
-            "interval": "On 1:55",
+            "interval": "On 2:20",
             "focus": "Isolate upper-body technique",
             "eq": "pull"
           }
@@ -172,14 +172,14 @@
             "reps": 8,
             "dist": 50,
             "desc": "2 each: fly drill / back drill / breast drill / free drill",
-            "interval": "On 1:10",
+            "interval": "On 1:30",
             "focus": "Key isolation drill for each stroke"
           },
           {
             "reps": 4,
             "dist": 75,
             "desc": "25 Drill + 50 Swim (same stroke — apply what you drilled)",
-            "interval": "On 1:40",
+            "interval": "On 1:50",
             "focus": "Bridge drill into real swimming"
           }
         ]
@@ -215,7 +215,7 @@
     "type": "mixed",
     "typeLabel": "Mixed",
     "totalYards": 2200,
-    "estimatedMin": 66,
+    "estimatedMin": 60,
     "maxYardsCap": 2200,
     "equipment": {
       "kickboard": true,
@@ -240,7 +240,7 @@
             "reps": 4,
             "dist": 25,
             "desc": "Kick (no board, streamlined)",
-            "interval": "On :40",
+            "interval": "On :55",
             "focus": "Loosen hips and ankles"
           }
         ]
@@ -254,7 +254,7 @@
             "reps": 4,
             "dist": 50,
             "desc": "Kick — moderate, choice of stroke (board optional)",
-            "interval": "On 1:10",
+            "interval": "On 1:40",
             "focus": "Leg activation",
             "eq": "kick"
           },
@@ -262,7 +262,7 @@
             "reps": 2,
             "dist": 100,
             "desc": "Pull (buoy) — moderate, smooth rotation",
-            "interval": "On 1:50",
+            "interval": "On 2:15",
             "focus": "Upper-body warm-up before mix",
             "eq": "pull"
           }
@@ -277,21 +277,21 @@
             "reps": 1,
             "dist": 400,
             "desc": "Freestyle — steady aerobic effort",
-            "interval": "On 7:30",
+            "interval": "On 8:20",
             "focus": "Aerobic base"
           },
           {
             "reps": 4,
             "dist": 100,
             "desc": "100 IM — moderate, smooth transitions",
-            "interval": "On 2:15",
+            "interval": "On 2:45",
             "focus": "IM after aerobic load"
           },
           {
             "reps": 4,
             "dist": 100,
             "desc": "Freestyle — descending pace 1→4",
-            "interval": "On 1:50",
+            "interval": "On 2:15",
             "focus": "Build pace round to round"
           }
         ]
