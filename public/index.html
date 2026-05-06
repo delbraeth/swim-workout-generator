@@ -3233,7 +3233,7 @@
             fontWeight: 600, cursor: "pointer",
             minHeight: isLandscape ? 52 : undefined,
           }}>
-            {finished ? "Back to Set" : "↺ Reset"}
+            {finished ? "Next Set →" : "↺ Reset"}
           </button>
         </div>
       );
@@ -3275,10 +3275,10 @@
                 <div style={{ fontSize: 45, fontWeight: 800, color: "#e2e8f0", marginBottom: 6 }}>
                   {set.reps} × {set.dist} yds
                 </div>
-                <div style={{ fontSize: 40, color: "#cbd5e1", lineHeight: 1.35, marginBottom: 6 }}>
+                <div style={{ fontSize: 32, color: "#cbd5e1", lineHeight: 1.35, marginBottom: 6 }}>
                   {set.desc}
                 </div>
-                <div style={{ fontSize: 40, color: "#475569", fontFamily: "monospace", marginBottom: 12 }}>
+                <div style={{ fontSize: 32, color: "#475569", fontFamily: "monospace", marginBottom: 12 }}>
                   {set.interval}
                 </div>
                 {repDots}
