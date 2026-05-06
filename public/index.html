@@ -3121,7 +3121,7 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, onClose }) {
+    function PaceClockView({ set, onClose, onNext, isLastSet }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
@@ -3224,7 +3224,7 @@
               )}
             </>
           )}
-          <button onClick={finished ? onClose : handleReset} style={{
+          <button onClick={finished ? (onNext || onClose) : handleReset} style={{
             flex: finished ? 1 : undefined,
             width: finished ? undefined : (isLandscape ? undefined : "100%"),
             padding: isLandscape ? "12px 16px" : "18px 0",
@@ -3233,7 +3233,7 @@
             fontWeight: 600, cursor: "pointer",
             minHeight: isLandscape ? 52 : undefined,
           }}>
-            {finished ? "Next Set →" : "↺ Reset"}
+            {finished ? (isLastSet ? "Finish ✓" : "Next Set →") : "↺ Reset"}
           </button>
         </div>
       );
@@ -3426,8 +3426,24 @@
 
     function RunWorkoutOverlay({ workout, onClose }) {
       const [idx, setIdx]               = useState(0);
-      const [activePaceSet, setActivePaceSet] = useState(null);
+      const [paceIdx, setPaceIdx]       = useState(null);
       const blocks  = workout.blocks;
+
+      const allSets = useMemo(() =>
+        blocks.flatMap((block, bIdx) =>
+          block.sets.map((set, sIdx) => ({ set, blockIdx: bIdx, setIdx: sIdx }))
+        ), [blocks]);
+
+      function handlePaceNext() {
+        if (paceIdx + 1 < allSets.length) {
+          const next = allSets[paceIdx + 1];
+          setIdx(next.blockIdx);
+          setPaceIdx(paceIdx + 1);
+        } else {
+          setPaceIdx(null);
+          onClose();
+        }
+      }
       const block   = blocks[idx];
       const total   = blocks.length;
       const isFirst = idx === 0;
@@ -3484,7 +3500,7 @@
           <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
             {block.sets.map((set, i) => (
               <div key={i}
-                onClick={() => setActivePaceSet(set)}
+                onClick={() => setPaceIdx(blocks.slice(0, idx).reduce((acc, b) => acc + b.sets.length, 0) + i)}
                 style={{
                   background: "#1e293b", borderRadius: 14,
                   border: `1px solid ${s.border}`, padding: "18px 18px 14px",
@@ -3520,8 +3536,13 @@
           </div>
 
           {/* Pace clock — rendered over this overlay when a set is tapped */}
-          {activePaceSet && (
-            <PaceClockView set={activePaceSet} onClose={() => setActivePaceSet(null)} />
+          {paceIdx !== null && (
+            <PaceClockView
+              set={allSets[paceIdx].set}
+              onClose={() => setPaceIdx(null)}
+              onNext={handlePaceNext}
+              isLastSet={paceIdx === allSets.length - 1}
+            />
           )}
 
           {/* Navigation */}
