@@ -3121,7 +3121,7 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, onClose, onNext, isLastSet }) {
+    function PaceClockView({ set, sectionName, onClose, onNext, isLastSet }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
@@ -3258,7 +3258,7 @@
                 padding: "4px 8px", borderRadius: 8, minWidth: 44, minHeight: 44,
               }}>✕</button>
               <div style={{ fontSize: 15, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                Pace Clock
+                {sectionName || "Pace Clock"}
               </div>
               <div style={{ minWidth: 44 }} />
             </div>
@@ -3540,6 +3540,7 @@
             <PaceClockView
               key={paceIdx}
               set={allSets[paceIdx].set}
+              sectionName={workout.blocks[allSets[paceIdx].blockIdx].name}
               onClose={() => setPaceIdx(null)}
               onNext={handlePaceNext}
               isLastSet={paceIdx === allSets.length - 1}
