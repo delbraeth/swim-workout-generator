@@ -3538,6 +3538,7 @@
           {/* Pace clock — rendered over this overlay when a set is tapped */}
           {paceIdx !== null && (
             <PaceClockView
+              key={paceIdx}
               set={allSets[paceIdx].set}
               onClose={() => setPaceIdx(null)}
               onNext={handlePaceNext}
