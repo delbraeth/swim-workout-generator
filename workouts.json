@@ -312,5 +312,131 @@
       }
     ],
     "notes": "Wil change the 400 in the main set to maybe either 4x100 or 2x200 with a breathing pattern"
+  },
+  {
+    "id": "wmouto38r4jdv4v",
+    "savedAt": "2026-05-07T01:43:24.267Z",
+    "dateCompleted": "2026-05-07",
+    "type": "fly",
+    "typeLabel": "Specialty Fly",
+    "totalYards": 2000,
+    "estimatedMin": 59,
+    "maxYardsCap": 2200,
+    "equipment": {
+      "kickboard": true,
+      "fins": true,
+      "paddles": false,
+      "pullBuoy": false
+    },
+    "blocks": [
+      {
+        "name": "Warm-Up",
+        "section": "warmup",
+        "totalYards": 400,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 200,
+            "desc": "Easy Freestyle",
+            "interval": "No interval",
+            "focus": "Settle into rhythm"
+          },
+          {
+            "reps": 4,
+            "dist": 50,
+            "desc": "25 Drill / 25 Easy Swim (stroke choice)",
+            "interval": "On 1:15",
+            "focus": "Feel for the water"
+          }
+        ]
+      },
+      {
+        "name": "Drill / Pre-Main Set",
+        "section": "drill",
+        "totalYards": 300,
+        "sets": [
+          {
+            "reps": 6,
+            "dist": 50,
+            "desc": "Dolphin kick — alternate streamline on stomach / on back",
+            "interval": "On 1:45",
+            "focus": "Dolphin rhythm without arm fatigue",
+            "eq": "kick"
+          }
+        ]
+      },
+      {
+        "name": "Main Set — Fly Race Test Day",
+        "section": "main",
+        "totalYards": 1100,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 100,
+            "desc": "25 fly + 75 free — easy warm-up",
+            "interval": "On 2:30",
+            "focus": "Open up"
+          },
+          {
+            "reps": 1,
+            "dist": 100,
+            "desc": "Butterfly — TEST 100 (race pace)",
+            "interval": "On 3:30",
+            "focus": "100 fly test"
+          },
+          {
+            "reps": 1,
+            "dist": 200,
+            "desc": "Easy backstroke — recovery",
+            "interval": "On 5:30",
+            "focus": "Reset"
+          },
+          {
+            "reps": 1,
+            "dist": 50,
+            "desc": "Butterfly — TEST 50 (ALL OUT)",
+            "interval": "On 2:00",
+            "focus": "Sprint fly test"
+          },
+          {
+            "reps": 1,
+            "dist": 250,
+            "desc": "Easy choice — recovery",
+            "interval": "On 5:00",
+            "focus": "Reset"
+          },
+          {
+            "reps": 4,
+            "dist": 75,
+            "desc": "25 fly fast / 50 free easy",
+            "interval": "On 2:30",
+            "focus": "Apply fly volume"
+          },
+          {
+            "reps": 1,
+            "dist": 100,
+            "desc": "Easy choice — close",
+            "interval": "On 2:00",
+            "focus": "Cool down"
+          }
+        ]
+      },
+      {
+        "name": "Cool-Down",
+        "section": "cooldown",
+        "totalYards": 200,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 50,
+            "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
+            "interval": "On 1:20",
+            "focus": "Gentle recovery — no effort, just move"
+          }
+        ]
+      }
+    ],
+    "userInitials": "",
+    "notes": ""
   }
 ]
