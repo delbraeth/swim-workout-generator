@@ -438,5 +438,112 @@
     ],
     "userInitials": "",
     "notes": ""
+  },
+  {
+    "id": "wmoutr5k18p1mbc",
+    "savedAt": "2026-05-07T01:45:47.233Z",
+    "dateCompleted": "2026-05-07",
+    "type": "mixed",
+    "typeLabel": "Mixed",
+    "totalYards": 2100,
+    "estimatedMin": 62,
+    "maxYardsCap": 2300,
+    "equipment": {
+      "kickboard": false,
+      "fins": true,
+      "paddles": true,
+      "pullBuoy": true
+    },
+    "blocks": [
+      {
+        "name": "Warm-Up",
+        "section": "warmup",
+        "totalYards": 500,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 400,
+            "desc": "Freestyle — easy, focus on long stroke",
+            "interval": "No interval",
+            "focus": "Prime the aerobic engine"
+          },
+          {
+            "reps": 4,
+            "dist": 25,
+            "desc": "Backstroke — easy, open the shoulders",
+            "interval": "On :45",
+            "focus": "Counter the freestyle pull"
+          }
+        ]
+      },
+      {
+        "name": "Drill / Pre-Main Set",
+        "section": "drill",
+        "totalYards": 300,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 75,
+            "desc": "Kick 25 / Drill 25 / Swim 25 — stroke choice",
+            "interval": "On 1:40",
+            "focus": "All-around activation before varied main set",
+            "eq": "kickPart"
+          }
+        ]
+      },
+      {
+        "name": "Main Set — Pull + Kick Mix",
+        "section": "main",
+        "totalYards": 1100,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 100,
+            "desc": "Pull (buoy) — moderate, focus on catch",
+            "interval": "On 2:15",
+            "focus": "Upper-body block",
+            "eq": "pull"
+          },
+          {
+            "reps": 1,
+            "dist": 100,
+            "desc": "Easy freestyle — transition",
+            "interval": "On 2:00",
+            "focus": "Reset between blocks"
+          },
+          {
+            "reps": 4,
+            "dist": 50,
+            "desc": "Kick — moderate effort (board optional)",
+            "interval": "On 1:45",
+            "focus": "Lower-body block",
+            "eq": "kick"
+          },
+          {
+            "reps": 4,
+            "dist": 100,
+            "desc": "Freestyle — strong, integrate both",
+            "interval": "On 2:15",
+            "focus": "Apply pull + kick into full stroke"
+          }
+        ]
+      },
+      {
+        "name": "Cool-Down",
+        "section": "cooldown",
+        "totalYards": 200,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 200,
+            "desc": "Easy Freestyle — long, relaxed stroke",
+            "interval": "No interval",
+            "focus": "Bring heart rate down, flush the muscles"
+          }
+        ]
+      }
+    ],
+    "userInitials": "",
+    "notes": ""
   }
 ]
