@@ -2482,12 +2482,7 @@
         { name: `Main Set — ${ma.label}`,section: "main",    ...ma },
         { name: "Cool-Down",            section: "cooldown", ...cd },
       ];
-      const mainYdPerMin = { sprint: 28, im: 32, distance: 36, endurance: 36, technique: 30, mixed: 33 };
-      const estimatedMin =
-        Math.round(wu.totalYards / 35) +
-        Math.round(dr.totalYards / 32) +
-        Math.round(ma.totalYards / (mainYdPerMin[typeId] || 33)) +
-        Math.round(cd.totalYards / 35);
+      const estimatedMin = calcEstimatedMin(blocks);
       return { blocks, totalYards: total, estimatedMin, typeId };
     }
 
@@ -2568,15 +2563,7 @@
       const newBlocks = blocks.map((b, i) => i === idx ? newBlock : b);
       const total = newBlocks.reduce((s, b) => s + b.totalYards, 0);
 
-      const wu = newBlocks[0], dr = newBlocks[1], ma = newBlocks[2], cd = newBlocks[3];
-      const mainYdPerMin = { sprint: 28, im: 32, distance: 36, endurance: 36, technique: 30, mixed: 33 };
-      const estimatedMin =
-        Math.round(wu.totalYards / 35) +
-        Math.round(dr.totalYards / 32) +
-        Math.round(ma.totalYards / (mainYdPerMin[typeId] || 33)) +
-        Math.round(cd.totalYards / 35);
-
-      return { workout: { blocks: newBlocks, totalYards: total, estimatedMin, typeId }, error: null };
+      return { workout: { blocks: newBlocks, totalYards: total, estimatedMin: calcEstimatedMin(newBlocks), typeId }, error: null };
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -2661,6 +2648,23 @@
       if (secs === null) return intervalStr;
       const scaled = Math.max(30, Math.round((secs * ratio) / 5) * 5);
       return formatIntervalSecs(scaled);
+    }
+
+    // Sum reps×interval across all sets; fall back to 35 yd/min for sets with no interval.
+    function calcEstimatedMin(blocks) {
+      const FALLBACK_YD_PER_MIN = 35;
+      let totalSecs = 0;
+      for (const block of blocks) {
+        for (const set of block.sets) {
+          const secs = parseIntervalSecs(set.interval);
+          if (secs !== null) {
+            totalSecs += set.reps * secs;
+          } else {
+            totalSecs += (set.reps * set.dist / FALLBACK_YD_PER_MIN) * 60;
+          }
+        }
+      }
+      return Math.round(totalSecs / 60);
     }
 
     function getEquivalents(set) {
@@ -3963,14 +3967,13 @@
         const userSecs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
         if (!userSecs || userSecs < 30 || userSecs > 300) return;
         const ratio = userSecs / PACE_BASELINE_SECS;
-        setWorkout(prev => ({
-          ...prev,
-          estimatedMin: Math.round(prev.estimatedMin * ratio),
-          blocks: prev.blocks.map(b => ({
+        setWorkout(prev => {
+          const newBlocks = prev.blocks.map(b => ({
             ...b,
             sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })),
-          })),
-        }));
+          }));
+          return { ...prev, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
+        });
       }, [paceInput]);
 
       // ── Per-set interval editing ──────────────────────────────────
@@ -3986,13 +3989,13 @@
       const handleCommitInterval = useCallback((bIdx, sIdx, draft) => {
         const val = draft.trim();
         if (val) {
-          setWorkout(prev => ({
-            ...prev,
-            blocks: prev.blocks.map((b, bi) => bi !== bIdx ? b : {
+          setWorkout(prev => {
+            const newBlocks = prev.blocks.map((b, bi) => bi !== bIdx ? b : {
               ...b,
               sets: b.sets.map((s, si) => si !== sIdx ? s : { ...s, interval: val }),
-            }),
-          }));
+            });
+            return { ...prev, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
+          });
         }
         setEditIntervalKey(null);
         setEditIntervalDraft("");
