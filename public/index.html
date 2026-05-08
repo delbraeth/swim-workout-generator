@@ -2570,7 +2570,7 @@
       return true;
     }
 
-    function generateWorkout(typeId, maxYards, equipment) {
+    function generateWorkout(typeId, maxYards, equipment, favorites = []) {
       const drillList = DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed;
       const mainList  = MAIN_OPTIONS[typeId]  || MAIN_OPTIONS.mixed;
       const hasEquipReq = equipment && Object.values(EQUIP_REQUIREMENTS).length > 0
@@ -2599,7 +2599,11 @@
           o.totalYards <= maxYards - wu.totalYards - dr.totalYards - MIN_COOLDOWN
         );
         if (!validMain.length) continue;
-        const ma = pick(validMain);
+        // Favorites get 3× weight in the pick pool
+        const weightedMain = favorites.length
+          ? validMain.flatMap(o => o.label && favorites.includes(o.label) ? [o, o, o] : [o])
+          : validMain;
+        const ma = pick(weightedMain);
 
         // 4. Equipment satisfaction check — every checked item needs a matching set
         if (hasEquipReq && !combinationSatisfies(dr, ma, equipment)) continue;
@@ -3011,7 +3015,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, isFavorited, onToggleFavorite }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -3029,6 +3033,22 @@
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} yds</span>
+              {block.section === "main" && block.label && onToggleFavorite && (
+                <button
+                  type="button"
+                  className="screen-only"
+                  onClick={() => onToggleFavorite(block.label)}
+                  title={isFavorited ? "Remove from favorites" : "Save as favorite"}
+                  style={{
+                    background: "transparent", border: "none",
+                    color: isFavorited ? "#f59e0b" : s.headerText,
+                    fontSize: 20, lineHeight: 1, cursor: "pointer",
+                    padding: "2px 4px", opacity: isFavorited ? 1 : 0.5,
+                    transition: "opacity 0.15s, color 0.15s",
+                  }}>
+                  {isFavorited ? "★" : "☆"}
+                </button>
+              )}
               {onRegenerate && (
                 <button
                   type="button"
@@ -3239,7 +3259,7 @@
     // ═══════════════════════════════════════════════════════════════
     //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
     // ═══════════════════════════════════════════════════════════════
-    function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint, onRepeat, onRun }) {
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite }) {
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | initials string
       const [editingId,    setEditingId]    = useState(null);
@@ -3305,6 +3325,28 @@
 
       return (
         <div className="screen-only">
+          {/* Favorites panel */}
+          {favorites && favorites.length > 0 && (
+            <div style={{ marginBottom: 18, padding: "14px 16px", borderRadius: 10, background: "#1a1f2e", border: "1px solid #2d3748" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10 }}>
+                ★ Favorite Main Sets
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {favorites.map(label => (
+                  <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, background: "#0f172a", border: "1px solid #f59e0b33" }}>
+                    <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{label}</span>
+                    <button
+                      onClick={() => onToggleFavorite && onToggleFavorite(label)}
+                      title="Remove from favorites"
+                      style={{ background: "transparent", border: "none", color: "#f59e0b", fontSize: 16, cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>
+                      ★
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Type filter chips */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: showUserFilter ? 8 : 14 }}>
             {[{ id: "all", label: "All", emoji: "📋" }, ...WORKOUT_TYPES].map(t => {
@@ -4211,6 +4253,7 @@
       const [view, setView]                       = useState("generator"); // "generator" | "history"
       const [history, setHistory]                 = useState(() => loadLocalHistory());
       const [historyLoaded, setHistoryLoaded]     = useState(false);
+      const [favorites, setFavorites]             = useState([]);
       const [loadedFromHistoryId, setLoadedFromHistoryId] = useState(null);
       const [saveStatus, setSaveStatus]           = useState(null); // null | "saving" | "saved" | "error"
       const [saveError, setSaveError]             = useState(null);
@@ -4269,6 +4312,38 @@
           .catch(() => { if (!cancelled) setHistoryLoaded(true); });
         return () => { cancelled = true; };
       }, []);
+
+      // On mount: fetch favorites
+      useEffect(() => {
+        fetch(`${API_BASE}/favorites`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => { if (Array.isArray(data)) setFavorites(data); })
+          .catch(() => {});
+      }, []);
+
+      // Toggle a main-set label in/out of favorites
+      const handleToggleFavorite = useCallback(async (label) => {
+        const isFav = favorites.includes(label);
+        // Optimistic update
+        setFavorites(prev => isFav ? prev.filter(x => x !== label) : [...prev, label]);
+        try {
+          if (isFav) {
+            await fetch(`${API_BASE}/favorites/${encodeURIComponent(label)}`, {
+              method: "DELETE",
+              headers: { "x-access-code": accessCode || "" },
+            });
+          } else {
+            await fetch(`${API_BASE}/favorites`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-access-code": accessCode || "" },
+              body: JSON.stringify({ label }),
+            });
+          }
+        } catch (_) {
+          // Revert optimistic update on error
+          setFavorites(prev => isFav ? [...prev, label] : prev.filter(x => x !== label));
+        }
+      }, [favorites, accessCode]);
 
       const [openSwapKey, setOpenSwapKey] = useState(null);
 
@@ -4341,7 +4416,7 @@
 
       const handleGenerate = useCallback(() => {
         if (!selectedType) return;
-        setWorkout(generateWorkout(selectedType, maxYards, equipment));
+        setWorkout(generateWorkout(selectedType, maxYards, equipment, favorites));
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
         setRegenError(null);
@@ -4555,6 +4630,8 @@
                 onLoadAndPrint={handleLoadAndPrint}
                 onRepeat={handleRepeatFromHistory}
                 onRun={entry => { setRunWorkout(entry); setShowRestPicker(true); }}
+                favorites={favorites}
+                onToggleFavorite={handleToggleFavorite}
               />
             )}
 
@@ -4736,6 +4813,8 @@
                     onStartEditInterval={handleStartEditInterval}
                     onCommitInterval={handleCommitInterval}
                     onCancelInterval={handleCancelInterval}
+                    isFavorited={!!(block.label && favorites.includes(block.label))}
+                    onToggleFavorite={handleToggleFavorite}
                   />
                 ))}
 
