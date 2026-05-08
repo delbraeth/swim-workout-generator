@@ -3470,15 +3470,16 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, sectionName, onClose, onNext, isLastSet }) {
+    function PaceClockView({ set, sectionName, onClose, onNext, isLastSet, restSecs }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
 
-      const [repIdx,   setRepIdx]   = useState(0);
-      const [secsLeft, setSecsLeft] = useState(totalSecs ?? 0);
-      const [running,  setRunning]  = useState(false);
-      const [finished, setFinished] = useState(false);
+      const [repIdx,    setRepIdx]   = useState(0);
+      const [secsLeft,  setSecsLeft] = useState(totalSecs ?? 0);
+      const [running,   setRunning]  = useState(false);
+      const [finished,  setFinished] = useState(false);
+      const [restLeft,  setRestLeft] = useState(null); // null = not in rest phase
 
       // Tick down every second while running
       useEffect(() => {
@@ -3498,6 +3499,24 @@
           setSecsLeft(totalSecs);
         }
       }, [secsLeft, running, hasTimer]);
+
+      // When a set finishes, kick off rest phase (or 1.5s flash for 0s)
+      useEffect(() => {
+        if (!finished || isLastSet || restSecs === null) return;
+        if (restSecs === 0) {
+          const id = setTimeout(() => { if (onNext) onNext(); }, 1500);
+          return () => clearTimeout(id);
+        }
+        setRestLeft(restSecs);
+      }, [finished]);
+
+      // Tick rest countdown; call onNext when it reaches zero
+      useEffect(() => {
+        if (restLeft === null) return;
+        if (restLeft === 0) { if (onNext) onNext(); return; }
+        const id = setTimeout(() => setRestLeft(r => r - 1), 1000);
+        return () => clearTimeout(id);
+      }, [restLeft]);
 
       const handleReset = () => {
         setRunning(false);
@@ -3534,56 +3553,71 @@
       );
 
       // Controls shared between portrait and landscape
+      const btnBase = {
+        borderRadius: 16, fontWeight: 700, cursor: "pointer",
+        padding: isLandscape ? "12px 0" : "22px 0",
+        minHeight: isLandscape ? 52 : 70,
+        fontSize: isLandscape ? 17 : 22,
+      };
       const controls = (
         <div style={{ display: "flex", gap: isLandscape ? 10 : 14, width: "100%" }}>
           {!finished && (
             <>
               {hasTimer ? (
                 <button onClick={() => setRunning(r => !r)} style={{
-                  flex: 2, padding: isLandscape ? "12px 0" : "22px 0",
-                  borderRadius: 16, border: "none",
+                  ...btnBase, flex: 2, border: "none",
                   background: running ? "#dc2626" : "#3b82f6",
-                  color: "#fff", fontSize: isLandscape ? 20 : 26,
-                  fontWeight: 800, cursor: "pointer",
-                  minHeight: isLandscape ? 52 : 70,
+                  color: "#fff", fontSize: isLandscape ? 20 : 26, fontWeight: 800,
                 }}>
                   {running ? "⏸ Pause" : isAtStart ? "▶ Start" : "▶ Resume"}
                 </button>
               ) : (
                 <button onClick={handleSkip} style={{
-                  flex: 2, padding: isLandscape ? "12px 0" : "22px 0",
-                  borderRadius: 16, border: "none", background: "#3b82f6",
-                  color: "#fff", fontSize: isLandscape ? 20 : 26,
-                  fontWeight: 800, cursor: "pointer",
-                  minHeight: isLandscape ? 52 : 70,
+                  ...btnBase, flex: 2, border: "none", background: "#3b82f6",
+                  color: "#fff", fontSize: isLandscape ? 20 : 26, fontWeight: 800,
                 }}>
                   {repIdx + 1 >= set.reps ? "Done ✓" : "Next Rep →"}
                 </button>
               )}
               {hasTimer && (
                 <button onClick={handleSkip} style={{
-                  flex: 1, padding: isLandscape ? "12px 0" : "22px 0",
-                  borderRadius: 16, border: "1px solid #334155", background: "#0f172a",
-                  color: "#64748b", fontSize: isLandscape ? 17 : 22,
-                  fontWeight: 700, cursor: "pointer",
-                  minHeight: isLandscape ? 52 : 70,
+                  ...btnBase, flex: 1, border: "1px solid #334155",
+                  background: "#0f172a", color: "#64748b",
                 }}>
                   Skip →
                 </button>
               )}
             </>
           )}
-          <button onClick={finished ? (onNext || onClose) : handleReset} style={{
-            flex: finished ? 1 : undefined,
-            width: finished ? undefined : (isLandscape ? undefined : "100%"),
-            padding: isLandscape ? "12px 16px" : "18px 0",
-            borderRadius: 16, border: "1px solid #1e293b", background: "transparent",
-            color: "#475569", fontSize: isLandscape ? 17 : 22,
-            fontWeight: 600, cursor: "pointer",
-            minHeight: isLandscape ? 52 : undefined,
-          }}>
-            {finished ? (isLastSet ? "Finish ✓" : "Next Set →") : "↺ Reset"}
-          </button>
+          {!finished ? (
+            <button onClick={handleReset} style={{
+              ...btnBase, border: "1px solid #1e293b", background: "transparent",
+              color: "#475569", width: isLandscape ? undefined : "100%",
+            }}>
+              ↺ Reset
+            </button>
+          ) : isLastSet ? (
+            <button onClick={onClose} style={{
+              ...btnBase, flex: 1, border: "1px solid #1e293b",
+              background: "transparent", color: "#475569",
+            }}>
+              Finish ✓
+            </button>
+          ) : restSecs === null ? (
+            <button onClick={onNext || onClose} style={{
+              ...btnBase, flex: 1, border: "1px solid #1e293b",
+              background: "transparent", color: "#475569",
+            }}>
+              Next Set →
+            </button>
+          ) : restLeft !== null && restLeft > 0 ? (
+            <button onClick={() => setRestLeft(0)} style={{
+              ...btnBase, flex: 1, border: "1px solid #f59e0b",
+              background: "transparent", color: "#f59e0b",
+            }}>
+              Skip Rest →
+            </button>
+          ) : null}
         </div>
       );
 
@@ -3639,13 +3673,23 @@
                 alignItems: "center", justifyContent: "center", padding: "12px 16px",
               }}>
                 {finished ? (
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
-                    <div style={{ fontSize: 18, color: "#64748b", marginTop: 6 }}>
-                      {set.reps} rep{set.reps !== 1 ? "s" : ""} done
+                  restLeft !== null && restLeft > 0 ? (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b", letterSpacing: "0.12em", marginBottom: 6 }}>REST</div>
+                      <div style={{ fontSize: 80, fontWeight: 900, color: "#f59e0b", fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1 }}>
+                        {restLeft}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#64748b", marginTop: 6 }}>Next set starting soon…</div>
                     </div>
-                  </div>
+                  ) : (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
+                      <div style={{ fontSize: 18, color: "#64748b", marginTop: 6 }}>
+                        {set.reps} rep{set.reps !== 1 ? "s" : ""} done
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <>
                     <div style={{ fontSize: 20, fontWeight: 700, color: "#64748b", marginBottom: 8, letterSpacing: "0.06em" }}>
@@ -3725,13 +3769,23 @@
             width: "100%", padding: "0 24px",
           }}>
             {finished ? (
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 72, marginBottom: 16 }}>✅</div>
-                <div style={{ fontSize: 38, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
-                <div style={{ fontSize: 24, color: "#64748b", marginTop: 12 }}>
-                  {set.reps} rep{set.reps !== 1 ? "s" : ""} done
+              restLeft !== null && restLeft > 0 ? (
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#f59e0b", letterSpacing: "0.12em", marginBottom: 8 }}>REST</div>
+                  <div style={{ fontSize: 110, fontWeight: 900, color: "#f59e0b", fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: 20 }}>
+                    {restLeft}
+                  </div>
+                  <div style={{ fontSize: 16, color: "#64748b" }}>Next set starting soon…</div>
                 </div>
-              </div>
+              ) : (
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 72, marginBottom: 16 }}>✅</div>
+                  <div style={{ fontSize: 38, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
+                  <div style={{ fontSize: 24, color: "#64748b", marginTop: 12 }}>
+                    {set.reps} rep{set.reps !== 1 ? "s" : ""} done
+                  </div>
+                </div>
+              )
             ) : (
               <>
                 <div style={{ fontSize: 28, fontWeight: 700, color: "#64748b", marginBottom: 16, letterSpacing: "0.06em" }}>
@@ -3767,13 +3821,81 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  REST PICKER MODAL — shown when tapping "Run Workout"
+    // ═══════════════════════════════════════════════════════════════
+
+    const REST_OPTIONS = [
+      { label: "Manual", value: null },
+      { label: "0s",     value: 0 },
+      { label: "5s",     value: 5 },
+      { label: "10s",    value: 10 },
+      { label: "15s",    value: 15 },
+    ];
+
+    function RestPickerModal({ restSecs, onChange, onStart, onCancel }) {
+      return (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9998,
+          background: "rgba(0,0,0,0.75)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 24,
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        }}>
+          <div style={{
+            background: "#1e293b", borderRadius: 20, padding: "28px 24px",
+            width: "100%", maxWidth: 360, border: "1px solid #334155",
+          }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>
+              🏊 Start Workout
+            </div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
+              Rest between sets
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+              {REST_OPTIONS.map(o => {
+                const active = restSecs === o.value;
+                return (
+                  <button key={String(o.value)} onClick={() => onChange(o.value)} style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10,
+                    border: `2px solid ${active ? "#3b82f6" : "#334155"}`,
+                    background: active ? "#1e3a5f" : "#0f172a",
+                    color: active ? "#93c5fd" : "#64748b",
+                    fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  }}>
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={onCancel} style={{
+                flex: 1, padding: "14px 0", borderRadius: 12,
+                border: "1px solid #334155", background: "transparent",
+                color: "#64748b", fontSize: 15, fontWeight: 600, cursor: "pointer",
+              }}>
+                Cancel
+              </button>
+              <button onClick={onStart} style={{
+                flex: 2, padding: "14px 0", borderRadius: 12,
+                border: "none", background: "#3b82f6",
+                color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer",
+              }}>
+                ▶ Start
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  RUN WORKOUT OVERLAY
     //  Full-screen step-through: one section at a time, iPhone-sized.
     // ═══════════════════════════════════════════════════════════════
 
     const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
 
-    function RunWorkoutOverlay({ workout, onClose }) {
+    function RunWorkoutOverlay({ workout, restSecs, onClose }) {
       const [idx, setIdx]               = useState(0);
       const [paceIdx, setPaceIdx]       = useState(null);
       const blocks  = workout.blocks;
@@ -3893,6 +4015,7 @@
               onClose={() => setPaceIdx(null)}
               onNext={handlePaceNext}
               isLastSet={paceIdx === allSets.length - 1}
+              restSecs={restSecs}
             />
           )}
 
@@ -4044,6 +4167,8 @@
       const [regenError, setRegenError]           = useState(null);
       // Run Workout overlay: null when inactive, or the workout/entry object being stepped through
       const [runWorkout, setRunWorkout]           = useState(null);
+      const [showRestPicker, setShowRestPicker]   = useState(false);
+      const [restSecs,      setRestSecs]          = useState(10); // null=manual, 0/5/10/15=auto
       // Print dialog: show "save before printing?" prompt for unsaved workouts
       const [showPrintDialog, setShowPrintDialog] = useState(false);
       // Auth: authChecked flips to true once we know whether a stored code is valid
@@ -4372,7 +4497,7 @@
                 onDelete={handleDelete}
                 onLoadAndPrint={handleLoadAndPrint}
                 onRepeat={handleRepeatFromHistory}
-                onRun={entry => setRunWorkout(entry)}
+                onRun={entry => { setRunWorkout(entry); setShowRestPicker(true); }}
               />
             )}
 
@@ -4455,7 +4580,7 @@
                   ))}
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     <button
-                      onClick={() => setRunWorkout(workout)}
+                      onClick={() => { setRunWorkout(workout); setShowRestPicker(true); }}
                       style={{
                         padding: "10px 16px", borderRadius: 8,
                         border: "1px solid #3b82f6", background: "#1e3a5f", color: "#93c5fd",
@@ -4646,8 +4771,16 @@
               </div>
             </div>
           )}
-          {runWorkout && (
-            <RunWorkoutOverlay workout={runWorkout} onClose={() => setRunWorkout(null)} />
+          {showRestPicker && runWorkout && (
+            <RestPickerModal
+              restSecs={restSecs}
+              onChange={setRestSecs}
+              onStart={() => setShowRestPicker(false)}
+              onCancel={() => { setRunWorkout(null); setShowRestPicker(false); }}
+            />
+          )}
+          {!showRestPicker && runWorkout && (
+            <RunWorkoutOverlay workout={runWorkout} restSecs={restSecs} onClose={() => setRunWorkout(null)} />
           )}
         </div>
       );
