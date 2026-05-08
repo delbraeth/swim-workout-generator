@@ -269,6 +269,9 @@
         { totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Kick — moderate, even effort (board optional)", interval: "On 1:45", focus: "Leg priming for distance main set", eq: "kick" },
           ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — long stroke, nose-down position, minimal head movement", interval: "On 2:15", focus: "Head position and body alignment for distance work", eq: "snorkel" },
+          ]},
       ],
       sprint: [
         { totalYards: 300, sets: [
@@ -313,6 +316,9 @@
         { totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 catch-up drill / 25 easy swim — relaxed stroke", interval: "On 1:15", focus: "Stroke efficiency before long aerobic set" },
           ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Freestyle — easy pace, flat head, focus on hip rotation and body line", interval: "On 1:15", focus: "Aerobic priming with body alignment focus", eq: "snorkel" },
+          ]},
       ],
       technique: [
         { totalYards: 400, sets: [
@@ -333,6 +339,9 @@
           ]},
         { totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 catch-up drill / 25 swim — focus on full extension", interval: "On 1:15", focus: "Stroke timing and long extension" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "Freestyle — 25 catch-up drill / 25 swim, flat head position", interval: "On 1:15", focus: "Stroke mechanics with consistent head position", eq: "snorkel" },
           ]},
       ],
       mixed: [
@@ -356,6 +365,9 @@
           ]},
         { totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Alternating stroke — 50 stroke A drill / 50 stroke B drill", interval: "On 2:15", focus: "Cross-stroke skill work" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "Freestyle — 25 drill of choice / 25 swim, flat head throughout", interval: "On 1:15", focus: "Technique variety with consistent head position", eq: "snorkel" },
           ]},
       ],
       back: [
@@ -1468,6 +1480,10 @@
         { label: "20×50 Drill-Swim", totalYards: 1000, sets: [
             { reps: 20, dist: 50, desc: "25 Drill / 25 Swim — rotate strokes every 4",            interval: "On 1:05", focus: "High-rep technique: drill it, then immediately apply it" },
           ]},
+        { label: "Nose-Down Stroke Focus", totalYards: 1200, sets: [
+            { reps: 8, dist:  50, desc: "Freestyle — 25 catch-up drill / 25 swim, flat head position", interval: "On 1:15", focus: "Stroke mechanics with consistent head position", eq: "snorkel" },
+            { reps: 8, dist: 100, desc: "Freestyle — long stroke, neutral head, moderate pace",         interval: "On 2:10", focus: "Apply flat head technique to longer reps" },
+          ]},
         { label: "Single-Arm Progression", totalYards: 1200, sets: [
             { reps: 4, dist: 50, desc: "Single-arm freestyle — left only, lead arm extension", interval: "On 1:15", focus: "Left-side mechanics" },
             { reps: 4, dist: 50, desc: "Single-arm freestyle — right only, lead arm extension", interval: "On 1:15", focus: "Right-side mechanics" },
@@ -2538,6 +2554,7 @@
       fins:      ["kick", "kickPart", "underkick"],
       paddles:   ["pull"],
       pullBuoy:  ["pull"],
+      snorkel:   ["snorkel"],
     };
 
     function eqTagsIn(option) {
@@ -2728,6 +2745,7 @@
       { id: "fins",      label: "Fins",      icon: "🐬", description: "Add fins to kick & underwater sets" },
       { id: "paddles",   label: "Paddles",   icon: "🤚", description: "Add paddles to pull sets" },
       { id: "pullBuoy",  label: "Pull Buoy", icon: "🛟", description: "Confirms buoy use on pull sets" },
+      { id: "snorkel",   label: "Snorkel",   icon: "🤿", description: "Adds snorkel cue to freestyle drill and technique sets" },
     ];
 
     // Returns the equipment items (in display order) that apply to a given set
@@ -2744,6 +2762,8 @@
       } else if (set.eq === "pull") {
         if (equip.paddles)   items.push("paddles");
         if (equip.pullBuoy)  items.push("buoy");
+      } else if (set.eq === "snorkel") {
+        if (equip.snorkel)   items.push("snorkel");
       }
       return items;
     }
@@ -2770,6 +2790,9 @@
       }
       if (set.eq === "pull") {
         return set.desc.replace(/Pull\s*\(buoy\)/i, `Pull with ${eqText}`);
+      }
+      if (set.eq === "snorkel") {
+        return set.desc + "  ·  use snorkel";
       }
       return set.desc;
     }
