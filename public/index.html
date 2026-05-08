@@ -4431,7 +4431,7 @@
             </>}
           </div>
           {showPrintDialog && (
-            <div style={{
+            <div className="screen-only" style={{
               position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
               display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
             }}
@@ -4460,7 +4460,7 @@
                     Save &amp; Print
                   </button>
                   <button
-                    onClick={() => { setShowPrintDialog(false); window.print(); }}
+                    onClick={() => { setShowPrintDialog(false); setTimeout(() => window.print(), 150); }}
                     style={{
                       flex: 1, padding: "10px 16px", borderRadius: 8,
                       border: "1px solid #475569", background: "transparent", color: "#cbd5e1",
