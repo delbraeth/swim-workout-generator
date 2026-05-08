@@ -2534,12 +2534,183 @@
     ];
 
     // ═══════════════════════════════════════════════════════════════
+    //  50-METER POOL OPTION BANKS
+    //  All distances are in meters. totalYards property is re-used
+    //  (value is meters) to keep the generator logic unchanged.
+    //  IM / back / breast / fly types fall back to yard banks.
+    // ═══════════════════════════════════════════════════════════════
+
+    const WARMUP_OPTIONS_50M = [
+      { totalYards: 400, sets: [
+          { reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, settle into long-course rhythm" },
+        ]},
+      { totalYards: 500, sets: [
+          { reps: 1, dist: 300, desc: "Easy Freestyle", interval: "No interval", focus: "Settle into the long-course pool" },
+          { reps: 4, dist:  50, desc: "Stroke drill choice — one focus per length", interval: "On 1:20", focus: "Feel for the water" },
+        ]},
+      { totalYards: 600, sets: [
+          { reps: 1, dist: 400, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Warm up the aerobic engine gradually" },
+          { reps: 4, dist:  50, desc: "Kick (no board, streamlined) — 1 length each", interval: "On 1:30", focus: "Loosen hips and ankles", eq: "kick" },
+        ]},
+    ];
+
+    const COOLDOWN_OPTIONS_50M = [
+      { totalYards: 200, sets: [
+          { reps: 1, dist: 200, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Bring heart rate down, flush the muscles" },
+        ]},
+      { totalYards: 300, sets: [
+          { reps: 1, dist: 200, desc: "Easy Backstroke — open the chest, decelerate", interval: "No interval", focus: "Clear the lactic acid" },
+          { reps: 1, dist: 100, desc: "Easy Freestyle — progressively slower", interval: "No interval", focus: "Slowest lengths of the day" },
+        ]},
+      { totalYards: 400, sets: [
+          { reps: 4, dist: 100, desc: "Easy alternating: Freestyle / Backstroke (swap each 100)", interval: "On 2:30", focus: "Gentle recovery — no effort, just move" },
+        ]},
+    ];
+
+    const DRILL_OPTIONS_50M = {
+      distance: [
+        { totalYards: 300, sets: [
+            { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 2:30", focus: "Prime the pull pattern before distance work", eq: "pull" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 2:30", focus: "Upper body endurance, long stroke", eq: "pull" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 2, dist: 200, desc: "Pull (buoy) — steady aerobic, focus on long stroke", interval: "On 5:00", focus: "Build the aerobic base before distance main set", eq: "pull" },
+          ]},
+      ],
+      endurance: [
+        { totalYards: 300, sets: [
+            { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 2:30", focus: "Prime the pull pattern before endurance work", eq: "pull" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 2:30", focus: "Upper body endurance before long main set", eq: "pull" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Kick (board) — steady pace, even split", interval: "On 2:45", focus: "Leg conditioning before endurance main", eq: "kick" },
+          ]},
+      ],
+      sprint: [
+        { totalYards: 200, sets: [
+            { reps: 4, dist: 50, desc: "Build: easy first 25m / fast second 25m", interval: "On 1:30", focus: "Prime fast-twitch before sprint main" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Moderate to strong — 1 length each, crisp turns", interval: "On 1:20", focus: "Sharpen stroke rate for sprint main" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Build: 50m easy / 50m strong — 2 lengths each", interval: "On 2:30", focus: "Controlled activation into sprint mode" },
+          ]},
+      ],
+      technique: [
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Stroke drills — choice, one focus per length", interval: "On 1:20", focus: "Isolate weak points before technique main" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "50m drill / 50m swim — alternate focus", interval: "On 2:30", focus: "Bridge from drill isolation to full-stroke application" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "Single-arm or catch-up drill — alternate focus each length", interval: "On 1:20", focus: "Rotation control and high-elbow catch" },
+          ]},
+      ],
+      mixed: [
+        { totalYards: 300, sets: [
+            { reps: 3, dist: 100, desc: "50m drill / 50m strong swim", interval: "On 2:30", focus: "Sharpen technique then apply it at speed" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Alternating: Pull (odd reps) / Free strong (even reps)", interval: "On 2:30", focus: "Upper body endurance with speed contrast", eq: "pull" },
+          ]},
+        { totalYards: 500, sets: [
+            { reps: 2, dist:  50, desc: "Sprint — 1 length, max effort",                    interval: "On 1:30", focus: "Wake up fast-twitch" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — easy recovery between sprints",       interval: "On 2:30", focus: "Active recovery, reinforce catch", eq: "pull" },
+            { reps: 2, dist:  50, desc: "Sprint — 1 length, hold top-end speed",             interval: "On 1:30", focus: "Close the drill with speed" },
+            { reps: 1, dist: 100, desc: "Pull (buoy) — relaxed, flush the sprint work",      interval: "On 2:30", focus: "Transition smoothly to main set", eq: "pull" },
+          ]},
+      ],
+    };
+
+    const MAIN_OPTIONS_50M = {
+      distance: [
+        { label: "Distance Threshold", totalYards: 1200, sets: [
+            { reps: 3, dist: 400, desc: "Freestyle — threshold pace (RPE 7-8/10)", interval: "On 9:00", focus: "Hold pace across long-course 400s" },
+          ]},
+        { label: "Long Intervals", totalYards: 1000, sets: [
+            { reps: 5, dist: 200, desc: "Freestyle — strong, even-split each 200", interval: "On 5:00", focus: "Sustain aerobic threshold in a 50m pool" },
+          ]},
+        { label: "Distance Build", totalYards: 1200, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — steady threshold, set your long-course pace", interval: "On 9:00", focus: "Establish 50m rhythm" },
+            { reps: 4, dist: 200, desc: "Freestyle — slightly faster than the 400, descend 1→4", interval: "On 5:00", focus: "Build to top-end aerobic speed" },
+          ]},
+        { label: "Over-Distance 400s", totalYards: 800, sets: [
+            { reps: 2, dist: 400, desc: "Freestyle — easy to moderate, focus on efficiency", interval: "On 10:00", focus: "Comfortable long-course aerobic effort" },
+          ]},
+      ],
+      endurance: [
+        { label: "Steady 400s", totalYards: 1200, sets: [
+            { reps: 3, dist: 400, desc: "Freestyle — steady aerobic pace (conversational effort)", interval: "On 10:00", focus: "Build long-course aerobic base" },
+          ]},
+        { label: "Continuous 800s", totalYards: 1600, sets: [
+            { reps: 2, dist: 800, desc: "Freestyle — steady, negative split (2nd 400m faster)", interval: "On 18:00", focus: "Long-course aerobic endurance" },
+          ]},
+        { label: "Endurance Ladder", totalYards: 1000, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — steady, comfortably hard", interval: "On 10:00", focus: "Prime the aerobic engine for the shorter pieces" },
+            { reps: 3, dist: 200, desc: "Freestyle — slightly faster than the 400, hold pace", interval: "On 5:00", focus: "Sustain speed after the long effort" },
+          ]},
+        { label: "Long Pull Set", totalYards: 1200, sets: [
+            { reps: 3, dist: 400, desc: "Pull (buoy) — steady long-course pull, high elbow catch", interval: "On 9:30", focus: "Upper-body endurance for long-distance swimming", eq: "pull" },
+          ]},
+      ],
+      sprint: [
+        { label: "100m Sprint Set", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Sprint — 2 lengths at race pace, full recovery", interval: "On 3:00", focus: "Long-course sprint quality in short repeats" },
+          ]},
+        { label: "Pure 50s", totalYards: 800, sets: [
+            { reps: 16, dist: 50, desc: "Sprint — 1 length full effort, full recovery", interval: "On 1:30", focus: "Maximum velocity over a single 50m length" },
+          ]},
+        { label: "Sprint Pyramid", totalYards: 1000, sets: [
+            { reps: 4, dist: 100, desc: "Moderate sprint — build into race pace over 2 lengths", interval: "On 2:30", focus: "Dial in pacing" },
+            { reps: 4, dist:  50, desc: "Fast sprint — 1 length maximum effort",                   interval: "On 1:30", focus: "Peak velocity" },
+            { reps: 4, dist: 100, desc: "Strong sprint — hold race pace under fatigue",             interval: "On 2:30", focus: "Sustain speed when tired" },
+          ]},
+      ],
+      technique: [
+        { label: "Stroke Refinement", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Controlled pace — count strokes, exaggerate one drill element per rep", interval: "On 2:45", focus: "Build muscle memory at moderate effort" },
+          ]},
+        { label: "Efficiency Ladder", totalYards: 1200, sets: [
+            { reps: 2, dist: 400, desc: "Steady swim — count strokes per length, hold your count", interval: "On 10:00", focus: "Long-course stroke efficiency" },
+            { reps: 4, dist: 100, desc: "Control swim — maintain stroke count from the 400s at higher effort", interval: "On 2:45", focus: "Apply long-stroke efficiency at faster pace" },
+          ]},
+        { label: "Catch and Pull Focus", totalYards: 900, sets: [
+            { reps: 6, dist: 100, desc: "Pull (buoy) — high-elbow catch, early vertical forearm", interval: "On 2:30", focus: "Isolate the catch pattern over 2 lengths", eq: "pull" },
+            { reps: 6, dist:  50, desc: "Free swim — carry the catch into full stroke, no buoy", interval: "On 1:20", focus: "Transfer drill feel to race stroke" },
+          ]},
+      ],
+      mixed: [
+        { label: "Mixed Threshold", totalYards: 1100, sets: [
+            { reps: 4, dist: 200, desc: "Threshold pace — strong aerobic effort (RPE 7/10)", interval: "On 5:00", focus: "Establish steady long-course pace" },
+            { reps: 6, dist:  50, desc: "Sprint — race pace, maximum turnover", interval: "On 1:30", focus: "Top-end speed after threshold work" },
+          ]},
+        { label: "Long and Short", totalYards: 1200, sets: [
+            { reps: 2, dist: 400, desc: "Steady threshold — own your pace over 8 lengths", interval: "On 9:30", focus: "Long-course aerobic quality" },
+            { reps: 2, dist: 100, desc: "Moderate-strong — hold threshold pace from the 400s", interval: "On 2:30", focus: "Shorter repeats, sharper feel" },
+            { reps: 4, dist:  50, desc: "Sprint — 1 length full effort, finish the set fast", interval: "On 1:20", focus: "Close with speed" },
+          ]},
+        { label: "Mixed Variety", totalYards: 1000, sets: [
+            { reps: 4, dist: 100, desc: "Moderate — 2 lengths steady aerobic",          interval: "On 2:30", focus: "Get the engine running" },
+            { reps: 4, dist:  50, desc: "Fast — 1 length strong pace",                   interval: "On 1:20", focus: "Speed layer" },
+            { reps: 2, dist: 200, desc: "Threshold — 4 lengths, hold pace under fatigue", interval: "On 5:00", focus: "Endurance on top of the speed work" },
+          ]},
+      ],
+    };
+
+    // ═══════════════════════════════════════════════════════════════
     //  BUDGET-AWARE GENERATOR
     //  Filters options so the workout stays within [1900, maxYards]
     // ═══════════════════════════════════════════════════════════════
 
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-    const MIN_YARDS = 1900;
+    const MIN_YARDS  = 1900;
+    const MIN_METERS = 2000;
 
     // Minimum yards each section can contribute
     const MIN_WARMUP   = Math.min(...WARMUP_OPTIONS.map(o => o.totalYards));   // 400
@@ -2570,9 +2741,24 @@
       return true;
     }
 
-    function generateWorkout(typeId, maxYards, equipment, favorites = []) {
-      const drillList = DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed;
-      const mainList  = MAIN_OPTIONS[typeId]  || MAIN_OPTIONS.mixed;
+    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y") {
+      const is50m = poolMode === "50m";
+      const allWarmups   = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
+      const allCooldowns = is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
+      const drillList = is50m
+        ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
+        : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
+      const mainList = is50m
+        ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
+        : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
+
+      // Compute per-section minimums from the active banks
+      const minWu = Math.min(...allWarmups.map(o => o.totalYards));
+      const minDr = Math.min(...drillList.map(o => o.totalYards));
+      const minMa = Math.min(...mainList.map(o => o.totalYards));
+      const minCd = Math.min(...allCooldowns.map(o => o.totalYards));
+      const minTotal = is50m ? MIN_METERS : MIN_YARDS;
+
       const hasEquipReq = equipment && Object.values(EQUIP_REQUIREMENTS).length > 0
                          && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
 
@@ -2581,22 +2767,22 @@
       const attempts = hasEquipReq ? 60 : 30;
       for (let attempt = 0; attempt < attempts; attempt++) {
         // 1. Pick warmup — must leave room for min drill + min main + min cooldown
-        const validWarmups = WARMUP_OPTIONS.filter(o =>
-          o.totalYards <= maxYards - MIN_DRILL - MIN_MAIN - MIN_COOLDOWN
+        const validWarmups = allWarmups.filter(o =>
+          o.totalYards <= maxYards - minDr - minMa - minCd
         );
         if (!validWarmups.length) break;
         const wu = pick(validWarmups);
 
         // 2. Pick drill — must leave room for min main + min cooldown
         const validDrills = drillList.filter(o =>
-          o.totalYards <= maxYards - wu.totalYards - MIN_MAIN - MIN_COOLDOWN
+          o.totalYards <= maxYards - wu.totalYards - minMa - minCd
         );
         if (!validDrills.length) continue;
         const dr = pick(validDrills);
 
         // 3. Pick main — must leave room for min cooldown
         const validMain = mainList.filter(o =>
-          o.totalYards <= maxYards - wu.totalYards - dr.totalYards - MIN_COOLDOWN
+          o.totalYards <= maxYards - wu.totalYards - dr.totalYards - minCd
         );
         if (!validMain.length) continue;
         // Favorites get 3× weight in the pick pool
@@ -2610,39 +2796,38 @@
 
         // 5. Pick cooldown — must fit within remaining budget
         const remaining = maxYards - wu.totalYards - dr.totalYards - ma.totalYards;
-        const validCooldowns = COOLDOWN_OPTIONS.filter(o => o.totalYards <= remaining);
+        const validCooldowns = allCooldowns.filter(o => o.totalYards <= remaining);
         if (!validCooldowns.length) continue;
         const cd = pick(validCooldowns);
 
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
-        if (total >= MIN_YARDS && total <= maxYards) {
+        if (total >= minTotal && total <= maxYards) {
           return buildWorkout(typeId, wu, dr, ma, cd, total);
         }
       }
 
       // Fallback: use smallest valid combination, preferring equipment-satisfying drills
-      const wu = WARMUP_OPTIONS[0]; // 400
-      let drillCandidates = drillList.filter(o => o.totalYards <= maxYards - wu.totalYards - MIN_MAIN - MIN_COOLDOWN);
+      const wu = allWarmups[0];
+      let drillCandidates = drillList.filter(o => o.totalYards <= maxYards - wu.totalYards - minMa - minCd);
       if (!drillCandidates.length) drillCandidates = drillList;
       if (hasEquipReq) {
-        // Prefer the first drill option that, when paired with any main, would satisfy
         const eqPreferred = drillCandidates.filter(d =>
           mainList.some(m =>
-            m.totalYards <= maxYards - wu.totalYards - d.totalYards - MIN_COOLDOWN &&
+            m.totalYards <= maxYards - wu.totalYards - d.totalYards - minCd &&
             combinationSatisfies(d, m, equipment)
           )
         );
         if (eqPreferred.length) drillCandidates = eqPreferred;
       }
       const dr = drillCandidates[0];
-      let mainCandidates = mainList.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - MIN_COOLDOWN);
+      let mainCandidates = mainList.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - minCd);
       if (!mainCandidates.length) mainCandidates = mainList;
       if (hasEquipReq) {
         const eqMain = mainCandidates.filter(m => combinationSatisfies(dr, m, equipment));
         if (eqMain.length) mainCandidates = eqMain;
       }
       const ma = mainCandidates[0];
-      const cd = COOLDOWN_OPTIONS[0];
+      const cd = allCooldowns[0];
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       return buildWorkout(typeId, wu, dr, ma, cd, total);
     }
@@ -2678,24 +2863,29 @@
     // Returns { workout, error }. On success, workout is a fresh object with the
     // requested section replaced. On failure, error is a human-readable reason
     // and the caller should keep the prior workout unchanged.
-    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment) {
+    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y") {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
       const idx = SECTION_KEYS.indexOf(sectionKey);
       if (idx < 0) return { workout: null, error: "Unknown section." };
 
+      const is50m = poolMode === "50m";
       const blocks = workout.blocks;
       const current = blocks[idx];
       const others = blocks.reduce((sum, b, i) => i === idx ? sum : sum + b.totalYards, 0);
-      const lower = Math.max(0, MIN_YARDS - others);
+      const lower = Math.max(0, (is50m ? MIN_METERS : MIN_YARDS) - others);
       const upper = maxYards - others;
 
       let pool;
-      if (sectionKey === "warmup")        pool = WARMUP_OPTIONS;
-      else if (sectionKey === "cooldown") pool = COOLDOWN_OPTIONS;
-      else if (sectionKey === "drill")    pool = DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed;
-      else                                pool = MAIN_OPTIONS[typeId]  || MAIN_OPTIONS.mixed;
+      if (sectionKey === "warmup")        pool = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
+      else if (sectionKey === "cooldown") pool = is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
+      else if (sectionKey === "drill")    pool = is50m
+        ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
+        : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
+      else                                pool = is50m
+        ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
+        : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
 
       const hasEquipReq = equipment && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
       const partnerDrill = blocks[1]; // used when regenerating main
@@ -2879,7 +3069,7 @@
       );
     }
 
-    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval }) {
+    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, unit = "yds" }) {
       const eqItems = equipmentForSet(set, equipment);
       const desc = enhanceDesc(set, equipment);
       const equiv = onToggleSwap ? getEquivalents(set) : {};
@@ -2899,7 +3089,7 @@
               </div>
             </td>
             <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: "#1e293b", whiteSpace: "nowrap" }}>
-              {(set.reps * set.dist).toLocaleString()} yds
+              {(set.reps * set.dist).toLocaleString()} {unit}
             </td>
             <td style={{ padding: "10px 16px", fontSize: 13, color: "#334155" }}>
               {desc}
@@ -2948,13 +3138,13 @@
                   {equiv.shorter && (
                     <button onClick={() => onApplySwap(blockIdx, setIdx, equiv.shorter)}
                       style={{ fontSize: 12, padding: "5px 12px", borderRadius: 6, border: "1px solid #7dd3fc", background: "#e0f2fe", color: "#0369a1", cursor: "pointer", fontWeight: 600 }}>
-                      ↙ Shorter — {equiv.shorter.reps} × {equiv.shorter.dist} yds &nbsp;<span style={{ fontWeight: 400, color: "#0284c7" }}>{equiv.shorter.interval}</span>
+                      ↙ Shorter — {equiv.shorter.reps} × {equiv.shorter.dist} {unit} &nbsp;<span style={{ fontWeight: 400, color: "#0284c7" }}>{equiv.shorter.interval}</span>
                     </button>
                   )}
                   {equiv.longer && (
                     <button onClick={() => onApplySwap(blockIdx, setIdx, equiv.longer)}
                       style={{ fontSize: 12, padding: "5px 12px", borderRadius: 6, border: "1px solid #86efac", background: "#f0fdf4", color: "#15803d", cursor: "pointer", fontWeight: 600 }}>
-                      ↗ Longer — {equiv.longer.reps} × {equiv.longer.dist} yds &nbsp;<span style={{ fontWeight: 400, color: "#16a34a" }}>{equiv.longer.interval}</span>
+                      ↗ Longer — {equiv.longer.reps} × {equiv.longer.dist} {unit} &nbsp;<span style={{ fontWeight: 400, color: "#16a34a" }}>{equiv.longer.interval}</span>
                     </button>
                   )}
                   <button onClick={() => onToggleSwap(blockIdx, setIdx)}
@@ -3015,7 +3205,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, isFavorited, onToggleFavorite }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, isFavorited, onToggleFavorite, unit = "yds" }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -3032,7 +3222,7 @@
               <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.name}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} yds</span>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} {unit}</span>
               {block.section === "main" && block.label && onToggleFavorite && (
                 <button
                   type="button"
@@ -3103,6 +3293,7 @@
                     onStartEditInterval={onStartEditInterval}
                     onCommitInterval={onCommitInterval}
                     onCancelInterval={onCancelInterval}
+                    unit={unit}
                   />
                 ))}
               </tbody>
@@ -3114,34 +3305,49 @@
 
     // ─── Max Yardage Slider ──────────────────────────────────────────
     // Compute the minimum possible total yards for a given type
-    function minYardsForType(typeId) {
-      const drillList = DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed;
-      const mainList  = MAIN_OPTIONS[typeId]  || MAIN_OPTIONS.mixed;
-      const minWarmup   = Math.min(...WARMUP_OPTIONS.map(o => o.totalYards));
+    function minYardsForType(typeId, poolMode = "25y") {
+      const is50m = poolMode === "50m";
+      const allWarmups   = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
+      const allCooldowns = is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
+      const drillList = is50m
+        ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
+        : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
+      const mainList = is50m
+        ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
+        : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
+      const minWarmup   = Math.min(...allWarmups.map(o => o.totalYards));
       const minDrill    = Math.min(...drillList.map(o => o.totalYards));
       const minMain     = Math.min(...mainList.map(o => o.totalYards));
-      const minCooldown = Math.min(...COOLDOWN_OPTIONS.map(o => o.totalYards));
+      const minCooldown = Math.min(...allCooldowns.map(o => o.totalYards));
       return minWarmup + minDrill + minMain + minCooldown;
     }
 
-    function YardageSlider({ value, onChange, selectedType }) {
-      const SLIDER_MIN = 1900;
-      const SLIDER_MAX = 2500;
+    function YardageSlider({ value, onChange, selectedType, poolMode = "25y" }) {
+      const is50m = poolMode === "50m";
+      const SLIDER_MIN  = is50m ? 2000 : 1900;
+      const SLIDER_MAX  = is50m ? 4000 : 2500;
+      const SLIDER_STEP = is50m ? 100  : 50;
+      const unit = is50m ? "m" : "yds";
       const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN) * 100).toFixed(1);
+      const ticks = is50m ? [2000,2500,3000,3500,4000] : [1900,2000,2100,2200,2300,2400,2500];
+      const tickLabel = v => {
+        if (is50m) return v === 2000 ? "2.0k" : v === 2500 ? "2.5k" : v === 3000 ? "3.0k" : v === 3500 ? "3.5k" : "4.0k";
+        return v === 1900 ? "1.9k" : v === 2000 ? "2.0k" : v === 2100 ? "2.1k" : v === 2200 ? "2.2k" : v === 2300 ? "2.3k" : v === 2400 ? "2.4k" : "2.5k";
+      };
 
-      const typeMin = selectedType ? minYardsForType(selectedType) : null;
+      const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : null;
       const tooLow  = typeMin !== null && value < typeMin;
 
       return (
         <div style={{ background: "#1e293b", border: `1px solid ${tooLow ? "#7f1d1d" : "#334155"}`, borderRadius: 12, padding: "18px 20px", marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
             <div>
-              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" }}>Max Yardage</span>
-              <span style={{ color: "#64748b", fontSize: 11, marginLeft: 8 }}>(min locked at 1,900 yds)</span>
+              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" }}>Max {is50m ? "Distance" : "Yardage"}</span>
+              <span style={{ color: "#64748b", fontSize: 11, marginLeft: 8 }}>(min locked at {SLIDER_MIN.toLocaleString()} {unit})</span>
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
               <span style={{ color: "#ffffff", fontSize: 26, fontWeight: 900 }}>{value.toLocaleString()}</span>
-              <span style={{ color: "#94a3b8", fontSize: 12 }}>yds</span>
+              <span style={{ color: "#94a3b8", fontSize: 12 }}>{unit}</span>
             </div>
           </div>
 
@@ -3152,19 +3358,19 @@
                             background: tooLow ? "linear-gradient(90deg,#ef4444,#f87171)" : "linear-gradient(90deg,#3b82f6,#60a5fa)",
                             borderRadius: 3 }} />
             </div>
-            <input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={50} value={value}
+            <input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={SLIDER_STEP} value={value}
               onChange={e => onChange(Number(e.target.value))}
               style={{ position: "absolute", top: -4, left: 0, width: "100%", opacity: 0, height: 14, cursor: "pointer", margin: 0 }} />
           </div>
 
           {/* Tick labels */}
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-            {[1900,2000,2100,2200,2300,2400,2500].map(v => (
+            {ticks.map(v => (
               <span key={v} onClick={() => onChange(v)}
                 style={{ fontSize: 10, cursor: "pointer",
                           color: v === value ? "#60a5fa" : v < (typeMin||0) ? "#7f1d1d" : "#475569",
                           fontWeight: v === value ? 700 : 400 }}>
-                {v === 1900 ? "1.9k" : v === 2000 ? "2.0k" : v === 2100 ? "2.1k" : v === 2200 ? "2.2k" : v === 2300 ? "2.3k" : v === 2400 ? "2.4k" : "2.5k"}
+                {tickLabel(v)}
               </span>
             ))}
           </div>
@@ -3175,7 +3381,7 @@
               <span style={{ fontSize: 16 }}>⚠️</span>
               <div>
                 <span style={{ color: "#fca5a5", fontSize: 12, fontWeight: 600 }}>
-                  This workout type needs at least {typeMin.toLocaleString()} yds.
+                  This workout type needs at least {typeMin.toLocaleString()} {unit}.
                 </span>
                 <span style={{ color: "#ef4444", fontSize: 12 }}> Raise the max or choose a different type.</span>
               </div>
@@ -3184,12 +3390,12 @@
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, color: "#64748b" }}>Workout range:</span>
               <span style={{ fontSize: 11, color: "#34d399", background: "#064e3b", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>
-                {typeMin.toLocaleString()} – {value.toLocaleString()} yds ✓
+                {typeMin.toLocaleString()} – {value.toLocaleString()} {unit} ✓
               </span>
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "#64748b" }}>Select a workout type to see its yardage range.</span>
+              <span style={{ fontSize: 11, color: "#64748b" }}>Select a workout type to see its range.</span>
             </div>
           )}
         </div>
@@ -3535,7 +3741,7 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, sectionName, onClose, onNext, isLastSet, restSecs, autoStart, elapsed }) {
+    function PaceClockView({ set, sectionName, onClose, onNext, isLastSet, restSecs, autoStart, elapsed, unit = "yds" }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
@@ -3729,7 +3935,7 @@
                 borderRight: "1px solid #1e293b",
               }}>
                 <div style={{ fontSize: 45, fontWeight: 800, color: "#e2e8f0", marginBottom: 6 }}>
-                  {set.reps} × {set.dist} yds
+                  {set.reps} × {set.dist} {unit}
                 </div>
                 <div style={{ fontSize: 32, color: "#cbd5e1", lineHeight: 1.35, marginBottom: 6 }}>
                   {set.desc}
@@ -3833,7 +4039,7 @@
           {/* Set description + interval label */}
           <div style={{ width: "100%", padding: "20px 24px 0", textAlign: "center" }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: "#e2e8f0", lineHeight: 1.3, marginBottom: 8 }}>
-              {set.reps} × {set.dist} yds
+              {set.reps} × {set.dist} {unit}
             </div>
             <div style={{ fontSize: 30, color: "#cbd5e1", lineHeight: 1.4, marginBottom: 8 }}>
               {set.desc}
@@ -3976,7 +4182,7 @@
 
     const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
 
-    function RunWorkoutOverlay({ workout, restSecs, onClose }) {
+    function RunWorkoutOverlay({ workout, restSecs, onClose, unit = "yds" }) {
       const [idx, setIdx]               = useState(0);
       const [paceIdx, setPaceIdx]       = useState(null);
       const [elapsed, setElapsed]       = useState(0); // seconds since workout started
@@ -4060,7 +4266,7 @@
               {emoji} {block.name}
             </div>
             <div style={{ fontSize: 15, color: s.headerText, opacity: 0.85, fontWeight: 600 }}>
-              {block.totalYards.toLocaleString()} yards
+              {block.totalYards.toLocaleString()} {unit}
             </div>
           </div>
 
@@ -4077,7 +4283,7 @@
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ fontSize: 30, fontWeight: 900, color: "#fff", marginBottom: 8, letterSpacing: "-0.02em", lineHeight: 1 }}>
                     {set.reps} <span style={{ color: "#475569", fontWeight: 400 }}>×</span> {set.dist}
-                    <span style={{ fontSize: 16, fontWeight: 500, color: "#64748b", marginLeft: 6 }}>yds</span>
+                    <span style={{ fontSize: 16, fontWeight: 500, color: "#64748b", marginLeft: 6 }}>{unit}</span>
                   </div>
                   <span style={{ fontSize: 11, color: "#334155", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", paddingTop: 4 }}>
                     ▶ pace
@@ -4115,6 +4321,7 @@
               restSecs={restSecs}
               autoStart={autoStartNext}
               elapsed={elapsed}
+              unit={unit}
             />
           )}
 
@@ -4243,6 +4450,7 @@
     function App() {
       const [selectedType, setSelectedType] = useState(null);
       const [maxYards, setMaxYards]         = useState(2400);
+      const [poolMode, setPoolMode]         = useState("25y");
       const [workout, setWorkout]           = useState(null);
       const [hover, setHover]               = useState(null);
       const [equipment, setEquipment]       = useState({
@@ -4416,7 +4624,7 @@
 
       const handleGenerate = useCallback(() => {
         if (!selectedType) return;
-        setWorkout(generateWorkout(selectedType, maxYards, equipment, favorites));
+        setWorkout(generateWorkout(selectedType, maxYards, equipment, favorites, poolMode));
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
         setRegenError(null);
@@ -4425,14 +4633,14 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setPaceInput("2:00");
-      }, [selectedType, maxYards, equipment]);
+      }, [selectedType, maxYards, equipment, poolMode]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
       // surface a per-section inline error.
       const handleRegenerateSection = useCallback((sectionKey) => {
         if (!workout || !selectedType) return;
-        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment);
+        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode);
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
           return;
@@ -4443,10 +4651,18 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment]);
+      }, [workout, selectedType, maxYards, equipment, poolMode]);
 
       const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
       const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
+      const handlePoolModeChange = (mode) => {
+        setPoolMode(mode);
+        setWorkout(null);
+        setLoadedFromHistoryId(null);
+        setSaveStatus(null);
+        setRegenError(null);
+        setMaxYards(mode === "50m" ? 2500 : 2400);
+      };
       const handleEquipChange = (id, on) => {
         setEquipment(prev => ({ ...prev, [id]: on }));
         setWorkout(null);
@@ -4589,8 +4805,10 @@
 
       const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
       const sectionColors = ["#38bdf8", "#2dd4bf", "#3b82f6", "#94a3b8"];
-      const typeMin = selectedType ? minYardsForType(selectedType) : 0;
+      const unit = poolMode === "50m" ? "m" : "yds";
+      const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : 0;
       const canGenerate = selectedType && maxYards >= typeMin;
+      const is50mYardFallback = poolMode === "50m" && selectedType && ["im","back","breast","fly"].includes(selectedType);
 
       return (
         <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)" }}>
@@ -4637,6 +4855,24 @@
 
             {view === "generator" && <>
 
+            {/* Pool mode toggle */}
+            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Pool</span>
+              <div style={{ display: "flex", background: "#0f172a", borderRadius: 8, border: "1px solid #334155", overflow: "hidden" }}>
+                {[["25y","25 yds"],["50m","50 m"]].map(([mode, label]) => (
+                  <button key={mode} onClick={() => handlePoolModeChange(mode)}
+                    style={{
+                      padding: "6px 16px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+                      background: poolMode === mode ? "#3b82f6" : "transparent",
+                      color: poolMode === mode ? "#fff" : "#64748b",
+                      transition: "all 0.15s",
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Workout type selector */}
             <p className="screen-only" style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
               Select Workout Type
@@ -4669,11 +4905,22 @@
             </div>
 
             <div className="screen-only">
+
+              {/* 50m yard-fallback notice for stroke-specialty types */}
+              {is50mYardFallback && (
+                <div style={{ background: "#1c1917", border: "1px solid #78716c", borderRadius: 10, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 15 }}>ℹ️</span>
+                  <span style={{ fontSize: 12, color: "#a8a29e" }}>
+                    IM and stroke-specialty sets use yard-based options — no native 50m options for these types yet. Distances shown are in yards.
+                  </span>
+                </div>
+              )}
+
               {/* Equipment checkboxes */}
               <EquipmentPicker equipment={equipment} onChange={handleEquipChange} />
 
-              {/* Max Yardage Slider */}
-              <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} />
+              {/* Max Yardage / Distance Slider */}
+              <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} />
 
               {/* Generate Button */}
               <button
@@ -4700,9 +4947,9 @@
                     {meta.emoji} {meta.label}
                   </span>
                   {[
-                    ["Total Yardage",  `${workout.totalYards.toLocaleString()} yards`],
+                    [poolMode === "50m" ? "Total Distance" : "Total Yardage", `${workout.totalYards.toLocaleString()} ${unit}`],
                     ["Est. Duration",   `~${workout.estimatedMin} min`],
-                    ["Target Range",   `1,900 – ${maxYards.toLocaleString()} yds`],
+                    ["Target Range",   `${(poolMode === "50m" ? 2000 : 1900).toLocaleString()} – ${maxYards.toLocaleString()} ${unit}`],
                   ].map(([label, val]) => (
                     <div key={label}>
                       <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
@@ -4752,9 +4999,9 @@
                   <p className="print-subtitle">{meta.description}</p>
                   <div className="print-meta">
                     <span><b>Date:</b> {new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
-                    <span><b>Total:</b> {workout.totalYards.toLocaleString()} yds</span>
+                    <span><b>Total:</b> {workout.totalYards.toLocaleString()} {unit}</span>
                     <span><b>Duration:</b> ~{workout.estimatedMin} min</span>
-                    <span><b>Pace target:</b> ~{paceInput} / 100 yds</span>
+                    <span><b>Pace target:</b> ~{paceInput} / 100 {unit}</span>
                   </div>
                 </div>
 
@@ -4763,7 +5010,7 @@
                   {workout.blocks.map((b, i) => (
                     <div key={i}
                       style={{ width: `${(b.totalYards / workout.totalYards * 100).toFixed(1)}%`, background: sectionColors[i] }}
-                      title={`${b.name}: ${b.totalYards} yds`}
+                      title={`${b.name}: ${b.totalYards} ${unit}`}
                     />
                   ))}
                 </div>
@@ -4772,14 +5019,14 @@
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: sectionColors[i], display: "inline-block" }} />
                       <span style={{ color: sectionColors[i] }}>{b.name}</span>
-                      <span>({b.totalYards} yds)</span>
+                      <span>({b.totalYards} {unit})</span>
                     </div>
                   ))}
                 </div>
 
                 {/* Pace control (screen only) */}
                 <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "10px 16px", background: "#1e293b", borderRadius: 10, border: "1px solid #334155", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>100 yd pace</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>100 {unit} pace</span>
                   <input
                     type="text"
                     value={paceInput}
@@ -4815,13 +5062,17 @@
                     onCancelInterval={handleCancelInterval}
                     isFavorited={!!(block.label && favorites.includes(block.label))}
                     onToggleFavorite={handleToggleFavorite}
+                    unit={unit}
                   />
                 ))}
 
                 {/* Coach note (screen only — user opted not to include in print) */}
                 <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid #334155", color: "#94a3b8", fontSize: 13 }}>
                   <span style={{ fontWeight: 600, color: "#cbd5e1" }}>📋 Coach's Note: </span>
-                  Intervals are calibrated for a masters pace of 2:00–2:15/100 yds. Adjust ±10–15 sec to match your base.
+                  {poolMode === "50m"
+                    ? "Intervals are calibrated for a 50m pool at ~2:30–2:45/100 m. Adjust ±10–15 sec to match your base."
+                    : "Intervals are calibrated for a masters pace of 2:00–2:15/100 yds. Adjust ±10–15 sec to match your base."
+                  }
                   Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets.
                 </div>
 
@@ -4916,7 +5167,7 @@
             />
           )}
           {!showRestPicker && runWorkout && (
-            <RunWorkoutOverlay workout={runWorkout} restSecs={restSecs} onClose={() => setRunWorkout(null)} />
+            <RunWorkoutOverlay workout={runWorkout} restSecs={restSecs} onClose={() => setRunWorkout(null)} unit={unit} />
           )}
         </div>
       );
