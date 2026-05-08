@@ -3470,14 +3470,14 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, sectionName, onClose, onNext, isLastSet, restSecs }) {
+    function PaceClockView({ set, sectionName, onClose, onNext, isLastSet, restSecs, autoStart }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
 
       const [repIdx,    setRepIdx]   = useState(0);
       const [secsLeft,  setSecsLeft] = useState(totalSecs ?? 0);
-      const [running,   setRunning]  = useState(false);
+      const [running,   setRunning]  = useState(() => !!(autoStart && totalSecs !== null));
       const [finished,  setFinished] = useState(false);
       const [restLeft,  setRestLeft] = useState(null); // null = not in rest phase
 
@@ -3899,6 +3899,7 @@
       const [idx, setIdx]               = useState(0);
       const [paceIdx, setPaceIdx]       = useState(null);
       const [elapsed, setElapsed]       = useState(0); // seconds since workout started
+      const [autoStartNext, setAutoStartNext] = useState(false);
       const blocks  = workout.blocks;
 
       // Wall-clock elapsed timer — runs from mount, never pauses
@@ -3917,10 +3918,18 @@
           const next = allSets[paceIdx + 1];
           setIdx(next.blockIdx);
           setPaceIdx(paceIdx + 1);
+          setAutoStartNext(restSecs !== null); // auto-start if not manual
         } else {
           setPaceIdx(null);
+          setAutoStartNext(false);
           onClose();
         }
+      }
+
+      // Manual tap on a set card — never auto-starts
+      function handleSetTap(globalIdx) {
+        setPaceIdx(globalIdx);
+        setAutoStartNext(false);
       }
       const block   = blocks[idx];
       const total   = blocks.length;
@@ -3981,7 +3990,7 @@
           <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
             {block.sets.map((set, i) => (
               <div key={i}
-                onClick={() => setPaceIdx(blocks.slice(0, idx).reduce((acc, b) => acc + b.sets.length, 0) + i)}
+                onClick={() => handleSetTap(blocks.slice(0, idx).reduce((acc, b) => acc + b.sets.length, 0) + i)}
                 style={{
                   background: "#1e293b", borderRadius: 14,
                   border: `1px solid ${s.border}`, padding: "18px 18px 14px",
@@ -4026,6 +4035,7 @@
               onNext={handlePaceNext}
               isLastSet={paceIdx === allSets.length - 1}
               restSecs={restSecs}
+              autoStart={autoStartNext}
             />
           )}
 
