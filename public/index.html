@@ -2728,19 +2728,26 @@
               )}
             </td>
             <td style={{ padding: "10px 16px", fontSize: 12, color: "#64748b", fontFamily: "monospace" }}>
-              {isEditingInterval ? (
-                <input
-                  autoFocus
-                  value={editIntervalDraft}
-                  onChange={e => setEditIntervalDraft(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter")  onCommitInterval(blockIdx, setIdx, editIntervalDraft);
-                    if (e.key === "Escape") onCancelInterval();
-                  }}
-                  onBlur={() => onCommitInterval(blockIdx, setIdx, editIntervalDraft)}
-                  style={{ width: 78, fontFamily: "monospace", fontSize: 12, padding: "2px 5px", borderRadius: 4, border: "1px solid #94a3b8", background: "#fff", color: "#1e293b" }}
-                />
-              ) : (
+              {isEditingInterval ? (() => {
+                const hasOn = /^On\s+/i.test(editIntervalDraft);
+                const timePart = hasOn ? editIntervalDraft.replace(/^On\s+/i, "") : editIntervalDraft;
+                return (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    {hasOn && <span style={{ color: "#94a3b8" }}>On</span>}
+                    <input
+                      autoFocus
+                      value={timePart}
+                      onChange={e => setEditIntervalDraft(hasOn ? "On " + e.target.value : e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter")  onCommitInterval(blockIdx, setIdx, editIntervalDraft);
+                        if (e.key === "Escape") onCancelInterval();
+                      }}
+                      onBlur={() => onCommitInterval(blockIdx, setIdx, editIntervalDraft)}
+                      style={{ width: 52, fontFamily: "monospace", fontSize: 12, padding: "2px 5px", borderRadius: 4, border: "1px solid #94a3b8", background: "#fff", color: "#1e293b" }}
+                    />
+                  </span>
+                );
+              })() : (
                 <span
                   onClick={() => onStartEditInterval && onStartEditInterval(blockIdx, setIdx, set.interval)}
                   title={onStartEditInterval ? "Click to edit" : undefined}
