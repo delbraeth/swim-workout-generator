@@ -3958,6 +3958,7 @@
         const ratio = userSecs / PACE_BASELINE_SECS;
         setWorkout(prev => ({
           ...prev,
+          estimatedMin: Math.round(prev.estimatedMin * ratio),
           blocks: prev.blocks.map(b => ({
             ...b,
             sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })),
