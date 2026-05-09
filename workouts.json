@@ -650,5 +650,90 @@
     ],
     "userInitials": "PC",
     "notes": "TOWER TEST"
+  },
+  {
+    "id": "wmoxnnmt52jopx9",
+    "savedAt": "2026-05-09T01:18:23.801Z",
+    "dateCompleted": "2026-05-09",
+    "type": "endurance",
+    "typeLabel": "Endurance",
+    "totalYards": 2200,
+    "estimatedMin": 54,
+    "maxYardsCap": 2200,
+    "equipment": {
+      "kickboard": false,
+      "fins": false,
+      "paddles": true,
+      "pullBuoy": true,
+      "snorkel": false
+    },
+    "blocks": [
+      {
+        "name": "Warm-Up",
+        "section": "warmup",
+        "totalYards": 400,
+        "sets": [
+          {
+            "reps": 1,
+            "dist": 300,
+            "desc": "Freestyle — build from easy to moderate",
+            "interval": "No interval",
+            "focus": "Gradually wake up"
+          },
+          {
+            "reps": 4,
+            "dist": 25,
+            "desc": "Kick (no board, streamlined)",
+            "interval": "On 1:00",
+            "focus": "Loosen hips and ankles"
+          }
+        ]
+      },
+      {
+        "name": "Drill / Pre-Main Set",
+        "section": "drill",
+        "totalYards": 400,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 100,
+            "desc": "Pull (buoy) — easy/moderate, relaxed stroke",
+            "interval": "On 2:15",
+            "focus": "Aerobic priming, conserve energy",
+            "eq": "pull"
+          }
+        ]
+      },
+      {
+        "name": "Main Set — Heart Rate Recovery",
+        "section": "main",
+        "totalYards": 1200,
+        "sets": [
+          {
+            "reps": 12,
+            "dist": 100,
+            "desc": "Freestyle — moderate aerobic, focus on staying in HR zone 2",
+            "interval": "On 2:15",
+            "focus": "Build aerobic fitness with HR feedback"
+          }
+        ]
+      },
+      {
+        "name": "Cool-Down",
+        "section": "cooldown",
+        "totalYards": 200,
+        "sets": [
+          {
+            "reps": 4,
+            "dist": 50,
+            "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
+            "interval": "On 1:20",
+            "focus": "Gentle recovery — no effort, just move"
+          }
+        ]
+      }
+    ],
+    "userInitials": "",
+    "notes": ""
   }
 ]
