@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 23:24 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 23:26 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -2976,12 +2976,6 @@
     const MIN_YARDS  = 1900;
     const MIN_METERS = 2000;
 
-    // Minimum yards each section can contribute
-    const MIN_WARMUP   = Math.min(...WARMUP_OPTIONS.map(o => o.totalYards));   // 400
-    const MIN_DRILL    = 300;  // smallest drill option across types
-    const MIN_MAIN     = 1000; // smallest main set
-    const MIN_COOLDOWN = 200;  // smallest cooldown
-
     // Each checked equipment item must be satisfied by ≥ 1 set in the drill+main blocks.
     // satisfiedBy lists the eq tags whose presence counts for that equipment.
     const EQUIP_REQUIREMENTS = {
@@ -4272,7 +4266,7 @@
                         {entry.userInitials}
                       </span>
                     )}
-                    <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} yds</span>
+                    <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} {entry.poolMode === "50m" ? "m" : "yds"}</span>
                     {entry.estimatedMin && <span style={{ fontSize: 11, color: "#64748b" }}>~{entry.estimatedMin} min</span>}
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -5412,6 +5406,7 @@
           totalYards: workout.totalYards,
           estimatedMin: workout.estimatedMin,
           maxYardsCap: maxYards,
+          poolMode: poolMode,
           equipment: { ...equipment },
           blocks: workout.blocks.map(b => ({
             name: b.name, section: b.section, totalYards: b.totalYards,
@@ -5557,7 +5552,7 @@
               <span style={{ fontSize: 36 }}>🏊‍♂️</span>
               <div style={{ flex: 1 }}>
                 <h1 style={{ fontSize: 26, fontWeight: 900, color: "#fff", margin: 0, letterSpacing: "-0.02em" }}>Swim Workout Generator</h1>
-                <p style={{ color: "#93c5fd", fontSize: 13, margin: "2px 0 0" }}>~60 min · Masters / Competitive Swimmer</p>
+                <p style={{ color: "#93c5fd", fontSize: 13, margin: "2px 0 0" }}>Personalized swim workouts for masters swimmers</p>
               </div>
               <button onClick={() => setView(v => v === "generator" ? "history" : "generator")}
                 style={{
