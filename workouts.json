@@ -751,6 +751,99 @@
       "userInitials": "TEST",
       "notes": "",
       "sub": "000316.e47611df23a34c68a98e49c3e334c360.1912"
+    },
+    {
+      "id": "wmoysvhe1qmzrfq",
+      "savedAt": "2026-05-09T20:32:14.281Z",
+      "dateCompleted": "2026-05-09",
+      "type": "endurance",
+      "typeLabel": "Endurance",
+      "totalYards": 2150,
+      "estimatedMin": 49,
+      "maxYardsCap": 2400,
+      "equipment": {
+        "kickboard": false,
+        "fins": false,
+        "paddles": false,
+        "pullBuoy": false
+      },
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 300,
+              "desc": "Freestyle — build from easy to moderate",
+              "interval": "No interval",
+              "focus": "Gradually wake up"
+            },
+            {
+              "reps": 4,
+              "dist": 25,
+              "desc": "Kick (no board, streamlined)",
+              "interval": "On :40",
+              "focus": "Loosen hips and ankles"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 300,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 300,
+              "desc": "Kick — choice of stroke, easy pace (board optional)",
+              "interval": "No interval",
+              "focus": "Leg warm-up, build base endurance",
+              "eq": "kick"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — Threshold Pull 150s",
+          "section": "main",
+          "totalYards": 1200,
+          "sets": [
+            {
+              "reps": 8,
+              "dist": 150,
+              "desc": "Pull (buoy) — threshold pace, smooth long stroke",
+              "interval": "On 2:45",
+              "focus": "Pull threshold volume",
+              "eq": "pull"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 250,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 150,
+              "desc": "Easy Backstroke or choice",
+              "interval": "No interval",
+              "focus": "Let lactic acid clear, open the chest"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Easy Freestyle — progressively slower",
+              "interval": "No interval",
+              "focus": "Full cool-down — slowest laps of the day"
+            }
+          ]
+        }
+      ],
+      "userInitials": "TEST",
+      "notes": "",
+      "sub": "000316.e47611df23a34c68a98e49c3e334c360.1912"
     }
   ],
   "favorites": []
