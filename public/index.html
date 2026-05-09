@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 21:50 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 22:01 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -4987,7 +4987,21 @@
 
       const handleGenerate = useCallback(() => {
         if (!selectedType) return;
-        setWorkout(generateWorkout(selectedType, maxYards, equipment, favorites, poolMode));
+        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode);
+        // Apply user's pace to intervals at generation time (not just on "Rescale all")
+        const parts = paceInput.trim().split(":");
+        if (parts.length === 2) {
+          const userSecs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          if (userSecs && userSecs >= 30 && userSecs <= 300 && userSecs !== PACE_BASELINE_SECS) {
+            const ratio = userSecs / PACE_BASELINE_SECS;
+            const newBlocks = newWorkout.blocks.map(b => ({
+              ...b,
+              sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })),
+            }));
+            newWorkout = { ...newWorkout, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
+          }
+        }
+        setWorkout(newWorkout);
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
         setRegenError(null);
@@ -4996,8 +5010,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-        setPaceInput("2:00");
-      }, [selectedType, maxYards, equipment, poolMode]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -5009,7 +5022,23 @@
           setRegenError({ section: sectionKey, message: result.error });
           return;
         }
-        setWorkout(result.workout);
+        // Scale new section's intervals to match current pace
+        let regenWorkout = result.workout;
+        const parts = paceInput.trim().split(":");
+        if (parts.length === 2) {
+          const userSecs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          if (userSecs && userSecs >= 30 && userSecs <= 300 && userSecs !== PACE_BASELINE_SECS) {
+            const ratio = userSecs / PACE_BASELINE_SECS;
+            const newBlocks = regenWorkout.blocks.map((b, bi) => {
+              const origBlock = workout.blocks[bi];
+              // Only rescale the regenerated section; leave others as-is
+              if (b.section !== sectionKey) return b;
+              return { ...b, sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })) };
+            });
+            regenWorkout = { ...regenWorkout, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
+          }
+        }
+        setWorkout(regenWorkout);
         setRegenError(null);
         setEditDescKey(null);
         setEditIntervalKey(null);
@@ -5017,7 +5046,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput]);
 
       const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
       const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
