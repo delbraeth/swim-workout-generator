@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 20:59 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 21:04 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3559,22 +3559,22 @@
         const avg      = sessions ? Math.round(yards / sessions) : 0;
 
         // Workouts per week (completed only)
-        const now         = Date.now();
-        const msPerWeek   = 7 * 24 * 60 * 60 * 1000;
-        const fourWksAgo  = now - 4 * msPerWeek;
-        const recentCount = done.filter(e => {
+        const now        = Date.now();
+        const msPerWeek  = 7 * 24 * 60 * 60 * 1000;
+        const fourWksAgo = now - 4 * msPerWeek;
+        const allDates   = done.map(e => e.dateCompleted ? new Date(e.dateCompleted).getTime() : 0).filter(Boolean);
+        const firstDate  = allDates.length > 0 ? Math.min(...allDates) : now;
+        // All-time: sessions / weeks since first entry
+        const wkAll = allDates.length > 0
+          ? sessions / Math.max(1, (now - firstDate) / msPerWeek)
+          : 0;
+        // 4-week: sessions in last 28 days / actual elapsed weeks (capped at 4)
+        const recentCount  = done.filter(e => {
           const d = e.dateCompleted ? new Date(e.dateCompleted).getTime() : 0;
           return d >= fourWksAgo;
         }).length;
-        const wkRecent = recentCount / 4;
-        let wkAll = 0;
-        if (sessions > 0) {
-          const dates = done.map(e => e.dateCompleted ? new Date(e.dateCompleted).getTime() : 0).filter(Boolean);
-          if (dates.length > 0) {
-            const weeks = Math.max(1, (now - Math.min(...dates)) / msPerWeek);
-            wkAll = sessions / weeks;
-          }
-        }
+        const weeksElapsed = Math.min(4, Math.max(1, (now - firstDate) / msPerWeek));
+        const wkRecent     = recentCount / weeksElapsed;
 
         // Type distribution (completed only)
         const typeCounts = new Map();
