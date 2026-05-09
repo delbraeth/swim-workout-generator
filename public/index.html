@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 22:07 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 22:28 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -2907,7 +2907,7 @@
       return true;
     }
 
-    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y") {
+    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null) {
       const is50m = poolMode === "50m";
       const allWarmups   = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
       const allCooldowns = is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
@@ -2923,7 +2923,7 @@
       const minDr = Math.min(...drillList.map(o => o.totalYards));
       const minMa = Math.min(...mainList.map(o => o.totalYards));
       const minCd = Math.min(...allCooldowns.map(o => o.totalYards));
-      const absoluteMin = is50m ? MIN_METERS : MIN_YARDS;
+      const absoluteMin = Math.max(is50m ? MIN_METERS : MIN_YARDS, userMin || 0);
       // Floor scales with target: workout must use ≥ (maxYards - 400) yards so the
       // generator fills the budget rather than picking the smallest valid combo.
       const minTotal = Math.max(absoluteMin, maxYards - 400);
@@ -3049,7 +3049,7 @@
     // Returns { workout, error }. On success, workout is a fresh object with the
     // requested section replaced. On failure, error is a human-readable reason
     // and the caller should keep the prior workout unchanged.
-    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y") {
+    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -3060,7 +3060,7 @@
       const blocks = workout.blocks;
       const current = blocks[idx];
       const others = blocks.reduce((sum, b, i) => i === idx ? sum : sum + b.totalYards, 0);
-      const lower = Math.max(0, (is50m ? MIN_METERS : MIN_YARDS) - others);
+      const lower = Math.max(0, Math.max(is50m ? MIN_METERS : MIN_YARDS, userMin || 0) - others);
       const upper = maxYards - others;
 
       let pool;
@@ -3533,19 +3533,36 @@
       return minWarmup + minDrill + minMain + minCooldown;
     }
 
-    function YardageSlider({ value, onChange, selectedType, poolMode = "25y", paceInput = "2:00", onPaceChange }) {
+    function YardageSlider({ value, onChange, selectedType, poolMode = "25y", paceInput = "2:00", onPaceChange, sliderMin: sliderMinProp, sliderMax: sliderMaxProp, onRangeChange }) {
       const [activePreset, setActivePreset] = React.useState(null);
+      const [editingBound, setEditingBound] = React.useState(null); // 'min' | 'max' | null
+      const [boundDraft,   setBoundDraft]   = React.useState("");
       const is50m = poolMode === "50m";
-      const SLIDER_MIN  = is50m ? 2000 : 1900;
-      const SLIDER_MAX  = 4000;
+      const ABS_MIN     = is50m ? 2000 : 1900;
+      const ABS_MAX     = 6000;
       const SLIDER_STEP = is50m ? 100 : 50;
+      const SLIDER_MIN  = Math.max(ABS_MIN, sliderMinProp ?? ABS_MIN);
+      const SLIDER_MAX  = Math.min(ABS_MAX, sliderMaxProp ?? 4000);
       const unit = is50m ? "m" : "yds";
       const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN) * 100).toFixed(1);
-      const ticks = is50m ? [2000,2500,3000,3500,4000] : [1900,2400,2900,3400,4000];
-      const tickLabel = v => {
-        if (is50m) return v === 2000 ? "2.0k" : v === 2500 ? "2.5k" : v === 3000 ? "3.0k" : v === 3500 ? "3.5k" : "4.0k";
-        return v === 1900 ? "1.9k" : v === 2400 ? "2.4k" : v === 2900 ? "2.9k" : v === 3400 ? "3.4k" : "4.0k";
-      };
+      // 5 evenly-spaced ticks between SLIDER_MIN and SLIDER_MAX
+      const ticks = [0,1,2,3,4].map(i => Math.round((SLIDER_MIN + i * (SLIDER_MAX - SLIDER_MIN) / 4) / SLIDER_STEP) * SLIDER_STEP);
+      const tickLabel = v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v);
+
+      function commitBound(which, raw) {
+        const parsed = parseInt(raw, 10);
+        if (!isNaN(parsed)) {
+          const snap = Math.round(parsed / SLIDER_STEP) * SLIDER_STEP;
+          let newMin = SLIDER_MIN, newMax = SLIDER_MAX;
+          if (which === "min") newMin = Math.max(ABS_MIN, Math.min(snap, SLIDER_MAX - SLIDER_STEP));
+          if (which === "max") newMax = Math.min(ABS_MAX, Math.max(snap, SLIDER_MIN + SLIDER_STEP));
+          if (newMin !== SLIDER_MIN || newMax !== SLIDER_MAX) {
+            onRangeChange && onRangeChange(newMin, newMax);
+          }
+        }
+        setEditingBound(null);
+        setBoundDraft("");
+      }
 
       const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : null;
       const tooLow  = typeMin !== null && value < typeMin;
@@ -3619,16 +3636,33 @@
               style={{ position: "absolute", top: -4, left: 0, width: "100%", opacity: 0, height: 14, cursor: "pointer", margin: 0 }} />
           </div>
 
-          {/* Tick labels */}
+          {/* Tick labels — first and last are editable bounds */}
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-            {ticks.map(v => (
-              <span key={v} onClick={() => onChange(v)}
-                style={{ fontSize: 10, cursor: "pointer",
-                          color: v === value ? "#60a5fa" : v < (typeMin||0) ? "#7f1d1d" : "#475569",
-                          fontWeight: v === value ? 700 : 400 }}>
-                {tickLabel(v)}
-              </span>
-            ))}
+            {ticks.map((v, i) => {
+              const isMin = i === 0, isMax = i === ticks.length - 1;
+              const boundKey = isMin ? "min" : isMax ? "max" : null;
+              if (boundKey && editingBound === boundKey) {
+                return (
+                  <input key={v} type="number" value={boundDraft} autoFocus
+                    onChange={e => setBoundDraft(e.target.value)}
+                    onBlur={() => commitBound(boundKey, boundDraft)}
+                    onKeyDown={e => { if (e.key === "Enter") commitBound(boundKey, boundDraft); if (e.key === "Escape") { setEditingBound(null); setBoundDraft(""); } }}
+                    style={{ width: 52, fontSize: 10, fontFamily: "monospace", padding: "1px 4px", borderRadius: 4,
+                             border: "1px solid #3b82f6", background: "#0f172a", color: "#60a5fa", outline: "none" }} />
+                );
+              }
+              return (
+                <span key={v}
+                  onClick={() => boundKey ? (setEditingBound(boundKey), setBoundDraft(String(v))) : onChange(v)}
+                  title={boundKey ? `Click to set ${boundKey} yardage` : undefined}
+                  style={{ fontSize: 10, cursor: "pointer",
+                            color: v === value ? "#60a5fa" : v < (typeMin||0) ? "#7f1d1d" : "#475569",
+                            fontWeight: v === value ? 700 : 400,
+                            textDecoration: boundKey ? "underline dotted" : undefined }}>
+                  {tickLabel(v)}{boundKey ? " ✎" : ""}
+                </span>
+              );
+            })}
           </div>
 
           {/* Status row */}
@@ -4790,6 +4824,8 @@
       const [maxYards, setMaxYards]         = useState(2400);
       const [poolMode, setPoolMode]         = useState("25y");
       const [paceInput, setPaceInput]       = useState("2:00");
+      const [sliderMin, setSliderMin]       = useState(1900);
+      const [sliderMax, setSliderMax]       = useState(4000);
       const [workout, setWorkout]           = useState(null);
       const [hover, setHover]               = useState(null);
       const [equipment, setEquipment]       = useState({
@@ -4862,6 +4898,47 @@
           .then(data => { if (Array.isArray(data)) setFavorites(data); })
           .catch(() => {});
       }, []);
+
+      // On mount: fetch user settings (slider range + default pace)
+      useEffect(() => {
+        fetch(`${API_BASE}/settings`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : {})
+          .then(s => {
+            if (s.sliderMin) setSliderMin(s.sliderMin);
+            if (s.sliderMax) { setSliderMax(s.sliderMax); setMaxYards(v => Math.min(v, s.sliderMax)); }
+            if (s.paceInput) setPaceInput(s.paceInput);
+          })
+          .catch(() => {});
+      }, []);
+
+      // Debounced settings save — fires 1.5s after the last change
+      const saveSettingsTimerRef = React.useRef(null);
+      function saveSettings(min, max, pace) {
+        clearTimeout(saveSettingsTimerRef.current);
+        saveSettingsTimerRef.current = setTimeout(() => {
+          fetch(`${API_BASE}/settings`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sliderMin: min, sliderMax: max, paceInput: pace }),
+          }).catch(() => {});
+        }, 1500);
+      }
+
+      // Range change: update bounds, clamp current value, persist
+      const handleRangeChange = useCallback((newMin, newMax) => {
+        setSliderMin(newMin);
+        setSliderMax(newMax);
+        setMaxYards(v => Math.max(newMin, Math.min(v, newMax)));
+        setWorkout(null);
+        setSaveStatus(null);
+        saveSettings(newMin, newMax, paceInput);
+      }, [paceInput]);
+
+      // Pace change with settings persistence
+      const handlePaceChange = useCallback((val) => {
+        setPaceInput(val);
+        saveSettings(sliderMin, sliderMax, val);
+      }, [sliderMin, sliderMax]);
 
       // Toggle a main-set label in/out of favorites
       const handleToggleFavorite = useCallback(async (label) => {
@@ -4988,7 +5065,7 @@
 
       const handleGenerate = useCallback(() => {
         if (!selectedType) return;
-        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode);
+        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin);
         // Apply user's pace to intervals at generation time (not just on "Rescale all")
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
@@ -5018,7 +5095,7 @@
       // surface a per-section inline error.
       const handleRegenerateSection = useCallback((sectionKey) => {
         if (!workout || !selectedType) return;
-        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode);
+        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin);
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
           return;
@@ -5348,7 +5425,7 @@
               <EquipmentPicker equipment={equipment} onChange={handleEquipChange} />
 
               {/* Max Yardage / Distance Slider */}
-              <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={setPaceInput} />
+              <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} />
 
               {/* Generate Button */}
               <button
@@ -5458,7 +5535,7 @@
                   <input
                     type="text"
                     value={paceInput}
-                    onChange={e => setPaceInput(e.target.value)}
+                    onChange={e => handlePaceChange(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && handleApplyPace()}
                     placeholder="M:SS"
                     style={{ width: 58, fontFamily: "monospace", fontSize: 13, padding: "4px 7px", borderRadius: 6, border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0" }}
