@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 23:13 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 23:24 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -5214,7 +5214,7 @@
           const blocks = prev.blocks.map((b, bi) => {
             if (bi !== blockIdx) return b;
             const sets = b.sets.map((s, si) => si === setIdx ? newSet : s);
-            const totalYards = sets.reduce((sum, s) => sum + s.reps * s.dist, 0);
+            const totalYards = sets.reduce((sum, s) => sum + s.reps * s.dist, 0) * (b.rounds || 1);
             return { ...b, sets, totalYards };
           });
           return { ...prev, blocks };
@@ -5337,7 +5337,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -5373,7 +5373,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin]);
 
       const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
       const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
@@ -5665,7 +5665,7 @@
                 <div style={{ background: "#1c1917", border: "1px solid #78716c", borderRadius: 10, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 15 }}>ℹ️</span>
                   <span style={{ fontSize: 12, color: "#a8a29e" }}>
-                    IM and stroke-specialty sets use yard-based options — no native 50m options for these types yet. Distances shown are in yards.
+                    IM and stroke-specialty sets use yard-based distances — no native 50m options for these types yet. All distances below are in yards, not meters.
                   </span>
                 </div>
               )}
@@ -5851,7 +5851,7 @@
                 <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid #334155", color: "#94a3b8", fontSize: 13 }}>
                   <span style={{ fontWeight: 600, color: "#cbd5e1" }}>📋 Coach's Note: </span>
                   {poolMode === "50m"
-                    ? "Intervals are calibrated for a 50m pool at ~2:30–2:45/100 m. Adjust ±10–15 sec to match your base."
+                    ? "Intervals are scaled from your pace setting. Adjust ±10–15 sec to match your base."
                     : "Intervals are calibrated for a masters pace of 2:00–2:15/100 yds. Adjust ±10–15 sec to match your base."
                   }
                   Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets.
