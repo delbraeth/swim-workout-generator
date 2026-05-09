@@ -143,9 +143,6 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE = "/api";                  // same origin
-    const HISTORY_LOCAL_KEY  = "swim-workout-history-v1";
-    const USER_INITIALS_KEY  = "swim-workout-user-initials-v1";
-    const ACCESS_CODE_KEY    = "swim-access-code-v1";
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -4387,35 +4384,7 @@
     //  ACCESS GATE
     // ═══════════════════════════════════════════════════════════════
 
-    function AccessGate({ onSuccess }) {
-      const [code,    setCode]    = useState("");
-      const [error,   setError]   = useState(null);
-      const [loading, setLoading] = useState(false);
-
-      const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!code.trim()) return;
-        setLoading(true); setError(null);
-        try {
-          const res  = await fetch(`${API_BASE}/verify-code`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: code.trim() }),
-          });
-          const data = await res.json();
-          if (data.ok) {
-            onSuccess(code.trim());
-          } else {
-            setError("Incorrect code — try again.");
-            setCode("");
-          }
-        } catch (_) {
-          setError("Could not reach server. Check your connection.");
-        } finally {
-          setLoading(false);
-        }
-      };
-
+    function SignInGate({ authError }) {
       return (
         <div style={{
           minHeight: "100vh",
@@ -4424,45 +4393,35 @@
           fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
           padding: "24px",
         }}>
-          <div style={{ width: "100%", maxWidth: 380, textAlign: "center" }}>
+          <div style={{ width: "100%", maxWidth: 360, textAlign: "center" }}>
             <div style={{ fontSize: 56, marginBottom: 12 }}>🏊‍♂️</div>
-            <h1 style={{ fontSize: 24, fontWeight: 900, color: "#fff", margin: "0 0 6px", letterSpacing: "-0.02em" }}>
+            <h1 style={{ fontSize: 24, fontWeight: 900, color: "#fff", margin: "0 0 8px", letterSpacing: "-0.02em" }}>
               Swim Workout Generator
             </h1>
-            <p style={{ color: "#64748b", fontSize: 14, margin: "0 0 32px" }}>
-              Enter your access code to continue
+            <p style={{ color: "#64748b", fontSize: 14, margin: "0 0 36px" }}>
+              Sign in to continue
             </p>
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <input
-                type="password"
-                value={code}
-                onChange={e => setCode(e.target.value)}
-                placeholder="Access code"
-                autoFocus
-                style={{
-                  width: "100%", padding: "16px 18px", borderRadius: 12,
-                  border: `1.5px solid ${error ? "#ef4444" : "#334155"}`,
-                  background: "#1e293b", color: "#fff",
-                  fontSize: 18, fontFamily: "inherit", outline: "none",
-                  textAlign: "center", letterSpacing: "0.1em",
-                }}
-              />
-              {error && (
-                <div style={{ color: "#f87171", fontSize: 14 }}>{error}</div>
-              )}
-              <button
-                type="submit"
-                disabled={loading || !code.trim()}
-                style={{
-                  padding: "16px 0", borderRadius: 12, border: "none",
-                  background: code.trim() ? "#3b82f6" : "#334155",
-                  color: code.trim() ? "#fff" : "#64748b",
-                  fontSize: 16, fontWeight: 700, cursor: code.trim() ? "pointer" : "not-allowed",
-                  transition: "background 0.15s",
-                }}>
-                {loading ? "Checking…" : "Enter"}
-              </button>
-            </form>
+            {authError && (
+              <div style={{ color: "#f87171", fontSize: 13, marginBottom: 20, background: "rgba(239,68,68,0.1)", borderRadius: 8, padding: "10px 14px" }}>
+                {authError === "not_authorized" ? "Your Apple ID is not on the access list." : "Sign-in failed — please try again."}
+              </div>
+            )}
+            {/* Official Apple Sign in with Apple button styling */}
+            <a href="/auth/apple" style={{ textDecoration: "none" }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                background: "#fff", color: "#000", borderRadius: 12,
+                padding: "14px 24px", fontSize: 17, fontWeight: 600,
+                cursor: "pointer", userSelect: "none",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+              }}>
+                {/* Apple logo SVG */}
+                <svg width="20" height="20" viewBox="0 0 814 1000" fill="currentColor" aria-hidden="true">
+                  <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105-37.3-155.8-109.3C107.3 729.3 75 608.4 75 490.5c0-173.5 113.4-265.5 224.8-265.5 58.2 0 106.8 38.9 142.5 38.9 33.8 0 87.4-41.2 154.5-41.2 24.5 0 108.2 3.9 161.7 59.4zm-326.3-191.4c30.6-35.8 52.4-85.6 52.4-135.4 0-6.9-.6-13.9-1.9-19.5-49.6 1.9-108.9 33.1-145.5 73.8-27.5 30.1-53.1 79.7-53.1 130.3 0 7.5 1.3 15 1.9 17.4 3.2.6 8.4 1.3 13.6 1.3 44.6 0 100.7-29.5 132.6-67.9z"/>
+                </svg>
+                Sign in with Apple
+              </div>
+            </a>
           </div>
         </div>
       );
@@ -4504,30 +4463,21 @@
       const [restSecs,      setRestSecs]          = useState(10); // null=manual, 0/5/10/15=auto
       // Print dialog: show "save before printing?" prompt for unsaved workouts
       const [showPrintDialog, setShowPrintDialog] = useState(false);
-      // Auth: authChecked flips to true once we know whether a stored code is valid
-      const [accessCode,  setAccessCode]  = useState(null);
-      const [authChecked, setAuthChecked] = useState(false);
+      // Auth state: null = checking, false = not signed in, true = signed in
+      const [authenticated, setAuthenticated] = useState(null);
+      const [authError,     setAuthError]     = useState(null);
 
-      // On mount: verify any stored access code, then proceed
+      // On mount: check auth status via session cookie (set by /auth/callback)
       useEffect(() => {
-        const stored = localStorage.getItem(ACCESS_CODE_KEY);
-        if (!stored) { setAuthChecked(true); return; }
-        fetch(`${API_BASE}/verify-code`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: stored }),
-        })
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("auth") === "error") {
+          setAuthError(params.get("reason") || "unknown");
+          window.history.replaceState({}, "", "/");
+        }
+        fetch("/auth/status")
           .then(r => r.json())
-          .then(data => {
-            if (data.ok) { setAccessCode(stored); }
-            else { localStorage.removeItem(ACCESS_CODE_KEY); }
-            setAuthChecked(true);
-          })
-          .catch(() => {
-            // Network error on verify — trust the stored code rather than locking out
-            setAccessCode(stored);
-            setAuthChecked(true);
-          });
+          .then(data => setAuthenticated(data.authenticated))
+          .catch(() => setAuthenticated(true)); // network error — let them in, server will reject writes
       }, []);
 
       // On mount: fetch live history from the API, merge with localStorage cache
@@ -4563,12 +4513,12 @@
           if (isFav) {
             await fetch(`${API_BASE}/favorites/${encodeURIComponent(label)}`, {
               method: "DELETE",
-              headers: { "x-access-code": accessCode || "" },
+              headers: {},
             });
           } else {
             await fetch(`${API_BASE}/favorites`, {
               method: "POST",
-              headers: { "Content-Type": "application/json", "x-access-code": accessCode || "" },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ label }),
             });
           }
@@ -4576,7 +4526,7 @@
           // Revert optimistic update on error
           setFavorites(prev => isFav ? [...prev, label] : prev.filter(x => x !== label));
         }
-      }, [favorites, accessCode]);
+      }, [favorites]);
 
       const [openSwapKey, setOpenSwapKey] = useState(null);
 
@@ -4766,7 +4716,7 @@
         try {
           const res = await fetch(`${API_BASE}/log-workout`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "x-access-code": accessCode || "" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(entry),
           });
           if (!res.ok) {
@@ -4790,7 +4740,7 @@
         try {
           await fetch(`${API_BASE}/workouts/${id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json", "x-access-code": accessCode || "" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ notes }),
           });
         } catch (err) { console.error("Failed to update notes:", err); }
@@ -4803,10 +4753,7 @@
           return next;
         });
         try {
-          await fetch(`${API_BASE}/workouts/${id}`, {
-            method: "DELETE",
-            headers: { "x-access-code": accessCode || "" },
-          });
+          await fetch(`${API_BASE}/workouts/${id}`, { method: "DELETE" });
         } catch (err) { console.error("Failed to delete entry:", err); }
       }, []);
 
@@ -4854,13 +4801,8 @@
       }, []);
 
       // Auth gate — render nothing while checking, show gate if no valid code
-      if (!authChecked) return null;
-      if (!accessCode) return (
-        <AccessGate onSuccess={code => {
-          localStorage.setItem(ACCESS_CODE_KEY, code);
-          setAccessCode(code);
-        }} />
-      );
+      if (authenticated === null) return null; // still checking
+      if (!authenticated) return <SignInGate authError={authError} />;
 
       const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
       const sectionColors = ["#38bdf8", "#2dd4bf", "#3b82f6", "#94a3b8"];
@@ -4893,6 +4835,17 @@
                   </span>
                 )}
               </button>
+              <a href="/auth/signout"
+                title="Sign out"
+                style={{
+                  padding: "8px 12px", borderRadius: 8,
+                  border: "1px solid #334155", background: "#1e293b",
+                  color: "#64748b", fontSize: 12, fontWeight: 600,
+                  cursor: "pointer", textDecoration: "none",
+                  display: "inline-flex", alignItems: "center",
+                }}>
+                Sign out
+              </a>
             </div>
           </div>
 
