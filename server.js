@@ -95,8 +95,9 @@ async function readWorkouts({ force = false } = {}) {
   if (Array.isArray(parsed)) {
     parsed = { workouts: parsed, favorites: [] };
   }
-  if (!Array.isArray(parsed.workouts))  parsed.workouts  = [];
-  if (!Array.isArray(parsed.favorites)) parsed.favorites = [];
+  if (!Array.isArray(parsed.workouts))                   parsed.workouts  = [];
+  if (!Array.isArray(parsed.favorites))                  parsed.favorites = [];
+  if (!parsed.settings || typeof parsed.settings !== "object") parsed.settings = {};
   cache.json = parsed;
   cache.sha = data.sha;
   cache.fetchedAt = Date.now();
@@ -396,6 +397,30 @@ app.delete("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
     const [removed] = json.workouts.splice(idx, 1);
     await writeWorkouts(json, sha, `Delete workout ${id}`);
     res.json({ ok: true, removed });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ───── User settings routes ──────────────────────────────────────────
+app.get("/api/settings", checkOrigin, requireAuth, async (req, res) => {
+  try {
+    const { json } = await readWorkouts();
+    const key = req.userSub || "default";
+    res.json(json.settings[key] || {});
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post("/api/settings", checkOrigin, requireAuth, async (req, res) => {
+  try {
+    const patch = req.body || {};
+    const { json, sha } = await readWorkouts({ force: true });
+    const key = req.userSub || "default";
+    json.settings[key] = { ...(json.settings[key] || {}), ...patch };
+    await writeWorkouts(json, sha, `Update settings (${key.slice(0, 8)})`);
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
