@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 20:17 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 20:23 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3490,39 +3490,49 @@
     // ═══════════════════════════════════════════════════════════════
     function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite }) {
       const [filterType,   setFilterType]   = useState("all");
-      const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | initials string
+      const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | sub string
       const [editingId,    setEditingId]    = useState(null);
       const [editingNotes, setEditingNotes] = useState("");
       const [expandedId,   setExpandedId]   = useState(null);
 
-      // Distinct initials present in history (sorted), plus a flag for entries
-      // missing initials so we can render an "Unattributed" chip when relevant.
+      // Distinct subs present in history. Display label = most common initials for that sub.
       const userBuckets = useMemo(() => {
-        const set = new Set();
+        const subMap = new Map(); // sub → Map<initials, count>
         let hasUnattributed = false;
         for (const e of history) {
-          const u = (e.userInitials || "").trim();
-          if (u) set.add(u);
-          else hasUnattributed = true;
+          const sub      = (e.sub          || "").trim();
+          const initials = (e.userInitials || "").trim();
+          if (sub) {
+            if (!subMap.has(sub)) subMap.set(sub, new Map());
+            const counts = subMap.get(sub);
+            if (initials) counts.set(initials, (counts.get(initials) || 0) + 1);
+          } else {
+            hasUnattributed = true;
+          }
         }
-        return { users: [...set].sort(), hasUnattributed };
+        const users = [...subMap.entries()].map(([sub, counts]) => {
+          const label = counts.size > 0
+            ? [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+            : "Unknown";
+          return { id: sub, label };
+        }).sort((a, b) => a.label.localeCompare(b.label));
+        return { users, hasUnattributed };
       }, [history]);
 
-      // If the selected user filter no longer exists in history (last entry
-      // for that user was deleted), reset to "all" so the list isn't empty.
+      // If the selected user filter no longer exists in history, reset to "all".
       useEffect(() => {
         if (filterUser === "all") return;
         if (filterUser === "__unattributed__" && !userBuckets.hasUnattributed) setFilterUser("all");
-        else if (filterUser !== "__unattributed__" && !userBuckets.users.includes(filterUser)) setFilterUser("all");
+        else if (filterUser !== "__unattributed__" && !userBuckets.users.find(u => u.id === filterUser)) setFilterUser("all");
       }, [filterUser, userBuckets]);
 
       const filtered = useMemo(
         () => history.filter(e => {
           if (filterType !== "all" && e.type !== filterType) return false;
-          const u = (e.userInitials || "").trim();
+          const sub = (e.sub || "").trim();
           if (filterUser === "all") return true;
-          if (filterUser === "__unattributed__") return !u;
-          return u === filterUser;
+          if (filterUser === "__unattributed__") return !sub;
+          return sub === filterUser;
         }),
         [history, filterType, filterUser]
       );
@@ -3600,7 +3610,7 @@
               <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4 }}>Who:</span>
               {[
                 { id: "all", label: "All" },
-                ...userBuckets.users.map(u => ({ id: u, label: u })),
+                ...userBuckets.users,
                 ...(userBuckets.hasUnattributed ? [{ id: "__unattributed__", label: "Unattributed" }] : []),
               ].map(u => {
                 const active = filterUser === u.id;
