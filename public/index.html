@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 22:36 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 22:44 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -2958,12 +2958,18 @@
         const dr = pickBiased(validDrills, drFloor);
 
         // 3. Pick main — must leave room for min cooldown; strongly prefer larger mains
-        const validMain = mainList.filter(o =>
-          o.totalYards <= maxYards - wu.totalYards - dr.totalYards - minCd
-        );
-        if (!validMain.length) continue;
-        // Main should fill ≥65% of the budget remaining after warmup+drill+cooldown
+        // Expand pool with ×2 and ×3 repeat variants
         const mainBudget = maxYards - wu.totalYards - dr.totalYards - minCd;
+        const mainPoolExpanded = mainList.flatMap(o => {
+          const variants = [o];
+          for (const r of [2, 3]) {
+            const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
+            if (rep.totalYards <= mainBudget) variants.push(rep);
+          }
+          return variants;
+        });
+        const validMain = mainPoolExpanded.filter(o => o.totalYards <= mainBudget);
+        if (!validMain.length) continue;
         const maFloor = Math.max(minMa, mainBudget * 0.65);
         // Favorites get 3× weight in the pick pool
         const weightedMain = favorites.length
@@ -3004,7 +3010,16 @@
         if (eqPreferred.length) drillCandidates = eqPreferred;
       }
       const dr = drillCandidates[0];
-      let mainCandidates = mainList.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - minCd);
+      const fallbackMainBudget = maxYards - wu.totalYards - dr.totalYards - minCd;
+      const fallbackMainExpanded = mainList.flatMap(o => {
+        const variants = [o];
+        for (const r of [2, 3]) {
+          const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
+          if (rep.totalYards <= fallbackMainBudget) variants.push(rep);
+        }
+        return variants;
+      });
+      let mainCandidates = fallbackMainExpanded.filter(o => o.totalYards <= fallbackMainBudget);
       if (!mainCandidates.length) mainCandidates = mainList;
       mainCandidates = mainCandidates.slice().sort(byYardsDesc);
       if (hasEquipReq) {
@@ -3019,10 +3034,13 @@
     }
 
     function buildWorkout(typeId, wu, dr, ma, cd, total) {
+      const mainName = ma.rounds > 1
+        ? `Main Set — ${ma.label} ×${ma.rounds}`
+        : `Main Set — ${ma.label}`;
       const blocks = [
         { name: "Warm-Up",              section: "warmup",   ...wu },
         { name: "Drill / Pre-Main Set", section: "drill",    ...dr },
-        { name: `Main Set — ${ma.label}`,section: "main",    ...ma },
+        { name: mainName, section: "main", ...ma, roundRestSecs: ma.roundRestSecs ?? 30 },
         { name: "Cool-Down",            section: "cooldown", ...cd },
       ];
       const estimatedMin = calcEstimatedMin(blocks);
@@ -3043,7 +3061,7 @@
     function sectionFingerprint(b) {
       if (!b || !Array.isArray(b.sets)) return "";
       const sig = b.sets.map(s => `${s.reps}x${s.dist}|${s.desc}`).join("/");
-      return `${b.totalYards}|${sig}`;
+      return `${b.totalYards}|r${b.rounds || 1}|${sig}`;
     }
 
     // Returns { workout, error }. On success, workout is a fresh object with the
@@ -3069,9 +3087,19 @@
       else if (sectionKey === "drill")    pool = is50m
         ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
         : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
-      else                                pool = is50m
-        ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
-        : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
+      else {
+        const basePool = is50m
+          ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
+          : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
+        // Expand with ×2 and ×3 repeat variants
+        pool = basePool.flatMap(o => {
+          const variants = [o];
+          for (const r of [2, 3]) {
+            variants.push({ ...o, rounds: r, totalYards: o.totalYards * r });
+          }
+          return variants;
+        });
+      }
 
       const hasEquipReq = equipment && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
       const partnerDrill = blocks[1]; // used when regenerating main
@@ -3209,14 +3237,18 @@
       const FALLBACK_YD_PER_MIN = 35;
       let totalSecs = 0;
       for (const block of blocks) {
+        const rounds = block.rounds || 1;
+        let blockSecs = 0;
         for (const set of block.sets) {
           const secs = parseIntervalSecs(set.interval);
           if (secs !== null) {
-            totalSecs += set.reps * secs;
+            blockSecs += set.reps * secs;
           } else {
-            totalSecs += (set.reps * set.dist / FALLBACK_YD_PER_MIN) * 60;
+            blockSecs += (set.reps * set.dist / FALLBACK_YD_PER_MIN) * 60;
           }
         }
+        totalSecs += blockSecs * rounds;
+        if (rounds > 1) totalSecs += (rounds - 1) * (block.roundRestSecs ?? 30);
       }
       return Math.round(totalSecs / 60);
     }
@@ -3410,7 +3442,43 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, unit = "yds" }) {
+    function RoundRestRow({ restSecs, onChange }) {
+      const [editing, setEditing] = React.useState(false);
+      const [draft, setDraft]     = React.useState("");
+      function commit() {
+        const v = parseInt(draft, 10);
+        if (!isNaN(v) && onChange) onChange(v);
+        setEditing(false);
+      }
+      if (editing) {
+        return (
+          <tr>
+            <td colSpan={5} style={{ padding: "4px 16px", background: "#0f172a", borderTop: "1px dashed #334155", borderBottom: "1px dashed #334155" }}>
+              <span style={{ fontSize: 11, color: "#64748b", marginRight: 8 }}>Rest between rounds:</span>
+              <input type="number" autoFocus value={draft} min={0} max={300}
+                onChange={e => setDraft(e.target.value)}
+                onBlur={commit}
+                onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+                style={{ width: 52, fontSize: 12, fontFamily: "monospace", padding: "2px 6px", borderRadius: 4,
+                         border: "1px solid #3b82f6", background: "#0f172a", color: "#60a5fa", outline: "none" }} />
+              <span style={{ fontSize: 11, color: "#64748b", marginLeft: 6 }}>sec</span>
+            </td>
+          </tr>
+        );
+      }
+      return (
+        <tr className="screen-only" onClick={onChange ? () => { setDraft(String(restSecs)); setEditing(true); } : undefined}
+          style={{ cursor: onChange ? "pointer" : "default" }}>
+          <td colSpan={5} style={{ padding: "5px 16px", background: "#0f172a", borderTop: "1px dashed #334155", borderBottom: "1px dashed #334155", textAlign: "center" }}>
+            <span style={{ fontSize: 11, color: "#475569" }}>
+              ── {restSecs}s rest ──{onChange ? <span style={{ color: "#334155", marginLeft: 6 }}>✎</span> : null}
+            </span>
+          </td>
+        </tr>
+      );
+    }
+
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds" }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -3487,26 +3555,55 @@
                 </tr>
               </thead>
               <tbody>
-                {block.sets.map((set, i) => (
-                  <SetRow key={i} set={set} idx={i} equipment={equipment}
-                    blockIdx={blockIdx} setIdx={i}
-                    isSwapOpen={openSwapKey === `${blockIdx}-${i}`}
-                    onToggleSwap={onToggleSwap} onApplySwap={onApplySwap}
-                    isEditingInterval={editIntervalKey === `${blockIdx}-${i}`}
-                    editIntervalDraft={editIntervalDraft}
-                    setEditIntervalDraft={setEditIntervalDraft}
-                    onStartEditInterval={onStartEditInterval}
-                    onCommitInterval={onCommitInterval}
-                    onCancelInterval={onCancelInterval}
-                    isEditingDesc={editDescKey === `${blockIdx}-${i}`}
-                    editDescDraft={editDescDraft}
-                    setEditDescDraft={setEditDescDraft}
-                    onStartEditDesc={onStartEditDesc}
-                    onCommitDesc={onCommitDesc}
-                    onCancelDesc={onCancelDesc}
-                    unit={unit}
-                  />
-                ))}
+                {(() => {
+                  const rounds = block.rounds || 1;
+                  const rows = [];
+                  for (let r = 0; r < rounds; r++) {
+                    if (rounds > 1) {
+                      rows.push(
+                        <tr key={`round-${r}`}>
+                          <td colSpan={5} style={{ padding: "6px 16px", background: "#1e293b", borderTop: r > 0 ? "1px solid #334155" : undefined }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#60a5fa", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              Round {r + 1}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    block.sets.forEach((set, i) => {
+                      rows.push(
+                        <SetRow key={`${r}-${i}`} set={set} idx={i} equipment={equipment}
+                          blockIdx={blockIdx} setIdx={i}
+                          isSwapOpen={openSwapKey === `${blockIdx}-${i}`}
+                          onToggleSwap={onToggleSwap} onApplySwap={onApplySwap}
+                          isEditingInterval={editIntervalKey === `${blockIdx}-${i}`}
+                          editIntervalDraft={editIntervalDraft}
+                          setEditIntervalDraft={setEditIntervalDraft}
+                          onStartEditInterval={onStartEditInterval}
+                          onCommitInterval={onCommitInterval}
+                          onCancelInterval={onCancelInterval}
+                          isEditingDesc={editDescKey === `${blockIdx}-${i}`}
+                          editDescDraft={editDescDraft}
+                          setEditDescDraft={setEditDescDraft}
+                          onStartEditDesc={onStartEditDesc}
+                          onCommitDesc={onCommitDesc}
+                          onCancelDesc={onCancelDesc}
+                          unit={unit}
+                        />
+                      );
+                    });
+                    // Rest row between rounds (not after last round)
+                    if (rounds > 1 && r < rounds - 1) {
+                      rows.push(
+                        <RoundRestRow key={`rest-${r}`}
+                          restSecs={block.roundRestSecs ?? 30}
+                          onChange={onRoundRestChange ? (v) => onRoundRestChange(blockIdx, v) : null}
+                        />
+                      );
+                    }
+                  }
+                  return rows;
+                })()}
               </tbody>
             </table>
           </div>
@@ -5040,6 +5137,17 @@
         setEditIntervalDraft("");
       }, []);
 
+      // ── Round rest editing ───────────────────────────────────────
+      const handleRoundRestChange = useCallback((blockIdx, newSecs) => {
+        const secs = Math.max(0, Math.min(300, parseInt(newSecs, 10) || 0));
+        setWorkout(prev => {
+          const newBlocks = prev.blocks.map((b, i) =>
+            i !== blockIdx ? b : { ...b, roundRestSecs: secs }
+          );
+          return { ...prev, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
+        });
+      }, []);
+
       // ── Per-set description editing ───────────────────────────────
       const [editDescKey,   setEditDescKey]   = useState(null);
       const [editDescDraft, setEditDescDraft] = useState("");
@@ -5581,6 +5689,7 @@
                     onCancelDesc={handleCancelDesc}
                     isFavorited={!!(block.label && favorites.includes(block.label))}
                     onToggleFavorite={handleToggleFavorite}
+                    onRoundRestChange={handleRoundRestChange}
                     unit={unit}
                   />
                 ))}
