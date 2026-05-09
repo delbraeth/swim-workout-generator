@@ -48,7 +48,6 @@ const GITHUB_OWNER  = process.env.GITHUB_OWNER  || "delbraeth";
 const GITHUB_REPO   = process.env.GITHUB_REPO   || "swim-workout-generator";
 const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
 const GITHUB_PATH   = process.env.GITHUB_PATH   || "workouts.json";
-const ACCESS_CODE   = process.env.ACCESS_CODE   || "";
 const APP_URL       = process.env.APP_URL        || "https://veronicacassidy.com";
 
 // Apple Sign-In config — all empty until configured in Hyperlift
@@ -215,13 +214,6 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// ───── Legacy access-code guard (used when Apple auth is not configured) ─────
-function checkCode(req, res, next) {
-  if (!ACCESS_CODE) return next();
-  const supplied = req.get("x-access-code") || "";
-  if (supplied === ACCESS_CODE) return next();
-  return res.status(401).json({ error: "invalid access code" });
-}
 
 // ───── Same-origin guard ─────────────────────────────────────────────
 function checkOrigin(req, res, next) {
@@ -485,5 +477,5 @@ app.listen(PORT, () => {
   console.log(`[swim-workout-generator] listening on :${PORT}`);
   if (!GITHUB_TOKEN)      console.warn("[swim-workout-generator] GITHUB_TOKEN not set");
   if (APPLE_AUTH_ACTIVE)  console.log(`[auth] Apple Sign-In active. Allowed subs: ${APPLE_ALLOWED_SUBS.length || "none (bootstrap mode)"}`);
-  else                    console.warn("[auth] Apple auth not configured — falling back to ACCESS_CODE");
+  else                    console.warn("[auth] Apple auth not configured");
 });
