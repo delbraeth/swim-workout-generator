@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 22:01 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 22:07 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3534,6 +3534,7 @@
     }
 
     function YardageSlider({ value, onChange, selectedType, poolMode = "25y", paceInput = "2:00", onPaceChange }) {
+      const [activePreset, setActivePreset] = React.useState(null);
       const is50m = poolMode === "50m";
       const SLIDER_MIN  = is50m ? 2000 : 1900;
       const SLIDER_MAX  = 4000;
@@ -3584,16 +3585,16 @@
                 <input
                   type="text"
                   value={paceInput}
-                  onChange={e => onPaceChange && onPaceChange(e.target.value)}
+                  onChange={e => { setActivePreset(null); onPaceChange && onPaceChange(e.target.value); }}
                   placeholder="M:SS"
                   style={{ width: 52, fontFamily: "monospace", fontSize: 13, padding: "4px 7px", borderRadius: 6,
                            border: "1px solid #475569", background: "#0f172a", color: "#e2e8f0", outline: "none" }}
                 />
                 {presets.map(({ label, mins }) => {
                   const y = yardsForMins(mins);
-                  const active = y === value;
+                  const active = activePreset === label;
                   return (
-                    <button key={label} onClick={() => y && onChange(y)} disabled={!y}
+                    <button key={label} onClick={() => { if (y) { setActivePreset(label); onChange(y); } }} disabled={!y}
                       style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 6,
                                border: `1px solid ${active ? "#3b82f6" : "#334155"}`,
                                background: active ? "#1d4ed8" : "#0f172a",
@@ -3614,7 +3615,7 @@
                             borderRadius: 3 }} />
             </div>
             <input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={SLIDER_STEP} value={value}
-              onChange={e => onChange(Number(e.target.value))}
+              onChange={e => { setActivePreset(null); onChange(Number(e.target.value)); }}
               style={{ position: "absolute", top: -4, left: 0, width: "100%", opacity: 0, height: 14, cursor: "pointer", margin: 0 }} />
           </div>
 
