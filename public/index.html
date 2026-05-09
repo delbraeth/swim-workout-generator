@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 20:41 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 20:53 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3488,10 +3488,11 @@
     // ═══════════════════════════════════════════════════════════════
     //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
     // ═══════════════════════════════════════════════════════════════
-    function HistoryView({ history, historyLoaded, onUpdateNotes, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite }) {
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite }) {
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | sub string
       const [weekMode,     setWeekMode]     = useState("all"); // "all" | "4wk"
+      const [filterStatus, setFilterStatus] = useState("all"); // "all" | "done" | "planned"
       const [editingId,    setEditingId]    = useState(null);
       const [editingNotes, setEditingNotes] = useState("");
       const [expandedId,   setExpandedId]   = useState(null);
@@ -3531,11 +3532,18 @@
         () => history.filter(e => {
           if (filterType !== "all" && e.type !== filterType) return false;
           const sub = (e.sub || "").trim();
-          if (filterUser === "all") return true;
-          if (filterUser === "__unattributed__") return !sub;
-          return sub === filterUser;
+          if (filterUser !== "all") {
+            if (filterUser === "__unattributed__" && sub) return false;
+            if (filterUser !== "__unattributed__" && sub !== filterUser) return false;
+          }
+          if (filterStatus !== "all") {
+            const isDone = e.completed !== false; // treat missing as done (legacy entries)
+            if (filterStatus === "done"    && !isDone) return false;
+            if (filterStatus === "planned" &&  isDone) return false;
+          }
+          return true;
         }),
-        [history, filterType, filterUser]
+        [history, filterType, filterUser, filterStatus]
       );
 
       // Show the user-filter row only when it would offer a meaningful choice:
@@ -3544,33 +3552,35 @@
       const showUserFilter = userBucketCount > 1;
 
       const stats = useMemo(() => {
-        const sessions = filtered.length;
-        const yards    = filtered.reduce((s, e) => s + (e.totalYards || 0), 0);
+        // Stats count only completed entries (planned workouts excluded)
+        const done     = filtered.filter(e => e.completed !== false);
+        const sessions = done.length;
+        const yards    = done.reduce((s, e) => s + (e.totalYards || 0), 0);
         const avg      = sessions ? Math.round(yards / sessions) : 0;
 
-        // Workouts per week
+        // Workouts per week (completed only)
         const now         = Date.now();
         const msPerWeek   = 7 * 24 * 60 * 60 * 1000;
         const fourWksAgo  = now - 4 * msPerWeek;
-        const recentCount = filtered.filter(e => {
+        const recentCount = done.filter(e => {
           const d = e.dateCompleted ? new Date(e.dateCompleted).getTime() : 0;
           return d >= fourWksAgo;
         }).length;
         const wkRecent = recentCount / 4;
         let wkAll = 0;
         if (sessions > 0) {
-          const dates = filtered.map(e => e.dateCompleted ? new Date(e.dateCompleted).getTime() : 0).filter(Boolean);
+          const dates = done.map(e => e.dateCompleted ? new Date(e.dateCompleted).getTime() : 0).filter(Boolean);
           if (dates.length > 0) {
             const weeks = Math.max(1, (now - Math.min(...dates)) / msPerWeek);
             wkAll = sessions / weeks;
           }
         }
 
-        // Type distribution
+        // Type distribution (completed only)
         const typeCounts = new Map();
-        for (const e of filtered) typeCounts.set(e.type, (typeCounts.get(e.type) || 0) + 1);
+        for (const e of done) typeCounts.set(e.type, (typeCounts.get(e.type) || 0) + 1);
         const typeBreakdown = [...typeCounts.entries()]
-          .map(([type, count]) => ({ type, count, pct: Math.round(count / sessions * 100) }))
+          .map(([type, count]) => ({ type, count, pct: sessions ? Math.round(count / sessions * 100) : 0 }))
           .sort((a, b) => b.count - a.count);
 
         return { sessions, yards, avg, wkAll, wkRecent, typeBreakdown };
@@ -3657,6 +3667,29 @@
             </div>
           )}
 
+          {/* Status filter chips */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
+            <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4 }}>Status:</span>
+            {[
+              { id: "all",     label: "All" },
+              { id: "done",    label: "✓ Done" },
+              { id: "planned", label: "Planned" },
+            ].map(s => {
+              const active = filterStatus === s.id;
+              return (
+                <button key={s.id} onClick={() => setFilterStatus(s.id)}
+                  style={{
+                    padding: "6px 12px", borderRadius: 999, border: "none",
+                    background: active ? (s.id === "done" ? "#16a34a" : s.id === "planned" ? "#7c3aed" : "#475569") : "#1e293b",
+                    color: active ? "#fff" : "#94a3b8",
+                    fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}>
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Stats summary */}
           <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             {/* Key numbers row */}
@@ -3722,6 +3755,16 @@
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 13, color: "#cbd5e1", fontVariantNumeric: "tabular-nums" }}>{entry.dateCompleted || "—"}</span>
+                    <button
+                      onClick={() => onUpdateCompleted(entry.id, !(entry.completed !== false))}
+                      title={entry.completed !== false ? "Mark as planned" : "Mark as done"}
+                      style={{
+                        padding: "2px 9px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                        background: entry.completed !== false ? "#16a34a22" : "#7c3aed22",
+                        color:      entry.completed !== false ? "#86efac"   : "#c4b5fd",
+                      }}>
+                      {entry.completed !== false ? "✓ Done" : "Planned"}
+                    </button>
                     {meta && (
                       <span style={{ background: meta.badge, color: meta.badgeText, borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>
                         {meta.emoji} {meta.label}
@@ -4788,6 +4831,7 @@
           })),
           userInitials: cleanInitials,
           notes: (noteDraft || "").trim(),
+          completed: dateDraft <= new Date().toISOString().slice(0, 10),
         };
         // Optimistic: add to local cache and state immediately
         setHistory(prev => {
@@ -4821,6 +4865,21 @@
           setSaveError(err.message || String(err));
         }
       }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft]);
+
+      const handleUpdateCompleted = useCallback(async (id, completed) => {
+        setHistory(prev => {
+          const next = prev.map(e => e.id === id ? { ...e, completed } : e);
+          saveLocalHistory(next);
+          return next;
+        });
+        try {
+          await fetch(`${API_BASE}/workouts/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ completed }),
+          });
+        } catch (err) { console.error("Failed to update completed:", err); }
+      }, []);
 
       const handleUpdateNotes = useCallback(async (id, notes) => {
         setHistory(prev => {
@@ -4950,6 +5009,7 @@
                 history={history}
                 historyLoaded={historyLoaded}
                 onUpdateNotes={handleUpdateNotes}
+                onUpdateCompleted={handleUpdateCompleted}
                 onDelete={handleDelete}
                 onLoadAndPrint={handleLoadAndPrint}
                 onRepeat={handleRepeatFromHistory}
