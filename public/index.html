@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 23:08 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 23:13 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3332,6 +3332,38 @@
       return formatIntervalSecs(scaled);
     }
 
+    // Format a workout as plain text for clipboard sharing.
+    function workoutToText(workout, meta, paceInput, unit = "yds") {
+      if (!workout) return "";
+      const lines = [];
+      const estMin = calcEstimatedMin(workout.blocks);
+      lines.push(`${meta.label} Swim Workout — ${workout.totalYards.toLocaleString()} ${unit} (~${estMin} min)`);
+      if (paceInput) lines.push(`Pace target: ${paceInput}/100`);
+      lines.push("");
+      for (const block of workout.blocks) {
+        const rounds = block.rounds || 1;
+        const roundNote = rounds > 1 ? `  ×${rounds} rounds, ${block.roundRestSecs ?? 30}s rest between` : "";
+        lines.push(`${block.name.toUpperCase()}  (${block.totalYards.toLocaleString()} ${unit})${roundNote}`);
+        const renderSets = () => {
+          for (const set of block.sets) {
+            const ivl = set.interval ? ` @ ${set.interval}` : "";
+            lines.push(`  ${set.reps} × ${set.dist} — ${set.desc}${ivl}`);
+          }
+        };
+        if (rounds > 1) {
+          for (let r = 1; r <= rounds; r++) {
+            lines.push(`  — Round ${r} —`);
+            renderSets();
+            if (r < rounds) lines.push(`  (${block.roundRestSecs ?? 30}s rest)`);
+          }
+        } else {
+          renderSets();
+        }
+        lines.push("");
+      }
+      return lines.join("\n").trimEnd();
+    }
+
     // Sum reps×interval across all sets; fall back to 35 yd/min for sets with no interval.
     function calcEstimatedMin(blocks) {
       const FALLBACK_YD_PER_MIN = 35;
@@ -5051,6 +5083,7 @@
       const [restSecs,      setRestSecs]          = useState(10); // null=manual, 0/5/10/15=auto
       // Print dialog: show "save before printing?" prompt for unsaved workouts
       const [showPrintDialog, setShowPrintDialog] = useState(false);
+      const [copyFlash,       setCopyFlash]       = useState(false);
       // Auth state: null = checking, false = not signed in, true = signed in
       const [authenticated, setAuthenticated] = useState(null);
       const [authMode,      setAuthMode]      = useState(null); // "open" | "apple"
@@ -5691,6 +5724,26 @@
                       }}
                       title="Step through this workout section by section">
                       ▶ Run
+                    </button>
+                    <button
+                      onClick={() => {
+                        const text = workoutToText(workout, meta, paceInput, unit);
+                        navigator.clipboard.writeText(text).then(() => {
+                          setCopyFlash(true);
+                          setTimeout(() => setCopyFlash(false), 2000);
+                        });
+                      }}
+                      style={{
+                        padding: "10px 16px", borderRadius: 8,
+                        border: `1px solid ${copyFlash ? "#22c55e" : "#475569"}`,
+                        background: copyFlash ? "#052e16" : "#0f172a",
+                        color: copyFlash ? "#86efac" : "#e2e8f0",
+                        fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        transition: "all 0.2s",
+                      }}
+                      title="Copy workout as plain text for texting or pasting into Notes">
+                      {copyFlash ? "✓ Copied!" : "📋 Copy Text"}
                     </button>
                     <button
                       onClick={() => {
