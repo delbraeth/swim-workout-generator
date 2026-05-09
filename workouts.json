@@ -1,739 +1,637 @@
-[
-  {
-    "id": "wmof0j24ganu9ru",
-    "savedAt": "2026-04-26T00:11:08.032Z",
-    "dateCompleted": "2026-04-26",
-    "type": "sprint",
-    "typeLabel": "Sprint",
-    "totalYards": 2000,
-    "estimatedMin": 55,
-    "maxYardsCap": 2400,
-    "equipment": {
-      "kickboard": false,
-      "fins": false,
-      "paddles": true,
-      "pullBuoy": false
+{
+  "workouts": [
+    {
+      "id": "wmof0j24ganu9ru",
+      "savedAt": "2026-04-26T00:11:08.032Z",
+      "dateCompleted": "2026-04-26",
+      "type": "sprint",
+      "typeLabel": "Sprint",
+      "totalYards": 2000,
+      "estimatedMin": 55,
+      "maxYardsCap": 2400,
+      "equipment": {
+        "kickboard": false,
+        "fins": false,
+        "paddles": true,
+        "pullBuoy": false
+      },
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 500,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 400,
+              "desc": "Freestyle — easy, focus on long stroke",
+              "interval": "No interval",
+              "focus": "Prime the aerobic engine"
+            },
+            {
+              "reps": 4,
+              "dist": 25,
+              "desc": "Backstroke — easy, open the shoulders",
+              "interval": "On :45",
+              "focus": "Counter the freestyle pull"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 300,
+          "sets": [
+            {
+              "reps": 6,
+              "dist": 50,
+              "desc": "25 Easy / 25 Build (NOT all-out yet)",
+              "interval": "On 1:15",
+              "focus": "Activate fast-twitch, save energy for main set"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — Sprint Pull Power",
+          "section": "main",
+          "totalYards": 1000,
+          "sets": [
+            {
+              "reps": 6,
+              "dist": 50,
+              "desc": "Pull (buoy) — fast, drive arm speed",
+              "interval": "On 1:15",
+              "focus": "Upper-body sprint mechanics, max stroke rate",
+              "eq": "pull"
+            },
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy freestyle — recovery",
+              "interval": "On 4:30",
+              "focus": "Reset between blocks"
+            },
+            {
+              "reps": 8,
+              "dist": 25,
+              "desc": "Freestyle — ALL OUT, max turnover",
+              "interval": "On :45",
+              "focus": "Apply pull power into full sprint"
+            },
+            {
+              "reps": 6,
+              "dist": 50,
+              "desc": "Choice — fast, descend 1→6",
+              "interval": "On 1:30",
+              "focus": "Each one faster, finish strongest"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 200,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy Freestyle — long, relaxed stroke",
+              "interval": "No interval",
+              "focus": "Bring heart rate down, flush the muscles"
+            }
+          ]
+        }
+      ],
+      "notes": ""
     },
-    "blocks": [
-      {
-        "name": "Warm-Up",
-        "section": "warmup",
-        "totalYards": 500,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 400,
-            "desc": "Freestyle — easy, focus on long stroke",
-            "interval": "No interval",
-            "focus": "Prime the aerobic engine"
-          },
-          {
-            "reps": 4,
-            "dist": 25,
-            "desc": "Backstroke — easy, open the shoulders",
-            "interval": "On :45",
-            "focus": "Counter the freestyle pull"
-          }
-        ]
+    {
+      "id": "wmof19j46srh3a1",
+      "savedAt": "2026-04-26T00:31:43.110Z",
+      "dateCompleted": "2026-04-26",
+      "type": "technique",
+      "typeLabel": "Technique",
+      "totalYards": 2150,
+      "estimatedMin": 60,
+      "maxYardsCap": 2400,
+      "equipment": {
+        "kickboard": false,
+        "fins": true,
+        "paddles": true,
+        "pullBuoy": true
       },
-      {
-        "name": "Drill / Pre-Main Set",
-        "section": "drill",
-        "totalYards": 300,
-        "sets": [
-          {
-            "reps": 6,
-            "dist": 50,
-            "desc": "25 Easy / 25 Build (NOT all-out yet)",
-            "interval": "On 1:15",
-            "focus": "Activate fast-twitch, save energy for main set"
-          }
-        ]
-      },
-      {
-        "name": "Main Set — Sprint Pull Power",
-        "section": "main",
-        "totalYards": 1000,
-        "sets": [
-          {
-            "reps": 6,
-            "dist": 50,
-            "desc": "Pull (buoy) — fast, drive arm speed",
-            "interval": "On 1:15",
-            "focus": "Upper-body sprint mechanics, max stroke rate",
-            "eq": "pull"
-          },
-          {
-            "reps": 1,
-            "dist": 200,
-            "desc": "Easy freestyle — recovery",
-            "interval": "On 4:30",
-            "focus": "Reset between blocks"
-          },
-          {
-            "reps": 8,
-            "dist": 25,
-            "desc": "Freestyle — ALL OUT, max turnover",
-            "interval": "On :45",
-            "focus": "Apply pull power into full sprint"
-          },
-          {
-            "reps": 6,
-            "dist": 50,
-            "desc": "Choice — fast, descend 1→6",
-            "interval": "On 1:30",
-            "focus": "Each one faster, finish strongest"
-          }
-        ]
-      },
-      {
-        "name": "Cool-Down",
-        "section": "cooldown",
-        "totalYards": 200,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 200,
-            "desc": "Easy Freestyle — long, relaxed stroke",
-            "interval": "No interval",
-            "focus": "Bring heart rate down, flush the muscles"
-          }
-        ]
-      }
-    ],
-    "notes": ""
-  },
-  {
-    "id": "wmof19j46srh3a1",
-    "savedAt": "2026-04-26T00:31:43.110Z",
-    "dateCompleted": "2026-04-26",
-    "type": "technique",
-    "typeLabel": "Technique",
-    "totalYards": 2150,
-    "estimatedMin": 60,
-    "maxYardsCap": 2400,
-    "equipment": {
-      "kickboard": false,
-      "fins": true,
-      "paddles": true,
-      "pullBuoy": true
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 400,
+              "desc": "Easy Freestyle",
+              "interval": "No interval — swim easy",
+              "focus": "Loosen up, steady breathing"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "Kick — slow, focus on stroke alignment (board optional)",
+              "interval": "On 1:45",
+              "focus": "Isolate leg technique",
+              "eq": "kick"
+            },
+            {
+              "reps": 2,
+              "dist": 100,
+              "desc": "Pull (buoy) — high-elbow catch, long stroke",
+              "interval": "On 2:20",
+              "focus": "Isolate upper-body technique",
+              "eq": "pull"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — All-Stroke Technique",
+          "section": "main",
+          "totalYards": 1100,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 100,
+              "desc": "Choice of stroke — SLOW, perfect form over speed",
+              "interval": "On 2:30",
+              "focus": "No rushing — technique over pace"
+            },
+            {
+              "reps": 8,
+              "dist": 50,
+              "desc": "2 each: fly drill / back drill / breast drill / free drill",
+              "interval": "On 1:30",
+              "focus": "Key isolation drill for each stroke"
+            },
+            {
+              "reps": 4,
+              "dist": 75,
+              "desc": "25 Drill + 50 Swim (same stroke — apply what you drilled)",
+              "interval": "On 1:50",
+              "focus": "Bridge drill into real swimming"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 250,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 150,
+              "desc": "Easy Backstroke or choice",
+              "interval": "No interval",
+              "focus": "Let lactic acid clear, open the chest"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Easy Freestyle — progressively slower",
+              "interval": "No interval",
+              "focus": "Full cool-down — slowest laps of the day"
+            }
+          ]
+        }
+      ],
+      "notes": ""
     },
-    "blocks": [
-      {
-        "name": "Warm-Up",
-        "section": "warmup",
-        "totalYards": 400,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 400,
-            "desc": "Easy Freestyle",
-            "interval": "No interval — swim easy",
-            "focus": "Loosen up, steady breathing"
-          }
-        ]
+    {
+      "id": "wmoiy1jkxgtcxr2",
+      "savedAt": "2026-04-28T18:12:36.321Z",
+      "dateCompleted": "2026-04-28",
+      "type": "mixed",
+      "typeLabel": "Mixed",
+      "totalYards": 2200,
+      "estimatedMin": 60,
+      "maxYardsCap": 2200,
+      "equipment": {
+        "kickboard": true,
+        "fins": false,
+        "paddles": true,
+        "pullBuoy": true
       },
-      {
-        "name": "Drill / Pre-Main Set",
-        "section": "drill",
-        "totalYards": 400,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 50,
-            "desc": "Kick — slow, focus on stroke alignment (board optional)",
-            "interval": "On 1:45",
-            "focus": "Isolate leg technique",
-            "eq": "kick"
-          },
-          {
-            "reps": 2,
-            "dist": 100,
-            "desc": "Pull (buoy) — high-elbow catch, long stroke",
-            "interval": "On 2:20",
-            "focus": "Isolate upper-body technique",
-            "eq": "pull"
-          }
-        ]
-      },
-      {
-        "name": "Main Set — All-Stroke Technique",
-        "section": "main",
-        "totalYards": 1100,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 100,
-            "desc": "Choice of stroke — SLOW, perfect form over speed",
-            "interval": "On 2:30",
-            "focus": "No rushing — technique over pace"
-          },
-          {
-            "reps": 8,
-            "dist": 50,
-            "desc": "2 each: fly drill / back drill / breast drill / free drill",
-            "interval": "On 1:30",
-            "focus": "Key isolation drill for each stroke"
-          },
-          {
-            "reps": 4,
-            "dist": 75,
-            "desc": "25 Drill + 50 Swim (same stroke — apply what you drilled)",
-            "interval": "On 1:50",
-            "focus": "Bridge drill into real swimming"
-          }
-        ]
-      },
-      {
-        "name": "Cool-Down",
-        "section": "cooldown",
-        "totalYards": 250,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 150,
-            "desc": "Easy Backstroke or choice",
-            "interval": "No interval",
-            "focus": "Let lactic acid clear, open the chest"
-          },
-          {
-            "reps": 1,
-            "dist": 100,
-            "desc": "Easy Freestyle — progressively slower",
-            "interval": "No interval",
-            "focus": "Full cool-down — slowest laps of the day"
-          }
-        ]
-      }
-    ],
-    "notes": ""
-  },
-  {
-    "id": "wmoiy1jkxgtcxr2",
-    "savedAt": "2026-04-28T18:12:36.321Z",
-    "dateCompleted": "2026-04-28",
-    "type": "mixed",
-    "typeLabel": "Mixed",
-    "totalYards": 2200,
-    "estimatedMin": 60,
-    "maxYardsCap": 2200,
-    "equipment": {
-      "kickboard": true,
-      "fins": false,
-      "paddles": true,
-      "pullBuoy": true
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 300,
+              "desc": "Freestyle — build from easy to moderate",
+              "interval": "No interval",
+              "focus": "Gradually wake up"
+            },
+            {
+              "reps": 4,
+              "dist": 25,
+              "desc": "Kick (no board, streamlined)",
+              "interval": "On :55",
+              "focus": "Loosen hips and ankles"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "Kick — moderate, choice of stroke (board optional)",
+              "interval": "On 1:40",
+              "focus": "Leg activation",
+              "eq": "kick"
+            },
+            {
+              "reps": 2,
+              "dist": 100,
+              "desc": "Pull (buoy) — moderate, smooth rotation",
+              "interval": "On 2:15",
+              "focus": "Upper-body warm-up before mix",
+              "eq": "pull"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — Aerobic + IM Combo",
+          "section": "main",
+          "totalYards": 1200,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 400,
+              "desc": "Freestyle — steady aerobic effort",
+              "interval": "On 8:20",
+              "focus": "Aerobic base"
+            },
+            {
+              "reps": 4,
+              "dist": 100,
+              "desc": "100 IM — moderate, smooth transitions",
+              "interval": "On 2:45",
+              "focus": "IM after aerobic load"
+            },
+            {
+              "reps": 4,
+              "dist": 100,
+              "desc": "Freestyle — descending pace 1→4",
+              "interval": "On 2:15",
+              "focus": "Build pace round to round"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 200,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
+              "interval": "On 1:20",
+              "focus": "Gentle recovery — no effort, just move"
+            }
+          ]
+        }
+      ],
+      "notes": "Wil change the 400 in the main set to maybe either 4x100 or 2x200 with a breathing pattern"
     },
-    "blocks": [
-      {
-        "name": "Warm-Up",
-        "section": "warmup",
-        "totalYards": 400,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 300,
-            "desc": "Freestyle — build from easy to moderate",
-            "interval": "No interval",
-            "focus": "Gradually wake up"
-          },
-          {
-            "reps": 4,
-            "dist": 25,
-            "desc": "Kick (no board, streamlined)",
-            "interval": "On :55",
-            "focus": "Loosen hips and ankles"
-          }
-        ]
+    {
+      "id": "wmouto38r4jdv4v",
+      "savedAt": "2026-05-07T01:43:24.267Z",
+      "dateCompleted": "2026-05-07",
+      "type": "fly",
+      "typeLabel": "Specialty Fly",
+      "totalYards": 2000,
+      "estimatedMin": 59,
+      "maxYardsCap": 2200,
+      "equipment": {
+        "kickboard": true,
+        "fins": true,
+        "paddles": false,
+        "pullBuoy": false
       },
-      {
-        "name": "Drill / Pre-Main Set",
-        "section": "drill",
-        "totalYards": 400,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 50,
-            "desc": "Kick — moderate, choice of stroke (board optional)",
-            "interval": "On 1:40",
-            "focus": "Leg activation",
-            "eq": "kick"
-          },
-          {
-            "reps": 2,
-            "dist": 100,
-            "desc": "Pull (buoy) — moderate, smooth rotation",
-            "interval": "On 2:15",
-            "focus": "Upper-body warm-up before mix",
-            "eq": "pull"
-          }
-        ]
-      },
-      {
-        "name": "Main Set — Aerobic + IM Combo",
-        "section": "main",
-        "totalYards": 1200,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 400,
-            "desc": "Freestyle — steady aerobic effort",
-            "interval": "On 8:20",
-            "focus": "Aerobic base"
-          },
-          {
-            "reps": 4,
-            "dist": 100,
-            "desc": "100 IM — moderate, smooth transitions",
-            "interval": "On 2:45",
-            "focus": "IM after aerobic load"
-          },
-          {
-            "reps": 4,
-            "dist": 100,
-            "desc": "Freestyle — descending pace 1→4",
-            "interval": "On 2:15",
-            "focus": "Build pace round to round"
-          }
-        ]
-      },
-      {
-        "name": "Cool-Down",
-        "section": "cooldown",
-        "totalYards": 200,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 50,
-            "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
-            "interval": "On 1:20",
-            "focus": "Gentle recovery — no effort, just move"
-          }
-        ]
-      }
-    ],
-    "notes": "Wil change the 400 in the main set to maybe either 4x100 or 2x200 with a breathing pattern"
-  },
-  {
-    "id": "wmouto38r4jdv4v",
-    "savedAt": "2026-05-07T01:43:24.267Z",
-    "dateCompleted": "2026-05-07",
-    "type": "fly",
-    "typeLabel": "Specialty Fly",
-    "totalYards": 2000,
-    "estimatedMin": 59,
-    "maxYardsCap": 2200,
-    "equipment": {
-      "kickboard": true,
-      "fins": true,
-      "paddles": false,
-      "pullBuoy": false
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy Freestyle",
+              "interval": "No interval",
+              "focus": "Settle into rhythm"
+            },
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "25 Drill / 25 Easy Swim (stroke choice)",
+              "interval": "On 1:15",
+              "focus": "Feel for the water"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 300,
+          "sets": [
+            {
+              "reps": 6,
+              "dist": 50,
+              "desc": "Dolphin kick — alternate streamline on stomach / on back",
+              "interval": "On 1:45",
+              "focus": "Dolphin rhythm without arm fatigue",
+              "eq": "kick"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — Fly Race Test Day",
+          "section": "main",
+          "totalYards": 1100,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "25 fly + 75 free — easy warm-up",
+              "interval": "On 2:30",
+              "focus": "Open up"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Butterfly — TEST 100 (race pace)",
+              "interval": "On 3:30",
+              "focus": "100 fly test"
+            },
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy backstroke — recovery",
+              "interval": "On 5:30",
+              "focus": "Reset"
+            },
+            {
+              "reps": 1,
+              "dist": 50,
+              "desc": "Butterfly — TEST 50 (ALL OUT)",
+              "interval": "On 2:00",
+              "focus": "Sprint fly test"
+            },
+            {
+              "reps": 1,
+              "dist": 250,
+              "desc": "Easy choice — recovery",
+              "interval": "On 5:00",
+              "focus": "Reset"
+            },
+            {
+              "reps": 4,
+              "dist": 75,
+              "desc": "25 fly fast / 50 free easy",
+              "interval": "On 2:30",
+              "focus": "Apply fly volume"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Easy choice — close",
+              "interval": "On 2:00",
+              "focus": "Cool down"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 200,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
+              "interval": "On 1:20",
+              "focus": "Gentle recovery — no effort, just move"
+            }
+          ]
+        }
+      ],
+      "userInitials": "",
+      "notes": ""
     },
-    "blocks": [
-      {
-        "name": "Warm-Up",
-        "section": "warmup",
-        "totalYards": 400,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 200,
-            "desc": "Easy Freestyle",
-            "interval": "No interval",
-            "focus": "Settle into rhythm"
-          },
-          {
-            "reps": 4,
-            "dist": 50,
-            "desc": "25 Drill / 25 Easy Swim (stroke choice)",
-            "interval": "On 1:15",
-            "focus": "Feel for the water"
-          }
-        ]
+    {
+      "id": "wmoutr5k18p1mbc",
+      "savedAt": "2026-05-07T01:45:47.233Z",
+      "dateCompleted": "2026-05-07",
+      "type": "mixed",
+      "typeLabel": "Mixed",
+      "totalYards": 2100,
+      "estimatedMin": 62,
+      "maxYardsCap": 2300,
+      "equipment": {
+        "kickboard": false,
+        "fins": true,
+        "paddles": true,
+        "pullBuoy": true
       },
-      {
-        "name": "Drill / Pre-Main Set",
-        "section": "drill",
-        "totalYards": 300,
-        "sets": [
-          {
-            "reps": 6,
-            "dist": 50,
-            "desc": "Dolphin kick — alternate streamline on stomach / on back",
-            "interval": "On 1:45",
-            "focus": "Dolphin rhythm without arm fatigue",
-            "eq": "kick"
-          }
-        ]
-      },
-      {
-        "name": "Main Set — Fly Race Test Day",
-        "section": "main",
-        "totalYards": 1100,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 100,
-            "desc": "25 fly + 75 free — easy warm-up",
-            "interval": "On 2:30",
-            "focus": "Open up"
-          },
-          {
-            "reps": 1,
-            "dist": 100,
-            "desc": "Butterfly — TEST 100 (race pace)",
-            "interval": "On 3:30",
-            "focus": "100 fly test"
-          },
-          {
-            "reps": 1,
-            "dist": 200,
-            "desc": "Easy backstroke — recovery",
-            "interval": "On 5:30",
-            "focus": "Reset"
-          },
-          {
-            "reps": 1,
-            "dist": 50,
-            "desc": "Butterfly — TEST 50 (ALL OUT)",
-            "interval": "On 2:00",
-            "focus": "Sprint fly test"
-          },
-          {
-            "reps": 1,
-            "dist": 250,
-            "desc": "Easy choice — recovery",
-            "interval": "On 5:00",
-            "focus": "Reset"
-          },
-          {
-            "reps": 4,
-            "dist": 75,
-            "desc": "25 fly fast / 50 free easy",
-            "interval": "On 2:30",
-            "focus": "Apply fly volume"
-          },
-          {
-            "reps": 1,
-            "dist": 100,
-            "desc": "Easy choice — close",
-            "interval": "On 2:00",
-            "focus": "Cool down"
-          }
-        ]
-      },
-      {
-        "name": "Cool-Down",
-        "section": "cooldown",
-        "totalYards": 200,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 50,
-            "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
-            "interval": "On 1:20",
-            "focus": "Gentle recovery — no effort, just move"
-          }
-        ]
-      }
-    ],
-    "userInitials": "",
-    "notes": ""
-  },
-  {
-    "id": "wmoutr5k18p1mbc",
-    "savedAt": "2026-05-07T01:45:47.233Z",
-    "dateCompleted": "2026-05-07",
-    "type": "mixed",
-    "typeLabel": "Mixed",
-    "totalYards": 2100,
-    "estimatedMin": 62,
-    "maxYardsCap": 2300,
-    "equipment": {
-      "kickboard": false,
-      "fins": true,
-      "paddles": true,
-      "pullBuoy": true
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 500,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 400,
+              "desc": "Freestyle — easy, focus on long stroke",
+              "interval": "No interval",
+              "focus": "Prime the aerobic engine"
+            },
+            {
+              "reps": 4,
+              "dist": 25,
+              "desc": "Backstroke — easy, open the shoulders",
+              "interval": "On :45",
+              "focus": "Counter the freestyle pull"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 300,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 75,
+              "desc": "Kick 25 / Drill 25 / Swim 25 — stroke choice",
+              "interval": "On 1:40",
+              "focus": "All-around activation before varied main set",
+              "eq": "kickPart"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — Pull + Kick Mix",
+          "section": "main",
+          "totalYards": 1100,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 100,
+              "desc": "Pull (buoy) — moderate, focus on catch",
+              "interval": "On 2:15",
+              "focus": "Upper-body block",
+              "eq": "pull"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Easy freestyle — transition",
+              "interval": "On 2:00",
+              "focus": "Reset between blocks"
+            },
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "Kick — moderate effort (board optional)",
+              "interval": "On 1:45",
+              "focus": "Lower-body block",
+              "eq": "kick"
+            },
+            {
+              "reps": 4,
+              "dist": 100,
+              "desc": "Freestyle — strong, integrate both",
+              "interval": "On 2:15",
+              "focus": "Apply pull + kick into full stroke"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 200,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy Freestyle — long, relaxed stroke",
+              "interval": "No interval",
+              "focus": "Bring heart rate down, flush the muscles"
+            }
+          ]
+        }
+      ],
+      "userInitials": "",
+      "notes": ""
     },
-    "blocks": [
-      {
-        "name": "Warm-Up",
-        "section": "warmup",
-        "totalYards": 500,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 400,
-            "desc": "Freestyle — easy, focus on long stroke",
-            "interval": "No interval",
-            "focus": "Prime the aerobic engine"
-          },
-          {
-            "reps": 4,
-            "dist": 25,
-            "desc": "Backstroke — easy, open the shoulders",
-            "interval": "On :45",
-            "focus": "Counter the freestyle pull"
-          }
-        ]
+    {
+      "id": "wmoxnnmt52jopx9",
+      "savedAt": "2026-05-09T01:18:23.801Z",
+      "dateCompleted": "2026-05-09",
+      "type": "endurance",
+      "typeLabel": "Endurance",
+      "totalYards": 2200,
+      "estimatedMin": 54,
+      "maxYardsCap": 2200,
+      "equipment": {
+        "kickboard": false,
+        "fins": false,
+        "paddles": true,
+        "pullBuoy": true,
+        "snorkel": false
       },
-      {
-        "name": "Drill / Pre-Main Set",
-        "section": "drill",
-        "totalYards": 300,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 75,
-            "desc": "Kick 25 / Drill 25 / Swim 25 — stroke choice",
-            "interval": "On 1:40",
-            "focus": "All-around activation before varied main set",
-            "eq": "kickPart"
-          }
-        ]
-      },
-      {
-        "name": "Main Set — Pull + Kick Mix",
-        "section": "main",
-        "totalYards": 1100,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 100,
-            "desc": "Pull (buoy) — moderate, focus on catch",
-            "interval": "On 2:15",
-            "focus": "Upper-body block",
-            "eq": "pull"
-          },
-          {
-            "reps": 1,
-            "dist": 100,
-            "desc": "Easy freestyle — transition",
-            "interval": "On 2:00",
-            "focus": "Reset between blocks"
-          },
-          {
-            "reps": 4,
-            "dist": 50,
-            "desc": "Kick — moderate effort (board optional)",
-            "interval": "On 1:45",
-            "focus": "Lower-body block",
-            "eq": "kick"
-          },
-          {
-            "reps": 4,
-            "dist": 100,
-            "desc": "Freestyle — strong, integrate both",
-            "interval": "On 2:15",
-            "focus": "Apply pull + kick into full stroke"
-          }
-        ]
-      },
-      {
-        "name": "Cool-Down",
-        "section": "cooldown",
-        "totalYards": 200,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 200,
-            "desc": "Easy Freestyle — long, relaxed stroke",
-            "interval": "No interval",
-            "focus": "Bring heart rate down, flush the muscles"
-          }
-        ]
-      }
-    ],
-    "userInitials": "",
-    "notes": ""
-  },
-  {
-    "id": "wmowi70w7osl0pu",
-    "savedAt": "2026-05-08T05:57:44.647Z",
-    "dateCompleted": "2026-05-08",
-    "type": "mixed",
-    "typeLabel": "Mixed",
-    "totalYards": 1900,
-    "estimatedMin": 56,
-    "maxYardsCap": 2400,
-    "equipment": {
-      "kickboard": false,
-      "fins": false,
-      "paddles": false,
-      "pullBuoy": false
-    },
-    "blocks": [
-      {
-        "name": "Warm-Up",
-        "section": "warmup",
-        "totalYards": 400,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 200,
-            "desc": "Easy Freestyle",
-            "interval": "No interval",
-            "focus": "Settle into rhythm"
-          },
-          {
-            "reps": 4,
-            "dist": 50,
-            "desc": "25 Drill / 25 Easy Swim (stroke choice)",
-            "interval": "On 1:35",
-            "focus": "Feel for the water"
-          }
-        ]
-      },
-      {
-        "name": "Drill / Pre-Main Set",
-        "section": "drill",
-        "totalYards": 300,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 75,
-            "desc": "Kick 25 / Drill 25 / Swim 25 — stroke choice",
-            "interval": "On 2:05",
-            "focus": "All-around activation before varied main set",
-            "eq": "kickPart"
-          }
-        ]
-      },
-      {
-        "name": "Main Set — Mixed Ascending Tower",
-        "section": "main",
-        "totalYards": 1000,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 100,
-            "desc": "Choice stroke — controlled sprint, wake up fast-twitch",
-            "interval": "On 2:50",
-            "focus": "Start sharp before the distance builds"
-          },
-          {
-            "reps": 1,
-            "dist": 200,
-            "desc": "100 IM + 100 free — moderate, smooth transitions",
-            "interval": "On 5:40",
-            "focus": "Add IM complexity as volume grows"
-          },
-          {
-            "reps": 1,
-            "dist": 300,
-            "desc": "Freestyle — moderate to strong, 3 × 100 in your head",
-            "interval": "On 8:10",
-            "focus": "Sustain pace over longer distance"
-          },
-          {
-            "reps": 1,
-            "dist": 400,
-            "desc": "Choice stroke — strong, finish better than you started",
-            "interval": "On 11:20",
-            "focus": "Top of the tower — best effort of the set"
-          }
-        ]
-      },
-      {
-        "name": "Cool-Down",
-        "section": "cooldown",
-        "totalYards": 200,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 200,
-            "desc": "Easy Freestyle — long, relaxed stroke",
-            "interval": "No interval",
-            "focus": "Bring heart rate down, flush the muscles"
-          }
-        ]
-      }
-    ],
-    "userInitials": "PC",
-    "notes": "TOWER TEST"
-  },
-  {
-    "id": "wmoxnnmt52jopx9",
-    "savedAt": "2026-05-09T01:18:23.801Z",
-    "dateCompleted": "2026-05-09",
-    "type": "endurance",
-    "typeLabel": "Endurance",
-    "totalYards": 2200,
-    "estimatedMin": 54,
-    "maxYardsCap": 2200,
-    "equipment": {
-      "kickboard": false,
-      "fins": false,
-      "paddles": true,
-      "pullBuoy": true,
-      "snorkel": false
-    },
-    "blocks": [
-      {
-        "name": "Warm-Up",
-        "section": "warmup",
-        "totalYards": 400,
-        "sets": [
-          {
-            "reps": 1,
-            "dist": 300,
-            "desc": "Freestyle — build from easy to moderate",
-            "interval": "No interval",
-            "focus": "Gradually wake up"
-          },
-          {
-            "reps": 4,
-            "dist": 25,
-            "desc": "Kick (no board, streamlined)",
-            "interval": "On 1:00",
-            "focus": "Loosen hips and ankles"
-          }
-        ]
-      },
-      {
-        "name": "Drill / Pre-Main Set",
-        "section": "drill",
-        "totalYards": 400,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 100,
-            "desc": "Pull (buoy) — easy/moderate, relaxed stroke",
-            "interval": "On 2:15",
-            "focus": "Aerobic priming, conserve energy",
-            "eq": "pull"
-          }
-        ]
-      },
-      {
-        "name": "Main Set — Heart Rate Recovery",
-        "section": "main",
-        "totalYards": 1200,
-        "sets": [
-          {
-            "reps": 12,
-            "dist": 100,
-            "desc": "Freestyle — moderate aerobic, focus on staying in HR zone 2",
-            "interval": "On 2:15",
-            "focus": "Build aerobic fitness with HR feedback"
-          }
-        ]
-      },
-      {
-        "name": "Cool-Down",
-        "section": "cooldown",
-        "totalYards": 200,
-        "sets": [
-          {
-            "reps": 4,
-            "dist": 50,
-            "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
-            "interval": "On 1:20",
-            "focus": "Gentle recovery — no effort, just move"
-          }
-        ]
-      }
-    ],
-    "userInitials": "",
-    "notes": ""
-  }
-]
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 300,
+              "desc": "Freestyle — build from easy to moderate",
+              "interval": "No interval",
+              "focus": "Gradually wake up"
+            },
+            {
+              "reps": 4,
+              "dist": 25,
+              "desc": "Kick (no board, streamlined)",
+              "interval": "On 1:00",
+              "focus": "Loosen hips and ankles"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 100,
+              "desc": "Pull (buoy) — easy/moderate, relaxed stroke",
+              "interval": "On 2:15",
+              "focus": "Aerobic priming, conserve energy",
+              "eq": "pull"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — Heart Rate Recovery",
+          "section": "main",
+          "totalYards": 1200,
+          "sets": [
+            {
+              "reps": 12,
+              "dist": 100,
+              "desc": "Freestyle — moderate aerobic, focus on staying in HR zone 2",
+              "interval": "On 2:15",
+              "focus": "Build aerobic fitness with HR feedback"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 200,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
+              "interval": "On 1:20",
+              "focus": "Gentle recovery — no effort, just move"
+            }
+          ]
+        }
+      ],
+      "userInitials": "",
+      "notes": ""
+    }
+  ],
+  "favorites": []
+}
