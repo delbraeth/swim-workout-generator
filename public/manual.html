@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Swim Workout Generator — User Manual</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f172a;
+      --bg2:       #1e293b;
+      --bg3:       #0f172a;
+      --border:    #334155;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --blue:      #3b82f6;
+      --blue-lt:   #93c5fd;
+      --teal:      #2dd4bf;
+      --green:     #22c55e;
+      --amber:     #f59e0b;
+      --purple:    #a78bfa;
+      --red:       #f87171;
+      --radius:    10px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: 100vh; }
+
+    nav {
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 24px 0 40px;
+    }
+
+    .nav-logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .nav-logo h2 { font-size: 14px; font-weight: 800; color: var(--blue-lt); letter-spacing: -0.01em; }
+    .nav-logo p  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    nav a {
+      display: block;
+      padding: 6px 20px;
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+    nav a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    nav a.active { color: var(--blue-lt); border-left-color: var(--blue); background: rgba(59,130,246,0.08); }
+    nav .nav-section {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #475569;
+      padding: 16px 20px 4px;
+    }
+
+    main {
+      flex: 1;
+      max-width: 820px;
+      padding: 48px 48px 80px;
+    }
+
+    @media (max-width: 700px) {
+      nav { display: none; }
+      main { padding: 24px 20px 60px; }
+    }
+
+    /* ── Typography ── */
+    h1 { font-size: 32px; font-weight: 900; color: #fff; letter-spacing: -0.03em; margin-bottom: 8px; }
+    h2 { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.02em; margin: 52px 0 16px; padding-top: 8px; border-top: 1px solid var(--border); }
+    h3 { font-size: 16px; font-weight: 700; color: var(--blue-lt); margin: 28px 0 10px; }
+    h4 { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 20px 0 6px; }
+    p  { color: var(--muted); margin-bottom: 14px; }
+    p strong { color: var(--text); font-weight: 600; }
+    ul, ol { color: var(--muted); padding-left: 20px; margin-bottom: 14px; }
+    li { margin-bottom: 6px; }
+    li strong { color: var(--text); }
+    a { color: var(--blue-lt); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 13px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--teal);
+    }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+      border: 1px solid #1e40af;
+      border-radius: 16px;
+      padding: 36px 40px;
+      margin-bottom: 40px;
+    }
+    .hero-sub { color: var(--blue-lt); font-size: 14px; margin-bottom: 4px; font-weight: 600; }
+    .hero p { color: #cbd5e1; margin-bottom: 0; font-size: 15px; }
+    .hero-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 20px; padding: 8px 14px; border-radius: 8px;
+      background: rgba(59,130,246,0.15); border: 1px solid var(--blue);
+      color: var(--blue-lt); font-size: 13px; font-weight: 600;
+      text-decoration: none;
+    }
+    .hero-back:hover { background: rgba(59,130,246,0.25); text-decoration: none; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .card h3 { margin-top: 0; }
+
+    /* ── Feature grid ── */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+    .feat {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .feat-icon { font-size: 22px; margin-bottom: 8px; }
+    .feat-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .feat-desc { font-size: 12px; color: var(--muted); }
+
+    /* ── Step list ── */
+    .steps { counter-reset: step; }
+    .step {
+      display: flex; gap: 16px; margin-bottom: 16px;
+      counter-increment: step;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      background: var(--blue);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; color: #fff;
+      margin-top: 2px;
+    }
+    .step-num::before { content: counter(step); }
+    .step-body { flex: 1; }
+    .step-body strong { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
+    .step-body p { margin-bottom: 0; font-size: 13px; }
+
+    /* ── Callout ── */
+    .callout {
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      display: flex; gap: 12px; align-items: flex-start;
+      font-size: 13px;
+    }
+    .callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .callout-body { color: var(--muted); }
+    .callout-body strong { color: var(--text); display: block; margin-bottom: 2px; }
+    .callout.tip    { background: rgba(34,197,94,0.08);  border: 1px solid rgba(34,197,94,0.25); }
+    .callout.note   { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); }
+    .callout.warn   { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); }
+
+    /* ── Badge pills ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 700;
+    }
+    .badge-blue   { background: #1e3a5f; color: var(--blue-lt); }
+    .badge-teal   { background: #0f3430; color: var(--teal); }
+    .badge-amber  { background: #2d1f00; color: var(--amber); }
+    .badge-purple { background: #2d1f4e; color: var(--purple); }
+    .badge-green  { background: #052e16; color: var(--green); }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+    th { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+    td { padding: 10px 12px; border-bottom: 1px solid #1e293b; color: var(--muted); vertical-align: top; }
+    td:first-child { color: var(--text); font-weight: 600; white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Keyboard shortcut ── */
+    kbd {
+      background: #1e293b; border: 1px solid #475569; border-bottom-width: 2px;
+      border-radius: 4px; padding: 1px 7px; font-size: 12px; font-family: inherit;
+      color: var(--text);
+    }
+
+    /* ── Section anchor offset ── */
+    section { scroll-margin-top: 24px; }
+
+    /* ── Divider ── */
+    hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+
+    /* ── Workout type color pills ── */
+    .type-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── Sidebar nav ── -->
+  <nav id="sidebar">
+    <div class="nav-logo">
+      <h2>🏊‍♂️ User Manual</h2>
+      <p>Swim Workout Generator</p>
+    </div>
+
+    <div class="nav-section">Getting Started</div>
+    <a href="#overview">Overview</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="#signin">Signing In</a>
+
+    <div class="nav-section">Generator</div>
+    <a href="#workout-types">Workout Types</a>
+    <a href="#yardage-slider">Yardage &amp; Pace</a>
+    <a href="#pool-mode">Pool Mode</a>
+    <a href="#equipment">Equipment</a>
+    <a href="#generating">Generating</a>
+
+    <div class="nav-section">Workout View</div>
+    <a href="#sections">Workout Sections</a>
+    <a href="#intervals">Intervals</a>
+    <a href="#descriptions">Set Descriptions</a>
+    <a href="#swap">Set Swap</a>
+    <a href="#repeat-sets">Repeat Sets</a>
+    <a href="#favorites">Favorites</a>
+    <a href="#regen">Regenerating Sections</a>
+
+    <div class="nav-section">Running a Workout</div>
+    <a href="#run-mode">Run Mode</a>
+    <a href="#pace-clock">Pace Clock</a>
+    <a href="#rest-timer">Rest Timer</a>
+
+    <div class="nav-section">History &amp; Sharing</div>
+    <a href="#saving">Saving</a>
+    <a href="#history">History View</a>
+    <a href="#stats">Stats Panel</a>
+    <a href="#copy-print">Copy &amp; Print</a>
+
+    <div class="nav-section">Settings</div>
+    <a href="#user-settings">Your Settings</a>
+    <a href="#tips">Tips &amp; Tricks</a>
+  </nav>
+
+  <!-- ── Main content ── -->
+  <main>
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-sub">🏊‍♂️ Swim Workout Generator</div>
+      <h1>User Manual</h1>
+      <p>Everything you need to generate, customize, run, and track personalized swim workouts.</p>
+      <a href="/" class="hero-back">← Back to the app</a>
+    </div>
+
+    <!-- ══ OVERVIEW ══ -->
+    <section id="overview">
+      <h2>Overview</h2>
+      <p>The Swim Workout Generator creates structured swim workouts tailored to your pool, pace, available equipment, and time budget. Every workout is built from four sections — Warm-Up, Drill, Main Set, and Cool-Down — chosen from a library of options calibrated for masters swimmers.</p>
+
+      <div class="grid">
+        <div class="feat"><div class="feat-icon">🎯</div><div class="feat-title">9 Workout Types</div><div class="feat-desc">IM, Distance, Sprint, Endurance, Technique, Mixed, plus Backstroke, Breaststroke, and Butterfly specialty workouts.</div></div>
+        <div class="feat"><div class="feat-icon">🔁</div><div class="feat-title">Repeat Sets</div><div class="feat-desc">Main sets can automatically repeat 2–3 rounds with rest between, filling your yardage target efficiently.</div></div>
+        <div class="feat"><div class="feat-icon">⏱</div><div class="feat-title">Pace-Aware Intervals</div><div class="feat-desc">All intervals scale to your personal 100-yard pace target. Adjust globally or per set.</div></div>
+        <div class="feat"><div class="feat-icon">🏊</div><div class="feat-title">25yd &amp; 50m Pools</div><div class="feat-desc">Separate option banks for 25-yard and 50-meter pools. Native 50m sets for most workout types.</div></div>
+        <div class="feat"><div class="feat-icon">📱</div><div class="feat-title">Run Mode</div><div class="feat-desc">Step through sets one at a time with a full-screen pace clock, elapsed time, and auto-advance rest timer.</div></div>
+        <div class="feat"><div class="feat-icon">📊</div><div class="feat-title">History &amp; Stats</div><div class="feat-desc">Every saved workout is logged. Stats panel shows sessions, total yards, weekly rate, and type breakdown.</div></div>
+        <div class="feat"><div class="feat-icon">⭐</div><div class="feat-title">Favorites</div><div class="feat-desc">Star your favorite main sets. They get extra weight in the generator and are pinned in your History.</div></div>
+        <div class="feat"><div class="feat-icon">☁️</div><div class="feat-title">Cloud Sync</div><div class="feat-desc">Your workout history, favorites, and settings are stored in the cloud and sync across devices.</div></div>
+      </div>
+    </section>
+
+    <!-- ══ QUICK START ══ -->
+    <section id="quickstart">
+      <h2>Quick Start</h2>
+      <div class="steps">
+        <div class="step"><div class="step-num"></div><div class="step-body"><strong>Sign in with Apple</strong><p>Tap "Sign in with Apple" on the landing page. Your workouts and settings are tied to your Apple ID.</p></div></div>
+        <div class="step"><div class="step-num"></div><div class="step-body"><strong>Choose a workout type</strong><p>Select one of the nine type cards: IM, Distance, Sprint, Endurance, Technique, Mixed, or a stroke specialty.</p></div></div>
+        <div class="step"><div class="step-num"></div><div class="step-body"><strong>Set your target distance</strong><p>Drag the yardage slider or tap a time preset (~60 / ~90 / ~2hr). Enter your 100-yard pace to get accurate time estimates.</p></div></div>
+        <div class="step"><div class="step-num"></div><div class="step-body"><strong>Choose equipment</strong><p>Check off the gear you have today. The generator only uses sets compatible with what you've selected.</p></div></div>
+        <div class="step"><div class="step-num"></div><div class="step-body"><strong>Generate</strong><p>Tap <strong>🏊 Generate Workout</strong>. Review the four sections. Hit regenerate on any section you want to swap out.</p></div></div>
+        <div class="step"><div class="step-num"></div><div class="step-body"><strong>Run or save</strong><p>Tap <strong>▶ Run</strong> to step through sets in the pool, or <strong>Save to History</strong> to log it and print later.</p></div></div>
+      </div>
+    </section>
+
+    <!-- ══ SIGNING IN ══ -->
+    <section id="signin">
+      <h2>Signing In</h2>
+      <p>The app uses <strong>Sign in with Apple</strong> for authentication. Your Apple ID is never shared — only a permanent, anonymized identifier is used to link your workouts and settings.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Access is invite-only.</strong> Your Apple ID must be on the approved list. Contact the app owner if you receive an "access denied" error after signing in.</div>
+      </div>
+
+      <p>Once signed in, your session persists via a secure cookie. You'll stay logged in across browser sessions until you explicitly sign out from the account menu.</p>
+    </section>
+
+    <!-- ══ WORKOUT TYPES ══ -->
+    <section id="workout-types">
+      <h2>Workout Types</h2>
+      <p>Select one type card before generating. Each type draws from a distinct library of warm-ups, drills, and main sets optimized for that discipline.</p>
+
+      <table>
+        <thead><tr><th>Type</th><th>Focus</th><th>Good for</th></tr></thead>
+        <tbody>
+          <tr><td>🔄 IM</td><td>All four strokes — butterfly, backstroke, breaststroke, freestyle</td><td>All-around fitness; technique variety</td></tr>
+          <tr><td>🏃 Distance</td><td>Sustained aerobic effort, longer swims</td><td>Base building; longer races</td></tr>
+          <tr><td>⚡ Sprint</td><td>High-intensity short efforts with full recovery</td><td>Speed development; race prep</td></tr>
+          <tr><td>💪 Endurance</td><td>Moderate-high intensity sustained work</td><td>Open water; triathlon prep</td></tr>
+          <tr><td>🎯 Technique</td><td>Drill-heavy; stroke mechanics and efficiency</td><td>Correcting habits; feel for the water</td></tr>
+          <tr><td>🌀 Mixed</td><td>Variety — kick, pull, swim, speed play</td><td>Avoiding ruts; general fitness</td></tr>
+          <tr><td>🔙 Backstroke</td><td>Backstroke-specific drills and main sets</td><td>Stroke specialty training</td></tr>
+          <tr><td>🐸 Breaststroke</td><td>Breaststroke technique and endurance</td><td>Stroke specialty training</td></tr>
+          <tr><td>🦋 Butterfly</td><td>Butterfly sets with free recovery</td><td>Stroke specialty training</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>Stroke specialty types in a 50m pool</strong> — IM, Backstroke, Breaststroke, and Butterfly fall back to yard-based distances in 50m mode (no native 50m sets for these types yet). All distances will be in yards when this occurs.</div>
+      </div>
+    </section>
+
+    <!-- ══ YARDAGE & PACE ══ -->
+    <section id="yardage-slider">
+      <h2>Yardage &amp; Pace</h2>
+
+      <h3>The Yardage Slider</h3>
+      <p>Drag the slider to set your target maximum distance. The generator fills to within ~400 yards of this target, so a 2400yd target typically produces a 2000–2400yd workout.</p>
+
+      <h4>Time presets</h4>
+      <p>Tap <strong>~60 min</strong>, <strong>~90 min</strong>, or <strong>~2hr</strong> to auto-set the slider based on your pace. The preset is calculated from your pace input, so set your pace first for accurate estimates.</p>
+
+      <h4>Custom range (your personal min &amp; max)</h4>
+      <p>Click the <strong>left tick label</strong> (the minimum) or <strong>right tick label</strong> (the maximum) on the slider to edit your personal bounds. For example, if you never swim more than 3000yd, set the max to 3000 and it will stay there across sessions. Your custom range is saved to your account.</p>
+
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>One swimmer, different ranges.</strong> Two users can have completely different slider ranges — one at 1900–2400yd, another at 2400–4000yd. Each person's range persists independently.</div>
+      </div>
+
+      <h3>Pace Input</h3>
+      <p>Enter your comfortable <strong>100-yard pace</strong> (format: <code>M:SS</code>, e.g. <code>2:00</code>) in the pace field. This does two things:</p>
+      <ul>
+        <li><strong>Scales all intervals</strong> — every generated interval is adjusted from the masters baseline (2:00/100) to your pace.</li>
+        <li><strong>Powers the time presets</strong> — the ~60/~90/~2hr buttons calculate the right yardage for your pace.</li>
+      </ul>
+      <p>You can also rescale intervals after generation from within any workout block. Your default pace is saved to your account.</p>
+    </section>
+
+    <!-- ══ POOL MODE ══ -->
+    <section id="pool-mode">
+      <h2>Pool Mode</h2>
+      <p>Toggle between <strong>25 yds</strong> and <strong>50 m</strong> using the pill switch above the workout type cards. Switching pool mode clears any current workout.</p>
+
+      <table>
+        <thead><tr><th></th><th>25 yd (default)</th><th>50 m</th></tr></thead>
+        <tbody>
+          <tr><td>Slider range</td><td>1900 – 4000 yds</td><td>2000 – 4000 m</td></tr>
+          <tr><td>Distance unit</td><td>yards</td><td>meters</td></tr>
+          <tr><td>Pace label</td><td>per 100 yds</td><td>per 100 m</td></tr>
+          <tr><td>IM / specialty types</td><td>Native options</td><td>Falls back to yard distances</td></tr>
+          <tr><td>Other types</td><td>Native options</td><td>Native 50m options</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══ EQUIPMENT ══ -->
+    <section id="equipment">
+      <h2>Equipment</h2>
+      <p>Check the gear you have available before generating. The generator guarantees that every checked piece of equipment appears in at least one set — and never assigns equipment to a set if you haven't selected it.</p>
+
+      <table>
+        <thead><tr><th>Item</th><th>What it affects</th></tr></thead>
+        <tbody>
+          <tr><td>🟦 Kickboard</td><td>Kick sets — board-supported leg work</td></tr>
+          <tr><td>🐬 Fins</td><td>Kick and underwater sets — adds fin cue to eligible sets</td></tr>
+          <tr><td>🤚 Paddles</td><td>Pull sets — adds paddle cue to pull-based sets</td></tr>
+          <tr><td>🛟 Pull Buoy</td><td>Pull sets — confirms buoy use alongside paddles</td></tr>
+          <tr><td>🤿 Snorkel</td><td>Freestyle drill and technique sets — appends "use snorkel" cue</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>No equipment needed.</strong> Leaving all boxes unchecked generates a fully equipment-free workout — just you and the water.</div>
+      </div>
+    </section>
+
+    <!-- ══ GENERATING ══ -->
+    <section id="generating">
+      <h2>Generating a Workout</h2>
+      <p>Once a workout type is selected and the slider is set, tap <strong>🏊 Generate Workout</strong>. The generator:</p>
+      <ol>
+        <li>Picks a warm-up that fits within the yardage budget.</li>
+        <li>Picks a drill set compatible with your equipment and warm-up.</li>
+        <li>Picks a main set (possibly as a 2× or 3× repeat) that fills the remaining budget to within ~400 yards of your target. Favorited sets get extra weight; repeat variants get extra weight to fill higher yardage targets.</li>
+        <li>Picks a cool-down to close the workout.</li>
+        <li>Scales all intervals to your pace setting.</li>
+      </ol>
+      <p>The summary bar shows total yardage, estimated duration, and your target range. Tap <strong>🔄 Generate New Workout</strong> at any time to replace everything.</p>
+    </section>
+
+    <!-- ══ SECTIONS ══ -->
+    <section id="sections">
+      <h2>Workout Sections</h2>
+      <p>Every workout has four sections displayed as color-coded blocks:</p>
+
+      <table>
+        <thead><tr><th>Section</th><th>Color</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>Warm-Up</td><td><span style="color:#38bdf8">■</span> Sky blue</td><td>Easy aerobic activation, 400–800 yds</td></tr>
+          <tr><td>Drill / Pre-Main</td><td><span style="color:#2dd4bf">■</span> Teal</td><td>Technique focus, stroke preparation</td></tr>
+          <tr><td>Main Set</td><td><span style="color:#3b82f6">■</span> Blue</td><td>The primary training stimulus</td></tr>
+          <tr><td>Cool-Down</td><td><span style="color:#94a3b8">■</span> Slate</td><td>Easy recovery swim, 200–400 yds</td></tr>
+        </tbody>
+      </table>
+
+      <p>Each block shows its name, total yardage, and a table of sets. The main set block also shows a <strong>⭐ favorite</strong> button and an optional repeat indicator (e.g. <strong>×2 rounds</strong>).</p>
+    </section>
+
+    <!-- ══ INTERVALS ══ -->
+    <section id="intervals">
+      <h2>Intervals</h2>
+      <p>Each set shows a target interval in the rightmost column (e.g. <code>On 2:15</code>). These are pre-scaled to your pace setting. You can adjust them two ways:</p>
+
+      <h3>Rescale all intervals</h3>
+      <p>In the pace field above the slider, update your pace and the app rescales every interval in the current workout proportionally. This is useful when you want to try a harder or easier version of the same workout.</p>
+
+      <h3>Edit a single interval</h3>
+      <p>Click any interval in the workout table to edit it inline. Type the new interval (e.g. <code>2:30</code> or <code>:45</code>), then press <kbd>Enter</kbd> or click away to commit. The estimated duration updates immediately.</p>
+
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>Sets without intervals</strong> show "No interval" — these are typically easy recovery swims. The estimated duration for these sets uses a 35 yd/min fallback.</div>
+      </div>
+    </section>
+
+    <!-- ══ SET DESCRIPTIONS ══ -->
+    <section id="descriptions">
+      <h2>Set Descriptions</h2>
+      <p>The description column in each set row is click-to-edit. Click any description text to open an inline editor, make your changes, then press <kbd>Enter</kbd> or click away. Changes flow through to the print layout, history save, and Run Mode.</p>
+      <p>Descriptions reset when you generate or regenerate a section.</p>
+    </section>
+
+    <!-- ══ SET SWAP ══ -->
+    <section id="swap">
+      <h2>Set Swap</h2>
+      <p>The <strong>⇄</strong> button appears on individual sets within a block. Tap it to see a shorter and longer equivalent set. Swapping rescales the interval proportionally and updates the block's total yardage.</p>
+      <p>Use set swap to fine-tune the balance within a section without regenerating the whole block.</p>
+    </section>
+
+    <!-- ══ REPEAT SETS ══ -->
+    <section id="repeat-sets">
+      <h2>Repeat Sets</h2>
+      <p>When the yardage target is high or when the generator determines it's the best fit, the main set may be selected as a <strong>repeat block</strong> — the same set performed 2 or 3 rounds with rest in between.</p>
+
+      <p>Repeat blocks are labeled with a round count (e.g. <strong>×2 rounds, 30s rest between</strong>) and display each round separately with "Round 1 / Round 2" headers.</p>
+
+      <h3>Editing rest between rounds</h3>
+      <p>Click the <strong>── 30s rest ──</strong> row between rounds to edit the rest duration inline. Enter a number of seconds and press <kbd>Enter</kbd>. In Run Mode, the rest timer between rounds uses this value.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Repeat vs. regenerate.</strong> Regenerating a repeat-set block replaces the entire set (including the round structure) with a different option. Use set swap or description editing to tweak a repeat block in place.</div>
+      </div>
+    </section>
+
+    <!-- ══ FAVORITES ══ -->
+    <section id="favorites">
+      <h2>Favorites</h2>
+      <p>Tap the <strong>⭐</strong> button on any main set block to mark it as a favorite. Favorited sets:</p>
+      <ul>
+        <li>Get <strong>3× extra weight</strong> in the generator's pick pool — you'll see them more often.</li>
+        <li>Appear in a dedicated <strong>Favorites</strong> panel in the History view.</li>
+        <li>Are stored per-user in the cloud and sync across devices.</li>
+      </ul>
+      <p>Tap the ⭐ again to remove a favorite. Unfavoriting takes effect immediately in both the generator and the history panel.</p>
+    </section>
+
+    <!-- ══ REGENERATING SECTIONS ══ -->
+    <section id="regen">
+      <h2>Regenerating Sections</h2>
+      <p>Each workout block has a <strong>↺</strong> regenerate button. Tapping it replaces only that section with a different option while keeping the other three sections unchanged.</p>
+      <p>The generator ensures the new section:</p>
+      <ul>
+        <li>Has a different fingerprint from the current section (no immediate repeats).</li>
+        <li>Fits the remaining yardage budget.</li>
+        <li>Satisfies your equipment selection.</li>
+        <li>Gets its intervals scaled to your current pace.</li>
+      </ul>
+      <p>If no valid alternative exists (e.g., the constraints are too tight), an inline error message appears explaining why. Try adjusting the max yardage or equipment selection.</p>
+
+      <div class="callout warn">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-body"><strong>Regenerating clears the save status.</strong> Even if the workout was previously saved, a section regen marks it as unsaved. You'll be prompted to save again before printing.</div>
+      </div>
+    </section>
+
+    <!-- ══ RUN MODE ══ -->
+    <section id="run-mode">
+      <h2>Run Mode</h2>
+      <p>Tap <strong>▶ Run</strong> in the summary bar to enter Run Mode — a full-screen, section-by-section view designed for use at the pool deck.</p>
+
+      <h3>Rest timer picker</h3>
+      <p>Before the workout starts, choose your rest-between-sets preference:</p>
+      <table>
+        <thead><tr><th>Option</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td>Manual</td><td>Waits for you to tap "Next Set" — you control the pace</td></tr>
+          <tr><td>0s</td><td>Flashes "Done" for 1.5s then auto-advances</td></tr>
+          <tr><td>5s / 10s / 15s</td><td>Countdown timer auto-advances to the next set</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Section navigation</h3>
+      <p>Run Mode steps through sets one at a time. The section name (Warm-Up, Drill, etc.) is shown in the top bar. Tap <strong>Next Set</strong> to advance, or use the back arrow to return to the previous set. When a section ends, you'll see a section summary before moving to the next.</p>
+
+      <h3>Landscape mode</h3>
+      <p>Rotate your device to landscape orientation for a full-screen <strong>Pace Clock</strong> view — the interval timer fills the screen. The section name appears in the top bar so you always know where you are in the workout.</p>
+    </section>
+
+    <!-- ══ PACE CLOCK ══ -->
+    <section id="pace-clock">
+      <h2>Pace Clock</h2>
+      <p>Tap any set row in Run Mode to open the Pace Clock — a large countdown timer for that set's interval.</p>
+
+      <table>
+        <thead><tr><th>Element</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>Countdown ring</td><td>Visual arc depletes as the interval counts down. Green while running, fills amber near zero.</td></tr>
+          <tr><td>Elapsed time</td><td>Shown in the top-right corner — total time since the workout started.</td></tr>
+          <tr><td>Set details</td><td>Reps × distance and description shown below the timer.</td></tr>
+          <tr><td>▶ / ⏸ button</td><td>Start and pause the clock. Tap to begin on first open.</td></tr>
+          <tr><td>↺ Reset</td><td>Resets the clock to the full interval without leaving the set.</td></tr>
+        </tbody>
+      </table>
+
+      <p>When the interval finishes, the clock flashes and (if you have a rest timer set) begins the between-set rest countdown automatically before advancing.</p>
+
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>Sets with no interval</strong> open a simplified view showing the set details without a countdown. Tap "Done" to advance.</div>
+      </div>
+    </section>
+
+    <!-- ══ REST TIMER ══ -->
+    <section id="rest-timer">
+      <h2>Rest Timer</h2>
+      <p>The rest timer controls how the app advances between sets in Run Mode. You choose the mode before starting (see <a href="#run-mode">Run Mode</a>). In timed modes, a rest countdown appears on the pace clock screen after each set finishes — you can always tap <strong>Skip</strong> to advance early.</p>
+
+      <p>For <strong>repeat-set blocks</strong>, the rest between rounds uses the per-block rest value you set in the workout view (default 30s), regardless of your global rest timer setting.</p>
+    </section>
+
+    <!-- ══ SAVING ══ -->
+    <section id="saving">
+      <h2>Saving a Workout</h2>
+      <p>Below the workout blocks, a <strong>Save to History</strong> form lets you log the workout:</p>
+
+      <table>
+        <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Date</td><td>Defaults to today. Change it to log a past or future workout.</td></tr>
+          <tr><td>Initials</td><td>Up to 4 characters — used to filter history by person. Saved as your default for next time.</td></tr>
+          <tr><td>Notes</td><td>Free-form text. Appears in the history entry and the print header.</td></tr>
+        </tbody>
+      </table>
+
+      <p>Tap <strong>Save</strong>. The entry is added to your history immediately (optimistically) and synced to the cloud. The save button turns to a "Saved ✓" confirmation.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Planned workouts.</strong> Saving with a future date marks the entry as "Planned" rather than "Completed." You can toggle this status from the History view.</td></div>
+      </div>
+    </section>
+
+    <!-- ══ HISTORY VIEW ══ -->
+    <section id="history">
+      <h2>History View</h2>
+      <p>Tap <strong>📜 History</strong> in the header to switch to the History view. It shows all your logged workouts, newest first.</p>
+
+      <h3>Filters</h3>
+      <ul>
+        <li><strong>Type</strong> — filter by workout type (IM, Distance, etc.).</li>
+        <li><strong>Who</strong> — filter by initials / user if multiple people share the app.</li>
+        <li><strong>All time / Last 4 weeks</strong> — scope the stats panel (see below).</li>
+      </ul>
+
+      <h3>Entry actions</h3>
+      <table>
+        <thead><tr><th>Action</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>View / Hide</td><td>Expands or collapses the full set-by-set workout detail.</td></tr>
+          <tr><td>Notes</td><td>Opens an inline editor for the entry's notes field.</td></tr>
+          <tr><td>✓ Done / Planned</td><td>Toggles whether the workout counts as completed in stats.</td></tr>
+          <tr><td>▶ Run</td><td>Loads the workout directly into Run Mode.</td></tr>
+          <tr><td>🖨 Print</td><td>Loads the workout and opens the print dialog.</td></tr>
+          <tr><td>🗑 Delete</td><td>Permanently removes the entry (with confirmation).</td></tr>
+        </tbody>
+      </table>
+
+      <p>Click the <strong>⟳ Repeat</strong> icon on any entry to load its blocks into the generator as a fresh, unsaved workout — useful for repeating a workout you liked.</p>
+
+      <h3>Favorites panel</h3>
+      <p>At the top of the History view, your starred main sets appear as cards. Click any card to see how many times that set has appeared in saved workouts.</p>
+    </section>
+
+    <!-- ══ STATS PANEL ══ -->
+    <section id="stats">
+      <h2>Stats Panel</h2>
+      <p>The stats panel sits at the top of the History view and updates as you filter. It shows:</p>
+
+      <table>
+        <thead><tr><th>Stat</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Sessions</td><td>Count of completed (not planned) workouts in the selected window.</td></tr>
+          <tr><td>Total Yards</td><td>Sum of yardage across completed sessions.</td></tr>
+          <tr><td>Avg per session</td><td>Total yards ÷ session count.</td></tr>
+          <tr><td>Per week</td><td>Sessions ÷ elapsed weeks. Toggle between all-time and last 4 weeks.</td></tr>
+          <tr><td>Type breakdown</td><td>Horizontal bars showing session count by workout type, color-coded to match the type badges.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══ COPY & PRINT ══ -->
+    <section id="copy-print">
+      <h2>Copy &amp; Print</h2>
+
+      <h3>📋 Copy Text</h3>
+      <p>Tap <strong>📋 Copy Text</strong> in the summary bar to copy the entire workout as plain text to your clipboard. The format is human-readable and suitable for texting to a lane partner or pasting into Notes. The button flashes green for 2 seconds to confirm the copy.</p>
+
+      <p>Example output:</p>
+      <pre style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;font-size:12px;color:#94a3b8;overflow-x:auto;margin-bottom:16px;line-height:1.6;"><code style="background:none;border:none;padding:0;color:#94a3b8;">Distance Swim Workout — 2,400 yds (~68 min)
+Pace target: 2:00/100
+
+WARM-UP  (600 yds)
+  4 × 100 — Easy freestyle, descend effort @ 2:15
+
+MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest between
+  — Round 1 —
+  4 × 100 — Steady descend, last 25 fast @ 2:00
+  (30s rest)
+  — Round 2 —  ...</code></pre>
+
+      <h3>🖨 Print Workout</h3>
+      <p>Tap <strong>🖨 Print Workout</strong> to open the system print dialog. The app renders a clean black-and-white layout optimized for 8.5×11 paper — the on-screen chrome disappears and only the workout content is printed.</p>
+      <p>If the workout hasn't been saved yet, you'll be asked whether to <strong>Save &amp; Print</strong> or <strong>Print Without Saving</strong>.</p>
+
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>Printing from history.</strong> Tap 🖨 Print on any history entry to load that workout and print it directly.</div>
+      </div>
+    </section>
+
+    <!-- ══ USER SETTINGS ══ -->
+    <section id="user-settings">
+      <h2>Your Settings</h2>
+      <p>The following preferences are saved per-user and sync across devices automatically (no separate settings screen needed — they update as you use the app):</p>
+
+      <table>
+        <thead><tr><th>Setting</th><th>Where to change it</th></tr></thead>
+        <tbody>
+          <tr><td>Default pace</td><td>Pace field on the generator page — saved 1.5s after you stop typing</td></tr>
+          <tr><td>Default initials</td><td>Initials field in the Save form — saved when you tap Save</td></tr>
+          <tr><td>Slider minimum</td><td>Click the left tick label on the slider and type a new value</td></tr>
+          <tr><td>Slider maximum</td><td>Click the right tick label on the slider and type a new value</td></tr>
+          <tr><td>Favorites</td><td>⭐ button on main set blocks — saved immediately</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══ TIPS ══ -->
+    <section id="tips">
+      <h2>Tips &amp; Tricks</h2>
+
+      <div class="card">
+        <h3>Getting repeat sets to appear</h3>
+        <p>Repeat sets are more likely at higher yardage targets (2400yd+). They get 2× weight in the pick pool. If you want repeats specifically, generate at 2400–3000yd and hit regenerate on the main set a few times until one appears.</p>
+      </div>
+
+      <div class="card">
+        <h3>Building a consistent routine</h3>
+        <p>Star your favorite main sets. Over time, the generator will favor them — you get the variety of randomized warm-ups, drills, and cool-downs, but your main set stays in familiar territory.</p>
+      </div>
+
+      <div class="card">
+        <h3>Customizing before the pool</h3>
+        <p>Generate at home, then use per-set interval editing and description editing to dial in exactly what you want. Copy to clipboard and text it to your lane partner, then save before you leave.</p>
+      </div>
+
+      <div class="card">
+        <h3>50m pool tips</h3>
+        <p>Switch to 50m mode before generating. The slider will shift to 2000–4000m range. For IM or stroke specialty workouts, you'll see a notice that distances are in yards — these types don't yet have native 50m options.</p>
+      </div>
+
+      <div class="card">
+        <h3>Tracking multiple swimmers</h3>
+        <p>Each Apple ID gets its own workout history, favorites, and settings. Use the <strong>Initials</strong> field on each save to identify who logged which workout — the History "Who" filter will then let you view each person's workouts separately.</p>
+      </div>
+
+      <div class="card">
+        <h3>Sharing a workout</h3>
+        <p>The fastest path: generate → <strong>📋 Copy Text</strong> → paste into Messages or Notes. For a nicer format: generate → save → <strong>🖨 Print</strong> → save as PDF from the print dialog.</p>
+      </div>
+
+      <hr />
+
+      <a href="/" class="hero-back" style="display:inline-flex;">← Back to the app</a>
+    </section>
+
+  </main>
+</div>
+
+<!-- Active nav link highlight on scroll -->
+<script>
+  const sections = document.querySelectorAll("section[id]");
+  const links    = document.querySelectorAll("nav a");
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.toggle("active", l.getAttribute("href") === "#" + e.target.id));
+      }
+    });
+  }, { rootMargin: "-20% 0px -70% 0px" });
+  sections.forEach(s => obs.observe(s));
+</script>
+
+</body>
+</html>
