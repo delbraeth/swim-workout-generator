@@ -378,7 +378,7 @@ app.patch("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
     const { json, sha } = await readWorkouts({ force: true });
     const idx = json.workouts.findIndex(e => e.id === id);
     if (idx === -1) return res.status(404).json({ error: "not found", id });
-    const allowed = ["notes", "dateCompleted"];
+    const allowed = ["notes", "dateCompleted", "completed"];
     for (const k of allowed) if (k in patch) json.workouts[idx][k] = patch[k];
     await writeWorkouts(json, sha, `Update workout ${id}`);
     res.json({ ok: true, entry: json.workouts[idx] });
