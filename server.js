@@ -365,7 +365,7 @@ app.post("/api/log-workout", checkOrigin, requireAuth, async (req, res) => {
     const label = entry.typeLabel || entry.type || "workout";
     const date  = entry.dateCompleted || "";
     await writeWorkouts(json, sha, `Log ${label} workout (${date})`);
-    res.json({ ok: true, id: entry.id });
+    res.json({ ok: true, id: entry.id, entry });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
