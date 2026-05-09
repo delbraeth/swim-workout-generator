@@ -3069,7 +3069,7 @@
       );
     }
 
-    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, unit = "yds" }) {
+    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds" }) {
       const eqItems = equipmentForSet(set, equipment);
       const desc = enhanceDesc(set, equipment);
       const equiv = onToggleSwap ? getEquivalents(set) : {};
@@ -3092,7 +3092,26 @@
               {(set.reps * set.dist).toLocaleString()} {unit}
             </td>
             <td style={{ padding: "10px 16px", fontSize: 13, color: "#334155" }}>
-              {desc}
+              {isEditingDesc ? (
+                <input
+                  autoFocus
+                  value={editDescDraft}
+                  onChange={e => setEditDescDraft(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter")  onCommitDesc(blockIdx, setIdx, editDescDraft);
+                    if (e.key === "Escape") onCancelDesc();
+                  }}
+                  onBlur={() => onCommitDesc(blockIdx, setIdx, editDescDraft)}
+                  style={{ width: "100%", fontSize: 13, padding: "2px 6px", borderRadius: 4, border: "1px solid #94a3b8", background: "#fff", color: "#1e293b", boxSizing: "border-box" }}
+                />
+              ) : (
+                <span
+                  onClick={() => onStartEditDesc && onStartEditDesc(blockIdx, setIdx, set.desc)}
+                  title={onStartEditDesc ? "Click to edit" : undefined}
+                  style={{ cursor: onStartEditDesc ? "text" : "default", borderBottom: onStartEditDesc ? "1px dashed #94a3b8" : "none", paddingBottom: onStartEditDesc ? 1 : 0 }}>
+                  {desc}
+                </span>
+              )}
               {eqItems.length > 0 && (
                 <div className="equipment-badges" style={{ marginTop: 6 }}>
                   {eqItems.map(e => <EquipmentBadge key={e} name={e} />)}
@@ -3205,7 +3224,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, isFavorited, onToggleFavorite, unit = "yds" }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, unit = "yds" }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -3293,6 +3312,12 @@
                     onStartEditInterval={onStartEditInterval}
                     onCommitInterval={onCommitInterval}
                     onCancelInterval={onCancelInterval}
+                    isEditingDesc={editDescKey === `${blockIdx}-${i}`}
+                    editDescDraft={editDescDraft}
+                    setEditDescDraft={setEditDescDraft}
+                    onStartEditDesc={onStartEditDesc}
+                    onCommitDesc={onCommitDesc}
+                    onCancelDesc={onCancelDesc}
                     unit={unit}
                   />
                 ))}
@@ -4622,6 +4647,37 @@
         setEditIntervalDraft("");
       }, []);
 
+      // ── Per-set description editing ───────────────────────────────
+      const [editDescKey,   setEditDescKey]   = useState(null);
+      const [editDescDraft, setEditDescDraft] = useState("");
+
+      const handleStartEditDesc = useCallback((bIdx, sIdx, current) => {
+        setEditDescKey(`${bIdx}-${sIdx}`);
+        setEditDescDraft(current);
+        setOpenSwapKey(null);
+        setEditIntervalKey(null);
+      }, []);
+
+      const handleCommitDesc = useCallback((bIdx, sIdx, draft) => {
+        const val = draft.trim();
+        if (val) {
+          setWorkout(prev => {
+            const newBlocks = prev.blocks.map((b, bi) => bi !== bIdx ? b : {
+              ...b,
+              sets: b.sets.map((s, si) => si !== sIdx ? s : { ...s, desc: val }),
+            });
+            return { ...prev, blocks: newBlocks };
+          });
+        }
+        setEditDescKey(null);
+        setEditDescDraft("");
+      }, []);
+
+      const handleCancelDesc = useCallback(() => {
+        setEditDescKey(null);
+        setEditDescDraft("");
+      }, []);
+
       const handleGenerate = useCallback(() => {
         if (!selectedType) return;
         setWorkout(generateWorkout(selectedType, maxYards, equipment, favorites, poolMode));
@@ -4632,6 +4688,7 @@
         setNoteDraft("");
         setOpenSwapKey(null);
         setEditIntervalKey(null);
+        setEditDescKey(null);
         setPaceInput("2:00");
       }, [selectedType, maxYards, equipment, poolMode]);
 
@@ -4647,6 +4704,8 @@
         }
         setWorkout(result.workout);
         setRegenError(null);
+        setEditDescKey(null);
+        setEditIntervalKey(null);
         // A single-section regen makes this a fresh, unsaved workout — even if
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
@@ -5039,7 +5098,7 @@
                     style={{ fontSize: 12, fontWeight: 600, padding: "4px 13px", borderRadius: 6, border: "1px solid #3b82f6", background: "#1d4ed8", color: "#fff", cursor: "pointer" }}>
                     Rescale all
                   </button>
-                  <span style={{ fontSize: 11, color: "#475569" }}>· Click any interval to edit directly</span>
+                  <span style={{ fontSize: 11, color: "#475569" }}>· Click any interval or description to edit directly</span>
                 </div>
 
                 {/* Workout blocks */}
@@ -5060,6 +5119,12 @@
                     onStartEditInterval={handleStartEditInterval}
                     onCommitInterval={handleCommitInterval}
                     onCancelInterval={handleCancelInterval}
+                    editDescKey={editDescKey}
+                    editDescDraft={editDescDraft}
+                    setEditDescDraft={setEditDescDraft}
+                    onStartEditDesc={handleStartEditDesc}
+                    onCommitDesc={handleCommitDesc}
+                    onCancelDesc={handleCancelDesc}
                     isFavorited={!!(block.label && favorites.includes(block.label))}
                     onToggleFavorite={handleToggleFavorite}
                     unit={unit}
