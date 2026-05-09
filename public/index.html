@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 22:28 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 22:36 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -4907,19 +4907,20 @@
             if (s.sliderMin) setSliderMin(s.sliderMin);
             if (s.sliderMax) { setSliderMax(s.sliderMax); setMaxYards(v => Math.min(v, s.sliderMax)); }
             if (s.paceInput) setPaceInput(s.paceInput);
+            if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
           })
           .catch(() => {});
       }, []);
 
       // Debounced settings save — fires 1.5s after the last change
       const saveSettingsTimerRef = React.useRef(null);
-      function saveSettings(min, max, pace) {
+      function saveSettings(min, max, pace, initials) {
         clearTimeout(saveSettingsTimerRef.current);
         saveSettingsTimerRef.current = setTimeout(() => {
           fetch(`${API_BASE}/settings`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sliderMin: min, sliderMax: max, paceInput: pace }),
+            body: JSON.stringify({ sliderMin: min, sliderMax: max, paceInput: pace, initials }),
           }).catch(() => {});
         }, 1500);
       }
@@ -4931,14 +4932,21 @@
         setMaxYards(v => Math.max(newMin, Math.min(v, newMax)));
         setWorkout(null);
         setSaveStatus(null);
-        saveSettings(newMin, newMax, paceInput);
-      }, [paceInput]);
+        saveSettings(newMin, newMax, paceInput, initialsDraft);
+      }, [paceInput, initialsDraft]);
 
       // Pace change with settings persistence
       const handlePaceChange = useCallback((val) => {
         setPaceInput(val);
-        saveSettings(sliderMin, sliderMax, val);
-      }, [sliderMin, sliderMax]);
+        saveSettings(sliderMin, sliderMax, val, initialsDraft);
+      }, [sliderMin, sliderMax, initialsDraft]);
+
+      // Initials change with settings persistence
+      const handleInitialsChange = useCallback((val) => {
+        const normalized = normalizeInitials(val);
+        setInitialsDraft(normalized);
+        saveSettings(sliderMin, sliderMax, paceInput, normalized);
+      }, [sliderMin, sliderMax, paceInput]);
 
       // Toggle a main-set label in/out of favorites
       const handleToggleFavorite = useCallback(async (label) => {
@@ -5591,7 +5599,7 @@
                 {!loadedFromHistoryId && (
                   <SaveToHistoryForm
                     dateDraft={dateDraft} setDateDraft={setDateDraft}
-                    initialsDraft={initialsDraft} setInitialsDraft={setInitialsDraft}
+                    initialsDraft={initialsDraft} setInitialsDraft={handleInitialsChange}
                     noteDraft={noteDraft} setNoteDraft={setNoteDraft}
                     saveStatus={saveStatus} saveError={saveError}
                     onSave={handleSave}
