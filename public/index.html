@@ -143,12 +143,15 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 23:26 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 23:32 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
       return (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
     }
+
+    const HISTORY_LOCAL_KEY = "swim_history_v1";
+    const USER_INITIALS_KEY = "swim_user_initials";
 
     function loadLocalHistory() {
       try { const raw = localStorage.getItem(HISTORY_LOCAL_KEY); return raw ? JSON.parse(raw) : []; }
@@ -3778,7 +3781,7 @@
           const snap = Math.round(parsed / SLIDER_STEP) * SLIDER_STEP;
           let newMin = SLIDER_MIN, newMax = SLIDER_MAX;
           if (which === "min") newMin = Math.max(ABS_MIN, Math.min(snap, SLIDER_MAX - SLIDER_STEP));
-          if (which === "max") newMax = Math.min(ABS_MAX, Math.max(snap, SLIDER_MIN + SLIDER_STEP));
+          if (which === "max") newMax = Math.min(ABS_MAX, Math.max(snap, newMin + SLIDER_STEP));
           if (newMin !== SLIDER_MIN || newMax !== SLIDER_MAX) {
             onRangeChange && onRangeChange(newMin, newMax);
           }
@@ -4412,7 +4415,7 @@
           return () => clearTimeout(id);
         }
         setRestLeft(restSecs);
-      }, [finished]);
+      }, [finished, isLastSet, restSecs, onNext]);
 
       // Tick rest countdown; call onNext when it reaches zero
       useEffect(() => {
@@ -5096,7 +5099,7 @@
             setAuthenticated(data.authenticated);
             setAuthMode(data.mode === "open" ? "open" : "apple");
           })
-          .catch(() => { setAuthenticated(true); setAuthMode("open"); });
+          .catch(() => { setAuthenticated(false); setAuthMode(null); });
       }, []);
 
       // On mount: fetch live history from the API, merge with localStorage cache
@@ -5410,6 +5413,7 @@
           equipment: { ...equipment },
           blocks: workout.blocks.map(b => ({
             name: b.name, section: b.section, totalYards: b.totalYards,
+            rounds: b.rounds, roundRestSecs: b.roundRestSecs,
             sets: b.sets.map(s => ({ ...s })),
           })),
           userInitials: cleanInitials,
@@ -5447,7 +5451,7 @@
           setSaveStatus("error");
           setSaveError(err.message || String(err));
         }
-      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft]);
+      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft, poolMode]);
 
       const handleUpdateCompleted = useCallback(async (id, completed) => {
         setHistory(prev => {
@@ -5494,6 +5498,7 @@
       const handleLoadAndPrint = useCallback((entry) => {
         setSelectedType(entry.type);
         setMaxYards(entry.maxYardsCap || 2400);
+        setPoolMode(entry.poolMode || "25y");
         setEquipment(entry.equipment || { kickboard: false, fins: false, paddles: false, pullBuoy: false });
         // Reconstruct a workout-shaped object from the saved entry
         setWorkout({
@@ -5518,6 +5523,7 @@
       const handleRepeatFromHistory = useCallback((entry) => {
         setSelectedType(entry.type);
         setMaxYards(entry.maxYardsCap || 2400);
+        setPoolMode(entry.poolMode || "25y");
         setEquipment(entry.equipment || { kickboard: false, fins: false, paddles: false, pullBuoy: false });
         setWorkout({
           blocks: entry.blocks,
@@ -5698,7 +5704,7 @@
                   {[
                     [poolMode === "50m" ? "Total Distance" : "Total Yardage", `${workout.totalYards.toLocaleString()} ${unit}`],
                     ["Est. Duration",   `~${workout.estimatedMin} min`],
-                    ["Target Range",   `${(poolMode === "50m" ? 2000 : 1900).toLocaleString()} – ${maxYards.toLocaleString()} ${unit}`],
+                    ["Target Range",   `${typeMin.toLocaleString()} – ${maxYards.toLocaleString()} ${unit}`],
                   ].map(([label, val]) => (
                     <div key={label}>
                       <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
