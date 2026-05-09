@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 22:55 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 23:08 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3069,10 +3069,12 @@
         const validMain = mainPoolExpanded.filter(o => o.totalYards <= mainBudget);
         if (!validMain.length) continue;
         const maFloor = Math.max(minMa, mainBudget * 0.65);
-        // Favorites get 3× weight in the pick pool
-        const weightedMain = favorites.length
-          ? validMain.flatMap(o => o.label && favorites.includes(o.label) ? [o, o, o] : [o])
-          : validMain;
+        // Favorites get 3× weight; repeat variants get 2× weight
+        const weightedMain = validMain.flatMap(o => {
+          const favWeight = favorites.length && o.label && favorites.includes(o.label) ? 3 : 1;
+          const repeatWeight = (o.rounds || 1) > 1 ? 2 : 1;
+          return Array(Math.max(favWeight, repeatWeight)).fill(o);
+        });
         const biasedMain = weightedMain.filter(o => o.totalYards >= maFloor);
         const ma = pick(biasedMain.length > 0 ? biasedMain : weightedMain);
 
