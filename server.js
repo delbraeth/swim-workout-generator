@@ -244,7 +244,7 @@ app.get("/api/auth/apple", (req, res) => {
   const state = crypto.randomBytes(16).toString("hex");
   // Short-lived cookie to verify state on callback (CSRF protection)
   res.setHeader("Set-Cookie",
-    `oauth_state=${state}; HttpOnly; Secure; SameSite=Lax; Max-Age=300; Path=/`
+    `oauth_state=${state}; HttpOnly; Secure; SameSite=None; Max-Age=300; Path=/`
   );
   const params = new URLSearchParams({
     client_id:     APPLE_CLIENT_ID,
