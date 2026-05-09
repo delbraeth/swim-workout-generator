@@ -360,6 +360,7 @@ app.post("/api/log-workout", checkOrigin, requireAuth, async (req, res) => {
     if (json.workouts.some(e => e.id === entry.id)) {
       return res.status(409).json({ error: "duplicate id", id: entry.id });
     }
+    if (req.userSub) entry.sub = req.userSub;
     json.workouts.push(entry);
     const label = entry.typeLabel || entry.type || "workout";
     const date  = entry.dateCompleted || "";
