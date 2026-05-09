@@ -4465,6 +4465,7 @@
       const [showPrintDialog, setShowPrintDialog] = useState(false);
       // Auth state: null = checking, false = not signed in, true = signed in
       const [authenticated, setAuthenticated] = useState(null);
+      const [authMode,      setAuthMode]      = useState(null); // "open" | "apple"
       const [authError,     setAuthError]     = useState(null);
 
       // On mount: check auth status via session cookie (set by /auth/callback)
@@ -4476,8 +4477,11 @@
         }
         fetch("/auth/status")
           .then(r => r.json())
-          .then(data => setAuthenticated(data.authenticated))
-          .catch(() => setAuthenticated(true)); // network error — let them in, server will reject writes
+          .then(data => {
+            setAuthenticated(data.authenticated);
+            setAuthMode(data.mode === "open" ? "open" : "apple");
+          })
+          .catch(() => { setAuthenticated(true); setAuthMode("open"); });
       }, []);
 
       // On mount: fetch live history from the API, merge with localStorage cache
@@ -4835,17 +4839,19 @@
                   </span>
                 )}
               </button>
-              <a href="/auth/signout"
-                title="Sign out"
-                style={{
-                  padding: "8px 12px", borderRadius: 8,
-                  border: "1px solid #334155", background: "#1e293b",
-                  color: "#64748b", fontSize: 12, fontWeight: 600,
-                  cursor: "pointer", textDecoration: "none",
-                  display: "inline-flex", alignItems: "center",
-                }}>
-                Sign out
-              </a>
+              {authMode === "apple" && (
+                <a href="/auth/signout"
+                  title="Sign out"
+                  style={{
+                    padding: "8px 12px", borderRadius: 8,
+                    border: "1px solid #334155", background: "#1e293b",
+                    color: "#64748b", fontSize: 12, fontWeight: 600,
+                    cursor: "pointer", textDecoration: "none",
+                    display: "inline-flex", alignItems: "center",
+                  }}>
+                  Sign out
+                </a>
+              )}
             </div>
           </div>
 
