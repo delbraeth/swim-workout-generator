@@ -761,6 +761,127 @@
       "notes": "",
       "sub": "000316.e47611df23a34c68a98e49c3e334c360.1912",
       "completed": true
+    },
+    {
+      "id": "wmoyyfv2aphzvth",
+      "savedAt": "2026-05-09T23:08:03.203Z",
+      "dateCompleted": "2026-05-09",
+      "type": "mixed",
+      "typeLabel": "Mixed",
+      "totalYards": 2300,
+      "estimatedMin": 70,
+      "maxYardsCap": 2400,
+      "equipment": {
+        "kickboard": false,
+        "fins": false,
+        "paddles": false,
+        "pullBuoy": false
+      },
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 600,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 400,
+              "desc": "Freestyle — build from easy to moderate",
+              "interval": "No interval",
+              "focus": "Aerobic warm-up, long stroke"
+            },
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "Pull (buoy) — easy, focus on catch and extension",
+              "interval": "On 1:40",
+              "focus": "Upper-body prime before main set",
+              "eq": "pull"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 200,
+          "sets": [
+            {
+              "reps": 4,
+              "dist": 25,
+              "desc": "Choice stroke drill — activate technique",
+              "interval": "On 0:55",
+              "focus": "Brief all-around drill activation"
+            },
+            {
+              "reps": 4,
+              "dist": 25,
+              "desc": "Choice stroke swim — apply the drill",
+              "interval": "On 0:55",
+              "focus": "Drill translation before mixed set"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — Mixed 100s Repeat Unit",
+          "section": "main",
+          "totalYards": 1200,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Freestyle — aerobic, long stroke",
+              "interval": "On 2:45",
+              "focus": "Base"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Backstroke or IM — moderate",
+              "interval": "On 3:10",
+              "focus": "Stroke variety"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Freestyle — build to strong",
+              "interval": "On 2:45",
+              "focus": "Intensity build"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Choice stroke — strong, not sprinting",
+              "interval": "On 2:50",
+              "focus": "Mixed effort close — designed to repeat 2–3×"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 300,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy Freestyle — long, relaxed stroke",
+              "interval": "No interval",
+              "focus": "Flush the muscles, lower heart rate"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Easy backstroke — gentle on the shoulders",
+              "interval": "No interval",
+              "focus": "Open the chest, counter freestyle pull"
+            }
+          ]
+        }
+      ],
+      "userInitials": "TEST",
+      "notes": "repeat",
+      "completed": true,
+      "sub": "000316.e47611df23a34c68a98e49c3e334c360.1912"
     }
   ],
   "favorites": [],
