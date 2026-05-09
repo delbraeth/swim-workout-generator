@@ -142,7 +142,8 @@
     //  are relative. The Node server (see server.js + Dockerfile)
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
-    const API_BASE = "/api";                  // same origin
+    const API_BASE  = "/api";                 // same origin
+    const BUILD_ID  = "2026-05-09 19:12 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -4839,6 +4840,7 @@
                   </span>
                 )}
               </button>
+              <span style={{ fontSize: 10, color: "#334155", fontFamily: "monospace", whiteSpace: "nowrap" }}>{BUILD_ID}</span>
               {authMode === "apple" && (
                 <a href="/api/auth/signout"
                   title="Sign out"
