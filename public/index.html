@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 22:44 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 22:54 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -747,6 +747,17 @@
         { label: "IM Marathon Six 400s", totalYards: 2400, sets: [
             { reps: 6, dist: 400, desc: "400 IM — 100 each stroke, moderate, hold form throughout", interval: "On 9:30", focus: "High-volume IM endurance" },
           ]},
+        { label: "IM 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "100 IM — 25 each stroke in order, smooth transitions", interval: "On 2:30", focus: "IM efficiency and stroke transitions — designed to repeat 2–3×" },
+          ]},
+        { label: "IM Stroke Focus Repeat Unit", totalYards: 500, sets: [
+            { reps: 4, dist: 100, desc: "100 IM — 25 each stroke, focus on weakest stroke each round", interval: "On 2:30", focus: "IM stroke balance" },
+            { reps: 2, dist:  50, desc: "50 IM — race-pace, crisp transitions", interval: "On 1:15", focus: "Speed layer to close the round" },
+          ]},
+        { label: "IM Broken 200 Repeat Unit", totalYards: 600, sets: [
+            { reps: 2, dist: 200, desc: "200 IM — 50 each stroke, moderate pace, maintain form", interval: "On 4:45", focus: "Full IM cycle at controlled effort" },
+            { reps: 4, dist:  50, desc: "50 choice stroke — not free, work your weakest", interval: "On 1:15", focus: "Specialty stroke volume each round" },
+          ]},
       ],
       distance: [
         { label: "200s Descend", totalYards: 1000, sets: [
@@ -970,6 +981,16 @@
           ]},
         { label: "Four 600s Distance", totalYards: 2400, sets: [
             { reps: 4, dist: 600, desc: "Freestyle — aerobic pace, even splits, hold form to the end", interval: "On 11:00", focus: "High-volume distance endurance" },
+          ]},
+        { label: "Distance 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — aerobic pace, even effort, count strokes on last 25", interval: "On 2:10", focus: "Steady-state aerobic — designed to repeat 2–3×" },
+          ]},
+        { label: "Distance 200s Repeat Unit", totalYards: 500, sets: [
+            { reps: 2, dist: 200, desc: "Freestyle — aerobic pace, negative split (second 100 faster)", interval: "On 4:15", focus: "Pacing discipline each round" },
+            { reps: 1, dist: 100, desc: "Freestyle — moderate, hold form from the 200s", interval: "On 2:05", focus: "Extend endurance without rest" },
+          ]},
+        { label: "Distance Build Repeat Unit", totalYards: 600, sets: [
+            { reps: 3, dist: 200, desc: "Freestyle — descend 1→3, each faster than the last", interval: "On 4:15", focus: "Progressive effort — push the last 200 each round" },
           ]},
       ],
       sprint: [
@@ -1265,6 +1286,17 @@
             { reps: 8, dist: 200, desc: "Freestyle — strong, descend 1→4 then repeat (1→4)", interval: "On 4:30", focus: "Sustained speed over distance" },
             { reps: 8, dist: 100, desc: "Choice stroke — fast (near race pace)", interval: "On 2:00", focus: "Speed layer after distance block" },
           ]},
+        { label: "Sprint 50s Repeat Unit", totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "Freestyle or choice — ALL OUT every rep, leave it on the wall", interval: "On 1:45", focus: "Max speed — designed to repeat 2–3×" },
+          ]},
+        { label: "Sprint 50+100 Repeat Unit", totalYards: 500, sets: [
+            { reps: 6, dist:  50, desc: "Freestyle — ALL OUT sprint", interval: "On 1:45", focus: "Top-end speed" },
+            { reps: 2, dist: 100, desc: "Freestyle — easy active recovery, long stroke", interval: "On 2:30", focus: "Flush and reset before next round" },
+          ]},
+        { label: "Sprint Build Repeat Unit", totalYards: 600, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — build to strong, last 25 sprint", interval: "On 2:00", focus: "Controlled build with sprint finish" },
+            { reps: 4, dist:  50, desc: "Choice stroke — ALL OUT", interval: "On 1:30", focus: "Max effort to close each round" },
+          ]},
       ],
       endurance: [
         { label: "Aerobic Ladder", totalYards: 1000, sets: [
@@ -1490,6 +1522,16 @@
           ]},
         { label: "Triple 800 Endurance", totalYards: 2400, sets: [
             { reps: 3, dist: 800, desc: "Freestyle — aerobic pace, descend 1→3 (each one faster)", interval: "On 17:00", focus: "High-volume endurance with progressive effort" },
+          ]},
+        { label: "Endurance 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — aerobic pace, RPE 6/10, long stroke throughout", interval: "On 2:10", focus: "Sustained aerobic effort — designed to repeat 2–3×" },
+          ]},
+        { label: "Endurance 200+100 Repeat Unit", totalYards: 500, sets: [
+            { reps: 2, dist: 200, desc: "Freestyle — moderate aerobic pace, even splits", interval: "On 4:15", focus: "Aerobic base work" },
+            { reps: 1, dist: 100, desc: "Freestyle — slightly stronger, hold form from 200s", interval: "On 2:05", focus: "Push the last 100 each round" },
+          ]},
+        { label: "Endurance 200s Repeat Unit", totalYards: 600, sets: [
+            { reps: 3, dist: 200, desc: "Freestyle — aerobic pace, aim for identical splits each rep", interval: "On 4:15", focus: "Pacing consistency — make each round match the last" },
           ]},
       ],
       technique: [
@@ -1794,6 +1836,16 @@
         { label: "Technique 8×300", totalYards: 2400, sets: [
             { reps: 8, dist: 300, desc: "Freestyle — 100 drill / 100 build / 100 strong — escalate quality each section", interval: "On 6:30", focus: "Extended technique integration at high volume" },
           ]},
+        { label: "Drill-Swim 50s Repeat Unit", totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "25 drill / 25 swim — one focus per rep (catch, rotation, reach, finish)", interval: "On 1:20", focus: "Apply each drill point directly into the swim — designed to repeat 2–3×" },
+          ]},
+        { label: "Technique 75s Repeat Unit", totalYards: 525, sets: [
+            { reps: 7, dist: 75, desc: "25 drill / 25 build / 25 strong — escalate quality within each 75", interval: "On 1:45", focus: "Drill-to-swim integration at low yardage" },
+          ]},
+        { label: "Catch-Up Build Repeat Unit", totalYards: 600, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — 50 catch-up drill / 50 swim, focus on full extension before pull", interval: "On 2:20", focus: "Extension and catch mechanics" },
+            { reps: 4, dist:  50, desc: "Freestyle — swim normal, hold the feeling from the drill", interval: "On 1:15", focus: "Transfer drill to full swimming" },
+          ]},
       ],
       mixed: [
         { label: "Compact Mix", totalYards: 1000, sets: [
@@ -2090,6 +2142,21 @@
             { reps: 4, dist: 200, desc: "Choice stroke or IM — moderate to strong",      interval: "On 4:15", focus: "Variety and intensity build" },
             { reps: 4, dist: 100, desc: "Freestyle — strong, hold pace to the end",      interval: "On 2:15", focus: "Aerobic capacity close-out" },
           ]},
+        { label: "Mixed 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 1, dist: 100, desc: "Freestyle — aerobic, long stroke",               interval: "On 2:10", focus: "Base" },
+            { reps: 1, dist: 100, desc: "Backstroke or IM — moderate",                    interval: "On 2:30", focus: "Stroke variety" },
+            { reps: 1, dist: 100, desc: "Freestyle — build to strong",                    interval: "On 2:10", focus: "Intensity build" },
+            { reps: 1, dist: 100, desc: "Choice stroke — strong, not sprinting",          interval: "On 2:15", focus: "Mixed effort close — designed to repeat 2–3×" },
+          ]},
+        { label: "Mixed Kick-Pull-Swim Repeat Unit", totalYards: 500, sets: [
+            { reps: 4, dist:  50, desc: "Kick (board optional) — moderate effort",        interval: "On 1:15", focus: "Leg activation", eq: "kickPart" },
+            { reps: 2, dist: 100, desc: "Pull (buoy) — long stroke, high elbow catch",    interval: "On 2:15", focus: "Upper-body isolation", eq: "pull" },
+            { reps: 2, dist:  50, desc: "Freestyle swim — put it all together",           interval: "On 1:05", focus: "Full-body integration each round" },
+          ]},
+        { label: "Mixed Sprint-Recover Repeat Unit", totalYards: 600, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — build to strong, last 25 all-out",   interval: "On 2:15", focus: "Controlled build with sprint close" },
+            { reps: 4, dist:  50, desc: "Choice stroke (not free) — moderate recovery",   interval: "On 1:20", focus: "Stroke variety and active recovery between rounds" },
+          ]},
       ],
       back: [
         { label: "Back 100s", totalYards: 1000, sets: [
@@ -2286,6 +2353,16 @@
         { label: "Back 8×300", totalYards: 2400, sets: [
             { reps: 8, dist: 300, desc: "Backstroke — aerobic pace, descend 1→4 then repeat (each set faster)", interval: "On 7:00", focus: "Extended back endurance at high volume" },
           ]},
+        { label: "Back 50s Repeat Unit", totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "Backstroke — moderate to strong, focus on high arm recovery and hip rotation", interval: "On 1:30", focus: "Back volume and mechanics — designed to repeat 2–3×" },
+          ]},
+        { label: "Back 100s Repeat Unit", totalYards: 500, sets: [
+            { reps: 4, dist: 100, desc: "Backstroke — moderate, count strokes per length to monitor efficiency", interval: "On 2:45", focus: "Back aerobic with stroke awareness" },
+            { reps: 2, dist:  50, desc: "Backstroke — strong, hold stroke count from 100s", interval: "On 1:20", focus: "Speed with maintained mechanics" },
+          ]},
+        { label: "Back Build Repeat Unit", totalYards: 600, sets: [
+            { reps: 3, dist: 200, desc: "Backstroke — descend 1→3, each 200 faster than the last", interval: "On 5:00", focus: "Progressive backstroke effort — push the last 200 each round" },
+          ]},
       ],
       breast: [
         { label: "Breast 100s", totalYards: 1000, sets: [
@@ -2477,6 +2554,16 @@
           ]},
         { label: "Breast 8×300", totalYards: 2400, sets: [
             { reps: 8, dist: 300, desc: "Breaststroke — aerobic pace, descend 1→4 then repeat", interval: "On 9:00", focus: "Extended breast endurance at high volume" },
+          ]},
+        { label: "Breast 50s Repeat Unit", totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "Breaststroke — moderate, focus on tight glide and sharp kick-pull-glide cycle", interval: "On 1:45", focus: "Breast mechanics at repeatable effort — designed to repeat 2–3×" },
+          ]},
+        { label: "Breast 100s Repeat Unit", totalYards: 500, sets: [
+            { reps: 4, dist: 100, desc: "Breaststroke — moderate to strong, count pull-out glide distance on turn", interval: "On 3:15", focus: "Breaststroke aerobic with technical focus" },
+            { reps: 2, dist:  50, desc: "Breaststroke — strong, crisp cycle rhythm", interval: "On 1:30", focus: "Finish each round with speed" },
+          ]},
+        { label: "Breast Build Repeat Unit", totalYards: 600, sets: [
+            { reps: 3, dist: 200, desc: "Breaststroke — descend 1→3, each faster than the last", interval: "On 6:00", focus: "Progressive breast effort — each round builds on the last" },
           ]},
       ],
       fly: [
@@ -2673,6 +2760,17 @@
           ]},
         { label: "Fly 8×300 Volume", totalYards: 2400, sets: [
             { reps: 8, dist: 300, desc: "50 fly / 250 free — strong fly lead, aerobic free, hold fly form on every rep", interval: "On 5:30", focus: "High-volume fly tolerance with free for distance" },
+          ]},
+        { label: "Fly 50s Repeat Unit", totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "25 fly / 25 freestyle — full fly effort on lead 25, easy free recovery", interval: "On 1:30", focus: "Fly tolerance with built-in recovery — designed to repeat 2–3×" },
+          ]},
+        { label: "Fly 25+Free Repeat Unit", totalYards: 500, sets: [
+            { reps: 6, dist:  50, desc: "25 fly ALL OUT / 25 freestyle easy", interval: "On 1:30", focus: "Max fly speed with active recovery" },
+            { reps: 2, dist: 100, desc: "Freestyle — moderate, keep breathing relaxed", interval: "On 2:10", focus: "Aerobic flush before the next round" },
+          ]},
+        { label: "Fly Build Repeat Unit", totalYards: 600, sets: [
+            { reps: 4, dist: 100, desc: "25 fly / 75 free — fly strong on lead 25, hold rhythm on the free", interval: "On 2:15", focus: "Fly volume without burnout — build fly quality each round" },
+            { reps: 4, dist:  50, desc: "25 fly ALL OUT / 25 free easy", interval: "On 1:20", focus: "Top-speed fly to close each round" },
           ]},
       ],
     };
