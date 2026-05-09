@@ -631,6 +631,145 @@
       ],
       "userInitials": "",
       "notes": ""
+    },
+    {
+      "id": "wmoyrj9m5v8xrns",
+      "savedAt": "2026-05-09T19:54:44.717Z",
+      "dateCompleted": "2026-05-09",
+      "type": "mixed",
+      "typeLabel": "Mixed",
+      "totalYards": 2150,
+      "estimatedMin": 54,
+      "maxYardsCap": 2400,
+      "equipment": {
+        "kickboard": false,
+        "fins": false,
+        "paddles": false,
+        "pullBuoy": false
+      },
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 400,
+              "desc": "Easy Freestyle",
+              "interval": "No interval — swim easy",
+              "focus": "Loosen up, steady breathing"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 300,
+          "sets": [
+            {
+              "reps": 3,
+              "dist": 100,
+              "desc": "Mixed stroke — 50 drill of choice / 50 swim",
+              "interval": "On 2:15",
+              "focus": "Variety technique priming"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — All-Stroke Pyramid",
+          "section": "main",
+          "totalYards": 1200,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 50,
+              "desc": "Butterfly — moderate",
+              "interval": "On 1:30",
+              "focus": "Open fly"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Backstroke — moderate",
+              "interval": "On 2:45",
+              "focus": "Back"
+            },
+            {
+              "reps": 1,
+              "dist": 150,
+              "desc": "Breaststroke — moderate",
+              "interval": "On 3:00",
+              "focus": "Breast"
+            },
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Freestyle — strong",
+              "interval": "On 4:15",
+              "focus": "Free"
+            },
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "IM — moderate",
+              "interval": "On 6:00",
+              "focus": "All four"
+            },
+            {
+              "reps": 1,
+              "dist": 150,
+              "desc": "Breaststroke — strong (match earlier)",
+              "interval": "On 3:00",
+              "focus": "Same pace under fatigue"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Backstroke — strong",
+              "interval": "On 2:45",
+              "focus": "Pick up pace"
+            },
+            {
+              "reps": 1,
+              "dist": 50,
+              "desc": "Butterfly — ALL OUT (best 50)",
+              "interval": "On 1:30",
+              "focus": "Final blast"
+            },
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy choice — close",
+              "interval": "On 4:00",
+              "focus": "Cool down"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 250,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 150,
+              "desc": "Easy Backstroke or choice",
+              "interval": "No interval",
+              "focus": "Let lactic acid clear, open the chest"
+            },
+            {
+              "reps": 1,
+              "dist": 100,
+              "desc": "Easy Freestyle — progressively slower",
+              "interval": "No interval",
+              "focus": "Full cool-down — slowest laps of the day"
+            }
+          ]
+        }
+      ],
+      "userInitials": "TEST",
+      "notes": ""
     }
   ],
   "favorites": []
