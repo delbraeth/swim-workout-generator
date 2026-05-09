@@ -316,8 +316,11 @@ app.get("/healthz", (req, res) => res.json({ ok: true, service: "swim-workout-ge
 app.get("/api/workouts", checkOrigin, requireAuth, async (req, res) => {
   try {
     const { json } = await readWorkouts();
-    // Strip per-user sub fields before sending to client
-    res.json(json.workouts.map(({ sub, ...rest }) => rest));
+    // Return only entries belonging to this user (or legacy entries with no sub)
+    const entries = req.userSub
+      ? json.workouts.filter(e => !e.sub || e.sub === req.userSub)
+      : json.workouts;
+    res.json(entries);
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -349,6 +352,8 @@ app.patch("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
     const { json, sha } = await readWorkouts({ force: true });
     const idx = json.workouts.findIndex(e => e.id === id);
     if (idx === -1) return res.status(404).json({ error: "not found", id });
+    if (req.userSub && json.workouts[idx].sub && json.workouts[idx].sub !== req.userSub)
+      return res.status(403).json({ error: "not authorized" });
     const allowed = ["notes", "dateCompleted", "completed"];
     for (const k of allowed) if (k in patch) json.workouts[idx][k] = patch[k];
     await writeWorkouts(json, sha, `Update workout ${id}`);
@@ -364,6 +369,8 @@ app.delete("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
     const { json, sha } = await readWorkouts({ force: true });
     const idx = json.workouts.findIndex(e => e.id === id);
     if (idx === -1) return res.status(404).json({ error: "not found", id });
+    if (req.userSub && json.workouts[idx].sub && json.workouts[idx].sub !== req.userSub)
+      return res.status(403).json({ error: "not authorized" });
     const [removed] = json.workouts.splice(idx, 1);
     await writeWorkouts(json, sha, `Delete workout ${id}`);
     res.json({ ok: true, removed });
