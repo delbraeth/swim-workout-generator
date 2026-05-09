@@ -887,7 +887,7 @@
   "favorites": [],
   "settings": {
     "000316.e47611df23a34c68a98e49c3e334c360.1912": {
-      "sliderMin": 2100,
+      "sliderMin": 1900,
       "sliderMax": 2400,
       "paceInput": "2:30",
       "initials": "TEST"
