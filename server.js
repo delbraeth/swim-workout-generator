@@ -426,11 +426,21 @@ app.post("/api/settings", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-// ───── Favorites routes ───────────────────────────────────────────────
-app.get("/api/favorites", async (req, res) => {
+// ───── Favorites routes (per-user, stored in settings[sub].favorites) ───
+// Falls back to the legacy global favorites array on first load so existing
+// favorites are not lost when a user logs in for the first time after this change.
+function getUserFavorites(json, key) {
+  const userFavs = json.settings[key]?.favorites;
+  if (Array.isArray(userFavs)) return userFavs;
+  // One-time migration: seed from global favorites if per-user list doesn't exist yet
+  return Array.isArray(json.favorites) ? [...json.favorites] : [];
+}
+
+app.get("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
   try {
     const { json } = await readWorkouts();
-    res.json(json.favorites);
+    const key = req.userSub || "default";
+    res.json(getUserFavorites(json, key));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -441,9 +451,13 @@ app.post("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
     const { label } = req.body || {};
     if (!label || typeof label !== "string") return res.status(400).json({ error: "label required" });
     const { json, sha } = await readWorkouts({ force: true });
-    if (!json.favorites.includes(label)) {
-      json.favorites.push(label);
-      await writeWorkouts(json, sha, `Favorite: ${label}`);
+    const key = req.userSub || "default";
+    if (!json.settings[key]) json.settings[key] = {};
+    const favs = getUserFavorites(json, key);
+    if (!favs.includes(label)) {
+      favs.push(label);
+      json.settings[key].favorites = favs;
+      await writeWorkouts(json, sha, `Favorite: ${label} (${key.slice(0, 8)})`);
     }
     res.json({ ok: true });
   } catch (err) {
@@ -455,10 +469,14 @@ app.delete("/api/favorites/:label", checkOrigin, requireAuth, async (req, res) =
   try {
     const label = decodeURIComponent(req.params.label);
     const { json, sha } = await readWorkouts({ force: true });
-    const before = json.favorites.length;
-    json.favorites = json.favorites.filter(f => f !== label);
-    if (json.favorites.length < before) {
-      await writeWorkouts(json, sha, `Unfavorite: ${label}`);
+    const key = req.userSub || "default";
+    if (!json.settings[key]) json.settings[key] = {};
+    const favs = getUserFavorites(json, key);
+    const before = favs.length;
+    const updated = favs.filter(f => f !== label);
+    if (updated.length < before) {
+      json.settings[key].favorites = updated;
+      await writeWorkouts(json, sha, `Unfavorite: ${label} (${key.slice(0, 8)})`);
     }
     res.json({ ok: true });
   } catch (err) {
