@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 21:04 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 21:09 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3348,14 +3348,14 @@
     function YardageSlider({ value, onChange, selectedType, poolMode = "25y" }) {
       const is50m = poolMode === "50m";
       const SLIDER_MIN  = is50m ? 2000 : 1900;
-      const SLIDER_MAX  = is50m ? 4000 : 2500;
-      const SLIDER_STEP = is50m ? 100  : 50;
+      const SLIDER_MAX  = 4000;
+      const SLIDER_STEP = is50m ? 100 : 50;
       const unit = is50m ? "m" : "yds";
       const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN) * 100).toFixed(1);
-      const ticks = is50m ? [2000,2500,3000,3500,4000] : [1900,2000,2100,2200,2300,2400,2500];
+      const ticks = is50m ? [2000,2500,3000,3500,4000] : [1900,2400,2900,3400,4000];
       const tickLabel = v => {
         if (is50m) return v === 2000 ? "2.0k" : v === 2500 ? "2.5k" : v === 3000 ? "3.0k" : v === 3500 ? "3.5k" : "4.0k";
-        return v === 1900 ? "1.9k" : v === 2000 ? "2.0k" : v === 2100 ? "2.1k" : v === 2200 ? "2.2k" : v === 2300 ? "2.3k" : v === 2400 ? "2.4k" : "2.5k";
+        return v === 1900 ? "1.9k" : v === 2400 ? "2.4k" : v === 2900 ? "2.9k" : v === 3400 ? "3.4k" : "4.0k";
       };
 
       const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : null;
