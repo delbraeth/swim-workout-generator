@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 21:41 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 21:50 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -2923,39 +2923,54 @@
       const minDr = Math.min(...drillList.map(o => o.totalYards));
       const minMa = Math.min(...mainList.map(o => o.totalYards));
       const minCd = Math.min(...allCooldowns.map(o => o.totalYards));
-      const minTotal = is50m ? MIN_METERS : MIN_YARDS;
+      const absoluteMin = is50m ? MIN_METERS : MIN_YARDS;
+      // Floor scales with target: workout must use ≥ (maxYards - 400) yards so the
+      // generator fills the budget rather than picking the smallest valid combo.
+      const minTotal = Math.max(absoluteMin, maxYards - 400);
 
       const hasEquipReq = equipment && Object.values(EQUIP_REQUIREMENTS).length > 0
                          && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
 
-      // Up to 60 attempts to find a valid combination (more attempts when equipment
-      // requirements are added since fewer combinations satisfy)
-      const attempts = hasEquipReq ? 60 : 30;
+      // More attempts for large targets (tighter combos) and equipment constraints
+      const attempts = (maxYards >= 3000 || hasEquipReq) ? 80 : 30;
+
+      // Biased pick: prefer larger options to fill the budget, fall back to any valid
+      function pickBiased(arr, floor) {
+        const preferred = arr.filter(o => o.totalYards >= floor);
+        return pick(preferred.length > 0 ? preferred : arr);
+      }
+
       for (let attempt = 0; attempt < attempts; attempt++) {
-        // 1. Pick warmup — must leave room for min drill + min main + min cooldown
+        // 1. Pick warmup — prefer larger warmups when target is generous
         const validWarmups = allWarmups.filter(o =>
           o.totalYards <= maxYards - minDr - minMa - minCd
         );
         if (!validWarmups.length) break;
-        const wu = pick(validWarmups);
+        const wuFloor = maxYards * 0.12; // warmup should be ~12%+ of target
+        const wu = pickBiased(validWarmups, wuFloor);
 
-        // 2. Pick drill — must leave room for min main + min cooldown
+        // 2. Pick drill — prefer larger drills proportionally
         const validDrills = drillList.filter(o =>
           o.totalYards <= maxYards - wu.totalYards - minMa - minCd
         );
         if (!validDrills.length) continue;
-        const dr = pick(validDrills);
+        const drFloor = (maxYards - wu.totalYards) * 0.10;
+        const dr = pickBiased(validDrills, drFloor);
 
-        // 3. Pick main — must leave room for min cooldown
+        // 3. Pick main — must leave room for min cooldown; strongly prefer larger mains
         const validMain = mainList.filter(o =>
           o.totalYards <= maxYards - wu.totalYards - dr.totalYards - minCd
         );
         if (!validMain.length) continue;
+        // Main should fill ≥65% of the budget remaining after warmup+drill+cooldown
+        const mainBudget = maxYards - wu.totalYards - dr.totalYards - minCd;
+        const maFloor = Math.max(minMa, mainBudget * 0.65);
         // Favorites get 3× weight in the pick pool
         const weightedMain = favorites.length
           ? validMain.flatMap(o => o.label && favorites.includes(o.label) ? [o, o, o] : [o])
           : validMain;
-        const ma = pick(weightedMain);
+        const biasedMain = weightedMain.filter(o => o.totalYards >= maFloor);
+        const ma = pick(biasedMain.length > 0 ? biasedMain : weightedMain);
 
         // 4. Equipment satisfaction check — every checked item needs a matching set
         if (hasEquipReq && !combinationSatisfies(dr, ma, equipment)) continue;
@@ -2972,10 +2987,13 @@
         }
       }
 
-      // Fallback: use smallest valid combination, preferring equipment-satisfying drills
-      const wu = allWarmups[0];
+      // Fallback: prefer largest valid combination (sort descending by totalYards)
+      const byYardsDesc = (a, b) => b.totalYards - a.totalYards;
+      const wuFallbackPool = allWarmups.filter(o => o.totalYards <= maxYards - minDr - minMa - minCd);
+      const wu = (wuFallbackPool.length ? wuFallbackPool.sort(byYardsDesc) : allWarmups.slice().sort(byYardsDesc))[0];
       let drillCandidates = drillList.filter(o => o.totalYards <= maxYards - wu.totalYards - minMa - minCd);
       if (!drillCandidates.length) drillCandidates = drillList;
+      drillCandidates = drillCandidates.slice().sort(byYardsDesc);
       if (hasEquipReq) {
         const eqPreferred = drillCandidates.filter(d =>
           mainList.some(m =>
@@ -2988,12 +3006,14 @@
       const dr = drillCandidates[0];
       let mainCandidates = mainList.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - minCd);
       if (!mainCandidates.length) mainCandidates = mainList;
+      mainCandidates = mainCandidates.slice().sort(byYardsDesc);
       if (hasEquipReq) {
         const eqMain = mainCandidates.filter(m => combinationSatisfies(dr, m, equipment));
         if (eqMain.length) mainCandidates = eqMain;
       }
       const ma = mainCandidates[0];
-      const cd = allCooldowns[0];
+      const cdFallbackPool = allCooldowns.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - ma.totalYards);
+      const cd = (cdFallbackPool.length ? cdFallbackPool.slice().sort(byYardsDesc) : allCooldowns)[0];
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       return buildWorkout(typeId, wu, dr, ma, cd, total);
     }
