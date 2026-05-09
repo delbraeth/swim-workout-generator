@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 23:41 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 23:52 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -5619,7 +5619,7 @@
             <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Pool</span>
               <div style={{ display: "flex", background: "#0f172a", borderRadius: 8, border: "1px solid #334155", overflow: "hidden" }}>
-                {[["25y","25 yds"],["50m","50 m"]].map(([mode, label]) => (
+                {[["25y","SCY"],["50m","LCM"]].map(([mode, label]) => (
                   <button key={mode} onClick={() => handlePoolModeChange(mode)}
                     style={{
                       padding: "6px 16px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
@@ -5630,6 +5630,13 @@
                     {label}
                   </button>
                 ))}
+                <button disabled title="Short Course Meters — coming soon"
+                  style={{
+                    padding: "6px 16px", border: "none", cursor: "not-allowed", fontSize: 13, fontWeight: 700,
+                    background: "transparent", color: "#334155",
+                  }}>
+                  SCM
+                </button>
               </div>
             </div>
 
