@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-09 20:53 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-09 20:59 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3710,7 +3710,7 @@
                   <span style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Per Week</span>
                   <button
                     onClick={() => setWeekMode(m => m === "all" ? "4wk" : "all")}
-                    style={{ fontSize: 9, padding: "1px 7px", borderRadius: 999, border: "1px solid #475569", background: "transparent", color: "#64748b", cursor: "pointer", fontWeight: 700 }}>
+                    style={{ fontSize: 9, padding: "1px 7px", borderRadius: 999, border: "1px solid #7c3aed", background: "#7c3aed33", color: "#c4b5fd", cursor: "pointer", fontWeight: 700 }}>
                     {weekMode === "all" ? "All time" : "4 wks"}
                   </button>
                 </div>
