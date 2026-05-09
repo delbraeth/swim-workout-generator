@@ -268,7 +268,7 @@ app.post("/api/auth/callback", express.urlencoded({ extended: false }), async (r
     // CSRF: verify state matches what we set in the oauth_state cookie
     const storedState = getCookie(req, "oauth_state");
     res.setHeader("Set-Cookie",
-      `oauth_state=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/`
+      `oauth_state=; HttpOnly; Secure; SameSite=None; Max-Age=0; Path=/`
     );
     if (!storedState || storedState !== state) return fail("state_mismatch");
     if (!id_token) return fail("missing_id_token");
@@ -321,33 +321,11 @@ app.get("/api/auth/signout", (req, res) => {
 // ───── API routes ────────────────────────────────────────────────────
 app.get("/healthz", (req, res) => res.json({ ok: true, service: "swim-workout-generator" }));
 
-// Temporary debug — shows which Apple env vars are present (never logs values)
-app.get("/api/auth/debug", (req, res) => {
-  res.json({
-    APPLE_AUTH_ACTIVE,
-    vars: {
-      APPLE_TEAM_ID:     !!APPLE_TEAM_ID,
-      APPLE_CLIENT_ID:   !!APPLE_CLIENT_ID,
-      APPLE_KEY_ID:      !!APPLE_KEY_ID,
-      APPLE_PRIVATE_KEY: !!APPLE_PRIVATE_KEY,
-      SESSION_SECRET:    !!SESSION_SECRET,
-    },
-    allowed_subs_count: APPLE_ALLOWED_SUBS.length,
-    private_key_starts: APPLE_PRIVATE_KEY.slice(0, 27),
-  });
-});
-
-// Legacy: verify an access code (kept for backward compat; not used when Apple auth is active)
-app.post("/api/verify-code", (req, res) => {
-  if (!ACCESS_CODE) return res.json({ ok: true });
-  const { code } = req.body || {};
-  res.json({ ok: code === ACCESS_CODE });
-});
-
-app.get("/api/workouts", async (req, res) => {
+app.get("/api/workouts", checkOrigin, requireAuth, async (req, res) => {
   try {
     const { json } = await readWorkouts();
-    res.json(json.workouts);
+    // Strip per-user sub fields before sending to client
+    res.json(json.workouts.map(({ sub, ...rest }) => rest));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -438,9 +416,16 @@ function getUserFavorites(json, key) {
 
 app.get("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
   try {
-    const { json } = await readWorkouts();
+    const { json, sha } = await readWorkouts();
     const key = req.userSub || "default";
-    res.json(getUserFavorites(json, key));
+    const favs = getUserFavorites(json, key);
+    // If we fell back to global favorites, persist them into the per-user slot now
+    if (!Array.isArray(json.settings[key]?.favorites) && favs.length > 0) {
+      if (!json.settings[key]) json.settings[key] = {};
+      json.settings[key].favorites = favs;
+      await writeWorkouts(json, sha, `Migrate favorites → ${key.slice(0, 8)}`);
+    }
+    res.json(favs);
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
