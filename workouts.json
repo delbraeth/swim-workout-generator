@@ -24,14 +24,14 @@
             {
               "reps": 1,
               "dist": 400,
-              "desc": "Freestyle \u2014 easy, focus on long stroke",
+              "desc": "Freestyle — easy, focus on long stroke",
               "interval": "No interval",
               "focus": "Prime the aerobic engine"
             },
             {
               "reps": 4,
               "dist": 25,
-              "desc": "Backstroke \u2014 easy, open the shoulders",
+              "desc": "Backstroke — easy, open the shoulders",
               "interval": "On :45",
               "focus": "Counter the freestyle pull"
             }
@@ -52,14 +52,14 @@
           ]
         },
         {
-          "name": "Main Set \u2014 Sprint Pull Power",
+          "name": "Main Set — Sprint Pull Power",
           "section": "main",
           "totalYards": 1000,
           "sets": [
             {
               "reps": 6,
               "dist": 50,
-              "desc": "Pull (buoy) \u2014 fast, drive arm speed",
+              "desc": "Pull (buoy) — fast, drive arm speed",
               "interval": "On 1:15",
               "focus": "Upper-body sprint mechanics, max stroke rate",
               "eq": "pull"
@@ -67,21 +67,21 @@
             {
               "reps": 1,
               "dist": 200,
-              "desc": "Easy freestyle \u2014 recovery",
+              "desc": "Easy freestyle — recovery",
               "interval": "On 4:30",
               "focus": "Reset between blocks"
             },
             {
               "reps": 8,
               "dist": 25,
-              "desc": "Freestyle \u2014 ALL OUT, max turnover",
+              "desc": "Freestyle — ALL OUT, max turnover",
               "interval": "On :45",
               "focus": "Apply pull power into full sprint"
             },
             {
               "reps": 6,
               "dist": 50,
-              "desc": "Choice \u2014 fast, descend 1\u21926",
+              "desc": "Choice — fast, descend 1→6",
               "interval": "On 1:30",
               "focus": "Each one faster, finish strongest"
             }
@@ -95,7 +95,7 @@
             {
               "reps": 1,
               "dist": 200,
-              "desc": "Easy Freestyle \u2014 long, relaxed stroke",
+              "desc": "Easy Freestyle — long, relaxed stroke",
               "interval": "No interval",
               "focus": "Bring heart rate down, flush the muscles"
             }
@@ -131,7 +131,7 @@
               "reps": 1,
               "dist": 400,
               "desc": "Easy Freestyle",
-              "interval": "No interval \u2014 swim easy",
+              "interval": "No interval — swim easy",
               "focus": "Loosen up, steady breathing"
             }
           ]
@@ -144,7 +144,7 @@
             {
               "reps": 4,
               "dist": 50,
-              "desc": "Kick \u2014 slow, focus on stroke alignment (board optional)",
+              "desc": "Kick — slow, focus on stroke alignment (board optional)",
               "interval": "On 1:45",
               "focus": "Isolate leg technique",
               "eq": "kick"
@@ -152,7 +152,7 @@
             {
               "reps": 2,
               "dist": 100,
-              "desc": "Pull (buoy) \u2014 high-elbow catch, long stroke",
+              "desc": "Pull (buoy) — high-elbow catch, long stroke",
               "interval": "On 2:20",
               "focus": "Isolate upper-body technique",
               "eq": "pull"
@@ -160,16 +160,16 @@
           ]
         },
         {
-          "name": "Main Set \u2014 All-Stroke Technique",
+          "name": "Main Set — All-Stroke Technique",
           "section": "main",
           "totalYards": 1100,
           "sets": [
             {
               "reps": 4,
               "dist": 100,
-              "desc": "Choice of stroke \u2014 SLOW, perfect form over speed",
+              "desc": "Choice of stroke — SLOW, perfect form over speed",
               "interval": "On 2:30",
-              "focus": "No rushing \u2014 technique over pace"
+              "focus": "No rushing — technique over pace"
             },
             {
               "reps": 8,
@@ -181,7 +181,7 @@
             {
               "reps": 4,
               "dist": 75,
-              "desc": "25 Drill + 50 Swim (same stroke \u2014 apply what you drilled)",
+              "desc": "25 Drill + 50 Swim (same stroke — apply what you drilled)",
               "interval": "On 1:50",
               "focus": "Bridge drill into real swimming"
             }
@@ -202,9 +202,9 @@
             {
               "reps": 1,
               "dist": 100,
-              "desc": "Easy Freestyle \u2014 progressively slower",
+              "desc": "Easy Freestyle — progressively slower",
               "interval": "No interval",
-              "focus": "Full cool-down \u2014 slowest laps of the day"
+              "focus": "Full cool-down — slowest laps of the day"
             }
           ]
         }
@@ -237,7 +237,7 @@
             {
               "reps": 1,
               "dist": 300,
-              "desc": "Freestyle \u2014 build from easy to moderate",
+              "desc": "Freestyle — build from easy to moderate",
               "interval": "No interval",
               "focus": "Gradually wake up"
             },
@@ -258,7 +258,7 @@
             {
               "reps": 4,
               "dist": 50,
-              "desc": "Kick \u2014 moderate, choice of stroke (board optional)",
+              "desc": "Kick — moderate, choice of stroke (board optional)",
               "interval": "On 1:40",
               "focus": "Leg activation",
               "eq": "kick"
@@ -266,7 +266,7 @@
             {
               "reps": 2,
               "dist": 100,
-              "desc": "Pull (buoy) \u2014 moderate, smooth rotation",
+              "desc": "Pull (buoy) — moderate, smooth rotation",
               "interval": "On 2:15",
               "focus": "Upper-body warm-up before mix",
               "eq": "pull"
@@ -274,28 +274,28 @@
           ]
         },
         {
-          "name": "Main Set \u2014 Aerobic + IM Combo",
+          "name": "Main Set — Aerobic + IM Combo",
           "section": "main",
           "totalYards": 1200,
           "sets": [
             {
               "reps": 1,
               "dist": 400,
-              "desc": "Freestyle \u2014 steady aerobic effort",
+              "desc": "Freestyle — steady aerobic effort",
               "interval": "On 8:20",
               "focus": "Aerobic base"
             },
             {
               "reps": 4,
               "dist": 100,
-              "desc": "100 IM \u2014 moderate, smooth transitions",
+              "desc": "100 IM — moderate, smooth transitions",
               "interval": "On 2:45",
               "focus": "IM after aerobic load"
             },
             {
               "reps": 4,
               "dist": 100,
-              "desc": "Freestyle \u2014 descending pace 1\u21924",
+              "desc": "Freestyle — descending pace 1→4",
               "interval": "On 2:15",
               "focus": "Build pace round to round"
             }
@@ -311,7 +311,7 @@
               "dist": 50,
               "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
               "interval": "On 1:20",
-              "focus": "Gentle recovery \u2014 no effort, just move"
+              "focus": "Gentle recovery — no effort, just move"
             }
           ]
         }
@@ -365,7 +365,7 @@
             {
               "reps": 6,
               "dist": 50,
-              "desc": "Dolphin kick \u2014 alternate streamline on stomach / on back",
+              "desc": "Dolphin kick — alternate streamline on stomach / on back",
               "interval": "On 1:45",
               "focus": "Dolphin rhythm without arm fatigue",
               "eq": "kick"
@@ -373,42 +373,42 @@
           ]
         },
         {
-          "name": "Main Set \u2014 Fly Race Test Day",
+          "name": "Main Set — Fly Race Test Day",
           "section": "main",
           "totalYards": 1100,
           "sets": [
             {
               "reps": 1,
               "dist": 100,
-              "desc": "25 fly + 75 free \u2014 easy warm-up",
+              "desc": "25 fly + 75 free — easy warm-up",
               "interval": "On 2:30",
               "focus": "Open up"
             },
             {
               "reps": 1,
               "dist": 100,
-              "desc": "Butterfly \u2014 TEST 100 (race pace)",
+              "desc": "Butterfly — TEST 100 (race pace)",
               "interval": "On 3:30",
               "focus": "100 fly test"
             },
             {
               "reps": 1,
               "dist": 200,
-              "desc": "Easy backstroke \u2014 recovery",
+              "desc": "Easy backstroke — recovery",
               "interval": "On 5:30",
               "focus": "Reset"
             },
             {
               "reps": 1,
               "dist": 50,
-              "desc": "Butterfly \u2014 TEST 50 (ALL OUT)",
+              "desc": "Butterfly — TEST 50 (ALL OUT)",
               "interval": "On 2:00",
               "focus": "Sprint fly test"
             },
             {
               "reps": 1,
               "dist": 250,
-              "desc": "Easy choice \u2014 recovery",
+              "desc": "Easy choice — recovery",
               "interval": "On 5:00",
               "focus": "Reset"
             },
@@ -422,7 +422,7 @@
             {
               "reps": 1,
               "dist": 100,
-              "desc": "Easy choice \u2014 close",
+              "desc": "Easy choice — close",
               "interval": "On 2:00",
               "focus": "Cool down"
             }
@@ -438,7 +438,7 @@
               "dist": 50,
               "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
               "interval": "On 1:20",
-              "focus": "Gentle recovery \u2014 no effort, just move"
+              "focus": "Gentle recovery — no effort, just move"
             }
           ]
         }
@@ -471,14 +471,14 @@
             {
               "reps": 1,
               "dist": 400,
-              "desc": "Freestyle \u2014 easy, focus on long stroke",
+              "desc": "Freestyle — easy, focus on long stroke",
               "interval": "No interval",
               "focus": "Prime the aerobic engine"
             },
             {
               "reps": 4,
               "dist": 25,
-              "desc": "Backstroke \u2014 easy, open the shoulders",
+              "desc": "Backstroke — easy, open the shoulders",
               "interval": "On :45",
               "focus": "Counter the freestyle pull"
             }
@@ -492,7 +492,7 @@
             {
               "reps": 4,
               "dist": 75,
-              "desc": "Kick 25 / Drill 25 / Swim 25 \u2014 stroke choice",
+              "desc": "Kick 25 / Drill 25 / Swim 25 — stroke choice",
               "interval": "On 1:40",
               "focus": "All-around activation before varied main set",
               "eq": "kickPart"
@@ -500,14 +500,14 @@
           ]
         },
         {
-          "name": "Main Set \u2014 Pull + Kick Mix",
+          "name": "Main Set — Pull + Kick Mix",
           "section": "main",
           "totalYards": 1100,
           "sets": [
             {
               "reps": 4,
               "dist": 100,
-              "desc": "Pull (buoy) \u2014 moderate, focus on catch",
+              "desc": "Pull (buoy) — moderate, focus on catch",
               "interval": "On 2:15",
               "focus": "Upper-body block",
               "eq": "pull"
@@ -515,14 +515,14 @@
             {
               "reps": 1,
               "dist": 100,
-              "desc": "Easy freestyle \u2014 transition",
+              "desc": "Easy freestyle — transition",
               "interval": "On 2:00",
               "focus": "Reset between blocks"
             },
             {
               "reps": 4,
               "dist": 50,
-              "desc": "Kick \u2014 moderate effort (board optional)",
+              "desc": "Kick — moderate effort (board optional)",
               "interval": "On 1:45",
               "focus": "Lower-body block",
               "eq": "kick"
@@ -530,7 +530,7 @@
             {
               "reps": 4,
               "dist": 100,
-              "desc": "Freestyle \u2014 strong, integrate both",
+              "desc": "Freestyle — strong, integrate both",
               "interval": "On 2:15",
               "focus": "Apply pull + kick into full stroke"
             }
@@ -544,7 +544,7 @@
             {
               "reps": 1,
               "dist": 200,
-              "desc": "Easy Freestyle \u2014 long, relaxed stroke",
+              "desc": "Easy Freestyle — long, relaxed stroke",
               "interval": "No interval",
               "focus": "Bring heart rate down, flush the muscles"
             }
@@ -580,7 +580,7 @@
             {
               "reps": 1,
               "dist": 300,
-              "desc": "Freestyle \u2014 build from easy to moderate",
+              "desc": "Freestyle — build from easy to moderate",
               "interval": "No interval",
               "focus": "Gradually wake up"
             },
@@ -601,7 +601,7 @@
             {
               "reps": 4,
               "dist": 100,
-              "desc": "Pull (buoy) \u2014 easy/moderate, relaxed stroke",
+              "desc": "Pull (buoy) — easy/moderate, relaxed stroke",
               "interval": "On 2:15",
               "focus": "Aerobic priming, conserve energy",
               "eq": "pull"
@@ -609,14 +609,14 @@
           ]
         },
         {
-          "name": "Main Set \u2014 Heart Rate Recovery",
+          "name": "Main Set — Heart Rate Recovery",
           "section": "main",
           "totalYards": 1200,
           "sets": [
             {
               "reps": 12,
               "dist": 100,
-              "desc": "Freestyle \u2014 moderate aerobic, focus on staying in HR zone 2",
+              "desc": "Freestyle — moderate aerobic, focus on staying in HR zone 2",
               "interval": "On 2:15",
               "focus": "Build aerobic fitness with HR feedback"
             }
@@ -632,7 +632,7 @@
               "dist": 50,
               "desc": "Easy alternating: Freestyle / Backstroke (swap each length)",
               "interval": "On 1:20",
-              "focus": "Gentle recovery \u2014 no effort, just move"
+              "focus": "Gentle recovery — no effort, just move"
             }
           ]
         }
@@ -665,7 +665,7 @@
             {
               "reps": 1,
               "dist": 300,
-              "desc": "Freestyle \u2014 build from easy to moderate",
+              "desc": "Freestyle — build from easy to moderate",
               "interval": "No interval",
               "focus": "Gradually wake up"
             },
@@ -693,14 +693,14 @@
           ]
         },
         {
-          "name": "Main Set \u2014 Breast Pull + Kick + Swim",
+          "name": "Main Set — Breast Pull + Kick + Swim",
           "section": "main",
           "totalYards": 1200,
           "sets": [
             {
               "reps": 4,
               "dist": 50,
-              "desc": "Breaststroke \u2014 pull only (no kick, glide)",
+              "desc": "Breaststroke — pull only (no kick, glide)",
               "interval": "On 1:30",
               "focus": "Pull power",
               "eq": "pull"
@@ -708,7 +708,7 @@
             {
               "reps": 4,
               "dist": 50,
-              "desc": "Breaststroke kick (board) \u2014 strong",
+              "desc": "Breaststroke kick (board) — strong",
               "interval": "On 1:30",
               "focus": "Kick power",
               "eq": "kick"
@@ -716,21 +716,21 @@
             {
               "reps": 4,
               "dist": 50,
-              "desc": "Breaststroke \u2014 full stroke, integrate",
+              "desc": "Breaststroke — full stroke, integrate",
               "interval": "On 1:30",
               "focus": "Apply both"
             },
             {
               "reps": 4,
               "dist": 100,
-              "desc": "Breaststroke \u2014 full stroke, race-pace tempo",
+              "desc": "Breaststroke — full stroke, race-pace tempo",
               "interval": "On 3:15",
               "focus": "Race-pace endurance"
             },
             {
               "reps": 1,
               "dist": 200,
-              "desc": "Easy choice \u2014 close",
+              "desc": "Easy choice — close",
               "interval": "On 4:00",
               "focus": "Cool down"
             }
@@ -744,7 +744,7 @@
             {
               "reps": 1,
               "dist": 200,
-              "desc": "Easy Freestyle \u2014 long, relaxed stroke",
+              "desc": "Easy Freestyle — long, relaxed stroke",
               "interval": "No interval",
               "focus": "Bring heart rate down, flush the muscles"
             }
@@ -779,7 +779,7 @@
             {
               "reps": 1,
               "dist": 300,
-              "desc": "Freestyle \u2014 build from easy to moderate",
+              "desc": "Freestyle — build from easy to moderate",
               "interval": "No interval",
               "focus": "Gradually wake up"
             },
@@ -800,7 +800,7 @@
             {
               "reps": 1,
               "dist": 300,
-              "desc": "Kick \u2014 choice of stroke, easy pace (board optional)",
+              "desc": "Kick — choice of stroke, easy pace (board optional)",
               "interval": "No interval",
               "focus": "Leg warm-up, build base endurance",
               "eq": "kick"
@@ -808,14 +808,14 @@
           ]
         },
         {
-          "name": "Main Set \u2014 Threshold Pull 150s",
+          "name": "Main Set — Threshold Pull 150s",
           "section": "main",
           "totalYards": 1200,
           "sets": [
             {
               "reps": 8,
               "dist": 150,
-              "desc": "Pull (buoy) \u2014 threshold pace, smooth long stroke",
+              "desc": "Pull (buoy) — threshold pace, smooth long stroke",
               "interval": "On 2:45",
               "focus": "Pull threshold volume",
               "eq": "pull"
@@ -837,14 +837,121 @@
             {
               "reps": 1,
               "dist": 100,
-              "desc": "Easy Freestyle \u2014 progressively slower",
+              "desc": "Easy Freestyle — progressively slower",
               "interval": "No interval",
-              "focus": "Full cool-down \u2014 slowest laps of the day"
+              "focus": "Full cool-down — slowest laps of the day"
             }
           ]
         }
       ],
       "userInitials": "TEST",
+      "notes": "",
+      "sub": "000316.e47611df23a34c68a98e49c3e334c360.1912"
+    },
+    {
+      "id": "wmoyt1isnwi1l9m",
+      "savedAt": "2026-05-09T20:36:56.039Z",
+      "dateCompleted": "2026-05-09",
+      "type": "mixed",
+      "typeLabel": "Mixed",
+      "totalYards": 2100,
+      "estimatedMin": 55,
+      "maxYardsCap": 2400,
+      "equipment": {
+        "kickboard": false,
+        "fins": false,
+        "paddles": false,
+        "pullBuoy": false
+      },
+      "blocks": [
+        {
+          "name": "Warm-Up",
+          "section": "warmup",
+          "totalYards": 400,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy Freestyle",
+              "interval": "No interval",
+              "focus": "Settle into rhythm"
+            },
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "25 Drill / 25 Easy Swim (stroke choice)",
+              "interval": "On 1:15",
+              "focus": "Feel for the water"
+            }
+          ]
+        },
+        {
+          "name": "Drill / Pre-Main Set",
+          "section": "drill",
+          "totalYards": 300,
+          "sets": [
+            {
+              "reps": 3,
+              "dist": 100,
+              "desc": "Mixed stroke — 50 drill of choice / 50 swim",
+              "interval": "On 2:15",
+              "focus": "Variety technique priming"
+            }
+          ]
+        },
+        {
+          "name": "Main Set — Quad Mix",
+          "section": "main",
+          "totalYards": 1200,
+          "sets": [
+            {
+              "reps": 6,
+              "dist": 50,
+              "desc": "Kick — choice stroke (board optional)",
+              "interval": "On 1:45",
+              "focus": "Leg block",
+              "eq": "kick"
+            },
+            {
+              "reps": 4,
+              "dist": 100,
+              "desc": "Pull (buoy) — moderate, focus on catch",
+              "interval": "On 2:15",
+              "focus": "Pull block",
+              "eq": "pull"
+            },
+            {
+              "reps": 4,
+              "dist": 50,
+              "desc": "25 Drill / 25 Swim — choice stroke",
+              "interval": "On 1:30",
+              "focus": "Drill block"
+            },
+            {
+              "reps": 3,
+              "dist": 100,
+              "desc": "Freestyle — strong, integrate all",
+              "interval": "On 2:15",
+              "focus": "Apply all four phases into stroke"
+            }
+          ]
+        },
+        {
+          "name": "Cool-Down",
+          "section": "cooldown",
+          "totalYards": 200,
+          "sets": [
+            {
+              "reps": 1,
+              "dist": 200,
+              "desc": "Easy Freestyle — long, relaxed stroke",
+              "interval": "No interval",
+              "focus": "Bring heart rate down, flush the muscles"
+            }
+          ]
+        }
+      ],
+      "userInitials": "",
       "notes": "",
       "sub": "000316.e47611df23a34c68a98e49c3e334c360.1912"
     }
