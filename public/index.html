@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-10 00:46 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-10 00:53 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -3142,7 +3142,10 @@
       return true;
     }
 
-    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null) {
+    // pinnedBlocks: { warmup?, drill?, main?, cooldown? } — sections to hold fixed.
+    // For each pinned section the block is used as-is; unpinned sections are generated
+    // to fill the remaining budget. Budget math uses freeBudget = maxYards - pinnedTotal.
+    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}) {
       const is50m = poolMode === "50m";
       const allWarmups   = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
       const allCooldowns = is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
@@ -3153,76 +3156,103 @@
         ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
         : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
 
-      // Compute per-section minimums from the active banks
-      const minWu = Math.min(...allWarmups.map(o => o.totalYards));
-      const minDr = Math.min(...drillList.map(o => o.totalYards));
-      const minMa = Math.min(...mainList.map(o => o.totalYards));
-      const minCd = Math.min(...allCooldowns.map(o => o.totalYards));
+      // Fixed yardage from pinned sections; free budget is what remains for unpinned picks
+      const pinnedTotal = (pinnedBlocks.warmup   ? pinnedBlocks.warmup.totalYards   : 0)
+                        + (pinnedBlocks.drill    ? pinnedBlocks.drill.totalYards    : 0)
+                        + (pinnedBlocks.main     ? pinnedBlocks.main.totalYards     : 0)
+                        + (pinnedBlocks.cooldown ? pinnedBlocks.cooldown.totalYards : 0);
+      const freeBudget  = maxYards - pinnedTotal;
+      const hasPins     = pinnedTotal > 0;
+
+      // Per-section minimums (0 for pinned sections — they don't consume free budget)
+      const minWu = pinnedBlocks.warmup   ? 0 : Math.min(...allWarmups.map(o => o.totalYards));
+      const minDr = pinnedBlocks.drill    ? 0 : Math.min(...drillList.map(o => o.totalYards));
+      const minMa = pinnedBlocks.main     ? 0 : Math.min(...mainList.map(o => o.totalYards));
+      const minCd = pinnedBlocks.cooldown ? 0 : Math.min(...allCooldowns.map(o => o.totalYards));
+
       const absoluteMin = Math.max(is50m ? MIN_METERS : MIN_YARDS, userMin || 0);
-      // Floor scales with target: workout must use ≥ (maxYards - 400) yards so the
-      // generator fills the budget rather than picking the smallest valid combo.
-      const minTotal = Math.max(absoluteMin, maxYards - 400);
+      // Floor scales with target; relax when pins are present (user chose those blocks)
+      const minTotal = hasPins ? absoluteMin : Math.max(absoluteMin, maxYards - 400);
 
       const hasEquipReq = equipment && Object.values(EQUIP_REQUIREMENTS).length > 0
                          && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
 
-      // More attempts for large targets (tighter combos) and equipment constraints
       const attempts = (maxYards >= 3000 || hasEquipReq) ? 80 : 30;
 
-      // Biased pick: prefer larger options to fill the budget, fall back to any valid
       function pickBiased(arr, floor) {
         const preferred = arr.filter(o => o.totalYards >= floor);
         return pick(preferred.length > 0 ? preferred : arr);
       }
 
       for (let attempt = 0; attempt < attempts; attempt++) {
-        // 1. Pick warmup — prefer larger warmups when target is generous
-        const validWarmups = allWarmups.filter(o =>
-          o.totalYards <= maxYards - minDr - minMa - minCd
-        );
-        if (!validWarmups.length) break;
-        const wuFloor = maxYards * 0.12; // warmup should be ~12%+ of target
-        const wu = pickBiased(validWarmups, wuFloor);
+        let freeUsed = 0; // yards committed to unpinned sections this attempt
 
-        // 2. Pick drill — prefer larger drills proportionally
-        const validDrills = drillList.filter(o =>
-          o.totalYards <= maxYards - wu.totalYards - minMa - minCd
-        );
-        if (!validDrills.length) continue;
-        const drFloor = (maxYards - wu.totalYards) * 0.10;
-        const dr = pickBiased(validDrills, drFloor);
+        // 1. Warmup
+        let wu;
+        if (pinnedBlocks.warmup) {
+          wu = pinnedBlocks.warmup;
+        } else {
+          const validWarmups = allWarmups.filter(o =>
+            o.totalYards <= freeBudget - minDr - minMa - minCd
+          );
+          if (!validWarmups.length) break;
+          wu = pickBiased(validWarmups, freeBudget * 0.12);
+          freeUsed += wu.totalYards;
+        }
 
-        // 3. Pick main — must leave room for min cooldown; strongly prefer larger mains
-        // Expand pool with ×2 and ×3 repeat variants
-        const mainBudget = maxYards - wu.totalYards - dr.totalYards - minCd;
-        const mainPoolExpanded = mainList.flatMap(o => {
-          const variants = [o];
-          for (const r of [2, 3]) {
-            const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
-            if (rep.totalYards <= mainBudget) variants.push(rep);
-          }
-          return variants;
-        });
-        const validMain = mainPoolExpanded.filter(o => o.totalYards <= mainBudget);
-        if (!validMain.length) continue;
-        const maFloor = Math.max(minMa, mainBudget * 0.65);
-        // Favorites get 3× weight; repeat variants get 2× weight
-        const weightedMain = validMain.flatMap(o => {
-          const favWeight = favorites.length && o.label && favorites.includes(o.label) ? 3 : 1;
-          const repeatWeight = (o.rounds || 1) > 1 ? 2 : 1;
-          return Array(Math.max(favWeight, repeatWeight)).fill(o);
-        });
-        const biasedMain = weightedMain.filter(o => o.totalYards >= maFloor);
-        const ma = pick(biasedMain.length > 0 ? biasedMain : weightedMain);
+        // 2. Drill
+        let dr;
+        if (pinnedBlocks.drill) {
+          dr = pinnedBlocks.drill;
+        } else {
+          const validDrills = drillList.filter(o =>
+            o.totalYards <= freeBudget - freeUsed - minMa - minCd
+          );
+          if (!validDrills.length) continue;
+          dr = pickBiased(validDrills, (freeBudget - freeUsed) * 0.10);
+          freeUsed += dr.totalYards;
+        }
 
-        // 4. Equipment satisfaction check — every checked item needs a matching set
+        // 3. Main — expand pool with ×2 and ×3 repeat variants
+        let ma;
+        if (pinnedBlocks.main) {
+          ma = pinnedBlocks.main;
+        } else {
+          const mainBudget = freeBudget - freeUsed - minCd;
+          const mainPoolExpanded = mainList.flatMap(o => {
+            const variants = [o];
+            for (const r of [2, 3]) {
+              const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
+              if (rep.totalYards <= mainBudget) variants.push(rep);
+            }
+            return variants;
+          });
+          const validMain = mainPoolExpanded.filter(o => o.totalYards <= mainBudget);
+          if (!validMain.length) continue;
+          const maFloor = Math.max(minMa, mainBudget * 0.65);
+          const weightedMain = validMain.flatMap(o => {
+            const favWeight = favorites.length && o.label && favorites.includes(o.label) ? 3 : 1;
+            const repeatWeight = (o.rounds || 1) > 1 ? 2 : 1;
+            return Array(Math.max(favWeight, repeatWeight)).fill(o);
+          });
+          const biasedMain = weightedMain.filter(o => o.totalYards >= maFloor);
+          ma = pick(biasedMain.length > 0 ? biasedMain : weightedMain);
+          freeUsed += ma.totalYards;
+        }
+
+        // 4. Equipment satisfaction check
         if (hasEquipReq && !combinationSatisfies(dr, ma, equipment)) continue;
 
-        // 5. Pick cooldown — must fit within remaining budget
-        const remaining = maxYards - wu.totalYards - dr.totalYards - ma.totalYards;
-        const validCooldowns = allCooldowns.filter(o => o.totalYards <= remaining);
-        if (!validCooldowns.length) continue;
-        const cd = pick(validCooldowns);
+        // 5. Cooldown
+        let cd;
+        if (pinnedBlocks.cooldown) {
+          cd = pinnedBlocks.cooldown;
+        } else {
+          const remaining = freeBudget - freeUsed;
+          const validCooldowns = allCooldowns.filter(o => o.totalYards <= remaining);
+          if (!validCooldowns.length) continue;
+          cd = pick(validCooldowns);
+        }
 
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
@@ -3230,42 +3260,71 @@
         }
       }
 
-      // Fallback: prefer largest valid combination (sort descending by totalYards)
+      // Fallback: largest valid combination, respecting pins
       const byYardsDesc = (a, b) => b.totalYards - a.totalYards;
-      const wuFallbackPool = allWarmups.filter(o => o.totalYards <= maxYards - minDr - minMa - minCd);
-      const wu = (wuFallbackPool.length ? wuFallbackPool.sort(byYardsDesc) : allWarmups.slice().sort(byYardsDesc))[0];
-      let drillCandidates = drillList.filter(o => o.totalYards <= maxYards - wu.totalYards - minMa - minCd);
-      if (!drillCandidates.length) drillCandidates = drillList;
-      drillCandidates = drillCandidates.slice().sort(byYardsDesc);
-      if (hasEquipReq) {
-        const eqPreferred = drillCandidates.filter(d =>
-          mainList.some(m =>
-            m.totalYards <= maxYards - wu.totalYards - d.totalYards - minCd &&
-            combinationSatisfies(d, m, equipment)
-          )
-        );
-        if (eqPreferred.length) drillCandidates = eqPreferred;
+      let fbFree = 0;
+
+      let wu;
+      if (pinnedBlocks.warmup) {
+        wu = pinnedBlocks.warmup;
+      } else {
+        const wuPool = allWarmups.filter(o => o.totalYards <= freeBudget - minDr - minMa - minCd);
+        wu = (wuPool.length ? wuPool.slice().sort(byYardsDesc) : allWarmups.slice().sort(byYardsDesc))[0];
+        fbFree += wu.totalYards;
       }
-      const dr = drillCandidates[0];
-      const fallbackMainBudget = maxYards - wu.totalYards - dr.totalYards - minCd;
-      const fallbackMainExpanded = mainList.flatMap(o => {
-        const variants = [o];
-        for (const r of [2, 3]) {
-          const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
-          if (rep.totalYards <= fallbackMainBudget) variants.push(rep);
+
+      let dr;
+      if (pinnedBlocks.drill) {
+        dr = pinnedBlocks.drill;
+      } else {
+        let drCandidates = drillList.filter(o => o.totalYards <= freeBudget - fbFree - minMa - minCd);
+        if (!drCandidates.length) drCandidates = drillList;
+        drCandidates = drCandidates.slice().sort(byYardsDesc);
+        if (hasEquipReq) {
+          const eqPreferred = drCandidates.filter(d =>
+            mainList.some(m =>
+              m.totalYards <= freeBudget - fbFree - d.totalYards - minCd &&
+              combinationSatisfies(d, m, equipment)
+            )
+          );
+          if (eqPreferred.length) drCandidates = eqPreferred;
         }
-        return variants;
-      });
-      let mainCandidates = fallbackMainExpanded.filter(o => o.totalYards <= fallbackMainBudget);
-      if (!mainCandidates.length) mainCandidates = mainList;
-      mainCandidates = mainCandidates.slice().sort(byYardsDesc);
-      if (hasEquipReq) {
-        const eqMain = mainCandidates.filter(m => combinationSatisfies(dr, m, equipment));
-        if (eqMain.length) mainCandidates = eqMain;
+        dr = drCandidates[0];
+        fbFree += dr.totalYards;
       }
-      const ma = mainCandidates[0];
-      const cdFallbackPool = allCooldowns.filter(o => o.totalYards <= maxYards - wu.totalYards - dr.totalYards - ma.totalYards);
-      const cd = (cdFallbackPool.length ? cdFallbackPool.slice().sort(byYardsDesc) : allCooldowns)[0];
+
+      let ma;
+      if (pinnedBlocks.main) {
+        ma = pinnedBlocks.main;
+      } else {
+        const fbMainBudget = freeBudget - fbFree - minCd;
+        const fbMainExpanded = mainList.flatMap(o => {
+          const variants = [o];
+          for (const r of [2, 3]) {
+            const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
+            if (rep.totalYards <= fbMainBudget) variants.push(rep);
+          }
+          return variants;
+        });
+        let mainCandidates = fbMainExpanded.filter(o => o.totalYards <= fbMainBudget);
+        if (!mainCandidates.length) mainCandidates = mainList;
+        mainCandidates = mainCandidates.slice().sort(byYardsDesc);
+        if (hasEquipReq) {
+          const eqMain = mainCandidates.filter(m => combinationSatisfies(dr, m, equipment));
+          if (eqMain.length) mainCandidates = eqMain;
+        }
+        ma = mainCandidates[0];
+        fbFree += ma.totalYards;
+      }
+
+      let cd;
+      if (pinnedBlocks.cooldown) {
+        cd = pinnedBlocks.cooldown;
+      } else {
+        const cdPool = allCooldowns.filter(o => o.totalYards <= freeBudget - fbFree);
+        cd = (cdPool.length ? cdPool.slice().sort(byYardsDesc) : allCooldowns.slice().sort(byYardsDesc))[0];
+      }
+
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       return buildWorkout(typeId, wu, dr, ma, cd, total);
     }
@@ -3747,7 +3806,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds" }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -3757,11 +3816,12 @@
       const btnBorder = isDarkHeader ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.15)";
       const [hovered, setHovered] = useState(false);
       return (
-        <div className="workout-block" style={{ borderRadius: 12, border: `1px solid ${s.border}`, overflow: "hidden", marginBottom: 16 }}>
+        <div className="workout-block" style={{ borderRadius: 12, border: isPinned ? `2px solid ${s.dot}` : `1px solid ${s.border}`, overflow: "hidden", marginBottom: 16 }}>
           <div className="workout-block-header" style={{ background: s.headerBg, color: s.headerText, padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.dot, display: "inline-block" }} />
               <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.name}</span>
+              {isPinned && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", opacity: 0.8 }}>PINNED</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} {unit}</span>
@@ -3781,7 +3841,23 @@
                   {isFavorited ? "★" : "☆"}
                 </button>
               )}
-              {onRegenerate && (
+              {onTogglePin && (
+                <button
+                  type="button"
+                  className="screen-only"
+                  onClick={() => onTogglePin(block.section)}
+                  title={isPinned ? "Unpin — regenerate this section next time" : "Pin — keep this section on next generate"}
+                  style={{
+                    background: isPinned ? "rgba(255,255,255,0.20)" : btnBg,
+                    border: `1px solid ${isPinned ? "rgba(255,255,255,0.45)" : btnBorder}`,
+                    color: s.headerText, fontSize: 14, lineHeight: 1,
+                    cursor: "pointer", padding: "4px 7px", borderRadius: 6,
+                    transition: "background 0.15s",
+                  }}>
+                  {isPinned ? "📌" : "📍"}
+                </button>
+              )}
+              {onRegenerate && !isPinned && (
                 <button
                   type="button"
                   className="screen-only"
@@ -5212,6 +5288,10 @@
         try { return normalizeInitials(localStorage.getItem(USER_INITIALS_KEY) || ""); }
         catch (_) { return ""; }
       });
+      // Pinned sections: { warmup?: bool, drill?: bool, main?: bool, cooldown?: bool }
+      // Pinned blocks are held fixed on "Generate New Workout"; unpinned sections get fresh picks.
+      const [pinnedSections, setPinnedSections]   = useState({});
+
       // Per-section regeneration error: { section: "warmup"|"drill"|"main"|"cooldown", message } | null
       const [regenError, setRegenError]           = useState(null);
       // Run Workout overlay: null when inactive, or the workout/entry object being stepped through
@@ -5451,7 +5531,14 @@
 
       const handleGenerate = useCallback(() => {
         if (!selectedType) return;
-        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin);
+        // Build pinned block map from current workout state
+        const pinned = {};
+        if (workout) {
+          for (const b of workout.blocks) {
+            if (pinnedSections[b.section]) pinned[b.section] = b;
+          }
+        }
+        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned);
         // Apply user's pace to intervals at generation time (not just on "Rescale all")
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
@@ -5474,13 +5561,14 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
       // surface a per-section inline error.
       const handleRegenerateSection = useCallback((sectionKey) => {
         if (!workout || !selectedType) return;
+        if (pinnedSections[sectionKey]) return; // pinned sections can't be individually regenerated
         const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin);
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -5510,9 +5598,13 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections]);
 
-      const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
+      const handleTogglePin = useCallback((sectionKey) => {
+        setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
+      }, []);
+
+      const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); setPinnedSections({}); };
       const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
       const handlePoolModeChange = (mode) => {
         setPoolMode(mode);
@@ -5520,6 +5612,7 @@
         setLoadedFromHistoryId(null);
         setSaveStatus(null);
         setRegenError(null);
+        setPinnedSections({});
         setMaxYards(mode === "50m" ? 2500 : 2400);
       };
       const handleEquipChange = (id, on) => {
@@ -6029,6 +6122,8 @@
                     onToggleFavorite={handleToggleFavorite}
                     onRoundRestChange={handleRoundRestChange}
                     unit={unit}
+                    isPinned={!!pinnedSections[block.section]}
+                    onTogglePin={handleTogglePin}
                   />
                 ))}
 
