@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-10 01:54 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-10 05:47 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -2808,16 +2808,47 @@
     // ═══════════════════════════════════════════════════════════════
 
     const WARMUP_OPTIONS_50M = [
+      // --- Sprint affinity ---
       { typeAffinity: ["sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, settle into long-course rhythm" },
+        ]},
+      { typeAffinity: ["sprint"], totalYards: 500, sets: [
+          { reps: 1, dist: 300, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Ease into the long-course pool" },
+          { reps: 4, dist:  50, desc: "Build: easy first 25m, strong second 25m", interval: "On 1:20", focus: "Wake up fast-twitch before sprint work" },
+        ]},
+      { typeAffinity: ["sprint"], totalYards: 600, sets: [
+          { reps: 1, dist: 400, desc: "Easy Freestyle — steady pace, long stroke", interval: "No interval", focus: "Full-body warm-up before fast work" },
+          { reps: 4, dist:  50, desc: "Descend 1→4: add speed each length", interval: "On 1:20", focus: "Gradual race-pace activation" },
+        ]},
+      // --- Technique affinity ---
+      { typeAffinity: ["technique"], totalYards: 400, sets: [
+          { reps: 1, dist: 200, desc: "Easy Freestyle — focus on long, smooth stroke", interval: "No interval", focus: "Settle into good mechanics" },
+          { reps: 4, dist:  50, desc: "Drill choice — fingertip drag or catch-up drill", interval: "On 1:20", focus: "Isolate recovery and front-end catch" },
         ]},
       { typeAffinity: ["technique"], totalYards: 500, sets: [
           { reps: 1, dist: 300, desc: "Easy Freestyle", interval: "No interval", focus: "Settle into the long-course pool" },
           { reps: 4, dist:  50, desc: "Stroke drill choice — one focus per length", interval: "On 1:20", focus: "Feel for the water" },
         ]},
+      { typeAffinity: ["technique"], totalYards: 700, sets: [
+          { reps: 1, dist: 500, desc: "Easy Freestyle — breathe every 3, focus on rotation", interval: "No interval", focus: "Long warm-up before detailed drill work" },
+          { reps: 4, dist:  50, desc: "Drill choice — one focus per length, reset between", interval: "On 1:30", focus: "Prime stroke mechanics before technique main" },
+        ]},
+      // --- Endurance affinity ---
+      { typeAffinity: ["endurance"], totalYards: 400, sets: [
+          { reps: 1, dist: 400, desc: "Easy Freestyle — build effort from 30% to 60%", interval: "No interval", focus: "Gradual aerobic engine warm-up" },
+        ]},
+      { typeAffinity: ["endurance"], totalYards: 500, sets: [
+          { reps: 1, dist: 300, desc: "Easy Freestyle — relaxed, long-course rhythm", interval: "No interval", focus: "Ease into aerobic work" },
+          { reps: 4, dist:  50, desc: "Kick (board) — steady pace, hips up", interval: "On 1:30", focus: "Engage legs before endurance main", eq: "kick" },
+        ]},
       { typeAffinity: ["endurance"], totalYards: 600, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Warm up the aerobic engine gradually" },
           { reps: 4, dist:  50, desc: "Kick (no board, streamlined) — 1 length each", interval: "On 1:30", focus: "Loosen hips and ankles", eq: "kick" },
+        ]},
+      { typeAffinity: ["endurance"], totalYards: 800, sets: [
+          { reps: 1, dist: 400, desc: "Easy Freestyle — aerobic pace, breathe every 3", interval: "No interval", focus: "Thorough warm-up for long-distance work" },
+          { reps: 2, dist: 100, desc: "Pull (buoy) — moderate, high elbow catch", interval: "On 2:30", focus: "Upper body activation", eq: "pull" },
+          { reps: 4, dist:  50, desc: "Kick (board) — easy to moderate", interval: "On 1:30", focus: "Leg conditioning before the long main set", eq: "kick" },
         ]},
     ];
 
