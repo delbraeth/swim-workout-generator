@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-10 00:15 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-10 00:29 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -2893,6 +2893,50 @@
             { reps: 1, dist: 100, desc: "Pull (buoy) — relaxed, flush the sprint work",      interval: "On 2:30", focus: "Transition smoothly to main set", eq: "pull" },
           ]},
       ],
+      im: [
+        { totalYards: 200, sets: [
+            { reps: 4, dist: 50, desc: "IM stroke sequence — one stroke per 50m: fly / back / breast / free", interval: "On 1:30", focus: "Prime each stroke before IM main set" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Stroke drill rotation — fly drill / back drill / breast drill / free easy / repeat", interval: "On 1:20", focus: "Isolate weak points across all four strokes" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "IM — one stroke per 50m (drill first 50m, swim second 50m)", interval: "On 2:45", focus: "Bridge drill feel into full-stroke IM rhythm" },
+          ]},
+      ],
+      back: [
+        { totalYards: 200, sets: [
+            { reps: 4, dist: 50, desc: "Backstroke — alternating single-arm / full-stroke each length", interval: "On 1:20", focus: "Isolate the pulling pattern and high-elbow catch" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Backstroke — alternating elbow-lead drill / full-stroke swim", interval: "On 1:20", focus: "Sharpen rotation and catch before backstroke main" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Backstroke — 50m drill (count strokes) / 50m swim (hold your count)", interval: "On 2:30", focus: "Transfer stroke efficiency to full backstroke" },
+          ]},
+      ],
+      breast: [
+        { totalYards: 200, sets: [
+            { reps: 4, dist: 50, desc: "Breaststroke — alternating pull-only / full-stroke each length", interval: "On 1:20", focus: "Isolate the pull phase and high elbow recovery" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Breaststroke — alternating kick-only / full-stroke each length", interval: "On 1:30", focus: "Build kick power and timing before breaststroke main" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Breaststroke — 50m pull-only / 50m full-stroke, focus on glide", interval: "On 2:30", focus: "Connect the pull to a patient, powerful stroke cycle" },
+          ]},
+      ],
+      fly: [
+        { totalYards: 200, sets: [
+            { reps: 4, dist: 50, desc: "Alternating: fly drill (single-arm or finger-drag) / easy freestyle", interval: "On 1:20", focus: "Activate butterfly without fatiguing before the main set" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Alternating: underwater dolphin kick / easy freestyle recovery", interval: "On 1:20", focus: "Build the undulation rhythm and kick power for fly" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "50m single-arm fly (alternate arms each length) / 50m easy freestyle", interval: "On 2:30", focus: "Isolate each arm's pull before full-butterfly main set" },
+          ]},
+      ],
     };
 
     const MAIN_OPTIONS_50M = {
@@ -2966,6 +3010,102 @@
             { reps: 4, dist: 100, desc: "Moderate — 2 lengths steady aerobic",          interval: "On 2:30", focus: "Get the engine running" },
             { reps: 4, dist:  50, desc: "Fast — 1 length strong pace",                   interval: "On 1:20", focus: "Speed layer" },
             { reps: 2, dist: 200, desc: "Threshold — 4 lengths, hold pace under fatigue", interval: "On 5:00", focus: "Endurance on top of the speed work" },
+          ]},
+      ],
+      im: [
+        { label: "IM 200s", totalYards: 800, sets: [
+            { reps: 4, dist: 200, desc: "Individual Medley — one stroke per 50m, hold each stroke strong", interval: "On 6:00", focus: "Build IM rhythm and transition efficiency" },
+          ]},
+        { label: "IM Volume", totalYards: 1000, sets: [
+            { reps: 5, dist: 200, desc: "Individual Medley — steady effort, focus on clean transitions", interval: "On 6:00", focus: "Long-course IM aerobic base" },
+          ]},
+        { label: "IM 400s", totalYards: 1200, sets: [
+            { reps: 3, dist: 400, desc: "Individual Medley — one stroke per 100m, controlled effort", interval: "On 12:00", focus: "Sustain all four strokes over a long-course 400 IM" },
+          ]},
+        { label: "IM Endurance", totalYards: 1600, sets: [
+            { reps: 4, dist: 400, desc: "Individual Medley — moderate effort, negative-split the back half", interval: "On 12:00", focus: "Long-course IM aerobic endurance" },
+          ]},
+        { label: "IM Ladder", totalYards: 1000, sets: [
+            { reps: 2, dist: 400, desc: "Individual Medley — steady, establish your IM pace", interval: "On 12:00", focus: "Long IM aerobic effort" },
+            { reps: 1, dist: 200, desc: "Individual Medley — push the pace slightly vs. the 400s", interval: "On 6:00", focus: "Close the set faster" },
+          ]},
+        { label: "IM 200s Repeat Unit", totalYards: 400, sets: [
+            { reps: 2, dist: 200, desc: "Individual Medley — strong, clean transitions", interval: "On 6:00", focus: "Repeatable IM quality — designed to repeat 2–3×" },
+          ]},
+        { label: "IM 200s Long Repeat Unit", totalYards: 600, sets: [
+            { reps: 3, dist: 200, desc: "Individual Medley — consistent effort each round", interval: "On 6:00", focus: "IM endurance volume — designed to repeat 2–3×" },
+          ]},
+      ],
+      back: [
+        { label: "Backstroke 100s", totalYards: 800, sets: [
+            { reps: 8, dist: 100, desc: "Backstroke — moderate pace, count strokes per length", interval: "On 2:45", focus: "Build stroke efficiency over 2 lengths" },
+          ]},
+        { label: "Backstroke 200s", totalYards: 1000, sets: [
+            { reps: 5, dist: 200, desc: "Backstroke — steady aerobic, hold stroke count from length to length", interval: "On 5:30", focus: "Long-course backstroke aerobic base" },
+          ]},
+        { label: "Backstroke Volume", totalYards: 1200, sets: [
+            { reps: 6, dist: 200, desc: "Backstroke — comfortably hard (RPE 7/10), negative-split each 200", interval: "On 5:30", focus: "Backstroke endurance at long-course pace" },
+          ]},
+        { label: "Backstroke 400s", totalYards: 1600, sets: [
+            { reps: 4, dist: 400, desc: "Backstroke — steady threshold pace, focus on long-axis rotation", interval: "On 11:00", focus: "Backstroke aerobic power over 8 lengths" },
+          ]},
+        { label: "Backstroke Ladder", totalYards: 1000, sets: [
+            { reps: 4, dist: 100, desc: "Backstroke — moderate, establish pace", interval: "On 2:45", focus: "Find your long-course backstroke rhythm" },
+            { reps: 3, dist: 200, desc: "Backstroke — slightly faster than the 100s, hold pace", interval: "On 5:30", focus: "Sustain speed at longer distance" },
+          ]},
+        { label: "Back 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Backstroke — strong, count strokes each length", interval: "On 2:45", focus: "Repeatable backstroke quality — designed to repeat 2–3×" },
+          ]},
+        { label: "Back 200s Repeat Unit", totalYards: 600, sets: [
+            { reps: 3, dist: 200, desc: "Backstroke — consistent effort, hold stroke rate", interval: "On 5:30", focus: "Backstroke endurance volume — designed to repeat 2–3×" },
+          ]},
+      ],
+      breast: [
+        { label: "Breaststroke 100s", totalYards: 800, sets: [
+            { reps: 8, dist: 100, desc: "Breaststroke — moderate pace, focus on patient glide and powerful pull", interval: "On 3:00", focus: "Build stroke timing over 2 lengths" },
+          ]},
+        { label: "Breaststroke 200s", totalYards: 1000, sets: [
+            { reps: 5, dist: 200, desc: "Breaststroke — steady aerobic, hold consistent cycle rhythm", interval: "On 6:00", focus: "Long-course breaststroke aerobic base" },
+          ]},
+        { label: "Breaststroke Volume", totalYards: 1200, sets: [
+            { reps: 6, dist: 200, desc: "Breaststroke — comfortably hard (RPE 7/10), strong pull each cycle", interval: "On 6:00", focus: "Breaststroke endurance at long-course pace" },
+          ]},
+        { label: "Breaststroke 400s", totalYards: 1600, sets: [
+            { reps: 4, dist: 400, desc: "Breaststroke — steady threshold pace, focus on efficient pull-out on turns", interval: "On 12:00", focus: "Breaststroke aerobic power over 8 lengths" },
+          ]},
+        { label: "Breaststroke Ladder", totalYards: 1000, sets: [
+            { reps: 4, dist: 100, desc: "Breaststroke — moderate, establish pace and glide timing", interval: "On 3:00", focus: "Find your long-course breaststroke rhythm" },
+            { reps: 3, dist: 200, desc: "Breaststroke — slightly faster than the 100s, hold cycle timing", interval: "On 6:00", focus: "Sustain breaststroke speed at longer distance" },
+          ]},
+        { label: "Breast 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Breaststroke — strong pull and patient glide", interval: "On 3:00", focus: "Repeatable breaststroke quality — designed to repeat 2–3×" },
+          ]},
+        { label: "Breast 200s Repeat Unit", totalYards: 600, sets: [
+            { reps: 3, dist: 200, desc: "Breaststroke — consistent cycle rhythm each round", interval: "On 6:00", focus: "Breaststroke endurance volume — designed to repeat 2–3×" },
+          ]},
+      ],
+      fly: [
+        { label: "Fly/Free 100s", totalYards: 800, sets: [
+            { reps: 8, dist: 100, desc: "50m butterfly / 50m easy freestyle — full effort on the fly, recover on free", interval: "On 3:00", focus: "Build butterfly volume with active recovery" },
+          ]},
+        { label: "Fly Sprint 50s", totalYards: 1000, sets: [
+            { reps: 20, dist: 50, desc: "Butterfly — maximum effort, long underwater off the wall, full recovery", interval: "On 1:30", focus: "Maintain stroke quality on each 50m fly length" },
+          ]},
+        { label: "Fly/Free 200s", totalYards: 1200, sets: [
+            { reps: 6, dist: 200, desc: "100m butterfly / 100m easy freestyle — push the fly, use the free to recover", interval: "On 6:00", focus: "Long-course butterfly endurance with built-in recovery" },
+          ]},
+        { label: "Fly Volume", totalYards: 1600, sets: [
+            { reps: 8, dist: 200, desc: "100m butterfly / 100m moderate freestyle — maintain fly technique on each half", interval: "On 6:00", focus: "Build butterfly aerobic base through fly-dominant 200s" },
+          ]},
+        { label: "Fly Ladder", totalYards: 1000, sets: [
+            { reps: 6, dist: 100, desc: "50m butterfly / 50m easy freestyle — hold fly technique", interval: "On 3:00", focus: "Establish fly rhythm at long-course pace" },
+            { reps: 2, dist: 200, desc: "100m butterfly / 100m moderate freestyle — sustain quality", interval: "On 6:00", focus: "Extend fly endurance after the shorter reps" },
+          ]},
+        { label: "Fly 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "50m butterfly / 50m easy freestyle — quality fly on each rep", interval: "On 3:00", focus: "Repeatable butterfly quality — designed to repeat 2–3×" },
+          ]},
+        { label: "Fly 100s Long Repeat Unit", totalYards: 600, sets: [
+            { reps: 6, dist: 100, desc: "50m butterfly / 50m easy freestyle — consistent effort each round", interval: "On 3:00", focus: "Butterfly endurance volume — designed to repeat 2–3×" },
           ]},
       ],
     };
@@ -5548,7 +5688,7 @@
       const unit = poolMode === "50m" ? "m" : "yds";
       const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : 0;
       const canGenerate = selectedType && maxYards >= typeMin;
-      const is50mYardFallback = poolMode === "50m" && selectedType && ["im","back","breast","fly"].includes(selectedType);
+      const is50mYardFallback = false; // all types now have native 50m option banks
 
       return (
         <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)" }}>
