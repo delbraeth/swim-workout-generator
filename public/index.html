@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-10 00:53 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-10 00:58 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -5772,6 +5772,27 @@
         setView("generator");
       }, []);
 
+      // Last completed session summary — must be before early returns (Rules of Hooks)
+      const lastSession = useMemo(() => {
+        const done = history.filter(e => e.completed !== false && e.dateCompleted);
+        if (!done.length) return null;
+        done.sort((a, b) => b.dateCompleted.localeCompare(a.dateCompleted));
+        const e = done[0];
+        const today = new Date().toISOString().slice(0, 10);
+        const diffDays = Math.round((new Date(today) - new Date(e.dateCompleted)) / 86400000);
+        let when;
+        if      (diffDays === 0) when = "today";
+        else if (diffDays === 1) when = "yesterday";
+        else if (diffDays <  7)  when = `${diffDays} days ago`;
+        else if (diffDays < 14)  when = "1 week ago";
+        else                     when = `${Math.floor(diffDays / 7)} weeks ago`;
+        const lastUnit = e.poolMode === "50m" ? "m" : "yds";
+        const typeMeta = WORKOUT_TYPES.find(t => t.id === e.type);
+        const emoji = typeMeta ? typeMeta.emoji : "🏊";
+        const label = e.typeLabel || (typeMeta ? typeMeta.label : e.type);
+        return { emoji, label, totalYards: e.totalYards, unit: lastUnit, when };
+      }, [history]);
+
       // Auth gate — render nothing while checking, show gate if no valid code
       if (authenticated === null) return null; // still checking
       if (!authenticated) return <SignInGate authError={authError} />;
@@ -5782,28 +5803,6 @@
       const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : 0;
       const canGenerate = selectedType && maxYards >= typeMin;
 
-      // Last completed session summary for the generate screen
-      const lastSession = useMemo(() => {
-        const done = history.filter(e => e.completed !== false && e.dateCompleted);
-        if (!done.length) return null;
-        done.sort((a, b) => b.dateCompleted.localeCompare(a.dateCompleted));
-        const e = done[0];
-        const today = new Date().toISOString().slice(0, 10);
-        const diffDays = Math.round(
-          (new Date(today) - new Date(e.dateCompleted)) / 86400000
-        );
-        let when;
-        if      (diffDays === 0) when = "today";
-        else if (diffDays === 1) when = "yesterday";
-        else if (diffDays <  7)  when = `${diffDays} days ago`;
-        else if (diffDays < 14)  when = "1 week ago";
-        else                     when = `${Math.floor(diffDays / 7)} weeks ago`;
-        const unit = e.poolMode === "50m" ? "m" : "yds";
-        const typeMeta = WORKOUT_TYPES.find(t => t.id === e.type);
-        const emoji = typeMeta ? typeMeta.emoji : "🏊";
-        const label = e.typeLabel || (typeMeta ? typeMeta.label : e.type);
-        return { emoji, label, totalYards: e.totalYards, unit, when };
-      }, [history]);
       const is50mYardFallback = false; // all types now have native 50m option banks
 
       return (
