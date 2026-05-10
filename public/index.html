@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-10 00:58 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-10 01:10 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -208,31 +208,31 @@
     // ═══════════════════════════════════════════════════════════════
 
     const WARMUP_OPTIONS = [
-      { totalYards: 400, sets: [
+      { typeAffinity: ["sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, steady breathing" },
         ]},
-      { totalYards: 400, sets: [
+      { typeAffinity: ["technique", "sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle", interval: "No interval", focus: "Settle into rhythm" },
           { reps: 4, dist:  50, desc: "25 Drill / 25 Easy Swim (stroke choice)", interval: "On 1:15", focus: "Feel for the water" },
         ]},
-      { totalYards: 400, sets: [
+      { typeAffinity: ["endurance"], totalYards: 400, sets: [
           { reps: 1, dist: 300, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Gradually wake up" },
           { reps: 4, dist:  25, desc: "Kick (no board, streamlined)", interval: "On :40", focus: "Loosen hips and ankles" },
         ]},
-      { totalYards: 500, sets: [
+      { typeAffinity: ["endurance"], totalYards: 500, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — easy, focus on long stroke", interval: "No interval", focus: "Prime the aerobic engine" },
           { reps: 4, dist:  25, desc: "Backstroke — easy, open the shoulders", interval: "On :45", focus: "Counter the freestyle pull" },
         ]},
-      { totalYards: 600, sets: [
+      { typeAffinity: ["endurance"], totalYards: 600, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Aerobic warm-up, long stroke" },
           { reps: 4, dist:  50, desc: "Pull (buoy) — easy, focus on catch and extension", interval: "On 1:20", focus: "Upper-body prime before main set", eq: "pull" },
         ]},
-      { totalYards: 700, sets: [
+      { typeAffinity: ["endurance"], totalYards: 700, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle — settle in, count strokes", interval: "No interval", focus: "Efficiency awareness from the first lap" },
           { reps: 2, dist: 100, desc: "Kick (board optional) — moderate, even effort", interval: "On 2:30", focus: "Activate legs", eq: "kick" },
           { reps: 1, dist: 100, desc: "Easy backstroke — open the shoulders, counter freestyle pull", interval: "No interval", focus: "All-around warm-up close" },
         ]},
-      { totalYards: 800, sets: [
+      { typeAffinity: ["technique", "endurance"], totalYards: 800, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — very easy, nose down, minimal head movement", interval: "No interval", focus: "Prime body position and breathing pattern" },
           { reps: 4, dist:  50, desc: "Stroke drills — choice, one focus per 50", interval: "On 1:20", focus: "Technical warm-up" },
           { reps: 1, dist: 200, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Ramp up the aerobic engine before main set" },
@@ -2808,14 +2808,14 @@
     // ═══════════════════════════════════════════════════════════════
 
     const WARMUP_OPTIONS_50M = [
-      { totalYards: 400, sets: [
+      { typeAffinity: ["sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, settle into long-course rhythm" },
         ]},
-      { totalYards: 500, sets: [
+      { typeAffinity: ["technique"], totalYards: 500, sets: [
           { reps: 1, dist: 300, desc: "Easy Freestyle", interval: "No interval", focus: "Settle into the long-course pool" },
           { reps: 4, dist:  50, desc: "Stroke drill choice — one focus per length", interval: "On 1:20", focus: "Feel for the water" },
         ]},
-      { totalYards: 600, sets: [
+      { typeAffinity: ["endurance"], totalYards: 600, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Warm up the aerobic engine gradually" },
           { reps: 4, dist:  50, desc: "Kick (no board, streamlined) — 1 length each", interval: "On 1:30", focus: "Loosen hips and ankles", eq: "kick" },
         ]},
@@ -3145,6 +3145,14 @@
     // pinnedBlocks: { warmup?, drill?, main?, cooldown? } — sections to hold fixed.
     // For each pinned section the block is used as-is; unpinned sections are generated
     // to fill the remaining budget. Budget math uses freeBudget = maxYards - pinnedTotal.
+    // Maps workout type → warmup affinity family. Types not listed get no filter (use all warmups).
+    const TYPE_WARMUP_FAMILY = {
+      sprint:    "sprint",
+      endurance: "endurance",
+      distance:  "endurance",
+      technique: "technique",
+    };
+
     function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}) {
       const is50m = poolMode === "50m";
       const allWarmups   = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
@@ -3196,7 +3204,12 @@
             o.totalYards <= freeBudget - minDr - minMa - minCd
           );
           if (!validWarmups.length) break;
-          wu = pickBiased(validWarmups, freeBudget * 0.12);
+          // Prefer warmups whose typeAffinity matches the workout type family
+          const warmupFamily = TYPE_WARMUP_FAMILY[typeId] || null;
+          const affinityPool = warmupFamily
+            ? validWarmups.filter(o => o.typeAffinity && o.typeAffinity.includes(warmupFamily))
+            : validWarmups;
+          wu = pickBiased(affinityPool.length > 0 ? affinityPool : validWarmups, freeBudget * 0.12);
           freeUsed += wu.totalYards;
         }
 
@@ -3409,11 +3422,20 @@
       };
 
       const fitsBudget = (o) => o.totalYards >= lower && o.totalYards <= upper;
-      const validAll = pool.filter(o => fitsBudget(o) && passesEquip(o));
+      let validAll = pool.filter(o => fitsBudget(o) && passesEquip(o));
       if (!validAll.length) {
         return { workout: null, error: hasEquipReq
           ? "No option for this section fits the remaining yardage and your equipment selection."
           : "No option for this section fits the remaining yardage budget." };
+      }
+
+      // Prefer type-matched warmups on regen (same logic as generateWorkout)
+      if (sectionKey === "warmup") {
+        const warmupFamily = TYPE_WARMUP_FAMILY[typeId] || null;
+        if (warmupFamily) {
+          const affinityPool = validAll.filter(o => o.typeAffinity && o.typeAffinity.includes(warmupFamily));
+          if (affinityPool.length > 0) validAll = affinityPool;
+        }
       }
 
       const curFp = sectionFingerprint(current);
