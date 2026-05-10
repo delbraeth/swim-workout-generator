@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-10 00:29 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-10 00:46 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -5688,6 +5688,29 @@
       const unit = poolMode === "50m" ? "m" : "yds";
       const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : 0;
       const canGenerate = selectedType && maxYards >= typeMin;
+
+      // Last completed session summary for the generate screen
+      const lastSession = useMemo(() => {
+        const done = history.filter(e => e.completed !== false && e.dateCompleted);
+        if (!done.length) return null;
+        done.sort((a, b) => b.dateCompleted.localeCompare(a.dateCompleted));
+        const e = done[0];
+        const today = new Date().toISOString().slice(0, 10);
+        const diffDays = Math.round(
+          (new Date(today) - new Date(e.dateCompleted)) / 86400000
+        );
+        let when;
+        if      (diffDays === 0) when = "today";
+        else if (diffDays === 1) when = "yesterday";
+        else if (diffDays <  7)  when = `${diffDays} days ago`;
+        else if (diffDays < 14)  when = "1 week ago";
+        else                     when = `${Math.floor(diffDays / 7)} weeks ago`;
+        const unit = e.poolMode === "50m" ? "m" : "yds";
+        const typeMeta = WORKOUT_TYPES.find(t => t.id === e.type);
+        const emoji = typeMeta ? typeMeta.emoji : "🏊";
+        const label = e.typeLabel || (typeMeta ? typeMeta.label : e.type);
+        return { emoji, label, totalYards: e.totalYards, unit, when };
+      }, [history]);
       const is50mYardFallback = false; // all types now have native 50m option banks
 
       return (
@@ -5830,6 +5853,13 @@
 
               {/* Max Yardage / Distance Slider */}
               <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} />
+
+              {/* Last session summary */}
+              {lastSession && (
+                <div style={{ textAlign: "center", color: "#64748b", fontSize: 12, marginBottom: 12, marginTop: -4 }}>
+                  Last: {lastSession.emoji} {lastSession.label} · {lastSession.totalYards.toLocaleString()} {lastSession.unit} · {lastSession.when}
+                </div>
+              )}
 
               {/* Generate Button */}
               <button
