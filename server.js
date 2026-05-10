@@ -26,13 +26,16 @@
 //   ALLOW_NO_ORIGIN     — "true" to allow curl/local testing without Origin header
 //
 // Apple Sign-In env vars (all required when Apple auth is active):
-//   APPLE_TEAM_ID       — 10-char team ID from Apple Developer console
-//   APPLE_CLIENT_ID     — Services ID you registered (e.g. com.example.swimapp)
-//   APPLE_KEY_ID        — Key ID of the .p8 private key
-//   APPLE_PRIVATE_KEY   — Contents of the .p8 file (newlines as \n or literal)
-//   APPLE_ALLOWED_SUBS  — Comma-separated Apple sub values allowed to log in
-//   SESSION_SECRET      — Random 32+ char string for signing session cookies
-//   APP_URL             — Public HTTPS URL (default: https://veronicacassidy.com)
+//   APPLE_TEAM_ID            — 10-char team ID from Apple Developer console
+//   APPLE_CLIENT_ID          — Services ID you registered (e.g. com.example.swimapp)
+//   APPLE_NATIVE_BUNDLE_ID   — iOS app bundle ID (e.g. com.delbraeth.swimworkout); used to
+//                              verify the 'aud' claim in tokens issued by the native iOS app.
+//                              Falls back to APPLE_CLIENT_ID if not set.
+//   APPLE_KEY_ID             — Key ID of the .p8 private key
+//   APPLE_PRIVATE_KEY        — Contents of the .p8 file (newlines as \n or literal)
+//   APPLE_ALLOWED_SUBS       — Comma-separated Apple sub values allowed to log in
+//   SESSION_SECRET           — Random 32+ char string for signing session cookies
+//   APP_URL                  — Public HTTPS URL (default: https://veronicacassidy.com)
 
 import express from "express";
 import crypto  from "crypto";
@@ -176,7 +179,7 @@ async function getApplePublicKey(kid) {
     .export({ type: "spki", format: "pem" });
 }
 
-async function verifyAppleIdToken(idToken) {
+async function verifyAppleIdToken(idToken, expectedAud = APPLE_CLIENT_ID) {
   const parts = idToken.split(".");
   if (parts.length !== 3) throw new Error("Malformed id_token");
   const [headerB64, payloadB64, sigB64] = parts;
@@ -194,18 +197,23 @@ async function verifyAppleIdToken(idToken) {
   // Verify standard claims
   const now = Math.floor(Date.now() / 1000);
   if (payload.iss !== "https://appleid.apple.com") throw new Error("Wrong issuer");
-  if (payload.aud !== APPLE_CLIENT_ID)              throw new Error("Wrong audience");
-  if (payload.exp < now)                            throw new Error("Token expired");
+  if (payload.aud !== expectedAud)                 throw new Error("Wrong audience");
+  if (payload.exp < now)                           throw new Error("Token expired");
 
   return payload;
 }
 
 // ───── Auth middleware ───────────────────────────────────────────────
-// When Apple auth is active: require a valid session cookie.
+// When Apple auth is active: require a valid session cookie (web) or Bearer token (native).
 // When not active: open mode — writes are unrestricted (same-origin guard still applies).
 function requireAuth(req, res, next) {
   if (!APPLE_AUTH_ACTIVE) return next();
-  const sub = verifySession(getCookie(req, SESSION_COOKIE));
+  const cookieSub = verifySession(getCookie(req, SESSION_COOKIE));
+  const authHeader = req.get("Authorization") || "";
+  const bearerSub  = authHeader.startsWith("Bearer ")
+    ? verifySession(authHeader.slice(7))
+    : null;
+  const sub = cookieSub || bearerSub;
   if (!sub) return res.status(401).json({ error: "not authenticated" });
   if (APPLE_ALLOWED_SUBS.length > 0 && !APPLE_ALLOWED_SUBS.includes(sub)) {
     return res.status(403).json({ error: "not authorized" });
@@ -217,6 +225,11 @@ function requireAuth(req, res, next) {
 
 // ───── Same-origin guard ─────────────────────────────────────────────
 function checkOrigin(req, res, next) {
+  // Native app requests carry a Bearer token and no Origin header — Bearer tokens
+  // are not sent automatically by browsers, so there is no CSRF risk here.
+  const authHeader = req.get("Authorization") || "";
+  if (authHeader.startsWith("Bearer ") && verifySession(authHeader.slice(7))) return next();
+
   const origin = req.get("Origin") || req.get("Referer") || "";
   const host   = req.get("Host") || "";
   if (origin) {
@@ -300,6 +313,31 @@ app.get("/api/auth/status", (req, res) => {
     return res.json({ authenticated: false, reason: "not_authorized" });
   }
   res.json({ authenticated: true });
+});
+
+// Native iOS Sign in with Apple — accepts an identityToken from ASAuthorizationAppleIDCredential,
+// verifies it, and returns a session token the app stores in Keychain and sends as Bearer.
+app.post("/api/auth/native", async (req, res) => {
+  if (!APPLE_AUTH_ACTIVE) return res.status(404).json({ error: "Apple auth not configured" });
+  try {
+    const { identityToken } = req.body || {};
+    if (!identityToken || typeof identityToken !== "string")
+      return res.status(400).json({ error: "identityToken required" });
+    // Native tokens have aud = bundle ID, which differs from the web Services ID.
+    const nativeAud = process.env.APPLE_NATIVE_BUNDLE_ID || APPLE_CLIENT_ID;
+    const payload = await verifyAppleIdToken(identityToken, nativeAud);
+    const sub = payload.sub;
+    console.log(`[auth/native] Apple login: sub=${sub}`);
+    if (APPLE_ALLOWED_SUBS.length > 0 && !APPLE_ALLOWED_SUBS.includes(sub)) {
+      console.warn(`[auth/native] Rejected sub not in allowlist: sub=${sub}`);
+      return res.status(403).json({ error: "not_authorized" });
+    }
+    const token = signSession(sub);
+    res.json({ ok: true, token });
+  } catch (err) {
+    console.error("[auth/native]", err.message);
+    res.status(401).json({ error: err.message });
+  }
 });
 
 // Clear session and redirect home
