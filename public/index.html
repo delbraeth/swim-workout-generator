@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-10 01:10 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-10 01:54 UTC";         // replaced by _deploy.py at commit time
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -5074,7 +5074,7 @@
           block.sets.map((set, sIdx) => ({ set, blockIdx: bIdx, setIdx: sIdx }))
         ), [blocks]);
 
-      function handlePaceNext() {
+      const handlePaceNext = useCallback(() => {
         if (paceIdx + 1 < allSets.length) {
           const next = allSets[paceIdx + 1];
           setIdx(next.blockIdx);
@@ -5085,7 +5085,7 @@
           setAutoStartNext(false);
           onClose();
         }
-      }
+      }, [paceIdx, allSets, restSecs, onClose]);
 
       // Manual tap on a set card — never auto-starts
       function handleSetTap(globalIdx) {
