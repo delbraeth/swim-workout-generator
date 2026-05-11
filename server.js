@@ -51,6 +51,7 @@ import {
   dbIsUser, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent,
   dbCreateSession, dbGetSession, dbTouchSession,
   dbRevokeSession, dbRevokeOthersByUser, dbListSessions,
+  dbGetOrCreateCsrf, dbVerifyCsrf,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -299,6 +300,29 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// CSRF middleware — required on cookie-authenticated writes.
+// Bearer-token requests (native iOS) are CSRF-safe and skip the check.
+async function requireCsrf(req, res, next) {
+  const authHeader = req.get("Authorization") || "";
+  if (authHeader.startsWith("Bearer ")) return next();
+  if (!req.sessionId) return res.status(403).json({ error: "no session" });
+  const supplied = req.get("X-CSRF-Token");
+  if (!supplied) {
+    dbAuditEvent({ userSub: req.userSub, eventType: "csrf.reject", ...reqMeta(req), details: { path: req.path, method: req.method, reason: "missing_header" } });
+    return res.status(403).json({ error: "csrf token required" });
+  }
+  try {
+    if (!(await dbVerifyCsrf(req.sessionId, supplied))) {
+      dbAuditEvent({ userSub: req.userSub, eventType: "csrf.reject", ...reqMeta(req), details: { path: req.path, method: req.method, reason: "mismatch" } });
+      return res.status(403).json({ error: "invalid csrf token" });
+    }
+  } catch (err) {
+    console.warn("[csrf] verify failed:", err.message);
+    return res.status(503).json({ error: "auth backend unavailable" });
+  }
+  next();
+}
+
 
 // ───── Same-origin guard ─────────────────────────────────────────────
 function checkOrigin(req, res, next) {
@@ -415,6 +439,18 @@ app.get("/api/auth/status", async (req, res) => {
     }
   }
   res.json({ authenticated: true });
+});
+
+// Return the CSRF token bound to the current session. Frontend fetches this
+// after auth and includes it as X-CSRF-Token on every write request.
+app.get("/api/auth/csrf", checkOrigin, requireAuth, async (req, res) => {
+  try {
+    const token = await dbGetOrCreateCsrf(req.sessionId);
+    if (!token) return res.status(401).json({ error: "no session" });
+    res.json({ token });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
 });
 
 // Native iOS Sign in with Apple — accepts an identityToken from ASAuthorizationAppleIDCredential,
@@ -535,7 +571,7 @@ app.get("/api/workouts", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/log-workout", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
+app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const entry = req.body;
     if (!entry || !entry.id) return res.status(400).json({ error: "entry must include an id" });
@@ -567,7 +603,7 @@ app.post("/api/log-workout", checkOrigin, requireAuth, writeLimiter, async (req,
   }
 });
 
-app.patch("/api/workouts/:id", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
+app.patch("/api/workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const patch  = req.body || {};
@@ -606,7 +642,7 @@ app.patch("/api/workouts/:id", checkOrigin, requireAuth, writeLimiter, async (re
   }
 });
 
-app.delete("/api/workouts/:id", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
+app.delete("/api/workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -656,7 +692,7 @@ app.get("/api/settings", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/settings", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
+app.post("/api/settings", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const patch = req.body || {};
 
@@ -708,7 +744,7 @@ app.get("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/favorites", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
+app.post("/api/favorites", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const { label } = req.body || {};
     if (!label || typeof label !== "string") return res.status(400).json({ error: "label required" });
@@ -737,7 +773,7 @@ app.post("/api/favorites", checkOrigin, requireAuth, writeLimiter, async (req, r
   }
 });
 
-app.delete("/api/favorites/:label", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
+app.delete("/api/favorites/:label", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const label = decodeURIComponent(req.params.label);
 
