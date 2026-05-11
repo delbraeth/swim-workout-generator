@@ -33,8 +33,7 @@
 //                              Falls back to APPLE_CLIENT_ID if not set.
 //   APPLE_KEY_ID             — Key ID of the .p8 private key
 //   APPLE_PRIVATE_KEY        — Contents of the .p8 file (newlines as \n or literal)
-//   APPLE_ALLOWED_SUBS       — Comma-separated Apple sub values allowed to log in
-//   SESSION_SECRET           — Random 32+ char string for signing session cookies
+//   APPLE_ALLOWED_SUBS       — (deprecated, unused) was the static allowlist; now uses users table + invites
 //   APP_URL                  — Public HTTPS URL (default: https://veronicacassidy.com)
 
 import express   from "express";
@@ -50,6 +49,8 @@ import {
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbIsUser, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent,
+  dbCreateSession, dbGetSession, dbTouchSession,
+  dbRevokeSession, dbRevokeOthersByUser, dbListSessions,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -80,9 +81,8 @@ const APPLE_PRIVATE_KEY  = (process.env.APPLE_PRIVATE_KEY || "").replace(/\\n/g,
 // Filter out placeholder values ("-", "--", "none") that platforms require instead of empty strings
 const APPLE_ALLOWED_SUBS = (process.env.APPLE_ALLOWED_SUBS || "")
   .split(",").map(s => s.trim()).filter(s => s && !/^-+$|^none$/i.test(s));
-const SESSION_SECRET     = process.env.SESSION_SECRET     || "";
 
-const APPLE_AUTH_ACTIVE = !!(APPLE_CLIENT_ID && APPLE_TEAM_ID && APPLE_KEY_ID && APPLE_PRIVATE_KEY && SESSION_SECRET);
+const APPLE_AUTH_ACTIVE = !!(APPLE_CLIENT_ID && APPLE_TEAM_ID && APPLE_KEY_ID && APPLE_PRIVATE_KEY);
 
 const app = express();
 
@@ -204,32 +204,20 @@ function getCookie(req, name) {
   return null;
 }
 
-// ───── Session helpers (signed cookie, no server-side store) ─────────
+// ───── Session helpers (stateful — sessions table is source of truth) ─────────
 const SESSION_COOKIE  = "swim_session";
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30 days in seconds
 
-function signSession(sub) {
-  const sig = crypto.createHmac("sha256", SESSION_SECRET).update(sub).digest("hex");
-  return `${sub}.${sig}`;
-}
-
-function verifySession(cookie) {
-  if (!cookie || !SESSION_SECRET) return null;
-  const dot = cookie.lastIndexOf(".");
-  if (dot === -1) return null;
-  const sub = cookie.slice(0, dot);
-  const sig = cookie.slice(dot + 1);
-  let expected;
+// Resolve a cookie/Bearer value to an active session row.
+// Returns { id, user_sub, ... } or null if the session is missing/expired/revoked.
+async function resolveSession(value) {
+  if (!value) return null;
   try {
-    expected = Buffer.from(
-      crypto.createHmac("sha256", SESSION_SECRET).update(sub).digest("hex"),
-      "hex"
-    );
-  } catch { return null; }
-  const supplied = Buffer.from(sig.length === expected.length * 2 ? sig : "", "hex");
-  if (supplied.length !== expected.length) return null;
-  if (!crypto.timingSafeEqual(supplied, expected)) return null;
-  return sub;
+    return await dbGetSession(value);
+  } catch (err) {
+    console.warn("[auth] dbGetSession failed:", err.message);
+    return null;
+  }
 }
 
 // ───── Apple Sign-In helpers ─────────────────────────────────────────
@@ -281,13 +269,14 @@ async function verifyAppleIdToken(idToken, expectedAud = APPLE_CLIENT_ID) {
 // Fails closed (503) on DB lookup error to avoid bypassing authz on transient DB issues.
 async function requireAuth(req, res, next) {
   if (!APPLE_AUTH_ACTIVE) return next();
-  const cookieSub = verifySession(getCookie(req, SESSION_COOKIE));
+  const cookieVal  = getCookie(req, SESSION_COOKIE);
   const authHeader = req.get("Authorization") || "";
-  const bearerSub  = authHeader.startsWith("Bearer ")
-    ? verifySession(authHeader.slice(7))
-    : null;
-  const sub = cookieSub || bearerSub;
-  if (!sub) return res.status(401).json({ error: "not authenticated" });
+  const bearerVal  = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const sessionVal = cookieVal || bearerVal;
+
+  const session = await resolveSession(sessionVal);
+  if (!session) return res.status(401).json({ error: "not authenticated" });
+  const sub = session.user_sub;
 
   if (dbActive) {
     try {
@@ -302,17 +291,23 @@ async function requireAuth(req, res, next) {
     }
   }
 
-  req.userSub = sub;
+  // Refresh last_seen + ip; fire and forget (don't block the request)
+  dbTouchSession(session.id, reqMeta(req).ip).catch(() => {});
+
+  req.userSub    = sub;
+  req.sessionId  = session.id;
   next();
 }
 
 
 // ───── Same-origin guard ─────────────────────────────────────────────
 function checkOrigin(req, res, next) {
-  // Native app requests carry a Bearer token and no Origin header — Bearer tokens
-  // are not sent automatically by browsers, so there is no CSRF risk here.
+  // Native app requests carry a Bearer token and no Origin header. Browsers
+  // don't auto-send Authorization headers cross-origin (CORS preflight is required),
+  // so a request with a Bearer header didn't originate from a cross-site form/script
+  // — no CSRF risk here. The bearer is then validated downstream by requireAuth.
   const authHeader = req.get("Authorization") || "";
-  if (authHeader.startsWith("Bearer ") && verifySession(authHeader.slice(7))) return next();
+  if (authHeader.startsWith("Bearer ")) return next();
 
   const origin = req.get("Origin") || req.get("Referer") || "";
   const host   = req.get("Host") || "";
@@ -388,9 +383,14 @@ app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false
       dbAuditEvent({ userSub: sub, eventType: "auth.signup",    ...meta, details: { channel: "web" } });
     }
 
-    const session = signSession(sub);
+    const sessionId = await dbCreateSession({
+      userSub:    sub,
+      ip:         meta.ip,
+      userAgent:  meta.userAgent,
+      ttlSeconds: SESSION_MAX_AGE,
+    });
     res.setHeader("Set-Cookie",
-      `${SESSION_COOKIE}=${encodeURIComponent(session)}; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; Path=/`
+      `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; Path=/`
     );
     dbAuditEvent({ userSub: sub, eventType: "auth.login.success", ...meta, details: { channel: "web" } });
     res.redirect("/");
@@ -401,15 +401,14 @@ app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false
 });
 
 // Check whether the current request is authenticated.
-// Trusts the signed session cookie + cross-checks the sub in the users table
-// when DB is active (so disabled users show as unauthenticated to the frontend).
+// Looks up the session in the sessions table + verifies user not disabled.
 app.get("/api/auth/status", async (req, res) => {
   if (!APPLE_AUTH_ACTIVE) return res.json({ authenticated: true, mode: "open" });
-  const sub = verifySession(getCookie(req, SESSION_COOKIE));
-  if (!sub) return res.json({ authenticated: false });
+  const session = await resolveSession(getCookie(req, SESSION_COOKIE));
+  if (!session) return res.json({ authenticated: false });
   if (dbActive) {
     try {
-      if (!(await dbIsUser(sub))) return res.json({ authenticated: false, reason: "not_authorized" });
+      if (!(await dbIsUser(session.user_sub))) return res.json({ authenticated: false, reason: "not_authorized" });
     } catch (err) {
       console.warn("[auth/status] dbIsUser failed:", err.message);
       return res.json({ authenticated: false, reason: "auth_backend_error" });
@@ -445,7 +444,12 @@ app.post("/api/auth/native", authLimiter, async (req, res) => {
       dbAuditEvent({ userSub: sub, eventType: "invite.consume", ...meta, details: { code: inviteCode, channel: "native" } });
       dbAuditEvent({ userSub: sub, eventType: "auth.signup",    ...meta, details: { channel: "native" } });
     }
-    const token = signSession(sub);
+    const token = await dbCreateSession({
+      userSub:    sub,
+      ip:         meta.ip,
+      userAgent:  meta.userAgent,
+      ttlSeconds: SESSION_MAX_AGE,
+    });
     dbAuditEvent({ userSub: sub, eventType: "auth.login.success", ...meta, details: { channel: "native" } });
     res.json({ ok: true, token });
   } catch (err) {
@@ -454,14 +458,48 @@ app.post("/api/auth/native", authLimiter, async (req, res) => {
   }
 });
 
-// Clear session and redirect home
-app.get("/api/auth/signout", (req, res) => {
-  const sub = verifySession(getCookie(req, SESSION_COOKIE));
-  if (sub) dbAuditEvent({ userSub: sub, eventType: "auth.signout", ...reqMeta(req) });
+// Revoke current session and clear the cookie
+app.get("/api/auth/signout", async (req, res) => {
+  const cookieVal = getCookie(req, SESSION_COOKIE);
+  const session = await resolveSession(cookieVal);
+  if (session) {
+    await dbRevokeSession(session.id);
+    dbAuditEvent({ userSub: session.user_sub, eventType: "auth.signout", ...reqMeta(req) });
+  }
   res.setHeader("Set-Cookie",
     `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/`
   );
   res.redirect("/");
+});
+
+// List the authenticated user's active sessions
+app.get("/api/auth/sessions", checkOrigin, requireAuth, async (req, res) => {
+  try {
+    const sessions = await dbListSessions(req.userSub);
+    const withCurrent = sessions.map(s => ({
+      ...s,
+      is_current: req.sessionId && req.sessionId.startsWith(s.id_prefix),
+    }));
+    res.json(withCurrent);
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Revoke all other sessions for the current user (keeps current alive)
+app.post("/api/auth/signout-all-others", checkOrigin, requireAuth, async (req, res) => {
+  try {
+    const count = await dbRevokeOthersByUser(req.userSub, req.sessionId);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "auth.signout.others",
+      ...reqMeta(req),
+      details:   { revoked_count: count },
+    });
+    res.json({ ok: true, revoked: count });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
 });
 
 // ───── API routes ────────────────────────────────────────────────────
