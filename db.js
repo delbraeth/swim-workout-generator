@@ -286,6 +286,42 @@ export async function dbRevokeOthersByUser(userSub, exceptId = null) {
   return Number(r.affectedRows || 0);
 }
 
+// Lazy-generate and return the CSRF token for a session. Returns null if
+// the session doesn't exist / is revoked / expired.
+export async function dbGetOrCreateCsrf(sessionId) {
+  if (!sessionId) return null;
+  const rows = await pool.query(
+    `SELECT \`csrf_token\` FROM \`sessions\`
+      WHERE \`id\` = ? AND \`revoked_at\` IS NULL AND \`expires_at\` > NOW()
+      LIMIT 1`,
+    [sessionId]
+  );
+  if (!rows[0]) return null;
+  if (rows[0].csrf_token) return rows[0].csrf_token;
+  const token = crypto.randomBytes(24).toString("base64url");
+  await pool.query(
+    "UPDATE `sessions` SET `csrf_token` = ? WHERE `id` = ? AND `csrf_token` IS NULL",
+    [token, sessionId]
+  );
+  return token;
+}
+
+// Constant-time compare of supplied CSRF header against the session's stored token.
+export async function dbVerifyCsrf(sessionId, supplied) {
+  if (!sessionId || !supplied) return false;
+  const rows = await pool.query(
+    `SELECT \`csrf_token\` FROM \`sessions\`
+      WHERE \`id\` = ? AND \`revoked_at\` IS NULL AND \`expires_at\` > NOW()
+      LIMIT 1`,
+    [sessionId]
+  );
+  if (!rows[0] || !rows[0].csrf_token) return false;
+  const a = Buffer.from(rows[0].csrf_token);
+  const b = Buffer.from(supplied);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 export async function dbListSessions(userSub) {
   if (!userSub) return [];
   const rows = await pool.query(
