@@ -531,3 +531,12 @@ fetch("https://api.ipify.org?format=json")
   .then(r => r.json())
   .then(d => console.log(`[egress-ip] ${d.ip}`))
   .catch(err => console.warn("[egress-ip] lookup failed:", err.message));
+
+// Boot-time MariaDB ping. No-op if DB env vars aren't set on Hyperlift yet —
+// the app keeps reading workouts.json. When env vars are configured, this
+// logs the result of SELECT 1 + @@have_ssl so we can confirm the TLS path.
+import("./db.js").then(({ pingDb }) =>
+  pingDb()
+    .then(r => console.log("[db]", r))
+    .catch(err => console.warn("[db] ping failed:", err.message))
+);
