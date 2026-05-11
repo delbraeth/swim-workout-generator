@@ -14,6 +14,7 @@
 // (encrypted but no cert chain validation against the self-signed CA).
 
 import { createPool } from "mariadb";
+import crypto          from "crypto";
 
 const {
   DB_HOST,
@@ -220,6 +221,90 @@ export async function dbUpsertSettings(userSub, patch) {
      ON DUPLICATE KEY UPDATE ${updates.join(", ")}`,
     vals
   );
+}
+
+// ─── sessions ───────────────────────────────────────────────────────────────
+const DEFAULT_SESSION_TTL_SEC = 60 * 60 * 24 * 30;   // 30 days
+
+function newSessionId() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+function nowDt() {
+  return new Date().toISOString().replace("T", " ").replace("Z", "");
+}
+function futureDt(secondsFromNow) {
+  return new Date(Date.now() + secondsFromNow * 1000)
+    .toISOString().replace("T", " ").replace("Z", "");
+}
+
+export async function dbCreateSession({ userSub, ip = null, userAgent = null, ttlSeconds = DEFAULT_SESSION_TTL_SEC }) {
+  if (!userSub) throw new Error("userSub required");
+  const id = newSessionId();
+  await pool.query(
+    "INSERT INTO `sessions` (`id`, `user_sub`, `created_at`, `expires_at`, `last_seen_at`, `ip`, `user_agent`) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [id, userSub, nowDt(), futureDt(ttlSeconds), nowDt(), ip, userAgent ? String(userAgent).slice(0, 255) : null]
+  );
+  return id;
+}
+
+export async function dbGetSession(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    `SELECT * FROM \`sessions\`
+      WHERE \`id\` = ?
+        AND \`revoked_at\` IS NULL
+        AND \`expires_at\` > NOW()
+      LIMIT 1`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+export async function dbTouchSession(id, ip = null) {
+  if (!id) return;
+  await pool.query(
+    "UPDATE `sessions` SET `last_seen_at` = NOW(3), `ip` = COALESCE(?, `ip`) WHERE `id` = ? AND `revoked_at` IS NULL",
+    [ip, id]
+  );
+}
+
+export async function dbRevokeSession(id) {
+  if (!id) return;
+  await pool.query(
+    "UPDATE `sessions` SET `revoked_at` = NOW(3) WHERE `id` = ? AND `revoked_at` IS NULL",
+    [id]
+  );
+}
+
+export async function dbRevokeOthersByUser(userSub, exceptId = null) {
+  if (!userSub) return 0;
+  const sql = exceptId
+    ? "UPDATE `sessions` SET `revoked_at` = NOW(3) WHERE `user_sub` = ? AND `id` <> ? AND `revoked_at` IS NULL"
+    : "UPDATE `sessions` SET `revoked_at` = NOW(3) WHERE `user_sub` = ? AND `revoked_at` IS NULL";
+  const args = exceptId ? [userSub, exceptId] : [userSub];
+  const r = await pool.query(sql, args);
+  return Number(r.affectedRows || 0);
+}
+
+export async function dbListSessions(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    `SELECT \`id\`, \`created_at\`, \`expires_at\`, \`last_seen_at\`, \`ip\`, \`user_agent\`
+       FROM \`sessions\`
+      WHERE \`user_sub\` = ? AND \`revoked_at\` IS NULL AND \`expires_at\` > NOW()
+      ORDER BY \`last_seen_at\` DESC`,
+    [userSub]
+  );
+  // Don't expose raw session IDs in the API response — that's the cookie value.
+  // Replace with a short prefix so the user can tell sessions apart in UI.
+  return rows.map(r => ({
+    id_prefix:    String(r.id).slice(0, 8),
+    created_at:   r.created_at,
+    expires_at:   r.expires_at,
+    last_seen_at: r.last_seen_at,
+    ip:           r.ip,
+    user_agent:   r.user_agent,
+  }));
 }
 
 // ─── audit_events ───────────────────────────────────────────────────────────
