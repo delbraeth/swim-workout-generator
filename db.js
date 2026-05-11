@@ -222,6 +222,54 @@ export async function dbUpsertSettings(userSub, patch) {
   );
 }
 
+// ─── auth helpers ───────────────────────────────────────────────────────────
+export async function dbIsUser(sub) {
+  if (!sub) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `users` WHERE `sub` = ? AND `is_disabled` = 0 LIMIT 1",
+    [sub]
+  );
+  return rows.length > 0;
+}
+
+// Atomically validate and consume an invite code.
+// Returns { ok: true } or { ok: false, reason: "invalid" | "expired" | "exhausted" | "no_code" }.
+export async function dbConsumeInviteCode(code) {
+  if (!code) return { ok: false, reason: "no_code" };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const rows = await conn.query(
+      "SELECT * FROM `invite_codes` WHERE `code` = ? FOR UPDATE",
+      [code]
+    );
+    if (!rows[0]) {
+      await conn.rollback();
+      return { ok: false, reason: "invalid" };
+    }
+    const inv = rows[0];
+    if (inv.expires_at && new Date(inv.expires_at) < new Date()) {
+      await conn.rollback();
+      return { ok: false, reason: "expired" };
+    }
+    if (Number(inv.times_used) >= Number(inv.max_uses)) {
+      await conn.rollback();
+      return { ok: false, reason: "exhausted" };
+    }
+    await conn.query(
+      "UPDATE `invite_codes` SET `times_used` = `times_used` + 1 WHERE `code` = ?",
+      [code]
+    );
+    await conn.commit();
+    return { ok: true };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 // ─── favorites ──────────────────────────────────────────────────────────────
 export async function dbListFavorites(userSub) {
   if (!userSub) return [];
