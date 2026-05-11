@@ -524,3 +524,10 @@ app.listen(PORT, () => {
   if (APPLE_AUTH_ACTIVE)  console.log(`[auth] Apple Sign-In active. Allowed subs: ${APPLE_ALLOWED_SUBS.length || "none (bootstrap mode)"}`);
   else                    console.warn("[auth] Apple auth not configured");
 });
+
+// Log container outbound IP at startup — Phase 0 verification of Hyperlift egress
+// stability across deploys. See EXPANSION_ROADMAP.md, Section 3 open items.
+fetch("https://api.ipify.org?format=json")
+  .then(r => r.json())
+  .then(d => console.log(`[egress-ip] ${d.ip}`))
+  .catch(err => console.warn("[egress-ip] lookup failed:", err.message));
