@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-11 23:03 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-11 23:21 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -3157,6 +3157,195 @@
     };
 
     // ═══════════════════════════════════════════════════════════════
+    //  SCM (25m short-course meters) option banks — starter scaffold.
+    //  Distances at 25m multiples. Meters stored in totalYards (same field
+    //  the generator reads). Specialty types fall back to LCM (50m) if a
+    //  SCM bank entry is missing for that type.
+    // ═══════════════════════════════════════════════════════════════
+
+    const WARMUP_OPTIONS_SCM = [
+      { typeAffinity: ["sprint"], totalYards: 400, sets: [
+          { reps: 1, dist: 200, desc: "Easy Freestyle — long, smooth stroke", interval: "No interval", focus: "Settle into 25m rhythm" },
+          { reps: 4, dist: 50,  desc: "Build: easy first length / strong second length", interval: "On 1:15", focus: "Wake up fast-twitch before sprint work" },
+        ]},
+      { typeAffinity: ["technique"], totalYards: 500, sets: [
+          { reps: 1, dist: 200, desc: "Easy Freestyle — breathe every 3, focus on rotation", interval: "No interval", focus: "Ease into technical work" },
+          { reps: 6, dist: 50,  desc: "Drill choice — fingertip drag or catch-up, one focus per length", interval: "On 1:20", focus: "Feel for the water" },
+        ]},
+      { typeAffinity: ["endurance"], totalYards: 600, sets: [
+          { reps: 1, dist: 300, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Aerobic warm-up" },
+          { reps: 6, dist: 50,  desc: "Kick (board) — steady, hips up, even tempo", interval: "On 1:20", focus: "Leg activation before endurance work", eq: "kick" },
+        ]},
+    ];
+
+    const COOLDOWN_OPTIONS_SCM = [
+      { totalYards: 200, sets: [
+          { reps: 1, dist: 200, desc: "Easy Freestyle — long, relaxed", interval: "No interval", focus: "Heart rate down, flush the muscles" },
+        ]},
+      { totalYards: 300, sets: [
+          { reps: 1, dist: 200, desc: "Easy Backstroke — open the chest", interval: "No interval", focus: "Counter the freestyle pull" },
+          { reps: 1, dist: 100, desc: "Easy Freestyle — progressively slower", interval: "No interval", focus: "Slowest lengths of the day" },
+        ]},
+    ];
+
+    const DRILL_OPTIONS_SCM = {
+      distance: [
+        { totalYards: 300, sets: [
+            { reps: 4, dist: 75, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 1:45", focus: "Prime the pull pattern before distance work", eq: "pull" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 2, dist: 200, desc: "Pull (buoy) — steady aerobic, long stroke", interval: "On 4:30", focus: "Build the aerobic base before distance main", eq: "pull" },
+          ]},
+      ],
+      endurance: [
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Kick (board) — steady pace, even split", interval: "On 1:20", focus: "Leg conditioning before endurance main", eq: "kick" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Pull (buoy) — moderate, high elbow catch", interval: "On 2:20", focus: "Upper body endurance before long main set", eq: "pull" },
+          ]},
+      ],
+      sprint: [
+        { totalYards: 200, sets: [
+            { reps: 8, dist: 25, desc: "Build sprint — 1 length, strong push-off, fast turnover", interval: "On 0:40", focus: "Prime fast-twitch before sprint main" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Moderate-strong — 2 lengths each, crisp turns", interval: "On 1:10", focus: "Sharpen stroke rate" },
+          ]},
+      ],
+      technique: [
+        { totalYards: 300, sets: [
+            { reps: 12, dist: 25, desc: "Single-arm or catch-up drill — alternate focus each length", interval: "On 0:50", focus: "Rotation control and high-elbow catch" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "Drill 25m / Swim 25m — apply drill into stroke", interval: "On 1:20", focus: "Bridge drill into full-stroke swim" },
+          ]},
+      ],
+      mixed: [
+        { totalYards: 300, sets: [
+            { reps: 4, dist: 75, desc: "Drill 25m / Pull 50m — combine technique and upper-body work", interval: "On 1:50", focus: "Activate technique then apply at moderate effort", eq: "pull" },
+          ]},
+        { totalYards: 400, sets: [
+            { reps: 8, dist: 50, desc: "Alternating: kick (odd) / pull (even) — 25m+25m each", interval: "On 1:20", focus: "Full-body activation before mixed main", eq: "kickPart" },
+          ]},
+      ],
+      im: [
+        { totalYards: 200, sets: [
+            { reps: 8, dist: 25, desc: "IM rotation — one stroke per length: fly / back / breast / free, repeat", interval: "On 0:45", focus: "Prime each stroke before IM main set" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Stroke drill 25m / Stroke swim 25m — cycle through fly, back, breast, free", interval: "On 1:30", focus: "Drill-to-swim bridge across all four strokes" },
+          ]},
+      ],
+      back: [
+        { totalYards: 200, sets: [
+            { reps: 8, dist: 25, desc: "Backstroke — alternating single-arm / full-stroke each length", interval: "On 0:45", focus: "Isolate pulling pattern and high-elbow catch" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Backstroke — 25m elbow-lead drill / 25m full-stroke swim", interval: "On 1:20", focus: "Sharpen rotation before backstroke main" },
+          ]},
+      ],
+      breast: [
+        { totalYards: 200, sets: [
+            { reps: 8, dist: 25, desc: "Breaststroke — alternating pull-only / full-stroke each length", interval: "On 0:55", focus: "Isolate the pull and high-elbow recovery" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "Breaststroke — 25m kick-only / 25m full-stroke", interval: "On 1:25", focus: "Build kick power and timing" },
+          ]},
+      ],
+      fly: [
+        { totalYards: 200, sets: [
+            { reps: 8, dist: 25, desc: "Alternating: butterfly / easy freestyle each length", interval: "On 0:50", focus: "Activate fly without fatiguing before main set" },
+          ]},
+        { totalYards: 300, sets: [
+            { reps: 6, dist: 50, desc: "25m underwater dolphin kick / 25m easy freestyle recovery", interval: "On 1:20", focus: "Build undulation rhythm and kick power", eq: "underkick" },
+          ]},
+      ],
+    };
+
+    const MAIN_OPTIONS_SCM = {
+      distance: [
+        { label: "Distance Threshold", totalYards: 1200, sets: [
+            { reps: 6, dist: 200, desc: "Freestyle — threshold pace (RPE 7-8/10)", interval: "On 4:30", focus: "Hold pace across multiple 200s" },
+          ]},
+        { label: "Long Intervals", totalYards: 1200, sets: [
+            { reps: 3, dist: 400, desc: "Freestyle — strong, even-split each 400", interval: "On 9:00", focus: "Sustain aerobic threshold over long pieces" },
+          ]},
+      ],
+      endurance: [
+        { label: "Steady 200s", totalYards: 1200, sets: [
+            { reps: 6, dist: 200, desc: "Freestyle — steady aerobic pace (conversational)", interval: "On 5:00", focus: "Build aerobic base" },
+          ]},
+        { label: "Endurance Ladder", totalYards: 1000, sets: [
+            { reps: 1, dist: 400, desc: "Freestyle — steady, comfortably hard", interval: "On 9:00", focus: "Prime the aerobic engine" },
+            { reps: 3, dist: 200, desc: "Freestyle — slightly faster than the 400, hold pace", interval: "On 4:30", focus: "Sustain speed after the long effort" },
+          ]},
+      ],
+      sprint: [
+        { label: "Sprint 50s", totalYards: 800, sets: [
+            { reps: 16, dist: 50, desc: "Sprint — 2 lengths full effort, full recovery", interval: "On 1:30", focus: "Max velocity over 50m" },
+          ]},
+        { label: "Sprint Pyramid", totalYards: 1000, sets: [
+            { reps: 4, dist: 100, desc: "Moderate sprint — build into race pace", interval: "On 2:30", focus: "Dial in pacing" },
+            { reps: 4, dist:  50, desc: "Fast sprint — 2 lengths max effort",      interval: "On 1:30", focus: "Peak velocity" },
+            { reps: 4, dist: 100, desc: "Strong sprint — hold race pace under fatigue", interval: "On 2:30", focus: "Sustain speed when tired" },
+          ]},
+      ],
+      technique: [
+        { label: "Stroke Refinement", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Controlled pace — count strokes, exaggerate one drill element per rep", interval: "On 2:30", focus: "Muscle memory at moderate effort" },
+          ]},
+        { label: "Efficiency Ladder", totalYards: 1100, sets: [
+            { reps: 2, dist: 300, desc: "Steady swim — count strokes, hold consistent count", interval: "On 7:00", focus: "Stroke efficiency over distance" },
+            { reps: 5, dist: 100, desc: "Control swim — maintain stroke count at higher effort", interval: "On 2:30", focus: "Apply efficiency at faster pace" },
+          ]},
+      ],
+      mixed: [
+        { label: "Mixed Threshold", totalYards: 1100, sets: [
+            { reps: 4, dist: 200, desc: "Threshold pace — strong aerobic effort (RPE 7/10)", interval: "On 4:30", focus: "Steady aerobic quality" },
+            { reps: 6, dist:  50, desc: "Sprint — 2 lengths race pace, max turnover", interval: "On 1:20", focus: "Top-end speed after threshold work" },
+          ]},
+        { label: "Mixed Variety", totalYards: 1000, sets: [
+            { reps: 4, dist: 100, desc: "Moderate — steady aerobic",                     interval: "On 2:30", focus: "Get the engine running" },
+            { reps: 4, dist:  50, desc: "Fast — strong pace",                              interval: "On 1:15", focus: "Speed layer" },
+            { reps: 2, dist: 200, desc: "Threshold — hold pace under fatigue",             interval: "On 4:30", focus: "Endurance on top of speed work" },
+          ]},
+      ],
+      im: [
+        { label: "IM 100s", totalYards: 800, sets: [
+            { reps: 8, dist: 100, desc: "Individual Medley — one stroke per 25m, hold each strong", interval: "On 2:30", focus: "Build IM rhythm and clean transitions" },
+          ]},
+        { label: "IM 200s", totalYards: 1000, sets: [
+            { reps: 5, dist: 200, desc: "Individual Medley — one stroke per 50m, steady effort", interval: "On 5:00", focus: "IM aerobic base" },
+          ]},
+      ],
+      back: [
+        { label: "Backstroke 100s", totalYards: 800, sets: [
+            { reps: 8, dist: 100, desc: "Backstroke — moderate pace, count strokes per length", interval: "On 2:30", focus: "Build stroke efficiency over 4 lengths" },
+          ]},
+        { label: "Backstroke 200s", totalYards: 1000, sets: [
+            { reps: 5, dist: 200, desc: "Backstroke — steady aerobic, hold stroke count consistent", interval: "On 5:00", focus: "Backstroke aerobic base" },
+          ]},
+      ],
+      breast: [
+        { label: "Breaststroke 100s", totalYards: 800, sets: [
+            { reps: 8, dist: 100, desc: "Breaststroke — moderate pace, patient glide and powerful pull", interval: "On 2:45", focus: "Build stroke timing" },
+          ]},
+        { label: "Breaststroke 200s", totalYards: 1000, sets: [
+            { reps: 5, dist: 200, desc: "Breaststroke — steady aerobic, consistent cycle rhythm", interval: "On 5:30", focus: "Breaststroke aerobic base" },
+          ]},
+      ],
+      fly: [
+        { label: "Fly/Free 100s", totalYards: 800, sets: [
+            { reps: 8, dist: 100, desc: "50m butterfly / 50m easy freestyle — full effort on fly, recover on free", interval: "On 2:45", focus: "Build butterfly volume with active recovery" },
+          ]},
+        { label: "Fly Sprint 50s", totalYards: 800, sets: [
+            { reps: 16, dist: 50, desc: "Butterfly — max effort, long underwater off the wall, full recovery", interval: "On 1:30", focus: "Maintain stroke quality on each 50m" },
+          ]},
+      ],
+    };
+
+    // ═══════════════════════════════════════════════════════════════
     //  BUDGET-AWARE GENERATOR
     //  Filters options so the workout stays within [1900, maxYards]
     // ═══════════════════════════════════════════════════════════════
@@ -3200,13 +3389,19 @@
     };
 
     function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}) {
-      const is50m = poolMode === "50m";
-      const allWarmups   = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
-      const allCooldowns = is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
-      const drillList = is50m
+      const is25m    = poolMode === "25m";
+      const is50m    = poolMode === "50m";
+      const isMeters = is25m || is50m;
+      const allWarmups   = is25m ? WARMUP_OPTIONS_SCM   : is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
+      const allCooldowns = is25m ? COOLDOWN_OPTIONS_SCM : is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
+      const drillList = is25m
+        ? (DRILL_OPTIONS_SCM[typeId] || DRILL_OPTIONS_SCM.mixed || DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
+        : is50m
         ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
         : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
-      const mainList = is50m
+      const mainList = is25m
+        ? (MAIN_OPTIONS_SCM[typeId] || MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
+        : is50m
         ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
         : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
 
@@ -3224,7 +3419,7 @@
       const minMa = pinnedBlocks.main     ? 0 : Math.min(...mainList.map(o => o.totalYards));
       const minCd = pinnedBlocks.cooldown ? 0 : Math.min(...allCooldowns.map(o => o.totalYards));
 
-      const absoluteMin = Math.max(is50m ? MIN_METERS : MIN_YARDS, userMin || 0);
+      const absoluteMin = Math.max(isMeters ? MIN_METERS : MIN_YARDS, userMin || 0);
       // Floor scales with target; relax when pins are present (user chose those blocks)
       const minTotal = hasPins ? absoluteMin : Math.max(absoluteMin, maxYards - 400);
 
@@ -3429,21 +3624,27 @@
       const idx = SECTION_KEYS.indexOf(sectionKey);
       if (idx < 0) return { workout: null, error: "Unknown section." };
 
-      const is50m = poolMode === "50m";
+      const is25m    = poolMode === "25m";
+      const is50m    = poolMode === "50m";
+      const isMeters = is25m || is50m;
       const blocks = workout.blocks;
       const current = blocks[idx];
       const others = blocks.reduce((sum, b, i) => i === idx ? sum : sum + b.totalYards, 0);
-      const lower = Math.max(0, Math.max(is50m ? MIN_METERS : MIN_YARDS, userMin || 0) - others);
+      const lower = Math.max(0, Math.max(isMeters ? MIN_METERS : MIN_YARDS, userMin || 0) - others);
       const upper = maxYards - others;
 
       let pool;
-      if (sectionKey === "warmup")        pool = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
-      else if (sectionKey === "cooldown") pool = is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
-      else if (sectionKey === "drill")    pool = is50m
+      if (sectionKey === "warmup")        pool = is25m ? WARMUP_OPTIONS_SCM   : is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
+      else if (sectionKey === "cooldown") pool = is25m ? COOLDOWN_OPTIONS_SCM : is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
+      else if (sectionKey === "drill")    pool = is25m
+        ? (DRILL_OPTIONS_SCM[typeId] || DRILL_OPTIONS_SCM.mixed || DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
+        : is50m
         ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
         : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
       else {
-        const basePool = is50m
+        const basePool = is25m
+          ? (MAIN_OPTIONS_SCM[typeId] || MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
+          : is50m
           ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
           : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
         // Expand with ×2 and ×3 repeat variants
@@ -4027,13 +4228,18 @@
     // ─── Max Yardage Slider ──────────────────────────────────────────
     // Compute the minimum possible total yards for a given type
     function minYardsForType(typeId, poolMode = "25y") {
+      const is25m = poolMode === "25m";
       const is50m = poolMode === "50m";
-      const allWarmups   = is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
-      const allCooldowns = is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
-      const drillList = is50m
+      const allWarmups   = is25m ? WARMUP_OPTIONS_SCM   : is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
+      const allCooldowns = is25m ? COOLDOWN_OPTIONS_SCM : is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
+      const drillList = is25m
+        ? (DRILL_OPTIONS_SCM[typeId] || DRILL_OPTIONS_SCM.mixed || DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
+        : is50m
         ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
         : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
-      const mainList = is50m
+      const mainList = is25m
+        ? (MAIN_OPTIONS_SCM[typeId] || MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
+        : is50m
         ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
         : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
       const minWarmup   = Math.min(...allWarmups.map(o => o.totalYards));
@@ -4047,13 +4253,15 @@
       const [activePreset, setActivePreset] = React.useState(null);
       const [editingBound, setEditingBound] = React.useState(null); // 'min' | 'max' | null
       const [boundDraft,   setBoundDraft]   = React.useState("");
-      const is50m = poolMode === "50m";
-      const ABS_MIN     = is50m ? 2000 : 1900;
+      const is25m    = poolMode === "25m";
+      const is50m    = poolMode === "50m";
+      const isMeters = is25m || is50m;
+      const ABS_MIN     = isMeters ? 2000 : 1900;
       const ABS_MAX     = 6000;
-      const SLIDER_STEP = is50m ? 100 : 50;
+      const SLIDER_STEP = is50m ? 100 : 50;     // SCM uses 50m step like SCY (more granular than LCM)
       const SLIDER_MIN  = Math.max(ABS_MIN, sliderMinProp ?? ABS_MIN);
       const SLIDER_MAX  = Math.min(ABS_MAX, sliderMaxProp ?? 4000);
-      const unit = is50m ? "m" : "yds";
+      const unit = isMeters ? "m" : "yds";
       const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN) * 100).toFixed(1);
       // 5 evenly-spaced ticks between SLIDER_MIN and SLIDER_MAX
       const ticks = [0,1,2,3,4].map(i => Math.round((SLIDER_MIN + i * (SLIDER_MAX - SLIDER_MIN) / 4) / SLIDER_STEP) * SLIDER_STEP);
@@ -4081,7 +4289,7 @@
         <div style={{ background: "#1e293b", border: `1px solid ${tooLow ? "#7f1d1d" : "#334155"}`, borderRadius: 12, padding: "18px 20px", marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
             <div>
-              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" }}>Max {is50m ? "Distance" : "Yardage"}</span>
+              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" }}>Max {isMeters ? "Distance" : "Yardage"}</span>
               <span style={{ color: "#64748b", fontSize: 11, marginLeft: 8 }}>(min locked at {SLIDER_MIN.toLocaleString()} {unit})</span>
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
@@ -4103,7 +4311,7 @@
               const ps = parsePaceSecs(paceInput);
               if (!ps) return null;
               const y = Math.round(2400 * (mins / 60) * (120 / ps) / 50) * 50;
-              return Math.min(4000, Math.max(is50m ? 2000 : 1900, y));
+              return Math.min(4000, Math.max(isMeters ? 2000 : 1900, y));
             }
             const presets = [{ label: "~60 min", mins: 60 }, { label: "~90 min", mins: 90 }, { label: "~2 hr", mins: 120 }];
             return (
@@ -4553,7 +4761,7 @@
                         {entry.userInitials}
                       </span>
                     )}
-                    <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} {entry.poolMode === "50m" ? "m" : "yds"}</span>
+                    <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} {(entry.poolMode === "50m" || entry.poolMode === "25m") ? "m" : "yds"}</span>
                     {entry.estimatedMin && <span style={{ fontSize: 11, color: "#64748b" }}>~{entry.estimatedMin} min</span>}
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -5682,7 +5890,7 @@
         setSaveStatus(null);
         setRegenError(null);
         setPinnedSections({});
-        setMaxYards(mode === "50m" ? 2500 : 2400);
+        setMaxYards(mode === "50m" || mode === "25m" ? 2500 : 2400);
       };
       const handleEquipChange = (id, on) => {
         setEquipment(prev => ({ ...prev, [id]: on }));
@@ -5855,7 +6063,7 @@
         else if (diffDays <  7)  when = `${diffDays} days ago`;
         else if (diffDays < 14)  when = "1 week ago";
         else                     when = `${Math.floor(diffDays / 7)} weeks ago`;
-        const lastUnit = e.poolMode === "50m" ? "m" : "yds";
+        const lastUnit = (e.poolMode === "50m" || e.poolMode === "25m") ? "m" : "yds";
         const typeMeta = WORKOUT_TYPES.find(t => t.id === e.type);
         const emoji = typeMeta ? typeMeta.emoji : "🏊";
         const label = e.typeLabel || (typeMeta ? typeMeta.label : e.type);
@@ -5868,7 +6076,7 @@
 
       const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
       const sectionColors = ["#38bdf8", "#2dd4bf", "#3b82f6", "#94a3b8"];
-      const unit = poolMode === "50m" ? "m" : "yds";
+      const unit = (poolMode === "50m" || poolMode === "25m") ? "m" : "yds";
       const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : 0;
       const canGenerate = selectedType && maxYards >= typeMin;
 
@@ -5945,7 +6153,7 @@
             <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Pool</span>
               <div style={{ display: "flex", background: "#0f172a", borderRadius: 8, border: "1px solid #334155", overflow: "hidden" }}>
-                {[["25y","SCY"],["50m","LCM"]].map(([mode, label]) => (
+                {[["25y","SCY"],["25m","SCM"],["50m","LCM"]].map(([mode, label]) => (
                   <button key={mode} onClick={() => handlePoolModeChange(mode)}
                     style={{
                       padding: "6px 16px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
@@ -5956,13 +6164,6 @@
                     {label}
                   </button>
                 ))}
-                <button disabled title="Short Course Meters — coming soon"
-                  style={{
-                    padding: "6px 16px", border: "none", cursor: "not-allowed", fontSize: 13, fontWeight: 700,
-                    background: "transparent", color: "#334155",
-                  }}>
-                  SCM
-                </button>
               </div>
             </div>
 
@@ -6047,7 +6248,7 @@
                     {meta.emoji} {meta.label}
                   </span>
                   {[
-                    [poolMode === "50m" ? "Total Distance" : "Total Yardage", `${workout.totalYards.toLocaleString()} ${unit}`],
+                    [(poolMode === "50m" || poolMode === "25m") ? "Total Distance" : "Total Yardage", `${workout.totalYards.toLocaleString()} ${unit}`],
                     ["Est. Duration",   `~${workout.estimatedMin} min`],
                     ["Target Range",   `${typeMin.toLocaleString()} – ${maxYards.toLocaleString()} ${unit}`],
                   ].map(([label, val]) => (
@@ -6199,7 +6400,9 @@
                 <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid #334155", color: "#94a3b8", fontSize: 13 }}>
                   <span style={{ fontWeight: 600, color: "#cbd5e1" }}>📋 Coach's Note: </span>
                   {poolMode === "50m"
-                    ? "Intervals are scaled from your pace setting. Adjust ±10–15 sec to match your base."
+                    ? "Intervals are scaled from your pace setting. Adjust ±10–15 sec to match your base in long-course."
+                    : poolMode === "25m"
+                    ? "Intervals are scaled from your pace setting. Adjust ±10–15 sec to match your base in short-course meters."
                     : "Intervals are calibrated for a masters pace of 2:00–2:15/100 yds. Adjust ±10–15 sec to match your base."
                   }
                   Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets.
