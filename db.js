@@ -222,6 +222,21 @@ export async function dbUpsertSettings(userSub, patch) {
   );
 }
 
+// ─── audit_events ───────────────────────────────────────────────────────────
+// Best-effort insert. Failures are logged and swallowed so audit issues
+// never fail user requests. Pass `details` as a plain object; it'll be JSON-stringified.
+export async function dbAuditEvent({ userSub = null, eventType, ip = null, userAgent = null, details = null }) {
+  if (!pool) return;
+  try {
+    await pool.query(
+      "INSERT INTO `audit_events` (`user_sub`, `event_type`, `ip`, `user_agent`, `details`) VALUES (?, ?, ?, ?, ?)",
+      [userSub, eventType, ip, userAgent ? String(userAgent).slice(0, 255) : null, details ? JSON.stringify(details) : null]
+    );
+  } catch (err) {
+    console.warn("[audit] insert failed:", err.message);
+  }
+}
+
 // ─── auth helpers ───────────────────────────────────────────────────────────
 export async function dbIsUser(sub) {
   if (!sub) return false;
