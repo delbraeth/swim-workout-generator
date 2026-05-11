@@ -143,7 +143,22 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-11 22:03 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-11 22:17 UTC";         // replaced by _deploy.py at commit time
+
+    // CSRF token bound to the session. Fetched after auth-status confirms login,
+    // sent on every write as the X-CSRF-Token header.
+    const csrf = { token: null };
+    async function refreshCsrf() {
+      try {
+        const r = await fetch(`${API_BASE}/auth/csrf`, { cache: "no-store" });
+        if (!r.ok) return;
+        const d = await r.json();
+        csrf.token = d.token || null;
+      } catch { /* leave previous value */ }
+    }
+    function csrfHeaders() {
+      return csrf.token ? { "X-CSRF-Token": csrf.token } : {};
+    }
 
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
@@ -5371,6 +5386,7 @@
           .then(data => {
             setAuthenticated(data.authenticated);
             setAuthMode(data.mode === "open" ? "open" : "apple");
+            if (data.authenticated) refreshCsrf();
           })
           .catch(() => { setAuthenticated(false); setAuthMode(null); });
       }, []);
@@ -5419,7 +5435,7 @@
         saveSettingsTimerRef.current = setTimeout(() => {
           fetch(`${API_BASE}/settings`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
             body: JSON.stringify({ sliderMin: min, sliderMax: max, paceInput: pace, initials }),
           }).catch(() => {});
         }, 1500);
@@ -5457,12 +5473,12 @@
           if (isFav) {
             await fetch(`${API_BASE}/favorites/${encodeURIComponent(label)}`, {
               method: "DELETE",
-              headers: {},
+              headers: { ...csrfHeaders() },
             });
           } else {
             await fetch(`${API_BASE}/favorites`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
               body: JSON.stringify({ label }),
             });
           }
@@ -5715,7 +5731,7 @@
         try {
           const res = await fetch(`${API_BASE}/log-workout`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
             body: JSON.stringify(entry),
           });
           if (!res.ok) {
@@ -5748,7 +5764,7 @@
         try {
           await fetch(`${API_BASE}/workouts/${id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
             body: JSON.stringify({ completed }),
           });
         } catch (err) { console.error("Failed to update completed:", err); }
@@ -5763,7 +5779,7 @@
         try {
           await fetch(`${API_BASE}/workouts/${id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
             body: JSON.stringify({ notes }),
           });
         } catch (err) { console.error("Failed to update notes:", err); }
@@ -5776,7 +5792,7 @@
           return next;
         });
         try {
-          await fetch(`${API_BASE}/workouts/${id}`, { method: "DELETE" });
+          await fetch(`${API_BASE}/workouts/${id}`, { method: "DELETE", headers: { ...csrfHeaders() } });
         } catch (err) { console.error("Failed to delete entry:", err); }
       }, []);
 
