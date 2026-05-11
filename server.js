@@ -42,6 +42,13 @@ import crypto  from "crypto";
 import path    from "path";
 import { fileURLToPath } from "url";
 
+import {
+  dbActive, jsonActive, dbMode, pingDb,
+  dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
+  dbGetSettings, dbUpsertSettings,
+  dbListFavorites, dbAddFavorite, dbRemoveFavorite,
+} from "./db.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
@@ -351,10 +358,27 @@ app.get("/api/auth/signout", (req, res) => {
 // ───── API routes ────────────────────────────────────────────────────
 app.get("/healthz", (req, res) => res.json({ ok: true, service: "swim-workout-generator" }));
 
+// Best-effort JSON write — used in dual mode after DB has succeeded.
+// In dual mode, JSON failure is logged but doesn't fail the request.
+async function jsonWriteBestEffort(json, sha, msg, dbAlreadySucceeded) {
+  try {
+    await writeWorkouts(json, sha, msg);
+  } catch (err) {
+    if (dbAlreadySucceeded) {
+      console.warn(`[dual-write] JSON write failed (DB has it): ${err.message}`);
+    } else {
+      throw err;
+    }
+  }
+}
+
 app.get("/api/workouts", checkOrigin, requireAuth, async (req, res) => {
   try {
+    if (dbActive) {
+      const entries = await dbListWorkouts(req.userSub);
+      return res.json(entries);
+    }
     const { json } = await readWorkouts();
-    // Return only entries belonging to this user (or legacy entries with no sub)
     const entries = req.userSub
       ? json.workouts.filter(e => !e.sub || e.sub === req.userSub)
       : json.workouts;
@@ -368,15 +392,28 @@ app.post("/api/log-workout", checkOrigin, requireAuth, async (req, res) => {
   try {
     const entry = req.body;
     if (!entry || !entry.id) return res.status(400).json({ error: "entry must include an id" });
-    const { json, sha } = await readWorkouts({ force: true });
-    if (json.workouts.some(e => e.id === entry.id)) {
-      return res.status(409).json({ error: "duplicate id", id: entry.id });
-    }
     if (req.userSub) entry.sub = req.userSub;
-    json.workouts.push(entry);
-    const label = entry.typeLabel || entry.type || "workout";
-    const date  = entry.dateCompleted || "";
-    await writeWorkouts(json, sha, `Log ${label} workout (${date})`);
+
+    // DB-first: detect duplicate via DB if active, else via JSON.
+    if (dbActive) {
+      if (await dbWorkoutExists(entry.id)) {
+        return res.status(409).json({ error: "duplicate id", id: entry.id });
+      }
+      await dbInsertWorkout(entry);
+    }
+
+    if (jsonActive) {
+      const { json, sha } = await readWorkouts({ force: true });
+      if (!dbActive && json.workouts.some(e => e.id === entry.id)) {
+        return res.status(409).json({ error: "duplicate id", id: entry.id });
+      }
+      // In dual mode, JSON dedup happens here too — but if DB accepted, push regardless.
+      if (!json.workouts.some(e => e.id === entry.id)) json.workouts.push(entry);
+      const label = entry.typeLabel || entry.type || "workout";
+      const date  = entry.dateCompleted || "";
+      await jsonWriteBestEffort(json, sha, `Log ${label} workout (${date})`, dbActive);
+    }
+
     res.json({ ok: true, id: entry.id, entry });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
@@ -387,6 +424,27 @@ app.patch("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const patch  = req.body || {};
+
+    if (dbActive) {
+      const r = await dbPatchWorkout(id, patch, req.userSub);
+      if (!r.ok) return res.status(r.status).json({ error: r.reason, id });
+      if (jsonActive) {
+        try {
+          const { json, sha } = await readWorkouts({ force: true });
+          const idx = json.workouts.findIndex(e => e.id === id);
+          if (idx !== -1) {
+            const allowed = ["notes", "dateCompleted", "completed"];
+            for (const k of allowed) if (k in patch) json.workouts[idx][k] = patch[k];
+            await jsonWriteBestEffort(json, sha, `Update workout ${id}`, true);
+          }
+        } catch (jsonErr) {
+          console.warn(`[dual-write] JSON patch failed (DB has it): ${jsonErr.message}`);
+        }
+      }
+      return res.json({ ok: true, entry: r.entry });
+    }
+
+    // JSON-only path (DB_MODE=off)
     const { json, sha } = await readWorkouts({ force: true });
     const idx = json.workouts.findIndex(e => e.id === id);
     if (idx === -1) return res.status(404).json({ error: "not found", id });
@@ -404,6 +462,25 @@ app.patch("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
 app.delete("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (dbActive) {
+      const r = await dbDeleteWorkout(id, req.userSub);
+      if (!r.ok) return res.status(r.status).json({ error: r.reason, id });
+      if (jsonActive) {
+        try {
+          const { json, sha } = await readWorkouts({ force: true });
+          const idx = json.workouts.findIndex(e => e.id === id);
+          if (idx !== -1) {
+            json.workouts.splice(idx, 1);
+            await jsonWriteBestEffort(json, sha, `Delete workout ${id}`, true);
+          }
+        } catch (jsonErr) {
+          console.warn(`[dual-write] JSON delete failed (DB applied it): ${jsonErr.message}`);
+        }
+      }
+      return res.json({ ok: true, removed: r.removed });
+    }
+
     const { json, sha } = await readWorkouts({ force: true });
     const idx = json.workouts.findIndex(e => e.id === id);
     if (idx === -1) return res.status(404).json({ error: "not found", id });
@@ -420,6 +497,9 @@ app.delete("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
 // ───── User settings routes ──────────────────────────────────────────
 app.get("/api/settings", checkOrigin, requireAuth, async (req, res) => {
   try {
+    if (dbActive) {
+      return res.json(await dbGetSettings(req.userSub));
+    }
     const { json } = await readWorkouts();
     const key = req.userSub || "default";
     res.json(json.settings[key] || {});
@@ -431,10 +511,20 @@ app.get("/api/settings", checkOrigin, requireAuth, async (req, res) => {
 app.post("/api/settings", checkOrigin, requireAuth, async (req, res) => {
   try {
     const patch = req.body || {};
-    const { json, sha } = await readWorkouts({ force: true });
-    const key = req.userSub || "default";
-    json.settings[key] = { ...(json.settings[key] || {}), ...patch };
-    await writeWorkouts(json, sha, `Update settings (${key.slice(0, 8)})`);
+
+    if (dbActive) await dbUpsertSettings(req.userSub, patch);
+
+    if (jsonActive) {
+      try {
+        const { json, sha } = await readWorkouts({ force: true });
+        const key = req.userSub || "default";
+        json.settings[key] = { ...(json.settings[key] || {}), ...patch };
+        await jsonWriteBestEffort(json, sha, `Update settings (${key.slice(0, 8)})`, dbActive);
+      } catch (jsonErr) {
+        if (!dbActive) throw jsonErr;
+        console.warn(`[dual-write] JSON settings write failed (DB has it): ${jsonErr.message}`);
+      }
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
@@ -453,10 +543,12 @@ function getUserFavorites(json, key) {
 
 app.get("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
   try {
+    if (dbActive) {
+      return res.json(await dbListFavorites(req.userSub));
+    }
     const { json, sha } = await readWorkouts();
     const key = req.userSub || "default";
     const favs = getUserFavorites(json, key);
-    // If we fell back to global favorites, persist them into the per-user slot now
     if (!Array.isArray(json.settings[key]?.favorites) && favs.length > 0) {
       if (!json.settings[key]) json.settings[key] = {};
       json.settings[key].favorites = favs;
@@ -472,14 +564,24 @@ app.post("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
   try {
     const { label } = req.body || {};
     if (!label || typeof label !== "string") return res.status(400).json({ error: "label required" });
-    const { json, sha } = await readWorkouts({ force: true });
-    const key = req.userSub || "default";
-    if (!json.settings[key]) json.settings[key] = {};
-    const favs = getUserFavorites(json, key);
-    if (!favs.includes(label)) {
-      favs.push(label);
-      json.settings[key].favorites = favs;
-      await writeWorkouts(json, sha, `Favorite: ${label} (${key.slice(0, 8)})`);
+
+    if (dbActive) await dbAddFavorite(req.userSub, label);
+
+    if (jsonActive) {
+      try {
+        const { json, sha } = await readWorkouts({ force: true });
+        const key = req.userSub || "default";
+        if (!json.settings[key]) json.settings[key] = {};
+        const favs = getUserFavorites(json, key);
+        if (!favs.includes(label)) {
+          favs.push(label);
+          json.settings[key].favorites = favs;
+          await jsonWriteBestEffort(json, sha, `Favorite: ${label} (${key.slice(0, 8)})`, dbActive);
+        }
+      } catch (jsonErr) {
+        if (!dbActive) throw jsonErr;
+        console.warn(`[dual-write] JSON favorite add failed (DB has it): ${jsonErr.message}`);
+      }
     }
     res.json({ ok: true });
   } catch (err) {
@@ -490,15 +592,24 @@ app.post("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
 app.delete("/api/favorites/:label", checkOrigin, requireAuth, async (req, res) => {
   try {
     const label = decodeURIComponent(req.params.label);
-    const { json, sha } = await readWorkouts({ force: true });
-    const key = req.userSub || "default";
-    if (!json.settings[key]) json.settings[key] = {};
-    const favs = getUserFavorites(json, key);
-    const before = favs.length;
-    const updated = favs.filter(f => f !== label);
-    if (updated.length < before) {
-      json.settings[key].favorites = updated;
-      await writeWorkouts(json, sha, `Unfavorite: ${label} (${key.slice(0, 8)})`);
+
+    if (dbActive) await dbRemoveFavorite(req.userSub, label);
+
+    if (jsonActive) {
+      try {
+        const { json, sha } = await readWorkouts({ force: true });
+        const key = req.userSub || "default";
+        if (!json.settings[key]) json.settings[key] = {};
+        const favs = getUserFavorites(json, key);
+        const updated = favs.filter(f => f !== label);
+        if (updated.length < favs.length) {
+          json.settings[key].favorites = updated;
+          await jsonWriteBestEffort(json, sha, `Unfavorite: ${label} (${key.slice(0, 8)})`, dbActive);
+        }
+      } catch (jsonErr) {
+        if (!dbActive) throw jsonErr;
+        console.warn(`[dual-write] JSON favorite delete failed (DB has it): ${jsonErr.message}`);
+      }
     }
     res.json({ ok: true });
   } catch (err) {
@@ -535,8 +646,7 @@ fetch("https://api.ipify.org?format=json")
 // Boot-time MariaDB ping. No-op if DB env vars aren't set on Hyperlift yet —
 // the app keeps reading workouts.json. When env vars are configured, this
 // logs the result of SELECT 1 + @@have_ssl so we can confirm the TLS path.
-import("./db.js").then(({ pingDb }) =>
-  pingDb()
-    .then(r => console.log("[db]", r))
-    .catch(err => console.warn("[db] ping failed:", err.message))
-);
+console.log(`[db] mode=${dbMode} active=${dbActive} jsonActive=${jsonActive}`);
+pingDb()
+  .then(r => console.log("[db]", r))
+  .catch(err => console.warn("[db] ping failed:", err.message));
