@@ -443,7 +443,9 @@ app.get("/api/auth/status", async (req, res) => {
 
 // Return the CSRF token bound to the current session. Frontend fetches this
 // after auth and includes it as X-CSRF-Token on every write request.
-app.get("/api/auth/csrf", checkOrigin, requireAuth, async (req, res) => {
+// No checkOrigin: GET doesn't change state, and CORS/SOP prevents cross-origin
+// reads of the response body. requireAuth is the gate.
+app.get("/api/auth/csrf", requireAuth, async (req, res) => {
   try {
     const token = await dbGetOrCreateCsrf(req.sessionId);
     if (!token) return res.status(401).json({ error: "no session" });
