@@ -1,40 +1,46 @@
 // Swim Workout Generator — Node/Express server
 //
-// Single app served from one container on Hyperlift:
-//   GET  /                        → static page (public/index.html)
-//   GET  /api/workouts            → list all workouts (cached read from GitHub)
-//   POST /api/log-workout         → append a workout, commit to workouts.json
-//   PATCH  /api/workouts/:id      → update notes/dateCompleted
-//   DELETE /api/workouts/:id      → remove an entry
-//   GET  /api/favorites           → list favorited main-set labels
-//   POST /api/favorites           → add a label to favorites
-//   DELETE /api/favorites/:label  → remove a label from favorites
-//   GET  /healthz                 → liveness probe
+// Reads/writes from MariaDB (vero_swimgen on the CyberPanel VM). All workout
+// history, favorites, settings, sessions, audit events, and invite codes
+// live in the database. See db.js for the schema and helpers.
 //
-//   GET  /auth/apple              → redirect to Apple sign-in
-//   POST /auth/callback           → Apple posts back here (form_post)
-//   GET  /auth/status             → { authenticated: bool }
-//   GET  /auth/signout            → clear session cookie, redirect /
+// Endpoints:
+//   GET  /                          → static page (public/index.html)
+//   GET  /api/workouts              → list this user's workouts
+//   POST /api/log-workout           → save a workout
+//   PATCH  /api/workouts/:id        → update notes/dateCompleted/completed
+//   DELETE /api/workouts/:id        → remove an entry
+//   GET  /api/favorites             → list favorited main-set labels
+//   POST /api/favorites             → add a label
+//   DELETE /api/favorites/:label    → remove a label
+//   GET  /api/settings              → user prefs (slider bounds, pace input)
+//   POST /api/settings              → update prefs
+//   GET  /healthz                   → liveness probe
+//
+//   GET  /api/auth/apple            → redirect to Apple sign-in
+//                                     supports ?invite=CODE for new users
+//   POST /api/auth/callback         → Apple posts back here (form_post)
+//   POST /api/auth/native           → iOS native sign-in
+//   GET  /api/auth/status           → { authenticated: bool }
+//   GET  /api/auth/csrf             → returns CSRF token for current session
+//   GET  /api/auth/sessions         → list this user's active sessions
+//   POST /api/auth/signout-all-others → revoke all sessions except current
+//   GET  /api/auth/signout          → revoke current session, redirect /
 //
 // Required env vars:
-//   GITHUB_TOKEN        — fine-grained PAT, contents:write on the repo (REQUIRED)
-//   GITHUB_OWNER        — repo owner       (default: delbraeth)
-//   GITHUB_REPO         — repo name        (default: swim-workout-generator)
-//   GITHUB_BRANCH       — branch           (default: main)
-//   GITHUB_PATH         — path in repo     (default: workouts.json)
-//   PORT                — listen port      (default: 8080, Hyperlift sets this)
-//   ALLOW_NO_ORIGIN     — "true" to allow curl/local testing without Origin header
+//   DB_HOST, DB_USER, DB_PASSWORD   — see db.js for the full list
 //
 // Apple Sign-In env vars (all required when Apple auth is active):
 //   APPLE_TEAM_ID            — 10-char team ID from Apple Developer console
 //   APPLE_CLIENT_ID          — Services ID you registered (e.g. com.example.swimapp)
-//   APPLE_NATIVE_BUNDLE_ID   — iOS app bundle ID (e.g. com.delbraeth.swimworkout); used to
-//                              verify the 'aud' claim in tokens issued by the native iOS app.
-//                              Falls back to APPLE_CLIENT_ID if not set.
+//   APPLE_NATIVE_BUNDLE_ID   — iOS app bundle ID; falls back to APPLE_CLIENT_ID if not set.
 //   APPLE_KEY_ID             — Key ID of the .p8 private key
 //   APPLE_PRIVATE_KEY        — Contents of the .p8 file (newlines as \n or literal)
-//   APPLE_ALLOWED_SUBS       — (deprecated, unused) was the static allowlist; now uses users table + invites
-//   APP_URL                  — Public HTTPS URL (default: https://veronicacassidy.com)
+//
+// Other env vars:
+//   PORT             — listen port (default: 8080, Hyperlift sets this)
+//   APP_URL          — Public HTTPS URL (default: https://veronicacassidy.com)
+//   ALLOW_NO_ORIGIN  — "true" to allow curl/local testing without Origin header
 
 import express   from "express";
 import crypto    from "crypto";
@@ -44,7 +50,7 @@ import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 
 import {
-  dbActive, jsonActive, dbMode, pingDb,
+  dbActive, pingDb,
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
@@ -65,13 +71,8 @@ function reqMeta(req) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
-const PORT          = process.env.PORT          || 8080;
-const GITHUB_TOKEN  = process.env.GITHUB_TOKEN  || "";
-const GITHUB_OWNER  = process.env.GITHUB_OWNER  || "delbraeth";
-const GITHUB_REPO   = process.env.GITHUB_REPO   || "swim-workout-generator";
-const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
-const GITHUB_PATH   = process.env.GITHUB_PATH   || "workouts.json";
-const APP_URL       = process.env.APP_URL        || "https://veronicacassidy.com";
+const PORT     = process.env.PORT     || 8080;
+const APP_URL  = process.env.APP_URL  || "https://veronicacassidy.com";
 
 // Apple Sign-In config — all empty until configured in Hyperlift
 const APPLE_TEAM_ID      = process.env.APPLE_TEAM_ID      || "";
@@ -79,9 +80,6 @@ const APPLE_CLIENT_ID    = process.env.APPLE_CLIENT_ID    || "";
 const APPLE_KEY_ID       = process.env.APPLE_KEY_ID       || "";
 // .p8 files use literal newlines; some platforms encode them as \n
 const APPLE_PRIVATE_KEY  = (process.env.APPLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
-// Filter out placeholder values ("-", "--", "none") that platforms require instead of empty strings
-const APPLE_ALLOWED_SUBS = (process.env.APPLE_ALLOWED_SUBS || "")
-  .split(",").map(s => s.trim()).filter(s => s && !/^-+$|^none$/i.test(s));
 
 const APPLE_AUTH_ACTIVE = !!(APPLE_CLIENT_ID && APPLE_TEAM_ID && APPLE_KEY_ID && APPLE_PRIVATE_KEY);
 
@@ -138,60 +136,6 @@ const writeLimiter = rateLimit({
     res.status(options.statusCode).json(options.message);
   },
 });
-
-// ───── GitHub helpers ─────────────────────────────────────────────────
-function ghHeaders() {
-  return {
-    "Authorization":         `Bearer ${GITHUB_TOKEN}`,
-    "Accept":                "application/vnd.github+json",
-    "User-Agent":            "swim-workout-history",
-    "X-GitHub-Api-Version":  "2022-11-28",
-  };
-}
-
-// 30-second TTL cache to avoid hammering the GitHub API on rapid reads
-const cache = { json: null, sha: null, fetchedAt: 0 };
-const CACHE_TTL_MS = 30_000;
-
-// Storage shape: { workouts: [...], favorites: [...] }
-async function readWorkouts({ force = false } = {}) {
-  if (!force && cache.json && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
-    return { json: cache.json, sha: cache.sha };
-  }
-  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${GITHUB_BRANCH}`;
-  const res = await fetch(url, { headers: ghHeaders() });
-  if (!res.ok) throw new Error(`GitHub read ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  const content = Buffer.from(data.content, "base64").toString("utf-8");
-  let parsed = JSON.parse(content);
-  if (Array.isArray(parsed)) {
-    parsed = { workouts: parsed, favorites: [] };
-  }
-  if (!Array.isArray(parsed.workouts))                   parsed.workouts  = [];
-  if (!Array.isArray(parsed.favorites))                  parsed.favorites = [];
-  if (!parsed.settings || typeof parsed.settings !== "object") parsed.settings = {};
-  cache.json = parsed;
-  cache.sha = data.sha;
-  cache.fetchedAt = Date.now();
-  return { json: cache.json, sha: cache.sha };
-}
-
-async function writeWorkouts(json, sha, message) {
-  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`;
-  const text = JSON.stringify(json, null, 2) + "\n";
-  const content = Buffer.from(text, "utf-8").toString("base64");
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { ...ghHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ message, content, sha, branch: GITHUB_BRANCH }),
-  });
-  if (!res.ok) throw new Error(`GitHub write ${res.status}: ${await res.text()}`);
-  const result = await res.json();
-  cache.json = json;
-  cache.sha = result.content.sha;
-  cache.fetchedAt = Date.now();
-  return result;
-}
 
 // ───── Cookie helper ─────────────────────────────────────────────────
 function getCookie(req, name) {
@@ -543,30 +487,9 @@ app.post("/api/auth/signout-all-others", checkOrigin, requireAuth, async (req, r
 // ───── API routes ────────────────────────────────────────────────────
 app.get("/healthz", (req, res) => res.json({ ok: true, service: "swim-workout-generator" }));
 
-// Best-effort JSON write — used in dual mode after DB has succeeded.
-// In dual mode, JSON failure is logged but doesn't fail the request.
-async function jsonWriteBestEffort(json, sha, msg, dbAlreadySucceeded) {
-  try {
-    await writeWorkouts(json, sha, msg);
-  } catch (err) {
-    if (dbAlreadySucceeded) {
-      console.warn(`[dual-write] JSON write failed (DB has it): ${err.message}`);
-    } else {
-      throw err;
-    }
-  }
-}
-
 app.get("/api/workouts", checkOrigin, requireAuth, async (req, res) => {
   try {
-    if (dbActive) {
-      const entries = await dbListWorkouts(req.userSub);
-      return res.json(entries);
-    }
-    const { json } = await readWorkouts();
-    const entries = req.userSub
-      ? json.workouts.filter(e => !e.sub || e.sub === req.userSub)
-      : json.workouts;
+    const entries = await dbListWorkouts(req.userSub);
     res.json(entries);
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
@@ -578,27 +501,10 @@ app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter
     const entry = req.body;
     if (!entry || !entry.id) return res.status(400).json({ error: "entry must include an id" });
     if (req.userSub) entry.sub = req.userSub;
-
-    // DB-first: detect duplicate via DB if active, else via JSON.
-    if (dbActive) {
-      if (await dbWorkoutExists(entry.id)) {
-        return res.status(409).json({ error: "duplicate id", id: entry.id });
-      }
-      await dbInsertWorkout(entry);
+    if (await dbWorkoutExists(entry.id)) {
+      return res.status(409).json({ error: "duplicate id", id: entry.id });
     }
-
-    if (jsonActive) {
-      const { json, sha } = await readWorkouts({ force: true });
-      if (!dbActive && json.workouts.some(e => e.id === entry.id)) {
-        return res.status(409).json({ error: "duplicate id", id: entry.id });
-      }
-      // In dual mode, JSON dedup happens here too — but if DB accepted, push regardless.
-      if (!json.workouts.some(e => e.id === entry.id)) json.workouts.push(entry);
-      const label = entry.typeLabel || entry.type || "workout";
-      const date  = entry.dateCompleted || "";
-      await jsonWriteBestEffort(json, sha, `Log ${label} workout (${date})`, dbActive);
-    }
-
+    await dbInsertWorkout(entry);
     res.json({ ok: true, id: entry.id, entry });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
@@ -609,36 +515,9 @@ app.patch("/api/workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimit
   try {
     const { id } = req.params;
     const patch  = req.body || {};
-
-    if (dbActive) {
-      const r = await dbPatchWorkout(id, patch, req.userSub);
-      if (!r.ok) return res.status(r.status).json({ error: r.reason, id });
-      if (jsonActive) {
-        try {
-          const { json, sha } = await readWorkouts({ force: true });
-          const idx = json.workouts.findIndex(e => e.id === id);
-          if (idx !== -1) {
-            const allowed = ["notes", "dateCompleted", "completed"];
-            for (const k of allowed) if (k in patch) json.workouts[idx][k] = patch[k];
-            await jsonWriteBestEffort(json, sha, `Update workout ${id}`, true);
-          }
-        } catch (jsonErr) {
-          console.warn(`[dual-write] JSON patch failed (DB has it): ${jsonErr.message}`);
-        }
-      }
-      return res.json({ ok: true, entry: r.entry });
-    }
-
-    // JSON-only path (DB_MODE=off)
-    const { json, sha } = await readWorkouts({ force: true });
-    const idx = json.workouts.findIndex(e => e.id === id);
-    if (idx === -1) return res.status(404).json({ error: "not found", id });
-    if (req.userSub && json.workouts[idx].sub && json.workouts[idx].sub !== req.userSub)
-      return res.status(403).json({ error: "not authorized" });
-    const allowed = ["notes", "dateCompleted", "completed"];
-    for (const k of allowed) if (k in patch) json.workouts[idx][k] = patch[k];
-    await writeWorkouts(json, sha, `Update workout ${id}`);
-    res.json({ ok: true, entry: json.workouts[idx] });
+    const r = await dbPatchWorkout(id, patch, req.userSub);
+    if (!r.ok) return res.status(r.status).json({ error: r.reason, id });
+    res.json({ ok: true, entry: r.entry });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -647,34 +526,10 @@ app.patch("/api/workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimit
 app.delete("/api/workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const { id } = req.params;
-
-    if (dbActive) {
-      const r = await dbDeleteWorkout(id, req.userSub);
-      if (!r.ok) return res.status(r.status).json({ error: r.reason, id });
-      dbAuditEvent({ userSub: req.userSub, eventType: "workout.delete", ...reqMeta(req), details: { id } });
-      if (jsonActive) {
-        try {
-          const { json, sha } = await readWorkouts({ force: true });
-          const idx = json.workouts.findIndex(e => e.id === id);
-          if (idx !== -1) {
-            json.workouts.splice(idx, 1);
-            await jsonWriteBestEffort(json, sha, `Delete workout ${id}`, true);
-          }
-        } catch (jsonErr) {
-          console.warn(`[dual-write] JSON delete failed (DB applied it): ${jsonErr.message}`);
-        }
-      }
-      return res.json({ ok: true, removed: r.removed });
-    }
-
-    const { json, sha } = await readWorkouts({ force: true });
-    const idx = json.workouts.findIndex(e => e.id === id);
-    if (idx === -1) return res.status(404).json({ error: "not found", id });
-    if (req.userSub && json.workouts[idx].sub && json.workouts[idx].sub !== req.userSub)
-      return res.status(403).json({ error: "not authorized" });
-    const [removed] = json.workouts.splice(idx, 1);
-    await writeWorkouts(json, sha, `Delete workout ${id}`);
-    res.json({ ok: true, removed });
+    const r = await dbDeleteWorkout(id, req.userSub);
+    if (!r.ok) return res.status(r.status).json({ error: r.reason, id });
+    dbAuditEvent({ userSub: req.userSub, eventType: "workout.delete", ...reqMeta(req), details: { id } });
+    res.json({ ok: true, removed: r.removed });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -683,12 +538,7 @@ app.delete("/api/workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimi
 // ───── User settings routes ──────────────────────────────────────────
 app.get("/api/settings", checkOrigin, requireAuth, async (req, res) => {
   try {
-    if (dbActive) {
-      return res.json(await dbGetSettings(req.userSub));
-    }
-    const { json } = await readWorkouts();
-    const key = req.userSub || "default";
-    res.json(json.settings[key] || {});
+    res.json(await dbGetSettings(req.userSub));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -696,51 +546,17 @@ app.get("/api/settings", checkOrigin, requireAuth, async (req, res) => {
 
 app.post("/api/settings", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const patch = req.body || {};
-
-    if (dbActive) await dbUpsertSettings(req.userSub, patch);
-
-    if (jsonActive) {
-      try {
-        const { json, sha } = await readWorkouts({ force: true });
-        const key = req.userSub || "default";
-        json.settings[key] = { ...(json.settings[key] || {}), ...patch };
-        await jsonWriteBestEffort(json, sha, `Update settings (${key.slice(0, 8)})`, dbActive);
-      } catch (jsonErr) {
-        if (!dbActive) throw jsonErr;
-        console.warn(`[dual-write] JSON settings write failed (DB has it): ${jsonErr.message}`);
-      }
-    }
+    await dbUpsertSettings(req.userSub, req.body || {});
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
 });
 
-// ───── Favorites routes (per-user, stored in settings[sub].favorites) ───
-// Falls back to the legacy global favorites array on first load so existing
-// favorites are not lost when a user logs in for the first time after this change.
-function getUserFavorites(json, key) {
-  const userFavs = json.settings[key]?.favorites;
-  if (Array.isArray(userFavs)) return userFavs;
-  // One-time migration: seed from global favorites if per-user list doesn't exist yet
-  return Array.isArray(json.favorites) ? [...json.favorites] : [];
-}
-
+// ───── Favorites routes (per-user) ───────────────────────────────────
 app.get("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
   try {
-    if (dbActive) {
-      return res.json(await dbListFavorites(req.userSub));
-    }
-    const { json, sha } = await readWorkouts();
-    const key = req.userSub || "default";
-    const favs = getUserFavorites(json, key);
-    if (!Array.isArray(json.settings[key]?.favorites) && favs.length > 0) {
-      if (!json.settings[key]) json.settings[key] = {};
-      json.settings[key].favorites = favs;
-      await writeWorkouts(json, sha, `Migrate favorites → ${key.slice(0, 8)}`);
-    }
-    res.json(favs);
+    res.json(await dbListFavorites(req.userSub));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -750,25 +566,7 @@ app.post("/api/favorites", checkOrigin, requireAuth, requireCsrf, writeLimiter, 
   try {
     const { label } = req.body || {};
     if (!label || typeof label !== "string") return res.status(400).json({ error: "label required" });
-
-    if (dbActive) await dbAddFavorite(req.userSub, label);
-
-    if (jsonActive) {
-      try {
-        const { json, sha } = await readWorkouts({ force: true });
-        const key = req.userSub || "default";
-        if (!json.settings[key]) json.settings[key] = {};
-        const favs = getUserFavorites(json, key);
-        if (!favs.includes(label)) {
-          favs.push(label);
-          json.settings[key].favorites = favs;
-          await jsonWriteBestEffort(json, sha, `Favorite: ${label} (${key.slice(0, 8)})`, dbActive);
-        }
-      } catch (jsonErr) {
-        if (!dbActive) throw jsonErr;
-        console.warn(`[dual-write] JSON favorite add failed (DB has it): ${jsonErr.message}`);
-      }
-    }
+    await dbAddFavorite(req.userSub, label);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
@@ -778,25 +576,7 @@ app.post("/api/favorites", checkOrigin, requireAuth, requireCsrf, writeLimiter, 
 app.delete("/api/favorites/:label", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const label = decodeURIComponent(req.params.label);
-
-    if (dbActive) await dbRemoveFavorite(req.userSub, label);
-
-    if (jsonActive) {
-      try {
-        const { json, sha } = await readWorkouts({ force: true });
-        const key = req.userSub || "default";
-        if (!json.settings[key]) json.settings[key] = {};
-        const favs = getUserFavorites(json, key);
-        const updated = favs.filter(f => f !== label);
-        if (updated.length < favs.length) {
-          json.settings[key].favorites = updated;
-          await jsonWriteBestEffort(json, sha, `Unfavorite: ${label} (${key.slice(0, 8)})`, dbActive);
-        }
-      } catch (jsonErr) {
-        if (!dbActive) throw jsonErr;
-        console.warn(`[dual-write] JSON favorite delete failed (DB has it): ${jsonErr.message}`);
-      }
-    }
+    await dbRemoveFavorite(req.userSub, label);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
@@ -817,22 +597,19 @@ app.use((req, res) => res.status(404).send("Not found"));
 
 app.listen(PORT, () => {
   console.log(`[swim-workout-generator] listening on :${PORT}`);
-  if (!GITHUB_TOKEN)      console.warn("[swim-workout-generator] GITHUB_TOKEN not set");
   if (APPLE_AUTH_ACTIVE)  console.log(`[auth] Apple Sign-In active. Gate: existing user in DB OR valid invite code`);
   else                    console.warn("[auth] Apple auth not configured");
+  if (!dbActive)          console.warn("[db] not configured — DB env vars missing");
 });
 
-// Log container outbound IP at startup — Phase 0 verification of Hyperlift egress
-// stability across deploys. See EXPANSION_ROADMAP.md, Section 3 open items.
+// Log container outbound IP at startup. Useful for confirming firewall
+// allow rules at the DB VM if egress ever changes.
 fetch("https://api.ipify.org?format=json")
   .then(r => r.json())
   .then(d => console.log(`[egress-ip] ${d.ip}`))
   .catch(err => console.warn("[egress-ip] lookup failed:", err.message));
 
-// Boot-time MariaDB ping. No-op if DB env vars aren't set on Hyperlift yet —
-// the app keeps reading workouts.json. When env vars are configured, this
-// logs the result of SELECT 1 + @@have_ssl so we can confirm the TLS path.
-console.log(`[db] mode=${dbMode} active=${dbActive} jsonActive=${jsonActive}`);
+// Boot-time MariaDB ping — confirms TLS handshake and credentials are good.
 pingDb()
   .then(r => console.log("[db]", r))
   .catch(err => console.warn("[db] ping failed:", err.message));
