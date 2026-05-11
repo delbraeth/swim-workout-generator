@@ -47,6 +47,7 @@ import {
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
+  dbIsUser, dbConsumeInviteCode, dbEnsureUser,
 } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -222,9 +223,9 @@ function requireAuth(req, res, next) {
     : null;
   const sub = cookieSub || bearerSub;
   if (!sub) return res.status(401).json({ error: "not authenticated" });
-  if (APPLE_ALLOWED_SUBS.length > 0 && !APPLE_ALLOWED_SUBS.includes(sub)) {
-    return res.status(403).json({ error: "not authorized" });
-  }
+  // Authorization gate happens at the login callback (user must be in DB or
+  // present a valid invite code). Per-request check trusts the signed session.
+  // Future hardening (Phase 2 — sessions table) will add per-request revocation.
   req.userSub = sub;
   next();
 }
@@ -251,11 +252,14 @@ function checkOrigin(req, res, next) {
 
 // ───── Apple auth routes ─────────────────────────────────────────────
 
-// Redirect user to Apple's authorization endpoint
+// Redirect user to Apple's authorization endpoint.
+// Optional ?invite=CODE is embedded in the OAuth state for new-user onboarding.
 app.get("/api/auth/apple", (req, res) => {
   if (!APPLE_AUTH_ACTIVE) return res.status(404).send("Apple auth not configured");
-  const state = crypto.randomBytes(16).toString("hex");
-  // Short-lived cookie to verify state on callback (CSRF protection)
+  const csrf   = crypto.randomBytes(16).toString("hex");
+  const invite = (req.query.invite || "").toString().trim().slice(0, 32);
+  // Period separates csrf from invite — neither component contains '.'
+  const state  = invite ? `${csrf}.${invite}` : csrf;
   res.setHeader("Set-Cookie",
     `oauth_state=${state}; HttpOnly; Secure; SameSite=None; Max-Age=300; Path=/`
   );
@@ -289,14 +293,23 @@ app.post("/api/auth/callback", express.urlencoded({ extended: false }), async (r
     const payload = await verifyAppleIdToken(id_token);
     const sub = payload.sub;
 
-    // Always log the sub — needed for bootstrapping APPLE_ALLOWED_SUBS
     console.log(`[auth] Apple login: sub=${sub}`);
 
-    if (APPLE_ALLOWED_SUBS.length === 0) {
-      console.warn(`[auth] APPLE_ALLOWED_SUBS is empty. Add this sub to allow login: ${sub}`);
-    } else if (!APPLE_ALLOWED_SUBS.includes(sub)) {
-      console.warn(`[auth] Rejected sub not in allowlist: ${sub}`);
-      return fail("not_authorized");
+    // Extract invite code from state (format: "csrf.invite")
+    const dotIdx = state.indexOf(".");
+    const invite = dotIdx > 0 ? state.slice(dotIdx + 1) : null;
+
+    // Authorization gate: existing user OR valid invite code
+    const isExisting = await dbIsUser(sub);
+    if (!isExisting) {
+      const result = await dbConsumeInviteCode(invite);
+      if (!result.ok) {
+        console.warn(`[auth] Reject new sub ${sub}: invite ${result.reason}`);
+        return fail(`invite_${result.reason}`);
+      }
+      // Invite accepted — create user row so FK constraints work for future writes
+      await dbEnsureUser(sub);
+      console.log(`[auth] New user created via invite: sub=${sub}`);
     }
 
     // Set session cookie (30-day httpOnly)
@@ -311,14 +324,12 @@ app.post("/api/auth/callback", express.urlencoded({ extended: false }), async (r
   }
 });
 
-// Check whether the current request is authenticated
+// Check whether the current request is authenticated.
+// Trusts the signed session cookie (authorization gate runs at /api/auth/callback).
 app.get("/api/auth/status", (req, res) => {
   if (!APPLE_AUTH_ACTIVE) return res.json({ authenticated: true, mode: "open" });
   const sub = verifySession(getCookie(req, SESSION_COOKIE));
   if (!sub) return res.json({ authenticated: false });
-  if (APPLE_ALLOWED_SUBS.length > 0 && !APPLE_ALLOWED_SUBS.includes(sub)) {
-    return res.json({ authenticated: false, reason: "not_authorized" });
-  }
   res.json({ authenticated: true });
 });
 
@@ -327,17 +338,23 @@ app.get("/api/auth/status", (req, res) => {
 app.post("/api/auth/native", async (req, res) => {
   if (!APPLE_AUTH_ACTIVE) return res.status(404).json({ error: "Apple auth not configured" });
   try {
-    const { identityToken } = req.body || {};
+    const { identityToken, inviteCode } = req.body || {};
     if (!identityToken || typeof identityToken !== "string")
       return res.status(400).json({ error: "identityToken required" });
-    // Native tokens have aud = bundle ID, which differs from the web Services ID.
     const nativeAud = process.env.APPLE_NATIVE_BUNDLE_ID || APPLE_CLIENT_ID;
     const payload = await verifyAppleIdToken(identityToken, nativeAud);
     const sub = payload.sub;
     console.log(`[auth/native] Apple login: sub=${sub}`);
-    if (APPLE_ALLOWED_SUBS.length > 0 && !APPLE_ALLOWED_SUBS.includes(sub)) {
-      console.warn(`[auth/native] Rejected sub not in allowlist: sub=${sub}`);
-      return res.status(403).json({ error: "not_authorized" });
+
+    const isExisting = await dbIsUser(sub);
+    if (!isExisting) {
+      const result = await dbConsumeInviteCode(inviteCode);
+      if (!result.ok) {
+        console.warn(`[auth/native] Reject new sub ${sub}: invite ${result.reason}`);
+        return res.status(403).json({ error: `invite_${result.reason}` });
+      }
+      await dbEnsureUser(sub);
+      console.log(`[auth/native] New user created via invite: sub=${sub}`);
     }
     const token = signSession(sub);
     res.json({ ok: true, token });
@@ -632,7 +649,7 @@ app.use((req, res) => res.status(404).send("Not found"));
 app.listen(PORT, () => {
   console.log(`[swim-workout-generator] listening on :${PORT}`);
   if (!GITHUB_TOKEN)      console.warn("[swim-workout-generator] GITHUB_TOKEN not set");
-  if (APPLE_AUTH_ACTIVE)  console.log(`[auth] Apple Sign-In active. Allowed subs: ${APPLE_ALLOWED_SUBS.length || "none (bootstrap mode)"}`);
+  if (APPLE_AUTH_ACTIVE)  console.log(`[auth] Apple Sign-In active. Gate: existing user in DB OR valid invite code`);
   else                    console.warn("[auth] Apple auth not configured");
 });
 
