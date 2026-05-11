@@ -13,7 +13,7 @@
 // not validate the server's self-signed cert chain. Hardening pass: bundle
 // the CA cert and set rejectUnauthorized:true. Tracked in EXPANSION_ROADMAP.md.
 
-import mariadb from "mariadb";
+import { createPool } from "mariadb";
 
 const {
   DB_HOST,
@@ -26,7 +26,7 @@ const {
 export const dbConfigured = Boolean(DB_HOST && DB_USER && DB_PASSWORD);
 
 export const pool = dbConfigured
-  ? mariadb.createPool({
+  ? createPool({
       host:            DB_HOST,
       port:            parseInt(DB_PORT, 10),
       user:            DB_USER,
