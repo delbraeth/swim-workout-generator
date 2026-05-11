@@ -214,7 +214,11 @@ async function verifyAppleIdToken(idToken, expectedAud = APPLE_CLIENT_ID) {
 // ───── Auth middleware ───────────────────────────────────────────────
 // When Apple auth is active: require a valid session cookie (web) or Bearer token (native).
 // When not active: open mode — writes are unrestricted (same-origin guard still applies).
-function requireAuth(req, res, next) {
+//
+// With DB active, also verify the sub is in `users` and not disabled, so revoking
+// access (setting users.is_disabled = 1) locks the user out within one request.
+// Fails closed (503) on DB lookup error to avoid bypassing authz on transient DB issues.
+async function requireAuth(req, res, next) {
   if (!APPLE_AUTH_ACTIVE) return next();
   const cookieSub = verifySession(getCookie(req, SESSION_COOKIE));
   const authHeader = req.get("Authorization") || "";
@@ -223,9 +227,17 @@ function requireAuth(req, res, next) {
     : null;
   const sub = cookieSub || bearerSub;
   if (!sub) return res.status(401).json({ error: "not authenticated" });
-  // Authorization gate happens at the login callback (user must be in DB or
-  // present a valid invite code). Per-request check trusts the signed session.
-  // Future hardening (Phase 2 — sessions table) will add per-request revocation.
+
+  if (dbActive) {
+    try {
+      const exists = await dbIsUser(sub);
+      if (!exists) return res.status(403).json({ error: "not authorized" });
+    } catch (err) {
+      console.warn("[auth] dbIsUser failed:", err.message);
+      return res.status(503).json({ error: "auth backend unavailable" });
+    }
+  }
+
   req.userSub = sub;
   next();
 }
@@ -325,11 +337,20 @@ app.post("/api/auth/callback", express.urlencoded({ extended: false }), async (r
 });
 
 // Check whether the current request is authenticated.
-// Trusts the signed session cookie (authorization gate runs at /api/auth/callback).
-app.get("/api/auth/status", (req, res) => {
+// Trusts the signed session cookie + cross-checks the sub in the users table
+// when DB is active (so disabled users show as unauthenticated to the frontend).
+app.get("/api/auth/status", async (req, res) => {
   if (!APPLE_AUTH_ACTIVE) return res.json({ authenticated: true, mode: "open" });
   const sub = verifySession(getCookie(req, SESSION_COOKIE));
   if (!sub) return res.json({ authenticated: false });
+  if (dbActive) {
+    try {
+      if (!(await dbIsUser(sub))) return res.json({ authenticated: false, reason: "not_authorized" });
+    } catch (err) {
+      console.warn("[auth/status] dbIsUser failed:", err.message);
+      return res.json({ authenticated: false, reason: "auth_backend_error" });
+    }
+  }
   res.json({ authenticated: true });
 });
 
