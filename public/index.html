@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-11 23:50 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-11 23:56 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6671,7 +6671,7 @@
       const ABS_MAX     = 6000;
       const SLIDER_STEP = is50m ? 100 : 50;     // SCM uses 50m step like SCY (more granular than LCM)
       const SLIDER_MIN  = Math.max(ABS_MIN, sliderMinProp ?? ABS_MIN);
-      const SLIDER_MAX  = Math.min(ABS_MAX, sliderMaxProp ?? 4000);
+      const SLIDER_MAX  = Math.min(ABS_MAX, sliderMaxProp ?? 5000);
       const unit = isMeters ? "m" : "yds";
       const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN) * 100).toFixed(1);
       // 5 evenly-spaced ticks between SLIDER_MIN and SLIDER_MAX
@@ -6722,7 +6722,7 @@
               const ps = parsePaceSecs(paceInput);
               if (!ps) return null;
               const y = Math.round(2400 * (mins / 60) * (120 / ps) / 50) * 50;
-              return Math.min(4000, Math.max(isMeters ? 2000 : 1900, y));
+              return Math.min(5000, Math.max(isMeters ? 2000 : 1900, y));
             }
             const presets = [{ label: "~60 min", mins: 60 }, { label: "~90 min", mins: 90 }, { label: "~2 hr", mins: 120 }];
             return (
@@ -7954,7 +7954,7 @@
       const [poolMode, setPoolMode]         = useState("25y");
       const [paceInput, setPaceInput]       = useState("2:00");
       const [sliderMin, setSliderMin]       = useState(1900);
-      const [sliderMax, setSliderMax]       = useState(4000);
+      const [sliderMax, setSliderMax]       = useState(5000);
       const [workout, setWorkout]           = useState(null);
       const [hover, setHover]               = useState(null);
       const [equipment, setEquipment]       = useState({
