@@ -42,8 +42,8 @@ export async function pingDb() {
   if (!pool) return { configured: false };
   const conn = await pool.getConnection();
   try {
-    const [row] = await conn.query("SELECT 1 AS ok, @@have_ssl AS ssl, current_user() AS who");
-    return { configured: true, ok: row.ok, ssl: row.ssl, who: row.who };
+    const [row] = await conn.query("SELECT 1 AS ok, @@have_ssl AS ssl_on, current_user() AS who");
+    return { configured: true, ok: row.ok, ssl: row.ssl_on, who: row.who };
   } finally {
     conn.release();
   }
