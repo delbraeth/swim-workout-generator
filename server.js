@@ -37,9 +37,11 @@
 //   SESSION_SECRET           — Random 32+ char string for signing session cookies
 //   APP_URL                  — Public HTTPS URL (default: https://veronicacassidy.com)
 
-import express from "express";
-import crypto  from "crypto";
-import path    from "path";
+import express   from "express";
+import crypto    from "crypto";
+import path      from "path";
+import helmet    from "helmet";
+import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 
 import {
@@ -47,8 +49,16 @@ import {
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
-  dbIsUser, dbConsumeInviteCode, dbEnsureUser,
+  dbIsUser, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent,
 } from "./db.js";
+
+// Helper for audit events — pulls IP/UA off the request consistently
+function reqMeta(req) {
+  return {
+    ip:        req.ip || req.get("X-Forwarded-For")?.split(",")[0]?.trim() || null,
+    userAgent: req.get("User-Agent") || null,
+  };
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -75,7 +85,58 @@ const SESSION_SECRET     = process.env.SESSION_SECRET     || "";
 const APPLE_AUTH_ACTIVE = !!(APPLE_CLIENT_ID && APPLE_TEAM_ID && APPLE_KEY_ID && APPLE_PRIVATE_KEY && SESSION_SECRET);
 
 const app = express();
+
+// Trust Hyperlift's reverse proxy so req.ip resolves to the real client.
+// '1' = trust the first hop only.
+app.set("trust proxy", 1);
+
+// Security headers. CSP is intentionally disabled — the app uses inline scripts
+// throughout public/index.html, and a strict CSP needs careful crafting before
+// it can be enabled. Other helmet defaults (HSTS, X-Frame-Options, X-Content-
+// Type-Options, Referrer-Policy, etc.) are on.
+app.use(helmet({
+  contentSecurityPolicy: false,
+}));
+
 app.use(express.json({ limit: "500kb" }));
+
+// ───── Rate limiters ──────────────────────────────────────────────────
+// Auth: 10/min/IP. Catches brute-force probes against /api/auth/*.
+const authLimiter = rateLimit({
+  windowMs:         60 * 1000,
+  limit:            10,
+  standardHeaders:  true,
+  legacyHeaders:    false,
+  message:          { error: "too many auth requests, try again later" },
+  handler: (req, res, _next, options) => {
+    dbAuditEvent({
+      eventType: "rate_limit.hit",
+      ...reqMeta(req),
+      details:   { scope: "auth", path: req.path, limit: options.limit, window_ms: options.windowMs },
+    });
+    res.status(options.statusCode).json(options.message);
+  },
+});
+
+// Writes: 30/min keyed on userSub (falls back to IP for pre-auth). Catches
+// authenticated abuse without trying to police per-IP traffic.
+const writeLimiter = rateLimit({
+  windowMs:         60 * 1000,
+  limit:            30,
+  standardHeaders:  true,
+  legacyHeaders:    false,
+  keyGenerator:     (req) => req.userSub || req.ip,
+  message:          { error: "too many requests, try again later" },
+  handler: (req, res, _next, options) => {
+    dbAuditEvent({
+      userSub:   req.userSub || null,
+      eventType: "rate_limit.hit",
+      ...reqMeta(req),
+      details:   { scope: "write", path: req.path, method: req.method, limit: options.limit, window_ms: options.windowMs },
+    });
+    res.status(options.statusCode).json(options.message);
+  },
+});
 
 // ───── GitHub helpers ─────────────────────────────────────────────────
 function ghHeaders() {
@@ -231,7 +292,10 @@ async function requireAuth(req, res, next) {
   if (dbActive) {
     try {
       const exists = await dbIsUser(sub);
-      if (!exists) return res.status(403).json({ error: "not authorized" });
+      if (!exists) {
+        dbAuditEvent({ userSub: sub, eventType: "auth.disabled_attempt", ...reqMeta(req), details: { path: req.path, method: req.method } });
+        return res.status(403).json({ error: "not authorized" });
+      }
     } catch (err) {
       console.warn("[auth] dbIsUser failed:", err.message);
       return res.status(503).json({ error: "auth backend unavailable" });
@@ -266,7 +330,7 @@ function checkOrigin(req, res, next) {
 
 // Redirect user to Apple's authorization endpoint.
 // Optional ?invite=CODE is embedded in the OAuth state for new-user onboarding.
-app.get("/api/auth/apple", (req, res) => {
+app.get("/api/auth/apple", authLimiter, (req, res) => {
   if (!APPLE_AUTH_ACTIVE) return res.status(404).send("Apple auth not configured");
   const csrf   = crypto.randomBytes(16).toString("hex");
   const invite = (req.query.invite || "").toString().trim().slice(0, 32);
@@ -287,13 +351,16 @@ app.get("/api/auth/apple", (req, res) => {
 });
 
 // Apple posts form data here after user authenticates
-app.post("/api/auth/callback", express.urlencoded({ extended: false }), async (req, res) => {
-  const fail = (reason) => res.redirect(`/?auth=error&reason=${encodeURIComponent(reason)}`);
+app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false }), async (req, res) => {
+  const meta = reqMeta(req);
+  const fail = (reason, userSub = null) => {
+    dbAuditEvent({ userSub, eventType: "auth.login.reject", ...meta, details: { reason, channel: "web" } });
+    res.redirect(`/?auth=error&reason=${encodeURIComponent(reason)}`);
+  };
   try {
     const { id_token, state, error } = req.body;
     if (error) return fail(error);
 
-    // CSRF: verify state matches what we set in the oauth_state cookie
     const storedState = getCookie(req, "oauth_state");
     res.setHeader("Set-Cookie",
       `oauth_state=; HttpOnly; Secure; SameSite=None; Max-Age=0; Path=/`
@@ -301,34 +368,31 @@ app.post("/api/auth/callback", express.urlencoded({ extended: false }), async (r
     if (!storedState || storedState !== state) return fail("state_mismatch");
     if (!id_token) return fail("missing_id_token");
 
-    // Verify id_token with Apple's public keys
     const payload = await verifyAppleIdToken(id_token);
     const sub = payload.sub;
-
     console.log(`[auth] Apple login: sub=${sub}`);
 
-    // Extract invite code from state (format: "csrf.invite")
     const dotIdx = state.indexOf(".");
     const invite = dotIdx > 0 ? state.slice(dotIdx + 1) : null;
 
-    // Authorization gate: existing user OR valid invite code
     const isExisting = await dbIsUser(sub);
     if (!isExisting) {
       const result = await dbConsumeInviteCode(invite);
       if (!result.ok) {
         console.warn(`[auth] Reject new sub ${sub}: invite ${result.reason}`);
-        return fail(`invite_${result.reason}`);
+        return fail(`invite_${result.reason}`, sub);
       }
-      // Invite accepted — create user row so FK constraints work for future writes
       await dbEnsureUser(sub);
       console.log(`[auth] New user created via invite: sub=${sub}`);
+      dbAuditEvent({ userSub: sub, eventType: "invite.consume", ...meta, details: { code: invite, channel: "web" } });
+      dbAuditEvent({ userSub: sub, eventType: "auth.signup",    ...meta, details: { channel: "web" } });
     }
 
-    // Set session cookie (30-day httpOnly)
     const session = signSession(sub);
     res.setHeader("Set-Cookie",
       `${SESSION_COOKIE}=${encodeURIComponent(session)}; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; Path=/`
     );
+    dbAuditEvent({ userSub: sub, eventType: "auth.login.success", ...meta, details: { channel: "web" } });
     res.redirect("/");
   } catch (err) {
     console.error("[auth/callback]", err.message);
@@ -356,8 +420,9 @@ app.get("/api/auth/status", async (req, res) => {
 
 // Native iOS Sign in with Apple — accepts an identityToken from ASAuthorizationAppleIDCredential,
 // verifies it, and returns a session token the app stores in Keychain and sends as Bearer.
-app.post("/api/auth/native", async (req, res) => {
+app.post("/api/auth/native", authLimiter, async (req, res) => {
   if (!APPLE_AUTH_ACTIVE) return res.status(404).json({ error: "Apple auth not configured" });
+  const meta = reqMeta(req);
   try {
     const { identityToken, inviteCode } = req.body || {};
     if (!identityToken || typeof identityToken !== "string")
@@ -372,12 +437,16 @@ app.post("/api/auth/native", async (req, res) => {
       const result = await dbConsumeInviteCode(inviteCode);
       if (!result.ok) {
         console.warn(`[auth/native] Reject new sub ${sub}: invite ${result.reason}`);
+        dbAuditEvent({ userSub: sub, eventType: "auth.login.reject", ...meta, details: { reason: `invite_${result.reason}`, channel: "native" } });
         return res.status(403).json({ error: `invite_${result.reason}` });
       }
       await dbEnsureUser(sub);
       console.log(`[auth/native] New user created via invite: sub=${sub}`);
+      dbAuditEvent({ userSub: sub, eventType: "invite.consume", ...meta, details: { code: inviteCode, channel: "native" } });
+      dbAuditEvent({ userSub: sub, eventType: "auth.signup",    ...meta, details: { channel: "native" } });
     }
     const token = signSession(sub);
+    dbAuditEvent({ userSub: sub, eventType: "auth.login.success", ...meta, details: { channel: "native" } });
     res.json({ ok: true, token });
   } catch (err) {
     console.error("[auth/native]", err.message);
@@ -387,6 +456,8 @@ app.post("/api/auth/native", async (req, res) => {
 
 // Clear session and redirect home
 app.get("/api/auth/signout", (req, res) => {
+  const sub = verifySession(getCookie(req, SESSION_COOKIE));
+  if (sub) dbAuditEvent({ userSub: sub, eventType: "auth.signout", ...reqMeta(req) });
   res.setHeader("Set-Cookie",
     `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/`
   );
@@ -426,7 +497,7 @@ app.get("/api/workouts", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/log-workout", checkOrigin, requireAuth, async (req, res) => {
+app.post("/api/log-workout", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
   try {
     const entry = req.body;
     if (!entry || !entry.id) return res.status(400).json({ error: "entry must include an id" });
@@ -458,7 +529,7 @@ app.post("/api/log-workout", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.patch("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
+app.patch("/api/workouts/:id", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const patch  = req.body || {};
@@ -497,13 +568,14 @@ app.patch("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.delete("/api/workouts/:id", checkOrigin, requireAuth, async (req, res) => {
+app.delete("/api/workouts/:id", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
   try {
     const { id } = req.params;
 
     if (dbActive) {
       const r = await dbDeleteWorkout(id, req.userSub);
       if (!r.ok) return res.status(r.status).json({ error: r.reason, id });
+      dbAuditEvent({ userSub: req.userSub, eventType: "workout.delete", ...reqMeta(req), details: { id } });
       if (jsonActive) {
         try {
           const { json, sha } = await readWorkouts({ force: true });
@@ -546,7 +618,7 @@ app.get("/api/settings", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/settings", checkOrigin, requireAuth, async (req, res) => {
+app.post("/api/settings", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
   try {
     const patch = req.body || {};
 
@@ -598,7 +670,7 @@ app.get("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
+app.post("/api/favorites", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
   try {
     const { label } = req.body || {};
     if (!label || typeof label !== "string") return res.status(400).json({ error: "label required" });
@@ -627,7 +699,7 @@ app.post("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
   }
 });
 
-app.delete("/api/favorites/:label", checkOrigin, requireAuth, async (req, res) => {
+app.delete("/api/favorites/:label", checkOrigin, requireAuth, writeLimiter, async (req, res) => {
   try {
     const label = decodeURIComponent(req.params.label);
 
