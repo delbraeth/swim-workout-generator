@@ -8,6 +8,7 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 # Copy app source
 COPY server.js ./
+COPY db.js ./
 COPY public/ ./public/
 
 # Hyperlift sets PORT; default to 8080 for local runs
