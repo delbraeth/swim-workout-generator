@@ -1,17 +1,14 @@
 // db.js — MariaDB connection pool + per-table helpers for vero_swimgen.
 //
-// Env vars (all required for the pool; if missing, dbConfigured=false and the
-// app falls back to workouts.json):
-//   DB_HOST, DB_PORT (default 3306), DB_USER, DB_PASSWORD, DB_NAME (default vero_swimgen)
+// Required env vars (pool fails to initialize if any are missing):
+//   DB_HOST, DB_USER, DB_PASSWORD
 //
-// Behavior toggle:
-//   DB_MODE = off  | dual | full   (default "off")
-//     off  — read/write workouts.json (current behavior)
-//     dual — read DB; write DB first then JSON (DB-first, B3 sequencing)
-//     full — read/write DB only; JSON not touched
+// Optional:
+//   DB_PORT (default 3306), DB_NAME (default vero_swimgen)
 //
-// TLS is required at the server (REQUIRE SSL); we pass rejectUnauthorized:false
-// (encrypted but no cert chain validation against the self-signed CA).
+// TLS is required at the server (REQUIRE SSL on the user). The pool passes
+// `ssl: { rejectUnauthorized: false }` — encrypted, no cert chain validation
+// against the self-signed CA. Future hardening: pin the CA cert.
 
 import { createPool } from "mariadb";
 import crypto          from "crypto";
@@ -22,15 +19,11 @@ const {
   DB_USER,
   DB_PASSWORD,
   DB_NAME     = "vero_swimgen",
-  DB_MODE     = "off",
 } = process.env;
 
-export const dbConfigured = Boolean(DB_HOST && DB_USER && DB_PASSWORD);
-export const dbMode       = String(DB_MODE).toLowerCase();   // "off" | "dual" | "full"
-export const dbActive     = dbConfigured && (dbMode === "dual" || dbMode === "full");
-export const jsonActive   = (dbMode === "off" || dbMode === "dual");
+export const dbActive = Boolean(DB_HOST && DB_USER && DB_PASSWORD);
 
-export const pool = dbConfigured
+export const pool = dbActive
   ? createPool({
       host:            DB_HOST,
       port:            parseInt(DB_PORT, 10),
@@ -51,7 +44,7 @@ export async function pingDb() {
     const [row] = await conn.query(
       "SELECT 1 AS ok, @@have_ssl AS ssl_on, current_user() AS who"
     );
-    return { configured: true, mode: dbMode, ok: row.ok, ssl: row.ssl_on, who: row.who };
+    return { configured: true, ok: row.ok, ssl: row.ssl_on, who: row.who };
   } finally {
     conn.release();
   }
