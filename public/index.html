@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 17:10 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 17:34 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -8055,7 +8055,7 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, onWorkoutFinish, isLastSet, restSecs, autoStart, elapsed, audioCues = false, unit = "yds" }) {
+    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, onWorkoutFinish, onLap, isLastSet, restSecs, autoStart, elapsed, audioCues = false, unit = "yds" }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
@@ -8065,6 +8065,10 @@
       const [running,   setRunning]  = useState(() => !!(autoStart && totalSecs !== null));
       const [finished,  setFinished] = useState(false);
       const [restLeft,  setRestLeft] = useState(null); // null = not in rest phase
+      // E: lap-split state. `lastSplit` shows transient feedback after each lap;
+      // `setSplits` is the running list for this single set (parent merges across sets).
+      const [lastSplit, setLastSplit] = useState(null);
+      const [setSplits, setSetSplits] = useState([]);
 
       // Tick down every second while running
       useEffect(() => {
@@ -8073,9 +8077,11 @@
         return () => clearInterval(id);
       }, [running, hasTimer]);
 
-      // When countdown hits zero, advance rep or finish
+      // When countdown hits zero, record an on-time split and advance rep or finish.
       useEffect(() => {
         if (!running || !hasTimer || secsLeft !== 0) return;
+        // E: auto-advance = swimmer made the interval exactly (delta 0).
+        recordSplit(totalSecs);
         if (repIdx + 1 >= set.reps) {
           setRunning(false);
           setFinished(true);
@@ -8084,6 +8090,34 @@
           setSecsLeft(totalSecs);
         }
       }, [secsLeft, running, hasTimer]);
+
+      // E: helper — record a split for the current rep and bubble up to parent.
+      function recordSplit(actualSecs) {
+        if (!hasTimer) return;
+        const split = {
+          rep:           repIdx,
+          actual_secs:   Math.max(0, Math.round(actualSecs)),
+          expected_secs: totalSecs,
+          delta:         Math.round(actualSecs) - totalSecs,
+        };
+        setSetSplits(prev => [...prev, split]);
+        setLastSplit(split);
+        if (onLap) onLap(split);
+      }
+
+      function handleLap() {
+        if (!hasTimer || !running) return;
+        const actualSecs = totalSecs - secsLeft;
+        if (actualSecs <= 0) return; // ignore taps before the rep has run
+        recordSplit(actualSecs);
+        if (repIdx + 1 >= set.reps) {
+          setRunning(false);
+          setFinished(true);
+        } else {
+          setRepIdx(r => r + 1);
+          setSecsLeft(totalSecs);
+        }
+      }
 
       // When a set finishes, kick off rest phase (or 1.5s flash for 0s)
       useEffect(() => {
@@ -8113,6 +8147,9 @@
         setFinished(false);
         setRepIdx(0);
         setSecsLeft(totalSecs ?? 0);
+        // E: dump in-progress splits — resetting means "swim this set over."
+        setSetSplits([]);
+        setLastSplit(null);
       };
 
       const handleSkip = () => {
@@ -8126,6 +8163,43 @@
       };
 
       const isAtStart = repIdx === 0 && secsLeft === (totalSecs ?? 0) && !running;
+
+      // E: split feedback — running avg across this set plus last-rep delta.
+      const avgDelta = setSplits.length > 0
+        ? Math.round(setSplits.reduce((s, sp) => s + sp.delta, 0) / setSplits.length)
+        : null;
+      const fmtSigned = (n) => {
+        if (n == null) return "—";
+        const abs = Math.abs(n);
+        const m = Math.floor(abs / 60);
+        const s = abs % 60;
+        const t = m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `0:${String(s).padStart(2, "0")}`;
+        return (n > 0 ? "+" : n < 0 ? "−" : "±") + t;
+      };
+      const splitFeedback = hasTimer && (setSplits.length > 0 || lastSplit) && (
+        <div className="screen-only" style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 14,
+          padding: "6px 12px", borderRadius: 999,
+          background: "rgba(15,23,42,0.6)", border: "1px solid #1e293b",
+          fontVariantNumeric: "tabular-nums",
+          fontSize: isLandscape ? 13 : 14,
+        }}>
+          {lastSplit && (
+            <span style={{
+              color: lastSplit.delta < 0 ? "#86efac" : lastSplit.delta > 0 ? "#fca5a5" : "#cbd5e1",
+              fontWeight: 800,
+            }}>
+              last {fmtSigned(lastSplit.delta)} <span style={{ color: "#475569", fontWeight: 400 }}>· {fmtTime(lastSplit.actual_secs)}</span>
+            </span>
+          )}
+          {avgDelta !== null && setSplits.length > 1 && (
+            <span style={{ color: "#94a3b8" }}>
+              avg ∆ <span style={{ color: avgDelta < 0 ? "#86efac" : avgDelta > 0 ? "#fca5a5" : "#cbd5e1", fontWeight: 700 }}>{fmtSigned(avgDelta)}</span>
+              <span style={{ color: "#475569" }}> · {setSplits.length}/{set.reps}</span>
+            </span>
+          )}
+        </div>
+      );
 
       // Rep dots shared between portrait and landscape
       const repDots = set.reps <= 20 && (
@@ -8153,13 +8227,29 @@
         <div style={{ display: "flex", gap: isLandscape ? 10 : 14, width: "100%" }}>
           {!finished && (
             <>
-              {hasTimer ? (
+              {hasTimer && running ? (
+                // E: when timer is running, the primary action is "✓ Lap".
+                <>
+                  <button onClick={handleLap} style={{
+                    ...btnBase, flex: 2, border: "none", background: "#16a34a",
+                    color: "#fff", fontSize: isLandscape ? 20 : 26, fontWeight: 800,
+                  }}>
+                    ✓ Lap
+                  </button>
+                  <button onClick={() => setRunning(false)} style={{
+                    ...btnBase, flex: 1, border: "1px solid #334155",
+                    background: "#0f172a", color: "#cbd5e1",
+                  }}>
+                    ⏸
+                  </button>
+                </>
+              ) : hasTimer ? (
                 <button onClick={() => setRunning(r => !r)} style={{
                   ...btnBase, flex: 2, border: "none",
-                  background: running ? "#dc2626" : "#3b82f6",
+                  background: "#3b82f6",
                   color: "#fff", fontSize: isLandscape ? 20 : 26, fontWeight: 800,
                 }}>
-                  {running ? "⏸ Pause" : isAtStart ? "▶ Start" : "▶ Resume"}
+                  {isAtStart ? "▶ Start" : "▶ Resume"}
                 </button>
               ) : (
                 <button onClick={handleSkip} style={{
@@ -8268,6 +8358,7 @@
                   {set.interval}
                 </div>
                 {repDots}
+                {splitFeedback && <div style={{ marginTop: 10 }}>{splitFeedback}</div>}
               </div>
 
               {/* Right: clock */}
@@ -8424,6 +8515,7 @@
                   </div>
                 )}
                 <div style={{ marginBottom: 8 }}>{repDots}</div>
+                {splitFeedback && <div style={{ marginTop: 12 }}>{splitFeedback}</div>}
               </>
             )}
           </div>
@@ -9512,6 +9604,8 @@
       const [finishDifficulty, setFinishDifficulty] = useState(null);
       const [logState, setLogState]     = useState("idle"); // idle | saving | saved | error
       const [logError, setLogError]     = useState(null);
+      // E: flat array of all splits captured this session — {blockIdx, setIdx, rep, actual_secs, expected_secs, delta}
+      const [allSplits, setAllSplits]   = useState([]);
       const blocks  = workout.blocks;
 
       // Wall-clock elapsed timer — pauses once the workout is finished
@@ -9547,7 +9641,11 @@
       const handleLogClick = useCallback(async () => {
         if (!onLogAsToday) { onClose(); return; }
         setLogState("saving"); setLogError(null);
-        const res = await onLogAsToday(workout, { difficulty: finishDifficulty || undefined });
+        const res = await onLogAsToday(workout, {
+          difficulty: finishDifficulty || undefined,
+          // E: bundle any captured splits into the new entry
+          actualSplits: allSplits.length > 0 ? allSplits : undefined,
+        });
         if (res.ok) {
           setLogState("saved");
           setTimeout(() => onClose(), 900);
@@ -9555,7 +9653,8 @@
           setLogState("error");
           setLogError(res.error || "Save failed");
         }
-      }, [onLogAsToday, workout, finishDifficulty, onClose]);
+      }, [onLogAsToday, workout, finishDifficulty, onClose, allSplits]);
+
 
       // Manual tap on a set card — never auto-starts
       function handleSetTap(globalIdx) {
@@ -9668,6 +9767,11 @@
               onClose={() => setPaceIdx(null)}
               onNext={handlePaceNext}
               onWorkoutFinish={finishWorkout}
+              onLap={(split) => setAllSplits(prev => [...prev, {
+                blockIdx: allSets[paceIdx].blockIdx,
+                setIdx:   allSets[paceIdx].setIdx,
+                ...split,
+              }])}
               isLastSet={paceIdx === allSets.length - 1}
               restSecs={restSecs}
               autoStart={autoStartNext}
@@ -9728,6 +9832,9 @@
                 </div>
                 <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
                   {workout.totalYards.toLocaleString()} {unit} · {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
+                  {allSplits.length > 0 && (
+                    <> · <span style={{ color: "#86efac", fontWeight: 700 }}>{allSplits.length} split{allSplits.length === 1 ? "" : "s"} captured</span></>
+                  )}
                 </div>
 
                 {/* Difficulty rating — optional, captured right after the swim while it's fresh */}
@@ -9747,7 +9854,7 @@
 
                 {logState === "saved" ? (
                   <div style={{ color: "#4ade80", fontSize: 15, fontWeight: 700, padding: "10px 0" }}>
-                    ✓ Logged to your history
+                    ✓ Logged to your history{allSplits.length > 0 ? " (with splits)" : ""}
                   </div>
                 ) : (
                   <>
@@ -9761,7 +9868,11 @@
                         cursor: logState === "saving" ? "default" : "pointer",
                         marginBottom: 10,
                       }}>
-                      {logState === "saving" ? "Saving…" : "Log as today's session"}
+                      {logState === "saving"
+                        ? "Saving…"
+                        : allSplits.length > 0
+                          ? `Log as today's session (with ${allSplits.length} split${allSplits.length === 1 ? "" : "s"})`
+                          : "Log as today's session"}
                     </button>
                     {logState === "error" && (
                       <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10 }}>
@@ -10403,6 +10514,7 @@
           difficulty: opts.difficulty || undefined,
           recovery: sourceWorkout.recovery ? true : undefined,
           phase: sourceWorkout.phase || undefined,
+          actual_splits: opts.actualSplits && opts.actualSplits.length > 0 ? opts.actualSplits : undefined,
           completed: true,
         };
         setHistory(prev => {
