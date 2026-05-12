@@ -271,6 +271,24 @@ export async function dbRevokeSession(id) {
   );
 }
 
+// Revoke a session by its id prefix, scoped to a specific user (so users can
+// only revoke their own sessions). Returns { ok, revoked } or { ok: false, reason }.
+export async function dbRevokeSessionByPrefix(userSub, prefix) {
+  if (!userSub || !prefix || prefix.length < 6) return { ok: false, reason: "invalid_prefix" };
+  // Use LIKE 'prefix%' to match the full session ID. base64url is safe (no SQL special chars),
+  // but escape % and _ just in case.
+  const safe = String(prefix).replace(/[\\%_]/g, "\\$&");
+  const rows = await pool.query(
+    "SELECT `id` FROM `sessions` WHERE `user_sub` = ? AND `id` LIKE CONCAT(?, '%') AND `revoked_at` IS NULL AND `expires_at` > NOW()",
+    [userSub, safe]
+  );
+  if (rows.length === 0) return { ok: false, reason: "not_found" };
+  if (rows.length > 1)  return { ok: false, reason: "ambiguous_prefix" };
+  const id = rows[0].id;
+  await pool.query("UPDATE `sessions` SET `revoked_at` = NOW(3) WHERE `id` = ?", [id]);
+  return { ok: true, revoked: id };
+}
+
 export async function dbRevokeOthersByUser(userSub, exceptId = null) {
   if (!userSub) return 0;
   const sql = exceptId
