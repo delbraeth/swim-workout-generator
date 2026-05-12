@@ -452,6 +452,23 @@ export async function dbAdminSetUserFlag(sub, field, value) {
   return { ok: true };
 }
 
+// Admin edits to a user's display fields. Only allows email, initials, display_name.
+export async function dbAdminUpdateUser(sub, patch) {
+  if (!sub) return { ok: false, reason: "no_sub" };
+  const allowed = { email: "email", initials: "initials", display_name: "display_name" };
+  const sets = [], vals = [];
+  for (const [k, col] of Object.entries(allowed)) {
+    if (k in patch) {
+      sets.push(`\`${col}\` = ?`);
+      vals.push(patch[k] === "" ? null : patch[k]);
+    }
+  }
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(sub);
+  const r = await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 export async function dbAdminDeleteUser(sub) {
   if (!sub) return { ok: false, reason: "no_sub" };
   // FK CASCADE on workouts/favorites/settings/sessions wipes child rows.
