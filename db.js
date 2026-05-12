@@ -416,6 +416,106 @@ export async function dbIsUser(sub) {
   return rows.length > 0;
 }
 
+export async function dbIsAdmin(sub) {
+  if (!sub) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `users` WHERE `sub` = ? AND `is_admin` = 1 AND `is_disabled` = 0 LIMIT 1",
+    [sub]
+  );
+  return rows.length > 0;
+}
+
+// ─── admin helpers ──────────────────────────────────────────────────────────
+export async function dbAdminListUsers() {
+  const rows = await pool.query(`
+    SELECT u.sub, u.email, u.email_verified, u.display_name, u.initials,
+           u.is_admin, u.is_disabled, u.created_at, u.last_login_at,
+           COALESCE(w.cnt, 0) AS workout_count
+      FROM users u
+      LEFT JOIN (SELECT user_sub, COUNT(*) AS cnt FROM workouts GROUP BY user_sub) w
+        ON w.user_sub = u.sub
+      ORDER BY u.created_at DESC
+  `);
+  return rows.map(r => ({
+    sub: r.sub, email: r.email, email_verified: !!r.email_verified,
+    display_name: r.display_name, initials: r.initials,
+    is_admin: !!r.is_admin, is_disabled: !!r.is_disabled,
+    created_at: r.created_at, last_login_at: r.last_login_at,
+    workout_count: Number(r.workout_count),
+  }));
+}
+
+export async function dbAdminSetUserFlag(sub, field, value) {
+  if (!sub) return { ok: false, reason: "no_sub" };
+  if (field !== "is_disabled" && field !== "is_admin") return { ok: false, reason: "bad_field" };
+  await pool.query(`UPDATE \`users\` SET \`${field}\` = ? WHERE \`sub\` = ?`, [value ? 1 : 0, sub]);
+  return { ok: true };
+}
+
+export async function dbAdminDeleteUser(sub) {
+  if (!sub) return { ok: false, reason: "no_sub" };
+  // FK CASCADE on workouts/favorites/settings/sessions wipes child rows.
+  // audit_events and invite_codes use SET NULL — trail preserved.
+  const r = await pool.query("DELETE FROM `users` WHERE `sub` = ?", [sub]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbAdminListInvites() {
+  const rows = await pool.query(`
+    SELECT ic.code, ic.note, ic.max_uses, ic.times_used,
+           ic.expires_at, ic.created_at, ic.created_by,
+           u.initials AS created_by_initials
+      FROM invite_codes ic
+      LEFT JOIN users u ON u.sub = ic.created_by
+      ORDER BY ic.created_at DESC
+  `);
+  return rows.map(r => ({
+    code: r.code, note: r.note,
+    max_uses: Number(r.max_uses), times_used: Number(r.times_used),
+    expires_at: r.expires_at, created_at: r.created_at,
+    created_by: r.created_by, created_by_initials: r.created_by_initials,
+    status: r.expires_at && new Date(r.expires_at) < new Date() ? "expired"
+          : Number(r.times_used) >= Number(r.max_uses) ? "exhausted"
+          : "active",
+  }));
+}
+
+export async function dbAdminCreateInvite({ note, maxUses = 1, expiresAt = null, createdBy = null }) {
+  const code = crypto.randomBytes(8).toString("base64url");
+  await pool.query(
+    "INSERT INTO `invite_codes` (`code`, `note`, `max_uses`, `expires_at`, `created_by`) VALUES (?, ?, ?, ?, ?)",
+    [code, note || null, maxUses, expiresAt || null, createdBy]
+  );
+  return code;
+}
+
+export async function dbAdminDeleteInvite(code) {
+  if (!code) return { ok: false, reason: "no_code" };
+  const r = await pool.query("DELETE FROM `invite_codes` WHERE `code` = ?", [code]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbAdminListAuditEvents({ limit = 100, offset = 0, eventType = null, userSub = null } = {}) {
+  const where = [];
+  const args  = [];
+  if (eventType) { where.push("`event_type` = ?"); args.push(eventType); }
+  if (userSub)   { where.push("`user_sub` = ?");   args.push(userSub); }
+  const wh = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  args.push(Number(limit), Number(offset));
+  const rows = await pool.query(
+    `SELECT id, user_sub, event_type, ip, user_agent, details, created_at
+       FROM audit_events ${wh}
+       ORDER BY id DESC
+       LIMIT ? OFFSET ?`,
+    args
+  );
+  return rows.map(r => ({
+    id: Number(r.id), user_sub: r.user_sub, event_type: r.event_type,
+    ip: r.ip, user_agent: r.user_agent,
+    details: r.details, created_at: r.created_at,
+  }));
+}
+
 // Atomically validate and consume an invite code.
 // Returns { ok: true } or { ok: false, reason: "invalid" | "expired" | "exhausted" | "no_code" }.
 export async function dbConsumeInviteCode(code) {
