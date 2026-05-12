@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Swim Workout Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0f172a;
+      --bg2:      #1e293b;
+      --border:   #334155;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --blue:     #3b82f6;
+      --blue-lt:  #93c5fd;
+      --green:    #22c55e;
+      --amber:    #f59e0b;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    @media (max-width: 700px) {
+      main { padding: 24px 20px 60px; }
+    }
+
+    h1 { font-size: 32px; font-weight: 900; color: #fff; letter-spacing: -0.03em; margin-bottom: 8px; }
+    h2 { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.01em; margin: 40px 0 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+    h3 { font-size: 15px; font-weight: 700; color: var(--blue-lt); margin: 24px 0 8px; }
+    p  { color: var(--muted); margin-bottom: 14px; }
+    p strong { color: var(--text); font-weight: 600; }
+    ul { color: var(--muted); padding-left: 22px; margin-bottom: 14px; }
+    li { margin-bottom: 6px; }
+    li strong { color: var(--text); }
+    a { color: var(--blue-lt); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .hero {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 8px;
+    }
+    .hero-sub { color: var(--blue-lt); font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 6px; }
+    .hero-back { color: var(--muted); font-size: 13px; margin-top: 14px; display: inline-block; }
+    .hero-back:hover { color: var(--text); }
+
+    .meta { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+    .callout {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 13px;
+      color: var(--text);
+    }
+    code { background: var(--bg2); padding: 1px 6px; border-radius: 4px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+
+    footer {
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+
+<main>
+
+  <div class="hero">
+    <div class="hero-sub">🏊‍♂️ Swim Workout Generator</div>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective 2026-05-12</p>
+    <a class="hero-back" href="/">← Back to the app</a>
+  </div>
+
+  <p>This page explains what data the Swim Workout Generator collects, why, how long it's kept, and what you can do about it. We aim for plain English over legalese; if anything here is unclear, the contact email at the bottom is the right place to ask.</p>
+
+  <h2>Who runs this app</h2>
+  <p>The app is operated by an individual ("the operator") for a small group of friends, family, and invited swimmers. There is no company, no employees, no investors. The app is hosted on infrastructure provided by Spaceship (a domain and hosting provider) in the United States.</p>
+
+  <h2>What we collect</h2>
+  <p>We collect only what's needed to run your account and protect the service:</p>
+
+  <h3>From Sign in with Apple</h3>
+  <ul>
+    <li><strong>Apple sub</strong> — a permanent, anonymized identifier Apple gives us. It does not reveal your name or other Apple-account details.</li>
+    <li><strong>Email</strong> — if you choose to share it during Apple sign-in. Apple lets you hide it behind a relay address; if you do, that's the address we see and use.</li>
+  </ul>
+
+  <h3>From your use of the app</h3>
+  <ul>
+    <li><strong>Workouts you generate and save</strong> — type, distance, blocks, notes, completion status, the date you swam.</li>
+    <li><strong>Preferences</strong> — initials, pace input, slider min/max range, favorite sets.</li>
+    <li><strong>Sessions</strong> — one row per active sign-in: a random session ID, IP address, browser user-agent string, timestamps for creation and last-seen.</li>
+  </ul>
+
+  <h3>In the security audit log</h3>
+  <ul>
+    <li><strong>Authentication events</strong> — successful and rejected logins, signouts, signup-via-invite, attempts by disabled accounts.</li>
+    <li><strong>Administrative actions</strong> — when an admin disables, deletes, or edits an account; when invites are created or deleted.</li>
+    <li><strong>Suspicious activity signals</strong> — rate-limit hits, CSRF token rejections.</li>
+    <li><strong>Per-event:</strong> timestamp, your Apple sub, IP, user-agent, and a small JSON details field.</li>
+  </ul>
+
+  <div class="callout">
+    <strong>What we don't collect:</strong> no analytics or tracking pixels, no third-party advertising, no behavioral profiling, no precise location, no health or biometric data. We don't collect anything from your device beyond what you explicitly enter.
+  </div>
+
+  <h2>Why we collect it</h2>
+  <ul>
+    <li><strong>To run your account</strong> — your workouts and settings need somewhere to live so they persist across devices.</li>
+    <li><strong>To authenticate you</strong> — the Apple sub identifies you across sessions; sessions track which devices are signed in.</li>
+    <li><strong>To protect the service</strong> — the audit log lets us spot abuse and investigate problems.</li>
+    <li><strong>To enable admin actions</strong> — the operator can disable abusive accounts and respond to security events.</li>
+  </ul>
+
+  <h2>Where it's stored</h2>
+  <p>All data lives in a MariaDB database on a virtual machine in Spaceship's US data center. Database backups are stored within Spaceship's hosting environment. The connection between the app and the database uses TLS encryption.</p>
+  <p>Apple handles the authentication transaction; we never see your Apple ID password.</p>
+
+  <h2>Who can see your data</h2>
+  <ul>
+    <li><strong>You</strong> — your own workouts, settings, favorites, and session list are visible to you in the app.</li>
+    <li><strong>The operator</strong> — has admin access to all data for the purpose of running the app, debugging problems, and responding to security events.</li>
+    <li><strong>Nobody else.</strong> We do not sell, share, or rent your data to third parties.</li>
+  </ul>
+
+  <h2>How long we keep it</h2>
+  <ul>
+    <li><strong>Your account data</strong> — kept as long as your account is active. If your account is deleted, your workouts, favorites, settings, and sessions are permanently removed from the database (foreign-key cascade).</li>
+    <li><strong>Audit log events</strong> — kept indefinitely for security forensics, but are anonymized (the link to your Apple sub is set to NULL) if your account is deleted.</li>
+    <li><strong>Database backups</strong> — kept according to Spaceship's backup retention. A deleted account may persist in older backups for a short period until they roll off.</li>
+  </ul>
+
+  <h2>Third parties</h2>
+  <p>The only third party involved in app operation is <strong>Apple</strong>, who provides the Sign in with Apple service. Apple's handling of your data is governed by <a href="https://www.apple.com/legal/privacy/" target="_blank" rel="noopener">Apple's Privacy Policy</a>, which we do not control.</p>
+  <p>We do not use Google Analytics, Facebook Pixel, ad networks, or any other third-party tracking or analytics service.</p>
+
+  <h2>Your rights</h2>
+  <p>You can request any of the following by emailing the operator (see <a href="#contact">Contact</a>):</p>
+  <ul>
+    <li><strong>A copy of your data</strong> — we'll export your workouts, favorites, settings, and sessions as JSON.</li>
+    <li><strong>Account deletion</strong> — we'll permanently delete your account and all the data attached to it.</li>
+    <li><strong>Corrections</strong> — if anything in your profile (initials, email, name) is wrong, ask and we'll fix it.</li>
+    <li><strong>To stop using the app</strong> — you can sign out at any time. Sign-out revokes that session; "Sign out everywhere else" revokes all your other sessions.</li>
+  </ul>
+  <p>We aim to respond to requests within a reasonable time (typically days, not weeks). This is a side project, not a 24/7 operation.</p>
+
+  <h2>Children's privacy</h2>
+  <p>The app is not intended for children under 13. We do not knowingly collect data from anyone under 13. If you become aware that a child has signed in via Apple, please contact the operator and we'll remove the account.</p>
+
+  <h2>Security</h2>
+  <p>We take reasonable, layered precautions:</p>
+  <ul>
+    <li>TLS encryption on all browser ↔ app and app ↔ database connections.</li>
+    <li>Session cookies are HttpOnly and Secure; cookie values are opaque random IDs (not your sub).</li>
+    <li>CSRF tokens on all write operations.</li>
+    <li>Rate limiting on authentication endpoints.</li>
+    <li>Server-side security headers (HSTS, X-Frame-Options, etc.) via the helmet middleware.</li>
+    <li>Database access is restricted to the app's IP and requires SSL with a least-privilege user.</li>
+    <li>Audit logging on all security-relevant events.</li>
+  </ul>
+  <p>No system is 100% secure. If a breach occurs that affects your data, we'll notify affected users by email.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If we make material changes, we'll update the effective date at the top of this page and notify active users. Continued use of the app after a change means you accept the updated policy.</p>
+
+  <h2 id="contact">Contact</h2>
+  <p>Questions, requests, or concerns:</p>
+  <p><strong>Email:</strong> <a href="mailto:delbraeth@gmail.com">delbraeth@gmail.com</a></p>
+
+  <footer>
+    <a href="/">← Back to the app</a>
+    <a href="/manual.html">User manual</a>
+    <a href="/terms.html">Terms of Service</a>
+  </footer>
+
+</main>
+
+</body>
+</html>
