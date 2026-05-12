@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 14:48 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 14:56 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7449,7 +7449,7 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, isLastSet, restSecs, autoStart, elapsed, unit = "yds" }) {
+    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, onWorkoutFinish, isLastSet, restSecs, autoStart, elapsed, unit = "yds" }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
@@ -7576,9 +7576,9 @@
               ↺ Reset
             </button>
           ) : isLastSet ? (
-            <button onClick={onClose} style={{
-              ...btnBase, flex: 1, border: "1px solid #1e293b",
-              background: "transparent", color: "#475569",
+            <button onClick={onWorkoutFinish || onClose} style={{
+              ...btnBase, flex: 1, border: "1px solid #16a34a",
+              background: "#16a34a22", color: "#86efac",
             }}>
               Finish ✓
             </button>
@@ -8397,23 +8397,35 @@
 
     const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
 
-    function RunWorkoutOverlay({ workout, restSecs, onClose, unit = "yds" }) {
+    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, unit = "yds" }) {
       const [idx, setIdx]               = useState(0);
       const [paceIdx, setPaceIdx]       = useState(null);
       const [elapsed, setElapsed]       = useState(0); // seconds since workout started
       const [autoStartNext, setAutoStartNext] = useState(false);
+      const [showFinish, setShowFinish] = useState(false);
+      const [finishDifficulty, setFinishDifficulty] = useState(null);
+      const [logState, setLogState]     = useState("idle"); // idle | saving | saved | error
+      const [logError, setLogError]     = useState(null);
       const blocks  = workout.blocks;
 
-      // Wall-clock elapsed timer — runs from mount, never pauses
+      // Wall-clock elapsed timer — pauses once the workout is finished
       useEffect(() => {
+        if (showFinish) return;
         const id = setInterval(() => setElapsed(e => e + 1), 1000);
         return () => clearInterval(id);
-      }, []);
+      }, [showFinish]);
 
       const allSets = useMemo(() =>
         blocks.flatMap((block, bIdx) =>
           block.sets.map((set, sIdx) => ({ set, blockIdx: bIdx, setIdx: sIdx }))
         ), [blocks]);
+
+      // Marks the workout as completed — show the Finish screen instead of closing.
+      const finishWorkout = useCallback(() => {
+        setPaceIdx(null);
+        setAutoStartNext(false);
+        setShowFinish(true);
+      }, []);
 
       const handlePaceNext = useCallback(() => {
         if (paceIdx + 1 < allSets.length) {
@@ -8422,11 +8434,22 @@
           setPaceIdx(paceIdx + 1);
           setAutoStartNext(restSecs !== null); // auto-start if not manual
         } else {
-          setPaceIdx(null);
-          setAutoStartNext(false);
-          onClose();
+          finishWorkout();
         }
-      }, [paceIdx, allSets, restSecs, onClose]);
+      }, [paceIdx, allSets, restSecs, finishWorkout]);
+
+      const handleLogClick = useCallback(async () => {
+        if (!onLogAsToday) { onClose(); return; }
+        setLogState("saving"); setLogError(null);
+        const res = await onLogAsToday(workout, { difficulty: finishDifficulty || undefined });
+        if (res.ok) {
+          setLogState("saved");
+          setTimeout(() => onClose(), 900);
+        } else {
+          setLogState("error");
+          setLogError(res.error || "Save failed");
+        }
+      }, [onLogAsToday, workout, finishDifficulty, onClose]);
 
       // Manual tap on a set card — never auto-starts
       function handleSetTap(globalIdx) {
@@ -8538,6 +8561,7 @@
               focusNote={workout.focusNote}
               onClose={() => setPaceIdx(null)}
               onNext={handlePaceNext}
+              onWorkoutFinish={finishWorkout}
               isLastSet={paceIdx === allSets.length - 1}
               restSecs={restSecs}
               autoStart={autoStartNext}
@@ -8564,7 +8588,7 @@
             ) : (
               <div style={{ flex: 1 }} />
             )}
-            <button onClick={() => isLast ? onClose() : setIdx(i => i + 1)} style={{
+            <button onClick={() => isLast ? finishWorkout() : setIdx(i => i + 1)} style={{
               flex: isFirst ? 2 : 1, padding: "17px 0", borderRadius: 14,
               border: "none",
               background: isLast ? "#16a34a" : "#3b82f6",
@@ -8575,6 +8599,82 @@
               {isLast ? "✓ Finish" : "Next →"}
             </button>
           </div>
+
+          {/* Finish screen — appears after the user reaches the last set / clicks Finish */}
+          {showFinish && (
+            <div style={{
+              position: "fixed", inset: 0, zIndex: 10001,
+              background: "rgba(2,6,23,0.96)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: 20,
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+            }}>
+              <div style={{
+                width: "100%", maxWidth: 380,
+                background: "#0f172a", border: "1px solid #1e293b",
+                borderRadius: 16, padding: "28px 22px 22px",
+                textAlign: "center",
+              }}>
+                <div style={{ fontSize: 56, marginBottom: 8 }}>🎉</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", marginBottom: 4 }}>
+                  Workout complete!
+                </div>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
+                  {workout.totalYards.toLocaleString()} {unit} · {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
+                </div>
+
+                {/* Difficulty rating — optional, captured right after the swim while it's fresh */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                    How hard was it? <span style={{ color: "#475569", textTransform: "none", letterSpacing: 0 }}>(optional)</span>
+                  </div>
+                  <div style={{ display: "inline-flex" }}>
+                    <StarRating
+                      value={finishDifficulty}
+                      onChange={setFinishDifficulty}
+                      size={28}
+                      allowToggleClear
+                    />
+                  </div>
+                </div>
+
+                {logState === "saved" ? (
+                  <div style={{ color: "#4ade80", fontSize: 15, fontWeight: 700, padding: "10px 0" }}>
+                    ✓ Logged to your history
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleLogClick}
+                      disabled={logState === "saving"}
+                      style={{
+                        width: "100%", padding: "14px 0", borderRadius: 12, border: "none",
+                        background: logState === "saving" ? "#1e3a5f" : "#3b82f6",
+                        color: "#fff", fontSize: 15, fontWeight: 800,
+                        cursor: logState === "saving" ? "default" : "pointer",
+                        marginBottom: 10,
+                      }}>
+                      {logState === "saving" ? "Saving…" : "Log as today's session"}
+                    </button>
+                    {logState === "error" && (
+                      <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10 }}>
+                        {logError}
+                      </div>
+                    )}
+                    <button
+                      onClick={onClose}
+                      style={{
+                        background: "transparent", border: "none",
+                        color: "#64748b", fontSize: 13, cursor: "pointer",
+                        padding: "6px 12px",
+                      }}>
+                      Close without logging
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -9075,6 +9175,73 @@
         }
       }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft, poolMode, focusNoteDraft, difficultyDraft]);
 
+      // Log a completed Run-mode workout as today's session.
+      // Used by RunWorkoutOverlay's finish screen — POSTs a NEW entry dated today,
+      // not a duplicate of any source entry's id/sub. Returns true on success.
+      const handleLogAsToday = useCallback(async (sourceWorkout, opts = {}) => {
+        if (!sourceWorkout || !sourceWorkout.blocks || !sourceWorkout.type) {
+          return { ok: false, error: "missing workout fields" };
+        }
+        const meta = WORKOUT_TYPES.find(t => t.id === sourceWorkout.type);
+        const today = new Date().toISOString().slice(0, 10);
+        const cleanInitials = normalizeInitials(initialsDraft) || sourceWorkout.userInitials || "";
+        const entry = {
+          id: makeEntryId(),
+          savedAt: new Date().toISOString(),
+          dateCompleted: today,
+          type: sourceWorkout.type,
+          typeLabel: sourceWorkout.typeLabel || (meta ? meta.label : sourceWorkout.type),
+          totalYards: sourceWorkout.totalYards,
+          estimatedMin: sourceWorkout.estimatedMin,
+          maxYardsCap: sourceWorkout.maxYardsCap,
+          poolMode: sourceWorkout.poolMode || "25y",
+          equipment: { ...(sourceWorkout.equipment || {}) },
+          blocks: sourceWorkout.blocks.map(b => ({
+            name: b.name, section: b.section, totalYards: b.totalYards,
+            rounds: b.rounds, roundRestSecs: b.roundRestSecs,
+            sets: b.sets.map(s => ({ ...s })),
+          })),
+          userInitials: cleanInitials,
+          notes: (opts.notes || "").trim(),
+          focusNote: sourceWorkout.focusNote || undefined,
+          difficulty: opts.difficulty || undefined,
+          completed: true,
+        };
+        setHistory(prev => {
+          const next = mergeById(prev, [entry]);
+          saveLocalHistory(next);
+          return next;
+        });
+        try {
+          const res = await fetch(`${API_BASE}/log-workout`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify(entry),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || `HTTP ${res.status}`);
+          }
+          const saved = await res.json().catch(() => ({}));
+          if (saved.entry) {
+            setHistory(prev => {
+              const next = prev.map(e => e.id === entry.id ? saved.entry : e);
+              saveLocalHistory(next);
+              return next;
+            });
+          }
+          return { ok: true };
+        } catch (err) {
+          // Roll back optimistic add
+          setHistory(prev => {
+            const next = prev.filter(e => e.id !== entry.id);
+            saveLocalHistory(next);
+            return next;
+          });
+          return { ok: false, error: err.message || String(err) };
+        }
+      }, [initialsDraft]);
+
       const handleUpdateCompleted = useCallback(async (id, completed) => {
         setHistory(prev => {
           const next = prev.map(e => e.id === id ? { ...e, completed } : e);
@@ -9504,7 +9671,18 @@
                     <button
                       onClick={() => {
                         const focus = (focusNoteDraft || "").trim();
-                        setRunWorkout(focus ? { ...workout, focusNote: focus } : workout);
+                        // Enrich workout with the surrounding App state so that
+                        // "Log as today's session" can build a valid entry from
+                        // a freshly-generated (not-yet-saved) workout.
+                        setRunWorkout({
+                          ...workout,
+                          type: selectedType,
+                          typeLabel: meta ? meta.label : selectedType,
+                          poolMode,
+                          equipment: { ...equipment },
+                          maxYardsCap: maxYards,
+                          ...(focus ? { focusNote: focus } : {}),
+                        });
                         setShowRestPicker(true);
                       }}
                       style={{
@@ -9775,7 +9953,13 @@
             />
           )}
           {!showRestPicker && runWorkout && (
-            <RunWorkoutOverlay workout={runWorkout} restSecs={restSecs} onClose={() => setRunWorkout(null)} unit={unit} />
+            <RunWorkoutOverlay
+              workout={runWorkout}
+              restSecs={restSecs}
+              onClose={() => setRunWorkout(null)}
+              onLogAsToday={handleLogAsToday}
+              unit={unit}
+            />
           )}
           {showProfile && (
             <ProfileModal onClose={() => {
