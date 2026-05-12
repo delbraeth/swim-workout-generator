@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 14:58 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 15:04 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -5762,6 +5762,33 @@
     // ═══════════════════════════════════════════════════════════════
 
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+    // Weighted random pick. weightFn(item) returns a positive number.
+    // Items with weight 0 are excluded. Falls back to uniform pick if total is 0.
+    function pickWeighted(arr, weightFn) {
+      const weights = arr.map(weightFn);
+      const total = weights.reduce((s, w) => s + (w > 0 ? w : 0), 0);
+      if (total <= 0) return pick(arr);
+      let r = Math.random() * total;
+      for (let i = 0; i < arr.length; i++) {
+        const w = weights[i] > 0 ? weights[i] : 0;
+        r -= w;
+        if (r <= 0) return arr[i];
+      }
+      return arr[arr.length - 1];
+    }
+
+    // Returns the main-set label for a block, whether the block came from a
+    // freshly generated workout (label preserved by spread), a regenerated
+    // section, or a history-loaded entry (handleSave persists `label` now;
+    // older rows fall back to parsing the block name).
+    function extractMainLabel(block) {
+      if (!block || block.section !== "main") return null;
+      if (block.label) return block.label;
+      const m = (block.name || "").match(/^Main Set — (.+?)(?:\s+×\d+)?$/);
+      return m ? m[1] : null;
+    }
+
     const MIN_YARDS  = 1900;
     const MIN_METERS = 2000;
 
@@ -5799,7 +5826,7 @@
       technique: "technique",
     };
 
-    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}) {
+    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}, recentLabels = []) {
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
@@ -5895,13 +5922,22 @@
           const validMain = mainPoolExpanded.filter(o => o.totalYards <= mainBudget);
           if (!validMain.length) continue;
           const maFloor = Math.max(minMa, mainBudget * 0.65);
-          const weightedMain = validMain.flatMap(o => {
-            const favWeight = favorites.length && o.label && favorites.includes(o.label) ? 3 : 1;
-            const repeatWeight = (o.rounds || 1) > 1 ? 2 : 1;
-            return Array(Math.max(favWeight, repeatWeight)).fill(o);
-          });
-          const biasedMain = weightedMain.filter(o => o.totalYards >= maFloor);
-          ma = pick(biasedMain.length > 0 ? biasedMain : weightedMain);
+          // Weighting:
+          //   base    = 1
+          //   favorite× 3
+          //   repeat(rounds > 1) × 2
+          //   recently-used label (last 7d) × 0.25  ← N1 anti-repeat
+          const recentSet = new Set(recentLabels);
+          const mainWeight = (o) => {
+            let w = 1;
+            if (favorites.length && o.label && favorites.includes(o.label)) w *= 3;
+            if ((o.rounds || 1) > 1) w *= 2;
+            if (o.label && recentSet.has(o.label)) w *= 0.25;
+            return w;
+          };
+          const filteredByFloor = validMain.filter(o => o.totalYards >= maFloor);
+          const mainSource = filteredByFloor.length > 0 ? filteredByFloor : validMain;
+          ma = pickWeighted(mainSource, mainWeight);
           freeUsed += ma.totalYards;
         }
 
@@ -6028,7 +6064,7 @@
     // Returns { workout, error }. On success, workout is a fresh object with the
     // requested section replaced. On failure, error is a human-readable reason
     // and the caller should keep the prior workout unchanged.
-    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null) {
+    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null, recentLabels = []) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -6101,7 +6137,11 @@
       if (!novel.length) {
         return { workout: null, error: "Only one option fits these constraints — adjust max yards or equipment for more variety." };
       }
-      const picked = pick(novel);
+      // N1: down-weight recently-used labels (main section only — no labels elsewhere).
+      const recentSet = new Set(recentLabels);
+      const picked = sectionKey === "main"
+        ? pickWeighted(novel, (o) => (o.label && recentSet.has(o.label)) ? 0.25 : 1)
+        : pick(novel);
 
       const NAME_BY_SECTION = {
         warmup:   "Warm-Up",
@@ -6486,7 +6526,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -6498,10 +6538,29 @@
       return (
         <div className="workout-block" style={{ borderRadius: 12, border: isPinned ? `2px solid ${s.dot}` : `1px solid ${s.border}`, overflow: "hidden", marginBottom: 16 }}>
           <div className="workout-block-header" style={{ background: s.headerBg, color: s.headerText, padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.dot, display: "inline-block" }} />
               <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.name}</span>
               {isPinned && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", opacity: 0.8 }}>PINNED</span>}
+              {(() => {
+                if (!recentMainLabels) return null;
+                const lbl = extractMainLabel(block);
+                if (!lbl) return null;
+                const days = recentMainLabels.get(lbl);
+                if (days === undefined) return null;
+                return (
+                  <span className="screen-only"
+                    title={`You completed this main set ${days === 0 ? "today" : days === 1 ? "yesterday" : days + " days ago"}`}
+                    style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: "0.02em",
+                      color: "#fca5a5", background: "rgba(127,29,29,0.45)",
+                      border: "1px solid #7f1d1d",
+                      padding: "1px 6px", borderRadius: 999,
+                    }}>
+                    last seen {days === 0 ? "today" : `${days}d ago`}
+                  </span>
+                );
+              })()}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} {unit}</span>
@@ -6923,7 +6982,7 @@
     // ═══════════════════════════════════════════════════════════════
     //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
     // ═══════════════════════════════════════════════════════════════
-    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onUpdateDifficulty, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite }) {
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onUpdateDifficulty, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite, recentMainLabels }) {
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | sub string
       const [weekMode,     setWeekMode]     = useState("all"); // "all" | "4wk"
@@ -7080,17 +7139,26 @@
                 ★ Favorite Main Sets
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {favorites.map(label => (
-                  <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, background: "#0f172a", border: "1px solid #f59e0b33" }}>
-                    <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{label}</span>
-                    <button
-                      onClick={() => onToggleFavorite && onToggleFavorite(label)}
-                      title="Remove from favorites"
-                      style={{ background: "transparent", border: "none", color: "#f59e0b", fontSize: 16, cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>
-                      ★
-                    </button>
-                  </div>
-                ))}
+                {favorites.map(label => {
+                  const seenDays = recentMainLabels ? recentMainLabels.get(label) : undefined;
+                  return (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, background: "#0f172a", border: "1px solid #f59e0b33" }}>
+                      <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{label}</span>
+                      {seenDays !== undefined && (
+                        <span title={`Last completed ${seenDays === 0 ? "today" : seenDays === 1 ? "yesterday" : seenDays + " days ago"}`}
+                          style={{ fontSize: 10, color: "#fca5a5", background: "#7f1d1d33", border: "1px solid #7f1d1d", padding: "1px 6px", borderRadius: 999, fontWeight: 700, letterSpacing: "0.02em" }}>
+                          last seen {seenDays === 0 ? "today" : `${seenDays}d ago`}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => onToggleFavorite && onToggleFavorite(label)}
+                        title="Remove from favorites"
+                        style={{ background: "transparent", border: "none", color: "#f59e0b", fontSize: 16, cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>
+                        ★
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -7403,7 +7471,7 @@
 
                 {isExpanded && entry.blocks && (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #334155" }}>
-                    {entry.blocks.map((b, i) => <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} />)}
+                    {entry.blocks.map((b, i) => <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} recentMainLabels={recentMainLabels} />)}
                   </div>
                 )}
               </div>
@@ -9021,7 +9089,8 @@
             if (pinnedSections[b.section]) pinned[b.section] = b;
           }
         }
-        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned);
+        const recentLabels = Array.from(recentMainLabels.keys());
+        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned, recentLabels);
         // Apply user's pace to intervals at generation time (not just on "Rescale all")
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
@@ -9046,7 +9115,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -9054,7 +9123,7 @@
       const handleRegenerateSection = useCallback((sectionKey) => {
         if (!workout || !selectedType) return;
         if (pinnedSections[sectionKey]) return; // pinned sections can't be individually regenerated
-        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin);
+        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, Array.from(recentMainLabels.keys()));
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
           return;
@@ -9083,7 +9152,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -9132,6 +9201,7 @@
           blocks: workout.blocks.map(b => ({
             name: b.name, section: b.section, totalYards: b.totalYards,
             rounds: b.rounds, roundRestSecs: b.roundRestSecs,
+            label: b.label,
             sets: b.sets.map(s => ({ ...s })),
           })),
           userInitials: cleanInitials,
@@ -9199,6 +9269,7 @@
           blocks: sourceWorkout.blocks.map(b => ({
             name: b.name, section: b.section, totalYards: b.totalYards,
             rounds: b.rounds, roundRestSecs: b.roundRestSecs,
+            label: b.label,
             sets: b.sets.map(s => ({ ...s })),
           })),
           userInitials: cleanInitials,
@@ -9372,6 +9443,33 @@
         return { emoji, label, totalYards: e.totalYards, unit: lastUnit, when };
       }, [history]);
 
+      // N1: recently-used main-set labels for the signed-in user (last 7 days).
+      // Returns Map<label, daysAgo> — used for (a) generator weight down-bias and
+      // (b) "last seen Nd ago" badges in the favorites panel + main-set blocks.
+      const recentMainLabels = useMemo(() => {
+        const mySub = me?.sub;
+        const map = new Map();
+        if (!mySub || !history.length) return map;
+        const today = new Date().toISOString().slice(0, 10);
+        const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        for (const e of history) {
+          if (e.sub !== mySub) continue;
+          if (e.completed === false) continue;
+          if (!e.dateCompleted) continue;
+          const ts = new Date(`${e.dateCompleted}T00:00:00Z`).getTime();
+          if (ts < cutoffMs) continue;
+          if (!Array.isArray(e.blocks)) continue;
+          const daysAgo = Math.max(0, Math.round((new Date(today) - new Date(e.dateCompleted)) / 86400000));
+          for (const b of e.blocks) {
+            const label = extractMainLabel(b);
+            if (!label) continue;
+            const prev = map.get(label);
+            if (prev === undefined || daysAgo < prev) map.set(label, daysAgo);
+          }
+        }
+        return map;
+      }, [history, me]);
+
       // Quick-launch — last 3 completed workouts belonging to the signed-in user.
       // Powers the pre-pool "do yesterday's again" cards above the Generate button.
       const quickLaunch = useMemo(() => {
@@ -9487,6 +9585,7 @@
                 onUpdateNotes={handleUpdateNotes}
                 onUpdateCompleted={handleUpdateCompleted}
                 onUpdateDifficulty={handleUpdateDifficulty}
+                recentMainLabels={recentMainLabels}
                 onDelete={handleDelete}
                 onLoadAndPrint={handleLoadAndPrint}
                 onRepeat={handleRepeatFromHistory}
@@ -9855,6 +9954,7 @@
                     unit={unit}
                     isPinned={!!pinnedSections[block.section]}
                     onTogglePin={handleTogglePin}
+                    recentMainLabels={recentMainLabels}
                   />
                 ))}
 
