@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 16:41 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 16:49 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -5895,6 +5895,52 @@
 
     // Weighted random pick. weightFn(item) returns a positive number.
     // Items with weight 0 are excluded. Falls back to uniform pick if total is 0.
+    // ─── Audio cues (W1) ─────────────────────────────────────────────
+    // Web Audio API tone generator for rest-timer cues.
+    // Lazy-init the AudioContext on first call. iOS requires the first
+    // call to happen inside a user gesture; we prime it from the rest
+    // picker's Start button (and from any user click that opens Run mode).
+    let _audioCtx = null;
+    function primeAudioCtx() {
+      if (!_audioCtx) {
+        try {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return null;
+          _audioCtx = new AC();
+        } catch (_) { return null; }
+      }
+      if (_audioCtx.state === "suspended") {
+        _audioCtx.resume().catch(() => {});
+      }
+      return _audioCtx;
+    }
+    function playRestCue(kind) {
+      const ctx = primeAudioCtx();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      const now = ctx.currentTime;
+      if (kind === "go") {
+        osc.frequency.value = 1320;
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.30);
+      } else {
+        // Short beep at T-3/T-2/T-1
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.25, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.13);
+      }
+    }
+
     function pickWeighted(arr, weightFn) {
       const weights = arr.map(weightFn);
       const total = weights.reduce((s, w) => s + (w > 0 ? w : 0), 0);
@@ -7928,7 +7974,7 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, onWorkoutFinish, isLastSet, restSecs, autoStart, elapsed, unit = "yds" }) {
+    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, onWorkoutFinish, isLastSet, restSecs, autoStart, elapsed, audioCues = false, unit = "yds" }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
@@ -7968,13 +8014,18 @@
         setRestLeft(restSecs);
       }, [finished, isLastSet, restSecs, onNext]);
 
-      // Tick rest countdown; call onNext when it reaches zero
+      // Tick rest countdown; call onNext when it reaches zero.
+      // W1: fire audio cues on the 3/2/1 beeps and the 0 "go" tone.
       useEffect(() => {
         if (restLeft === null) return;
+        if (audioCues) {
+          if (restLeft === 0)                 playRestCue("go");
+          else if (restLeft <= 3)             playRestCue("beep");
+        }
         if (restLeft === 0) { if (onNext) onNext(); return; }
         const id = setTimeout(() => setRestLeft(r => r - 1), 1000);
         return () => clearTimeout(id);
-      }, [restLeft]);
+      }, [restLeft, audioCues]);
 
       const handleReset = () => {
         setRunning(false);
@@ -9279,7 +9330,7 @@
       );
     }
 
-    function RestPickerModal({ restSecs, onChange, onStart, onCancel }) {
+    function RestPickerModal({ restSecs, onChange, onStart, onCancel, audioCues, onAudioCuesChange }) {
       return (
         <div style={{
           position: "fixed", inset: 0, zIndex: 9998,
@@ -9298,7 +9349,7 @@
             <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
               Rest between sets
             </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
               {REST_OPTIONS.map(o => {
                 const active = restSecs === o.value;
                 return (
@@ -9314,6 +9365,30 @@
                 );
               })}
             </div>
+            {/* W1: audio-cue toggle */}
+            {onAudioCuesChange && (
+              <button onClick={() => {
+                // Prime the audio context on the user gesture before toggling on,
+                // and play a one-beat preview so the user hears what they enabled.
+                if (!audioCues) { primeAudioCtx(); playRestCue("beep"); }
+                onAudioCuesChange(!audioCues);
+              }}
+                title="Three beeps at T-3/T-2/T-1, distinct tone at go"
+                style={{
+                  width: "100%", marginBottom: 22,
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "10px 14px", borderRadius: 10,
+                  border: `1px solid ${audioCues ? "#3b82f6" : "#334155"}`,
+                  background: audioCues ? "#1e3a5f" : "#0f172a",
+                  color: audioCues ? "#93c5fd" : "#64748b",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}>
+                <span>🔔 Audio cues</span>
+                <span style={{ fontSize: 11, color: audioCues ? "#93c5fd" : "#475569" }}>
+                  {audioCues ? "ON · preview ▶" : "OFF"}
+                </span>
+              </button>
+            )}
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={onCancel} style={{
                 flex: 1, padding: "14px 0", borderRadius: 12,
@@ -9322,7 +9397,12 @@
               }}>
                 Cancel
               </button>
-              <button onClick={onStart} style={{
+              <button onClick={() => {
+                // Prime audio context on the user gesture — first play after this
+                // (the first T-3 beep) will work even on iOS Safari.
+                if (audioCues) primeAudioCtx();
+                onStart();
+              }} style={{
                 flex: 2, padding: "14px 0", borderRadius: 12,
                 border: "none", background: "#3b82f6",
                 color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer",
@@ -9342,7 +9422,7 @@
 
     const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
 
-    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, personalFirstName, unit = "yds" }) {
+    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, personalFirstName, audioCues = false, unit = "yds" }) {
       const [idx, setIdx]               = useState(0);
       const [paceIdx, setPaceIdx]       = useState(null);
       const [elapsed, setElapsed]       = useState(0); // seconds since workout started
@@ -9511,6 +9591,7 @@
               restSecs={restSecs}
               autoStart={autoStartNext}
               elapsed={elapsed}
+              audioCues={audioCues}
               unit={unit}
             />
           )}
@@ -9702,6 +9783,7 @@
       const [goals, setGoals]                     = useState([]);
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
+      const [audioCues, setAudioCues]             = useState(true); // W1: rest-timer beeps default ON
       const [loadedFromHistoryId, setLoadedFromHistoryId] = useState(null);
       const [saveStatus, setSaveStatus]           = useState(null); // null | "saving" | "saved" | "error"
       const [saveError, setSaveError]             = useState(null);
@@ -9801,10 +9883,23 @@
             setNextEvent(s.next_event && s.next_event.name && s.next_event.date ? s.next_event : null);
             // N5: phase also in settings.extra (single string id).
             setPhase(s.phase && PHASES[s.phase] ? s.phase : null);
+            // W1: audio_cues persisted per-user; default ON when unset.
+            if (typeof s.audio_cues === "boolean") setAudioCues(s.audio_cues);
           })
           .catch(() => {});
       }, []);
       useEffect(() => { refreshSettings(); }, [refreshSettings]);
+
+      // W1: persist the audio_cues toggle to settings.extra without disturbing
+      // other extra keys. Optimistic local update; best-effort save.
+      const handleAudioCuesToggle = useCallback((next) => {
+        setAudioCues(next);
+        fetch(`${API_BASE}/settings/extra`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify({ audio_cues: next }),
+        }).catch(() => {});
+      }, []);
 
       // Debounced settings save — fires 1.5s after the last change
       const saveSettingsTimerRef = React.useRef(null);
@@ -11077,6 +11172,8 @@
               onChange={setRestSecs}
               onStart={() => setShowRestPicker(false)}
               onCancel={() => { setRunWorkout(null); setShowRestPicker(false); }}
+              audioCues={audioCues}
+              onAudioCuesChange={handleAudioCuesToggle}
             />
           )}
           {!showRestPicker && runWorkout && (
@@ -11086,6 +11183,7 @@
               onClose={() => setRunWorkout(null)}
               onLogAsToday={handleLogAsToday}
               personalFirstName={personalFirstName}
+              audioCues={audioCues}
               unit={unit}
             />
           )}
