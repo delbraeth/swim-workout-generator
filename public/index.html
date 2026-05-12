@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 16:32 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 16:38 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -232,6 +232,34 @@
       anaerobic: { id: "anaerobic", label: "Anaerobic", color: "#ef4444", rank: 5 },
     };
     const ZONE_ORDER = ["easy", "aerobic", "threshold", "vo2", "anaerobic"];
+
+    // ═══════════════════════════════════════════════════════════════
+    //  MESOCYCLE / TRAINING PHASE (N5)
+    //  Five phases. User sets one in the Profile modal; it sticks until
+    //  changed. The generator multiplies main-set pick weights by the
+    //  phase's per-zone multiplier (in addition to fav/repeat/recent).
+    //  Naming note: "recovery" PHASE is a longer-term setting; "recovery
+    //  mode" (item C) is a per-generation toggle. They compose: a recovery-
+    //  phase swimmer can still flip recovery mode on for an extra-easy day.
+    // ═══════════════════════════════════════════════════════════════
+    const PHASES = {
+      base:     { id: "base",     label: "Base",     emoji: "🌱", color: "#0ea5e9",
+                  description: "Aerobic foundation — high easy/aerobic volume",
+                  multipliers: { easy: 1.2, aerobic: 1.5, threshold: 0.8, vo2: 0.5, anaerobic: 0.5 } },
+      build:    { id: "build",    label: "Build",    emoji: "🔨", color: "#3b82f6",
+                  description: "Threshold/VO2 emphasis — push the ceiling",
+                  multipliers: { easy: 0.8, aerobic: 1.0, threshold: 1.5, vo2: 1.3, anaerobic: 0.8 } },
+      peak:     { id: "peak",     label: "Peak",     emoji: "⛰️", color: "#a855f7",
+                  description: "Race-specific intensity — sharpen the sword",
+                  multipliers: { easy: 0.8, aerobic: 0.8, threshold: 1.0, vo2: 1.5, anaerobic: 1.5 } },
+      taper:    { id: "taper",    label: "Taper",    emoji: "📉", color: "#eab308",
+                  description: "Reduce volume, preserve sharpness",
+                  multipliers: { easy: 1.5, aerobic: 1.3, threshold: 0.7, vo2: 0.5, anaerobic: 0.3 } },
+      recovery: { id: "recovery", label: "Recovery", emoji: "🌿", color: "#22c55e",
+                  description: "Active recovery — easy aerobic only",
+                  multipliers: { easy: 2.0, aerobic: 1.5, threshold: 0.3, vo2: 0.2, anaerobic: 0.1 } },
+    };
+    const PHASE_ORDER = ["base", "build", "peak", "taper", "recovery"];
 
     // Parse "On 2:00", "On :45" → seconds (alias of parseIntervalSeconds without
     // depending on that function's later definition).
@@ -5928,7 +5956,7 @@
       technique: "technique",
     };
 
-    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}, recentLabels = [], recoveryMode = false) {
+    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}, recentLabels = [], recoveryMode = false, phase = null) {
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
@@ -6050,12 +6078,19 @@
           //   favorite× 3
           //   repeat(rounds > 1) × 2
           //   recently-used label (last 7d) × 0.25  ← N1 anti-repeat
+          //   phase-zone multiplier (e.g. taper: easy×1.5, vo2×0.5) ← N5
           const recentSet = new Set(recentLabels);
+          const phaseSpec = phase && PHASES[phase] ? PHASES[phase] : null;
           const mainWeight = (o) => {
             let w = 1;
             if (favorites.length && o.label && favorites.includes(o.label)) w *= 3;
             if ((o.rounds || 1) > 1) w *= 2;
             if (o.label && recentSet.has(o.label)) w *= 0.25;
+            if (phaseSpec) {
+              const optionZone = inferBlockZone({ section: "main", sets: o.sets, primary_zone: o.primary_zone });
+              const m = phaseSpec.multipliers[optionZone];
+              if (typeof m === "number") w *= m;
+            }
             return w;
           };
           const filteredByFloor = validMain.filter(o => o.totalYards >= maFloor);
@@ -6189,7 +6224,7 @@
     // Returns { workout, error }. On success, workout is a fresh object with the
     // requested section replaced. On failure, error is a human-readable reason
     // and the caller should keep the prior workout unchanged.
-    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null, recentLabels = [], recoveryMode = false) {
+    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null, recentLabels = [], recoveryMode = false, phase = null) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -6273,9 +6308,19 @@
         return { workout: null, error: "Only one option fits these constraints — adjust max yards or equipment for more variety." };
       }
       // N1: down-weight recently-used labels (main section only — no labels elsewhere).
+      // N5: layer phase multipliers on top of the recent-label down-weight.
       const recentSet = new Set(recentLabels);
+      const phaseSpec = phase && PHASES[phase] ? PHASES[phase] : null;
       const picked = sectionKey === "main"
-        ? pickWeighted(novel, (o) => (o.label && recentSet.has(o.label)) ? 0.25 : 1)
+        ? pickWeighted(novel, (o) => {
+            let w = (o.label && recentSet.has(o.label)) ? 0.25 : 1;
+            if (phaseSpec) {
+              const optionZone = inferBlockZone({ section: "main", sets: o.sets, primary_zone: o.primary_zone });
+              const m = phaseSpec.multipliers[optionZone];
+              if (typeof m === "number") w *= m;
+            }
+            return w;
+          })
         : pick(novel);
 
       const NAME_BY_SECTION = {
@@ -8437,6 +8482,52 @@
       );
     }
 
+    // N5: PhaseRow lives in the Profile modal Goals section. Five buttons,
+    // single-select; clicking the active one clears the phase.
+    function PhaseRow({ value, onChange }) {
+      const selected = value && PHASES[value] ? PHASES[value] : null;
+      return (
+        <div style={{
+          display: "flex", flexDirection: "column", gap: 8,
+          background: "#1e293b", border: "1px solid #334155",
+          borderRadius: 8, padding: "8px 12px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>📅 Training phase</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                {selected
+                  ? <><span style={{ color: selected.color, fontWeight: 700 }}>{selected.emoji} {selected.label}</span> · {selected.description}</>
+                  : <span style={{ fontStyle: "italic" }}>No phase set — generator runs without phase bias.</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {PHASE_ORDER.map(pid => {
+              const p = PHASES[pid];
+              const active = value === pid;
+              return (
+                <button key={pid}
+                  onClick={() => onChange(active ? null : pid)}
+                  title={`${p.label} — ${p.description}`}
+                  style={{
+                    padding: "5px 11px", borderRadius: 999,
+                    border: `1px solid ${active ? p.color : "#334155"}`,
+                    background: active ? `${p.color}22` : "transparent",
+                    color: active ? p.color : "#94a3b8",
+                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                  }}>
+                  <span>{p.emoji}</span>
+                  <span>{p.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     function NextEventRow({ value, onSave, onClear }) {
       const [editing, setEditing] = React.useState(false);
       const [draftName, setDraftName] = React.useState("");
@@ -8545,6 +8636,7 @@
       const [sessions, setSessions] = React.useState([]);
       const [goals, setGoals]       = React.useState([]);
       const [nextEvent, setNextEventLocal] = React.useState(null); // { name, date } | null
+      const [phase, setPhaseLocal]  = React.useState(null);        // N5
       const [loading, setLoading]   = React.useState(true);
       const [revoking, setRevoking] = React.useState(false);
       const [revokeMsg, setRevokeMsg] = React.useState(null);
@@ -8562,6 +8654,7 @@
           setSessions(Array.isArray(sessRes) ? sessRes : []);
           setGoals(Array.isArray(goalsRes) ? goalsRes : []);
           setNextEventLocal(settingsRes?.next_event && settingsRes.next_event.name && settingsRes.next_event.date ? settingsRes.next_event : null);
+          setPhaseLocal(settingsRes?.phase && PHASES[settingsRes.phase] ? settingsRes.phase : null);
         } finally {
           setLoading(false);
         }
@@ -8640,6 +8733,20 @@
         });
         if (res.ok) {
           setNextEventLocal(null);
+          if (onProfileChange) onProfileChange();
+        }
+      };
+
+      // N5: set or clear the training phase. Null = cleared (no phase bias).
+      const handleSetPhase = async (phaseId) => {
+        const value = phaseId && PHASES[phaseId] ? phaseId : null;
+        const res = await fetch("/api/settings/extra", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify({ phase: value }),
+        });
+        if (res.ok) {
+          setPhaseLocal(value);
           if (onProfileChange) onProfileChange();
         }
       };
@@ -8799,6 +8906,7 @@
                     <NextEventRow value={nextEvent}
                       onSave={handleSaveNextEvent}
                       onClear={handleClearNextEvent} />
+                    <PhaseRow value={phase} onChange={handleSetPhase} />
                   </div>
                 </div>
 
@@ -9593,6 +9701,7 @@
       const [favorites, setFavorites]             = useState([]);
       const [goals, setGoals]                     = useState([]);
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
+      const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
       const [loadedFromHistoryId, setLoadedFromHistoryId] = useState(null);
       const [saveStatus, setSaveStatus]           = useState(null); // null | "saving" | "saved" | "error"
       const [saveError, setSaveError]             = useState(null);
@@ -9690,6 +9799,8 @@
             // Q: next-event countdown lives in settings.extra; dbGetSettings
             // spreads extra into the top-level response.
             setNextEvent(s.next_event && s.next_event.name && s.next_event.date ? s.next_event : null);
+            // N5: phase also in settings.extra (single string id).
+            setPhase(s.phase && PHASES[s.phase] ? s.phase : null);
           })
           .catch(() => {});
       }, []);
@@ -9875,7 +9986,7 @@
           }
         }
         const recentLabels = Array.from(recentMainLabels.keys());
-        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned, recentLabels, recoveryMode);
+        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned, recentLabels, recoveryMode, phase);
         // Apply user's pace to intervals at generation time (not just on "Rescale all")
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
@@ -9898,6 +10009,11 @@
           }));
           newWorkout = { ...newWorkout, blocks: newBlocks, recovery: true, estimatedMin: calcEstimatedMin(newBlocks) };
         }
+        // N5: stamp the current training phase on the workout so the soft
+        // badge renders alongside the summary bar.
+        if (phase && PHASES[phase]) {
+          newWorkout = { ...newWorkout, phase };
+        }
         setWorkout(newWorkout);
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
@@ -9909,7 +10025,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, recoveryMode]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, recoveryMode, phase]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -9918,7 +10034,7 @@
         if (!workout || !selectedType) return;
         if (pinnedSections[sectionKey]) return; // pinned sections can't be individually regenerated
         const isRecovery = !!workout.recovery;
-        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, Array.from(recentMainLabels.keys()), isRecovery);
+        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, Array.from(recentMainLabels.keys()), isRecovery, phase);
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
           return;
@@ -9956,7 +10072,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, phase]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -10013,6 +10129,7 @@
           focusNote: (focusNoteDraft || "").trim() || undefined,
           difficulty: difficultyDraft || undefined,
           recovery: workout.recovery ? true : undefined,
+          phase: workout.phase || undefined,
           completed: dateDraft <= new Date().toISOString().slice(0, 10),
         };
         // Optimistic: add to local cache and state immediately
@@ -10082,6 +10199,7 @@
           focusNote: sourceWorkout.focusNote || undefined,
           difficulty: opts.difficulty || undefined,
           recovery: sourceWorkout.recovery ? true : undefined,
+          phase: sourceWorkout.phase || undefined,
           completed: true,
         };
         setHistory(prev => {
@@ -10646,6 +10764,22 @@
                       🌿 Recovery day
                     </span>
                   )}
+                  {workout.phase && PHASES[workout.phase] && (() => {
+                    const p = PHASES[workout.phase];
+                    return (
+                      <span title={`Phase: ${p.label} — ${p.description}. Change in Account → Goals.`}
+                        style={{
+                          background: `${p.color}1f`,
+                          border: `1px solid ${p.color}`,
+                          color: p.color,
+                          borderRadius: 999, padding: "4px 12px",
+                          fontSize: 12, fontWeight: 700,
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                        }}>
+                        {p.emoji} {p.label}
+                      </span>
+                    );
+                  })()}
                   {[
                     [(poolMode === "50m" || poolMode === "25m") ? "Total Distance" : "Total Yardage", `${workout.totalYards.toLocaleString()} ${unit}`],
                     ["Est. Duration",   `~${workout.estimatedMin} min`],
