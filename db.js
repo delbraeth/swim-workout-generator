@@ -468,6 +468,37 @@ export async function dbAdminSetUserFlag(sub, field, value) {
 }
 
 // Admin edits to a user's display fields. Only allows email, initials, display_name.
+// Self-serve profile update. Unlike dbAdminUpdateUser, this resets
+// `email_verified` to 0 whenever the email value changes (the new
+// address has not been verified through Apple's flow yet).
+export async function dbUpdateMe(sub, patch) {
+  if (!sub) return { ok: false, reason: "no_sub" };
+  const allowed = { email: "email", display_name: "display_name", initials: "initials" };
+  const sets = [], vals = [];
+  // If email is changing, also blank `email_verified` so the UI badge
+  // reflects reality. We have to read the current value to know if it
+  // changed — comparing before/after avoids resetting verification
+  // when the user submits without actually altering the field.
+  let resetVerified = false;
+  if ("email" in patch) {
+    const current = await pool.query("SELECT `email` FROM `users` WHERE `sub` = ?", [sub]);
+    const oldEmail = current[0]?.email || null;
+    const newEmail = patch.email === "" ? null : patch.email;
+    if (oldEmail !== newEmail) resetVerified = true;
+  }
+  for (const [k, col] of Object.entries(allowed)) {
+    if (k in patch) {
+      sets.push(`\`${col}\` = ?`);
+      vals.push(patch[k] === "" ? null : patch[k]);
+    }
+  }
+  if (resetVerified) sets.push("`email_verified` = 0");
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(sub);
+  const r = await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 export async function dbAdminUpdateUser(sub, patch) {
   if (!sub) return { ok: false, reason: "no_sub" };
   const allowed = { email: "email", initials: "initials", display_name: "display_name" };
