@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 16:05 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 16:29 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -5928,7 +5928,7 @@
       technique: "technique",
     };
 
-    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}, recentLabels = []) {
+    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}, recentLabels = [], recoveryMode = false) {
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
@@ -5939,11 +5939,23 @@
         : is50m
         ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
         : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
-      const mainList = is25m
+      let mainList = is25m
         ? (MAIN_OPTIONS_SCM[typeId] || MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
         : is50m
         ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
         : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
+
+      // C: recovery mode — filter mains down to easy/aerobic zone options.
+      // If the filter would empty the pool, fall back to all mains and let
+      // the +10% interval stretch + repeat-suppression carry the recovery
+      // intent on its own.
+      if (recoveryMode) {
+        const recoveryMains = mainList.filter(o => {
+          const z = inferBlockZone({ section: "main", sets: o.sets, primary_zone: o.primary_zone });
+          return z === "easy" || z === "aerobic";
+        });
+        if (recoveryMains.length) mainList = recoveryMains;
+      }
 
       // Fixed yardage from pinned sections; free budget is what remains for unpinned picks
       const pinnedTotal = (pinnedBlocks.warmup   ? pinnedBlocks.warmup.totalYards   : 0)
@@ -5959,7 +5971,13 @@
       const minMa = pinnedBlocks.main     ? 0 : Math.min(...mainList.map(o => o.totalYards));
       const minCd = pinnedBlocks.cooldown ? 0 : Math.min(...allCooldowns.map(o => o.totalYards));
 
-      const absoluteMin = Math.max(isMeters ? MIN_METERS : MIN_YARDS, userMin || 0);
+      // C: recovery mode drops the absolute floor to 1200y (1300m) so a short
+      // easy day is allowed regardless of the type's normal minimum.
+      const recoveryFloor = isMeters ? 1300 : 1200;
+      const baseAbsMin = recoveryMode
+        ? Math.min(recoveryFloor, isMeters ? MIN_METERS : MIN_YARDS)
+        : (isMeters ? MIN_METERS : MIN_YARDS);
+      const absoluteMin = Math.max(baseAbsMin, userMin || 0);
       // Floor scales with target; relax when pins are present (user chose those blocks)
       const minTotal = hasPins ? absoluteMin : Math.max(absoluteMin, maxYards - 400);
 
@@ -6008,19 +6026,22 @@
         }
 
         // 3. Main — expand pool with ×2 and ×3 repeat variants
+        //    (C: recovery mode skips the repeat expansion — short and sweet)
         let ma;
         if (pinnedBlocks.main) {
           ma = pinnedBlocks.main;
         } else {
           const mainBudget = freeBudget - freeUsed - minCd;
-          const mainPoolExpanded = mainList.flatMap(o => {
-            const variants = [o];
-            for (const r of [2, 3]) {
-              const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
-              if (rep.totalYards <= mainBudget) variants.push(rep);
-            }
-            return variants;
-          });
+          const mainPoolExpanded = recoveryMode
+            ? mainList.slice()
+            : mainList.flatMap(o => {
+                const variants = [o];
+                for (const r of [2, 3]) {
+                  const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
+                  if (rep.totalYards <= mainBudget) variants.push(rep);
+                }
+                return variants;
+              });
           const validMain = mainPoolExpanded.filter(o => o.totalYards <= mainBudget);
           if (!validMain.length) continue;
           const maFloor = Math.max(minMa, mainBudget * 0.65);
@@ -6101,14 +6122,16 @@
         ma = pinnedBlocks.main;
       } else {
         const fbMainBudget = freeBudget - fbFree - minCd;
-        const fbMainExpanded = mainList.flatMap(o => {
-          const variants = [o];
-          for (const r of [2, 3]) {
-            const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
-            if (rep.totalYards <= fbMainBudget) variants.push(rep);
-          }
-          return variants;
-        });
+        const fbMainExpanded = recoveryMode
+          ? mainList.slice()
+          : mainList.flatMap(o => {
+              const variants = [o];
+              for (const r of [2, 3]) {
+                const rep = { ...o, rounds: r, totalYards: o.totalYards * r };
+                if (rep.totalYards <= fbMainBudget) variants.push(rep);
+              }
+              return variants;
+            });
         let mainCandidates = fbMainExpanded.filter(o => o.totalYards <= fbMainBudget);
         if (!mainCandidates.length) mainCandidates = mainList;
         mainCandidates = mainCandidates.slice().sort(byYardsDesc);
@@ -6166,7 +6189,7 @@
     // Returns { workout, error }. On success, workout is a fresh object with the
     // requested section replaced. On failure, error is a human-readable reason
     // and the caller should keep the prior workout unchanged.
-    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null, recentLabels = []) {
+    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null, recentLabels = [], recoveryMode = false) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -6191,19 +6214,29 @@
         ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
         : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
       else {
-        const basePool = is25m
+        let basePool = is25m
           ? (MAIN_OPTIONS_SCM[typeId] || MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
           : is50m
           ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
           : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
-        // Expand with ×2 and ×3 repeat variants
-        pool = basePool.flatMap(o => {
-          const variants = [o];
-          for (const r of [2, 3]) {
-            variants.push({ ...o, rounds: r, totalYards: o.totalYards * r });
-          }
-          return variants;
-        });
+        // C: in recovery mode, only consider easy/aerobic mains, no repeat variants.
+        if (recoveryMode) {
+          const recoveryMains = basePool.filter(o => {
+            const z = inferBlockZone({ section: "main", sets: o.sets, primary_zone: o.primary_zone });
+            return z === "easy" || z === "aerobic";
+          });
+          if (recoveryMains.length) basePool = recoveryMains;
+          pool = basePool.slice();
+        } else {
+          // Expand with ×2 and ×3 repeat variants
+          pool = basePool.flatMap(o => {
+            const variants = [o];
+            for (const r of [2, 3]) {
+              variants.push({ ...o, rounds: r, totalYards: o.totalYards * r });
+            }
+            return variants;
+          });
+        }
       }
 
       const hasEquipReq = equipment && Object.keys(EQUIP_REQUIREMENTS).some(k => equipment[k]);
@@ -9445,6 +9478,7 @@
       // Pinned sections: { warmup?: bool, drill?: bool, main?: bool, cooldown?: bool }
       // Pinned blocks are held fixed on "Generate New Workout"; unpinned sections get fresh picks.
       const [pinnedSections, setPinnedSections]   = useState({});
+      const [recoveryMode, setRecoveryMode]       = useState(false); // C: per-generation toggle, not persisted
 
       // Per-section regeneration error: { section: "warmup"|"drill"|"main"|"cooldown", message } | null
       const [regenError, setRegenError]           = useState(null);
@@ -9712,7 +9746,7 @@
           }
         }
         const recentLabels = Array.from(recentMainLabels.keys());
-        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned, recentLabels);
+        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned, recentLabels, recoveryMode);
         // Apply user's pace to intervals at generation time (not just on "Rescale all")
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
@@ -9726,6 +9760,15 @@
             newWorkout = { ...newWorkout, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
           }
         }
+        // C: recovery mode → stretch every interval +10% on top of any pace
+        // scaling, and mark the workout so the UI can render the green badge.
+        if (recoveryMode) {
+          const newBlocks = newWorkout.blocks.map(b => ({
+            ...b,
+            sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, 1.10) })),
+          }));
+          newWorkout = { ...newWorkout, blocks: newBlocks, recovery: true, estimatedMin: calcEstimatedMin(newBlocks) };
+        }
         setWorkout(newWorkout);
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
@@ -9737,7 +9780,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, recoveryMode]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -9745,7 +9788,8 @@
       const handleRegenerateSection = useCallback((sectionKey) => {
         if (!workout || !selectedType) return;
         if (pinnedSections[sectionKey]) return; // pinned sections can't be individually regenerated
-        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, Array.from(recentMainLabels.keys()));
+        const isRecovery = !!workout.recovery;
+        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, Array.from(recentMainLabels.keys()), isRecovery);
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
           return;
@@ -9765,6 +9809,15 @@
             });
             regenWorkout = { ...regenWorkout, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
           }
+        }
+        // C: if the existing workout is a recovery-day workout, apply the +10%
+        // interval stretch to the regenerated section so it matches its siblings.
+        if (isRecovery) {
+          const newBlocks = regenWorkout.blocks.map(b => {
+            if (b.section !== sectionKey) return b;
+            return { ...b, sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, 1.10) })) };
+          });
+          regenWorkout = { ...regenWorkout, blocks: newBlocks, recovery: true, estimatedMin: calcEstimatedMin(newBlocks) };
         }
         setWorkout(regenWorkout);
         setRegenError(null);
@@ -9830,6 +9883,7 @@
           notes: (noteDraft || "").trim(),
           focusNote: (focusNoteDraft || "").trim() || undefined,
           difficulty: difficultyDraft || undefined,
+          recovery: workout.recovery ? true : undefined,
           completed: dateDraft <= new Date().toISOString().slice(0, 10),
         };
         // Optimistic: add to local cache and state immediately
@@ -9898,6 +9952,7 @@
           notes: (opts.notes || "").trim(),
           focusNote: sourceWorkout.focusNote || undefined,
           difficulty: opts.difficulty || undefined,
+          recovery: sourceWorkout.recovery ? true : undefined,
           completed: true,
         };
         setHistory(prev => {
@@ -10276,6 +10331,34 @@
               )}
             </div>
 
+            {/* C: Recovery mode toggle — per-generation; not persisted */}
+            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <button onClick={() => setRecoveryMode(v => !v)}
+                title={recoveryMode
+                  ? "Recovery day ON — next generate keeps things easy/aerobic"
+                  : "Toggle recovery day — easy/aerobic main only, intervals +10%, no repeat sets"}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8,
+                  padding: "6px 14px", borderRadius: 999,
+                  border: `1px solid ${recoveryMode ? "#22c55e" : "#334155"}`,
+                  background: recoveryMode ? "rgba(34,197,94,0.15)" : "transparent",
+                  color: recoveryMode ? "#86efac" : "#64748b",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  transition: "all 0.15s",
+                }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: recoveryMode ? "#22c55e" : "#475569",
+                }} />
+                {recoveryMode ? "Recovery day ON" : "Easy day"}
+              </button>
+              {recoveryMode && (
+                <span style={{ fontSize: 11, color: "#475569", fontStyle: "italic" }}>
+                  Easy/aerobic mains · intervals +10% · no repeat sets · floor 1,200 {(poolMode === "50m" || poolMode === "25m") ? "m" : "yds"}
+                </span>
+              )}
+            </div>
+
             {/* Workout type selector */}
             <p className="screen-only" style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
               Select Workout Type
@@ -10411,11 +10494,29 @@
             {/* Workout display */}
             {workout && (
               <div>
-                {/* Summary bar (screen) */}
-                <div className="screen-only" style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 20, marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 24, alignItems: "center" }}>
+                {/* Summary bar (screen) — green-bordered when recovery day */}
+                <div className="screen-only" style={{
+                  background: "#1e293b",
+                  border: `${workout.recovery ? 2 : 1}px solid ${workout.recovery ? "#22c55e" : "#334155"}`,
+                  borderRadius: 12, padding: 20, marginBottom: 16,
+                  display: "flex", flexWrap: "wrap", gap: 24, alignItems: "center",
+                }}>
                   <span style={{ background: meta.badge, color: meta.badgeText, borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700 }}>
                     {meta.emoji} {meta.label}
                   </span>
+                  {workout.recovery && (
+                    <span title="Generated as a recovery day — easy/aerobic main, intervals stretched +10%, no repeat sets"
+                      style={{
+                        background: "rgba(34,197,94,0.18)",
+                        border: "1px solid #22c55e",
+                        color: "#86efac",
+                        borderRadius: 999, padding: "4px 12px",
+                        fontSize: 12, fontWeight: 700,
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                      }}>
+                      🌿 Recovery day
+                    </span>
+                  )}
                   {[
                     [(poolMode === "50m" || poolMode === "25m") ? "Total Distance" : "Total Yardage", `${workout.totalYards.toLocaleString()} ${unit}`],
                     ["Est. Duration",   `~${workout.estimatedMin} min`],
