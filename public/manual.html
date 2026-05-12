@@ -244,7 +244,9 @@
     <a href="#yardage-slider">Yardage &amp; Pace</a>
     <a href="#pool-mode">Pool Mode</a>
     <a href="#equipment">Equipment</a>
+    <a href="#quick-launch">Quick-Launch</a>
     <a href="#generating">Generating</a>
+    <a href="#focus-note">Focus Note</a>
 
     <div class="nav-section">Workout View</div>
     <a href="#sections">Workout Sections</a>
@@ -263,7 +265,9 @@
     <div class="nav-section">History &amp; Sharing</div>
     <a href="#saving">Saving</a>
     <a href="#history">History View</a>
+    <a href="#difficulty">Difficulty Rating</a>
     <a href="#stats">Stats Panel</a>
+    <a href="#goals">Goals</a>
     <a href="#copy-print">Copy &amp; Print</a>
 
     <div class="nav-section">Settings</div>
@@ -441,11 +445,45 @@
       <ol>
         <li>Picks a warm-up that fits within the yardage budget.</li>
         <li>Picks a drill set compatible with your equipment and warm-up.</li>
-        <li>Picks a main set (possibly as a 2× or 3× repeat) that fills the remaining budget to within ~400 yards of your target. Favorited sets get extra weight; repeat variants get extra weight to fill higher yardage targets.</li>
+        <li>Picks a main set (possibly as a 2× or 3× repeat) that fills the remaining budget to within ~400 yards of your target. Favorited sets get extra weight; repeat variants get extra weight to fill higher yardage targets; <strong>main sets you completed in the last 7 days are down-weighted to 25%</strong> so you naturally see fresh variety.</li>
         <li>Picks a cool-down to close the workout.</li>
         <li>Scales all intervals to your pace setting.</li>
       </ol>
       <p>The summary bar shows total yardage, estimated duration, and your target range. Tap <strong>🔄 Generate New Workout</strong> at any time to replace everything.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">🔁</div>
+        <div class="callout-body"><strong>"Last seen Nd ago" badge.</strong> If the generated main set was one you completed within the last 7 days, the block header shows a red <em>last seen Nd ago</em> pill (or <em>last seen today</em>). The down-weight makes recent repeats rare, but if one still shows up, just hit <strong>Regenerate</strong> on the main block for an alternative.</div>
+      </div>
+    </section>
+
+    <!-- ══ FOCUS NOTE ══ -->
+    <section id="focus-note">
+      <h2>Focus Note</h2>
+      <p>Above the workout blocks (on freshly generated workouts) is an optional <strong>🎯 Focus</strong> input — a one-line intention for the workout, like <em>hip rotation</em>, <em>strong turns</em>, or <em>negative split the 200s</em>.</p>
+      <ul>
+        <li>Saves with the workout when you log it.</li>
+        <li>Shown in the run-mode section header and at the top of the pace clock so you see it between sets.</li>
+        <li>Shown in the print header above the workout blocks.</li>
+        <li>For workouts loaded from history, the focus note is shown read-only — it's a snapshot of your intention at the time, not editable after the fact.</li>
+      </ul>
+      <p>Different from the post-workout <strong>Notes</strong> field on the save form: focus note is your <em>pre-workout intention</em>; notes are your <em>post-workout journal</em>.</p>
+    </section>
+
+    <!-- ══ QUICK-LAUNCH ══ -->
+    <section id="quick-launch">
+      <h2>Quick-Launch</h2>
+      <p>Above the Generate button, a <strong>Pick up where you left off</strong> panel shows up to 3 of your most recent completed workouts as compact cards.</p>
+      <ul>
+        <li>Tap anywhere on a card → opens the rest-picker, then drops you straight into Run Mode for that workout. Two taps from app launch to swimming.</li>
+        <li>The small <strong>🔁</strong> button on each card loads it into the generator instead, where you can tweak before logging.</li>
+        <li>Hidden once you've generated or loaded a workout — it doesn't push the active workout off-screen.</li>
+        <li>The layout adapts to your screen: three cards side-by-side on desktop, stacked on phones.</li>
+      </ul>
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body">Quick-launch only counts your own workouts (filtered by your account), not workouts logged by others sharing the device.</div>
+      </div>
     </section>
 
     <!-- ══ SECTIONS ══ -->
@@ -610,15 +648,32 @@
           <tr><td>Date</td><td>Defaults to today. Change it to log a past or future workout.</td></tr>
           <tr><td>Initials</td><td>Up to 4 characters — used to filter history by person. Saved as your default for next time.</td></tr>
           <tr><td>Notes</td><td>Free-form text. Appears in the history entry and the print header.</td></tr>
+          <tr><td>Difficulty</td><td>Optional 5-star self-rating. Tap a star to set the rating; tap the same star again to clear. See <a href="#difficulty">Difficulty Rating</a> for editing after the fact.</td></tr>
         </tbody>
       </table>
 
       <p>Tap <strong>Save</strong>. The entry is added to your history immediately (optimistically) and synced to the cloud. The save button turns to a "Saved ✓" confirmation.</p>
 
+      <div class="callout tip">
+        <div class="callout-icon">🏁</div>
+        <div class="callout-body"><strong>Log from Run Mode.</strong> When you finish the last set in Run Mode, a <em>Workout complete!</em> screen offers a one-tap <strong>"Log as today's session"</strong> button (with optional difficulty stars). This is the fastest way to capture today's swim — no return trip to the generator's save form. Bail out of Run Mode partway through, and the prompt is skipped (no accidental logs).</div>
+      </div>
+
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Planned workouts.</strong> Saving with a future date marks the entry as "Planned" rather than "Completed." You can toggle this status from the History view.</td></div>
+        <div class="callout-body"><strong>Planned workouts.</strong> Saving with a future date marks the entry as "Planned" rather than "Completed." You can toggle this status from the History view.</div>
       </div>
+    </section>
+
+    <!-- ══ DIFFICULTY RATING ══ -->
+    <section id="difficulty">
+      <h2>Difficulty Rating</h2>
+      <p>Each workout can carry an optional 5-star self-rating capturing how hard the session actually felt. Two places to set it, two slightly different behaviors:</p>
+      <ul>
+        <li><strong>Save dialog &amp; Run-Mode finish screen.</strong> Tap a star to set; tap the same star again to clear. Convenient for "I changed my mind, no rating."</li>
+        <li><strong>Inline on history rows.</strong> Click any star to set the rating cumulatively (e.g. click the 4th star → 4/5). Clicking the current top star does <em>not</em> clear — this prevents accidental wipes when scrolling. To clear, click the small <strong>✕</strong> that appears next to the stars when a rating is set.</li>
+      </ul>
+      <p>Ratings are optional and can be added or changed at any time. Currently used for personal record-keeping; future versions may surface average difficulty by workout type or week.</p>
     </section>
 
     <!-- ══ HISTORY VIEW ══ -->
@@ -641,32 +696,67 @@
           <tr><td>Notes</td><td>Opens an inline editor for the entry's notes field.</td></tr>
           <tr><td>✓ Done / Planned</td><td>Toggles whether the workout counts as completed in stats.</td></tr>
           <tr><td>▶ Run</td><td>Loads the workout directly into Run Mode.</td></tr>
-          <tr><td>🖨 Print</td><td>Loads the workout and opens the print dialog.</td></tr>
+          <tr><td>🔁 Repeat</td><td>Loads the entry's blocks into the generator as a fresh, unsaved workout — useful for repeating a workout you liked.</td></tr>
+          <tr><td>🖨 Print</td><td>Loads the workout and opens the print dialog. The focus note (if any) is included in the print header.</td></tr>
           <tr><td>🗑 Delete</td><td>Permanently removes the entry (with confirmation).</td></tr>
         </tbody>
       </table>
 
-      <p>Click the <strong>⟳ Repeat</strong> icon on any entry to load its blocks into the generator as a fresh, unsaved workout — useful for repeating a workout you liked.</p>
+      <p>Each row also displays an inline <strong>5-star difficulty rating</strong> next to the yards / duration. Unrated rows show 5 dim stars; click any star to set the rating, or the <strong>✕</strong> next to a set rating to clear it. See <a href="#difficulty">Difficulty Rating</a> for the click semantics.</p>
+
+      <p>If the workout carried a focus note, it shows below the equipment chips as <strong>🎯 your focus text</strong>.</p>
 
       <h3>Favorites panel</h3>
-      <p>At the top of the History view, your starred main sets appear as cards. Click any card to see how many times that set has appeared in saved workouts.</p>
+      <p>At the top of the History view, your starred main sets appear as chips. If you completed a favorite within the last 7 days, a small red <strong>last seen Nd ago</strong> (or <em>last seen today</em>) badge appears on its chip — the same signal the generator uses to down-weight recent repeats. Click the ★ on any chip to remove it from favorites.</p>
     </section>
 
     <!-- ══ STATS PANEL ══ -->
     <section id="stats">
       <h2>Stats Panel</h2>
-      <p>The stats panel sits at the top of the History view and updates as you filter. It shows:</p>
+      <p>The stats panel sits at the top of the History view and updates as you filter. It contains, from top to bottom:</p>
 
       <table>
         <thead><tr><th>Stat</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>Sessions</td><td>Count of completed (not planned) workouts in the selected window.</td></tr>
+          <tr><td>🎯 Goals · current period</td><td>One progress bar per active goal — see <a href="#goals">Goals</a> below. Only renders if you've set at least one goal.</td></tr>
+          <tr><td>Sessions</td><td>Count of completed (not planned) workouts matching the current filter.</td></tr>
           <tr><td>Total Yards</td><td>Sum of yardage across completed sessions.</td></tr>
           <tr><td>Avg per session</td><td>Total yards ÷ session count.</td></tr>
           <tr><td>Per week</td><td>Sessions ÷ elapsed weeks. Toggle between all-time and last 4 weeks.</td></tr>
-          <tr><td>Type breakdown</td><td>Horizontal bars showing session count by workout type, color-coded to match the type badges.</td></tr>
+          <tr><td>Yards / Week sparkline</td><td>Inline 12-week trend chart — one bar per ISO week. The current (in-progress) week is highlighted in lighter blue. Hover any bar for the per-week tooltip. "peak X yds" label on the right shows the maximum in the window.</td></tr>
+          <tr><td>Type Breakdown</td><td>Horizontal bars showing session count by workout type, color-coded to match the type badges. Top-right toggle scopes the breakdown: <strong>4 wks / 12 wks / All</strong> (default 4 wks). Percentages sum within the selected window. If the window is empty, the bars are replaced with "No completed workouts in this window."</td></tr>
         </tbody>
       </table>
+    </section>
+
+    <!-- ══ GOALS ══ -->
+    <section id="goals">
+      <h2>Goals</h2>
+      <p>Set recurring targets and track current-period progress. Three metrics are supported:</p>
+      <table>
+        <thead><tr><th>Metric</th><th>Period</th></tr></thead>
+        <tbody>
+          <tr><td>Workouts / week</td><td>Current ISO week (Monday–Sunday)</td></tr>
+          <tr><td>Yards / week</td><td>Current ISO week (Monday–Sunday)</td></tr>
+          <tr><td>Yards / month</td><td>Current calendar month</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Setting and editing goals</h3>
+      <p>Open <strong>👤 Account</strong> from the header → scroll to the <strong>🎯 Goals</strong> section.</p>
+      <ul>
+        <li><strong>+ Set a goal</strong> — opens an inline input pre-filled with a sensible default. Type your target, press <kbd>Enter</kbd> or click <strong>Save</strong>.</li>
+        <li><strong>Edit</strong> — change an existing target.</li>
+        <li><strong>✕</strong> — remove the goal entirely. The corresponding progress bar disappears.</li>
+      </ul>
+
+      <h3>Progress bars</h3>
+      <p>Once any goal is set, a <strong>🎯 Goals · current period</strong> card appears at the top of the stats panel with one progress bar per active goal. The bar color shifts from purple (early in the period) to blue (≥75%) to green (target met), and a <strong>✓</strong> appears on hit. Progress counts only your own completed workouts in the current period.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Recurring only (for now).</strong> All goals are recurring — they reset automatically each week or month. Period-scoped goals (e.g. "10,000 yards by next Sunday") are supported in the database schema but not yet in the UI.</div>
+      </div>
     </section>
 
     <!-- ══ COPY & PRINT ══ -->
@@ -730,6 +820,9 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>Workouts summary</h3>
       <p>Total count across all pool modes, plus a breakdown by mode (SCY, SCM, LCM) showing count and total distance in the right unit.</p>
+
+      <h3>Goals</h3>
+      <p>Set or clear recurring targets for workouts/week, yards/week, and yards/month. Progress bars render in the stats panel of the History view — see <a href="#goals">Goals</a> for the full details.</p>
 
       <h3>Active sessions</h3>
       <p>One row per device/browser where you're currently signed in. Each row shows the browser/OS string, IP address, and last-seen timestamp. Your current device is highlighted blue with a <strong>● this device</strong> badge.</p>
