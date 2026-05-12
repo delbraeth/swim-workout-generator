@@ -54,6 +54,7 @@ import {
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
+  dbListGoals, dbSetGoal, dbDeleteGoal,
   dbIsUser, dbIsAdmin, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
@@ -723,6 +724,39 @@ app.delete("/api/favorites/:label", checkOrigin, requireAuth, requireCsrf, write
   try {
     const label = decodeURIComponent(req.params.label);
     await dbRemoveFavorite(req.userSub, label);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ───── Goals ──────────────────────────────────────────────────────────
+// Recurring goals only (period_start = NULL). One active goal per metric.
+// Allowed metrics: workouts_per_week | yards_per_week | yards_per_month.
+app.get("/api/goals", requireAuth, async (req, res) => {
+  try {
+    res.json(await dbListGoals(req.userSub));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post("/api/goals", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { metric, target_value } = req.body || {};
+    if (!metric || typeof metric !== "string") return res.status(400).json({ error: "metric required" });
+    if (target_value == null) return res.status(400).json({ error: "target_value required" });
+    await dbSetGoal(req.userSub, metric, target_value);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
+});
+
+app.delete("/api/goals/:metric", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const metric = decodeURIComponent(req.params.metric);
+    await dbDeleteGoal(req.userSub, metric);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
