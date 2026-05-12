@@ -812,11 +812,26 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Click the <strong>👤</strong> button in the top-right of the header to open the Account modal. It shows:</p>
 
       <h3>Identity</h3>
+      <p>Three fields are inline-editable — click <strong>Edit</strong> on any row, type the new value, then press <kbd>Enter</kbd> or click <strong>Save</strong>:</p>
       <ul>
-        <li><strong>Initials</strong> &amp; <strong>email</strong> — your identifying info. Email comes from Apple at sign-in; initials are set when you save your first workout (and editable thereafter).</li>
+        <li><strong>Name</strong> — your display name. Used to personalize the app (see <a href="#personalization">Personalization</a> below). Up to 120 characters; leave blank to fall back to initials.</li>
+        <li><strong>Initials</strong> — short tag used to filter history by person. Up to 8 characters; auto-uppercased.</li>
+        <li><strong>Email</strong> — your contact email. Originally populated from Apple at sign-in. Changing it clears the <strong>✓ verified</strong> badge until the new address is re-verified.</li>
+      </ul>
+      <p>Read-only on the same panel:</p>
+      <ul>
         <li><strong>Member since</strong> — when your account was created.</li>
         <li><strong>Last login</strong> — when you most recently signed in to any session.</li>
+        <li><strong>Role</strong> — shown only if you have admin privileges.</li>
       </ul>
+
+      <h4 id="personalization">Personalization</h4>
+      <p>If you've set a <strong>Name</strong>, the app personalizes a few places using your first name:</p>
+      <ul>
+        <li>Header subtitle: <em>"Patrick's workouts"</em> on the generator view, <em>"Patrick's history"</em> on the history view.</li>
+        <li>Run-mode finish screen: <em>"Nice work, Patrick!"</em> instead of the generic "Workout complete!".</li>
+      </ul>
+      <p>If <strong>Name</strong> is blank, the app falls back to your initials. With both blank, you'll see the generic copy.</p>
 
       <h3>Workouts summary</h3>
       <p>Total count across all pool modes, plus a breakdown by mode (SCY, SCM, LCM) showing count and total distance in the right unit.</p>
