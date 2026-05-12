@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 14:32 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 14:37 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6927,6 +6927,7 @@
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | sub string
       const [weekMode,     setWeekMode]     = useState("all"); // "all" | "4wk"
+      const [typeWindow,   setTypeWindow]   = useState("4wk"); // "4wk" | "12wk" | "all" — windows the Type Breakdown stat
       const [filterStatus, setFilterStatus] = useState("all"); // "all" | "done" | "planned"
       const [editingId,    setEditingId]    = useState(null);
       const [editingNotes, setEditingNotes] = useState("");
@@ -7011,15 +7012,23 @@
         const weeksElapsed = Math.min(4, Math.max(1, (now - firstDate) / msPerWeek));
         const wkRecent     = recentCount / weeksElapsed;
 
-        // Type distribution (completed only)
+        // Type distribution (completed only), windowed
+        const winDays = typeWindow === "4wk" ? 28 : typeWindow === "12wk" ? 84 : null;
+        const winCutoff = winDays === null ? -Infinity : (now - winDays * 24 * 60 * 60 * 1000);
+        const windowed = done.filter(e => {
+          if (winCutoff === -Infinity) return true;
+          const d = e.dateCompleted ? new Date(e.dateCompleted).getTime() : 0;
+          return d >= winCutoff;
+        });
+        const winSessions = windowed.length;
         const typeCounts = new Map();
-        for (const e of done) typeCounts.set(e.type, (typeCounts.get(e.type) || 0) + 1);
+        for (const e of windowed) typeCounts.set(e.type, (typeCounts.get(e.type) || 0) + 1);
         const typeBreakdown = [...typeCounts.entries()]
-          .map(([type, count]) => ({ type, count, pct: sessions ? Math.round(count / sessions * 100) : 0 }))
+          .map(([type, count]) => ({ type, count, pct: winSessions ? Math.round(count / winSessions * 100) : 0 }))
           .sort((a, b) => b.count - a.count);
 
-        return { sessions, yards, avg, wkAll, wkRecent, typeBreakdown };
-      }, [filtered]);
+        return { sessions, yards, avg, wkAll, wkRecent, typeBreakdown, winSessions };
+      }, [filtered, typeWindow]);
 
       if (!historyLoaded) {
         return <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>Loading history…</div>;
@@ -7128,7 +7137,7 @@
           {/* Stats summary */}
           <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             {/* Key numbers row */}
-            <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: stats.typeBreakdown.length > 0 ? 16 : 0 }}>
+            <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: stats.sessions > 0 ? 16 : 0 }}>
               {[
                 ["Sessions",     stats.sessions.toLocaleString()],
                 ["Total Yards",  stats.yards.toLocaleString()],
@@ -7155,26 +7164,55 @@
               </div>
             </div>
             {/* Type distribution bars */}
-            {stats.typeBreakdown.length > 0 && (
+            {stats.sessions > 0 && (
               <div>
-                <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Type Breakdown</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {stats.typeBreakdown.map(({ type, count, pct }) => {
-                    const meta     = WORKOUT_TYPES.find(t => t.id === type);
-                    const maxCount = stats.typeBreakdown[0].count;
-                    return (
-                      <div key={type} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 11, color: "#cbd5e1", width: 90, flexShrink: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {meta ? `${meta.emoji} ${meta.label}` : type}
-                        </span>
-                        <div style={{ flex: 1, background: "#0f172a", borderRadius: 4, height: 8, overflow: "hidden" }}>
-                          <div style={{ width: `${(count / maxCount) * 100}%`, height: "100%", background: meta ? meta.badge : "#3b82f6", borderRadius: 4, transition: "width 0.4s" }} />
-                        </div>
-                        <span style={{ fontSize: 11, color: "#64748b", width: 44, textAlign: "right", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{count} · {pct}%</span>
-                      </div>
-                    );
-                  })}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Type Breakdown</div>
+                  <div style={{ display: "inline-flex", gap: 4, marginLeft: "auto" }}>
+                    {[
+                      { id: "4wk",  label: "4 wks"  },
+                      { id: "12wk", label: "12 wks" },
+                      { id: "all",  label: "All"    },
+                    ].map(o => {
+                      const active = typeWindow === o.id;
+                      return (
+                        <button key={o.id} onClick={() => setTypeWindow(o.id)}
+                          style={{
+                            fontSize: 9, padding: "1px 7px", borderRadius: 999,
+                            border: `1px solid ${active ? "#7c3aed" : "#334155"}`,
+                            background: active ? "#7c3aed33" : "transparent",
+                            color: active ? "#c4b5fd" : "#64748b",
+                            cursor: "pointer", fontWeight: 700,
+                          }}>
+                          {o.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+                {stats.typeBreakdown.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {stats.typeBreakdown.map(({ type, count, pct }) => {
+                      const meta     = WORKOUT_TYPES.find(t => t.id === type);
+                      const maxCount = stats.typeBreakdown[0].count;
+                      return (
+                        <div key={type} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 11, color: "#cbd5e1", width: 90, flexShrink: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {meta ? `${meta.emoji} ${meta.label}` : type}
+                          </span>
+                          <div style={{ flex: 1, background: "#0f172a", borderRadius: 4, height: 8, overflow: "hidden" }}>
+                            <div style={{ width: `${(count / maxCount) * 100}%`, height: "100%", background: meta ? meta.badge : "#3b82f6", borderRadius: 4, transition: "width 0.4s" }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: "#64748b", width: 44, textAlign: "right", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{count} · {pct}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic", padding: "4px 0" }}>
+                    No completed workouts in this window.
+                  </div>
+                )}
               </div>
             )}
           </div>
