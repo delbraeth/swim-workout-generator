@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 15:46 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 16:05 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -216,6 +216,108 @@
       main:     { bg: "#f8fafc", border: "#e2e8f0", headerBg: "#334155", headerText: "#ffffff", dot: "#64748b" },
       cooldown: { bg: "#f9fafb", border: "#e5e7eb", headerBg: "#f3f4f6", headerText: "#374151", dot: "#9ca3af" },
     };
+
+    // ═══════════════════════════════════════════════════════════════
+    //  EFFORT-ZONE TAXONOMY (Session 2 H foundation)
+    //  5 zones, green → red intensity gradient. Used for the small color
+    //  pip rendered on block headers and on divergent set rows.
+    //  Options can set `primary_zone` (and optional `secondary_zones`)
+    //  explicitly; otherwise `inferZone()` derives a sensible default.
+    // ═══════════════════════════════════════════════════════════════
+    const ZONES = {
+      easy:      { id: "easy",      label: "Easy",      color: "#22c55e", rank: 1 },
+      aerobic:   { id: "aerobic",   label: "Aerobic",   color: "#3b82f6", rank: 2 },
+      threshold: { id: "threshold", label: "Threshold", color: "#eab308", rank: 3 },
+      vo2:       { id: "vo2",       label: "VO2",       color: "#f97316", rank: 4 },
+      anaerobic: { id: "anaerobic", label: "Anaerobic", color: "#ef4444", rank: 5 },
+    };
+    const ZONE_ORDER = ["easy", "aerobic", "threshold", "vo2", "anaerobic"];
+
+    // Parse "On 2:00", "On :45" → seconds (alias of parseIntervalSeconds without
+    // depending on that function's later definition).
+    function _intervalSecs(intervalStr) {
+      if (!intervalStr || /no interval/i.test(intervalStr)) return null;
+      const full = intervalStr.match(/(\d+):(\d{2})/);
+      if (full) return parseInt(full[1], 10) * 60 + parseInt(full[2], 10);
+      const sec  = intervalStr.match(/:(\d{2})/);
+      if (sec)  return parseInt(sec[1], 10);
+      return null;
+    }
+
+    // Heuristic zone inference from a single set's text + interval + distance.
+    // Returns one of ZONE_ORDER. Keyword cues in desc/focus dominate; interval
+    // tightness (work/total ratio) is the tie-breaker when text is ambiguous.
+    function inferSetZone(set, sectionKey) {
+      if (!set) return "aerobic";
+      const text = `${set.desc || ""} ${set.focus || ""}`.toLowerCase();
+
+      // Cooldowns are always easy unless desc says otherwise.
+      if (sectionKey === "cooldown") {
+        if (/sprint|fast|hard|all.?out|race/.test(text)) return "aerobic";
+        return "easy";
+      }
+
+      // Strong keyword cues — explicit intensity language wins over heuristics.
+      if (/all.?out|sprint|max(?!imum aerobic)|blast|empty the tank|top speed|race pace/.test(text)) {
+        return "anaerobic";
+      }
+      if (/vo2|fast effort|fast,? hold|fast finish|fast close|fast,? fatigued/.test(text)) {
+        return "vo2";
+      }
+      if (/threshold|t.?pace|rpe ?[78]/.test(text)) return "threshold";
+      if (/easy|recovery|smooth|drill|technique/.test(text)) {
+        // Warmups and drills lean easy/aerobic — bias to easy on these cues.
+        return (sectionKey === "warmup" || sectionKey === "drill") ? "easy" : "aerobic";
+      }
+      if (/descend|build|negative.?split|strong/.test(text)) {
+        // Descend/build sets typically climb into threshold by the end.
+        return "threshold";
+      }
+      if (/moderate|steady|aerobic/.test(text)) return "aerobic";
+
+      // Interval-tightness fallback: estimate seconds/100yd then bucket.
+      // Tighter intervals = higher zone. This is a coarse signal.
+      const secs = _intervalSecs(set.interval);
+      const dist = Number(set.dist || 0);
+      if (secs && dist > 0) {
+        const per100 = secs / (dist / 100);
+        if (per100 < 75)  return "anaerobic";     // < 1:15/100 — sprint-tight
+        if (per100 < 95)  return "vo2";           // < 1:35/100
+        if (per100 < 115) return "threshold";     // < 1:55/100
+        if (per100 < 145) return "aerobic";       // < 2:25/100
+        return "easy";
+      }
+
+      // Section-default fallback when text gives no signal.
+      if (sectionKey === "warmup")   return "easy";
+      if (sectionKey === "drill")    return "aerobic";
+      if (sectionKey === "cooldown") return "easy";
+      return "aerobic";
+    }
+
+    // Block-level zone: explicit `primary_zone` wins; otherwise take the
+    // highest-rank zone across the block's sets (so a block with one vo2
+    // finisher is shown as threshold/vo2, not aerobic).
+    function inferBlockZone(block) {
+      if (!block) return "aerobic";
+      if (block.primary_zone && ZONES[block.primary_zone]) return block.primary_zone;
+      const sets = Array.isArray(block.sets) ? block.sets : [];
+      if (!sets.length) return "aerobic";
+      // For warmup/cooldown, take the modal (most common) zone since they're
+      // typically uniform and a single accent set shouldn't redefine the block.
+      // For drill/main, take the *dominant by yardage* zone.
+      const tally = {};
+      for (const s of sets) {
+        const z = s.zone || inferSetZone(s, block.section);
+        const w = (s.reps || 1) * (s.dist || 0);
+        tally[z] = (tally[z] || 0) + Math.max(1, w);
+      }
+      let best = null, bestW = -1;
+      for (const [z, w] of Object.entries(tally)) {
+        if (w > bestW) { best = z; bestW = w; }
+      }
+      return best || "aerobic";
+    }
 
     // ═══════════════════════════════════════════════════════════════
     //  WORKOUT DATA — all options as flat arrays
@@ -6335,16 +6437,30 @@
       );
     }
 
-    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds" }) {
+    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId }) {
       const eqItems = equipmentForSet(set, equipment);
       const desc = enhanceDesc(set, equipment);
       const equiv = onToggleSwap ? getEquivalents(set) : {};
       const hasSwap = !!(equiv.shorter || equiv.longer);
+      // H: per-set pip only when the set's zone diverges from the block's
+      // dominant zone (keeps the table visually quiet most of the time).
+      const setZoneId = set.zone || inferSetZone(set, blockSection);
+      const showSetPip = blockZoneId && setZoneId && setZoneId !== blockZoneId;
+      const setZone = showSetPip ? (ZONES[setZoneId] || null) : null;
       return (
         <React.Fragment>
           <tr style={{ background: idx % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
             <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "#334155", whiteSpace: "nowrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {setZone && (
+                  <span className="screen-only"
+                    title={`This set is ${setZone.label} (block is ${(ZONES[blockZoneId] || {}).label || "n/a"})`}
+                    style={{
+                      width: 8, height: 8, borderRadius: "50%",
+                      background: setZone.color,
+                      display: "inline-block", flexShrink: 0,
+                    }} />
+                )}
                 {set.reps > 1 ? `${set.reps} × ${set.dist}` : `${set.dist}`}
                 {hasSwap && (
                   <button onClick={() => onToggleSwap(blockIdx, setIdx)}
@@ -6535,12 +6651,30 @@
       const btnHoverBg = isDarkHeader ? "rgba(255,255,255,0.20)" : "rgba(15,23,42,0.12)";
       const btnBorder = isDarkHeader ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.15)";
       const [hovered, setHovered] = useState(false);
+      // H: derive the block's effort-zone for the header pip; per-set pips
+      // are shown only when a set diverges from this dominant zone.
+      const blockZoneId = useMemo(() => inferBlockZone(block), [block]);
+      const blockZone   = ZONES[blockZoneId] || ZONES.aerobic;
       return (
         <div className="workout-block" style={{ borderRadius: 12, border: isPinned ? `2px solid ${s.dot}` : `1px solid ${s.border}`, overflow: "hidden", marginBottom: 16 }}>
           <div className="workout-block-header" style={{ background: s.headerBg, color: s.headerText, padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.dot, display: "inline-block" }} />
               <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.name}</span>
+              <span className="screen-only"
+                title={`Effort zone: ${blockZone.label}`}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "1px 7px", borderRadius: 999,
+                  background: `${blockZone.color}22`,
+                  border: `1px solid ${blockZone.color}`,
+                  color: isDarkHeader ? "#fff" : blockZone.color,
+                  fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: blockZone.color, display: "inline-block" }} />
+                {blockZone.label}
+              </span>
               {isPinned && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", opacity: 0.8 }}>PINNED</span>}
               {(() => {
                 if (!recentMainLabels) return null;
@@ -6673,6 +6807,8 @@
                           onCommitDesc={onCommitDesc}
                           onCancelDesc={onCancelDesc}
                           unit={unit}
+                          blockSection={block.section}
+                          blockZoneId={blockZoneId}
                         />
                       );
                     });
