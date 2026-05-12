@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 04:02 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 04:09 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7931,6 +7931,13 @@
       const [maxUses, setMaxUses] = React.useState(1);
       const [expiresAt, setExpiresAt] = React.useState("");
       const [msg, setMsg] = React.useState(null);
+      const [copiedCode, setCopiedCode] = React.useState(null);
+
+      const copyShareUrl = (code) => {
+        navigator.clipboard.writeText(`${window.location.origin}/api/auth/apple?invite=${code}`);
+        setCopiedCode(code);
+        setTimeout(() => setCopiedCode(c => c === code ? null : c), 1500);
+      };
 
       const load = React.useCallback(async () => {
         const r = await fetch("/api/admin/invites", { cache: "no-store" });
@@ -7961,8 +7968,6 @@
         if (!r.ok) { setMsg(`Error: ${data.error || r.status}`); return; }
         await load();
       };
-
-      const shareUrl = (c) => `${window.location.origin}/api/auth/apple?invite=${c}`;
 
       if (invites === null) return <div style={{ color: "#64748b" }}>Loading…</div>;
       return (
@@ -8006,8 +8011,8 @@
                   </td>
                   <td style={{ padding: "8px 6px", color: "#94a3b8" }}>{i.expires_at ? new Date(i.expires_at).toLocaleDateString() : "—"}</td>
                   <td style={{ padding: "8px 6px" }}>
-                    <button onClick={() => navigator.clipboard.writeText(shareUrl(i.code))} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "#334155", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
-                      Copy link
+                    <button onClick={() => copyShareUrl(i.code)} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: copiedCode === i.code ? "#10b981" : "#334155", border: "none", borderRadius: 4, color: copiedCode === i.code ? "#0f172a" : "#cbd5e1", cursor: "pointer", fontWeight: copiedCode === i.code ? 700 : 400, transition: "background 0.15s, color 0.15s" }}>
+                      {copiedCode === i.code ? "✓ Copied!" : "Copy link"}
                     </button>
                     <button onClick={() => remove(i.code)} style={{ fontSize: 11, padding: "3px 8px", background: "#7f1d1d", border: "none", borderRadius: 4, color: "#fee2e2", cursor: "pointer" }}>
                       Delete
