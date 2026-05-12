@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 16:50 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 16:57 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -5925,10 +5925,10 @@
         osc.frequency.value = 1320;
         gain.gain.setValueAtTime(0.001, now);
         gain.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.60);
         osc.connect(gain).connect(ctx.destination);
         osc.start(now);
-        osc.stop(now + 0.30);
+        osc.stop(now + 0.60);
       } else {
         // Short beep at T-3/T-2/T-1
         osc.frequency.value = 880;
