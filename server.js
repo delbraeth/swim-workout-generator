@@ -400,7 +400,8 @@ app.get("/api/auth/csrf", requireAuth, async (req, res) => {
 });
 
 // Return the authenticated user's profile + workout stats. Used by the Profile UI.
-app.get("/api/me", checkOrigin, requireAuth, async (req, res) => {
+// No checkOrigin: GET, no state change, CORS/SOP prevents cross-origin reads.
+app.get("/api/me", requireAuth, async (req, res) => {
   try {
     const me = await dbGetMe(req.userSub);
     if (!me) return res.status(404).json({ error: "user not found" });
@@ -465,8 +466,8 @@ app.get("/api/auth/signout", async (req, res) => {
   res.redirect("/");
 });
 
-// List the authenticated user's active sessions
-app.get("/api/auth/sessions", checkOrigin, requireAuth, async (req, res) => {
+// List the authenticated user's active sessions. No checkOrigin (GET, no state change, SOP protects response).
+app.get("/api/auth/sessions", requireAuth, async (req, res) => {
   try {
     const sessions = await dbListSessions(req.userSub);
     const withCurrent = sessions.map(s => ({
