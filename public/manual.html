@@ -698,6 +698,18 @@
       <p>The rest timer controls how the app advances between sets in Run Mode. You choose the mode before starting (see <a href="#run-mode">Run Mode</a>). In timed modes, a rest countdown appears on the pace clock screen after each set finishes — you can always tap <strong>Skip</strong> to advance early.</p>
 
       <p>For <strong>repeat-set blocks</strong>, the rest between rounds uses the per-block rest value you set in the workout view (default 30s), regardless of your global rest timer setting.</p>
+
+      <h3>🔔 Audio cues</h3>
+      <p>In the Start Workout dialog (the rest picker) there's a <strong>🔔 Audio cues</strong> toggle. When ON, the app plays:</p>
+      <ul>
+        <li>Three short beeps at <strong>T-3, T-2, T-1</strong> as the rest timer counts down.</li>
+        <li>A distinct higher-pitched "go" tone at <strong>T-0</strong> when the rest ends and the next set starts.</li>
+      </ul>
+      <p>Tones are synthesized in the browser (no asset download). Tapping the toggle to enable it plays a one-beep preview so you can confirm your phone's volume is up. The preference is saved per-account; default is ON.</p>
+      <div class="callout note">
+        <div class="callout-icon">📱</div>
+        <div class="callout-body"><strong>iOS Safari:</strong> phone-deck audio works because the AudioContext is primed when you tap <strong>▶ Start</strong> in the rest picker. If you don't hear anything, double-check your phone isn't on silent mode (the silent switch overrides Web Audio on iOS).</div>
+      </div>
     </section>
 
     <!-- ══ SAVING ══ -->
