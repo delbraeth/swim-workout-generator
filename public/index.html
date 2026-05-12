@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 03:53 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 04:02 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7827,6 +7827,254 @@
       );
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  ADMIN VIEW — users, invites, audit log
+    // ═══════════════════════════════════════════════════════════════
+    function AdminView() {
+      const [tab, setTab] = React.useState("users");
+
+      const tabStyle = (active) => ({
+        padding: "8px 16px", border: "none", borderRadius: 8,
+        background: active ? "#a78bfa" : "#1e293b",
+        color: active ? "#0f172a" : "#94a3b8",
+        fontSize: 13, fontWeight: 700, cursor: "pointer",
+        marginRight: 8,
+      });
+
+      return (
+        <div>
+          <h2 style={{ color: "#e2e8f0", marginTop: 0 }}>🛡 Admin</h2>
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={() => setTab("users")}   style={tabStyle(tab === "users")}>Users</button>
+            <button onClick={() => setTab("invites")} style={tabStyle(tab === "invites")}>Invites</button>
+            <button onClick={() => setTab("audit")}   style={tabStyle(tab === "audit")}>Audit log</button>
+          </div>
+          {tab === "users"   && <AdminUsers />}
+          {tab === "invites" && <AdminInvites />}
+          {tab === "audit"   && <AdminAudit />}
+        </div>
+      );
+    }
+
+    function AdminUsers() {
+      const [users, setUsers] = React.useState(null);
+      const [msg, setMsg]     = React.useState(null);
+
+      const load = React.useCallback(async () => {
+        const r = await fetch("/api/admin/users", { cache: "no-store" });
+        setUsers(r.ok ? await r.json() : []);
+      }, []);
+      React.useEffect(() => { load(); }, [load]);
+
+      const act = async (sub, action) => {
+        setMsg(null);
+        let url, method = "POST";
+        if (action === "disable") url = `/api/admin/users/${encodeURIComponent(sub)}/disable`;
+        else if (action === "enable") url = `/api/admin/users/${encodeURIComponent(sub)}/enable`;
+        else if (action === "delete") {
+          if (!confirm(`Delete user ${sub.slice(0, 10)}…?\n\nThis cascades and wipes all their workouts, favorites, settings, and sessions. Audit events stay (anonymized). NOT REVERSIBLE.`)) return;
+          url = `/api/admin/users/${encodeURIComponent(sub)}`;
+          method = "DELETE";
+        }
+        const r = await fetch(url, { method, headers: { ...csrfHeaders() } });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) { setMsg(`Error: ${data.error || r.status}`); return; }
+        setMsg(`${action} → ok`);
+        await load();
+      };
+
+      if (users === null) return <div style={{ color: "#64748b" }}>Loading…</div>;
+      return (
+        <div>
+          {msg && <div style={{ fontSize: 12, color: "#10b981", marginBottom: 10 }}>{msg}</div>}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, color: "#cbd5e1" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #334155", color: "#64748b", textAlign: "left" }}>
+                <th style={{ padding: "8px 6px" }}>Initials</th>
+                <th style={{ padding: "8px 6px" }}>Email</th>
+                <th style={{ padding: "8px 6px", textAlign: "right" }}>Workouts</th>
+                <th style={{ padding: "8px 6px" }}>Last login</th>
+                <th style={{ padding: "8px 6px" }}>Flags</th>
+                <th style={{ padding: "8px 6px" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.sub} style={{ borderBottom: "1px solid #1e293b" }}>
+                  <td style={{ padding: "8px 6px", fontWeight: 700 }}>{u.initials || "—"}</td>
+                  <td style={{ padding: "8px 6px" }} title={u.sub}>{u.email || u.sub.slice(0, 16) + "…"}</td>
+                  <td style={{ padding: "8px 6px", textAlign: "right" }}>{u.workout_count}</td>
+                  <td style={{ padding: "8px 6px", color: "#94a3b8" }}>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : "—"}</td>
+                  <td style={{ padding: "8px 6px" }}>
+                    {u.is_admin    && <span style={{ background: "#a78bfa", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>admin</span>}
+                    {u.is_disabled && <span style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>disabled</span>}
+                  </td>
+                  <td style={{ padding: "8px 6px" }}>
+                    <button onClick={() => act(u.sub, u.is_disabled ? "enable" : "disable")} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "#334155", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
+                      {u.is_disabled ? "Enable" : "Disable"}
+                    </button>
+                    <button onClick={() => act(u.sub, "delete")} style={{ fontSize: 11, padding: "3px 8px", background: "#7f1d1d", border: "none", borderRadius: 4, color: "#fee2e2", cursor: "pointer" }}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    function AdminInvites() {
+      const [invites, setInvites] = React.useState(null);
+      const [note, setNote] = React.useState("");
+      const [maxUses, setMaxUses] = React.useState(1);
+      const [expiresAt, setExpiresAt] = React.useState("");
+      const [msg, setMsg] = React.useState(null);
+
+      const load = React.useCallback(async () => {
+        const r = await fetch("/api/admin/invites", { cache: "no-store" });
+        setInvites(r.ok ? await r.json() : []);
+      }, []);
+      React.useEffect(() => { load(); }, [load]);
+
+      const create = async () => {
+        setMsg(null);
+        const body = { note: note || null, maxUses: Number(maxUses) || 1, expiresAt: expiresAt || null };
+        const r = await fetch("/api/admin/invites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) { setMsg(`Error: ${data.error || r.status}`); return; }
+        setMsg(`Created: ${data.code}`);
+        setNote(""); setMaxUses(1); setExpiresAt("");
+        await load();
+      };
+
+      const remove = async (code) => {
+        if (!confirm(`Delete invite ${code}?`)) return;
+        setMsg(null);
+        const r = await fetch(`/api/admin/invites/${encodeURIComponent(code)}`, { method: "DELETE", headers: { ...csrfHeaders() } });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) { setMsg(`Error: ${data.error || r.status}`); return; }
+        await load();
+      };
+
+      const shareUrl = (c) => `${window.location.origin}/api/auth/apple?invite=${c}`;
+
+      if (invites === null) return <div style={{ color: "#64748b" }}>Loading…</div>;
+      return (
+        <div>
+          <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 12, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Create invite</div>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr auto", gap: 8, alignItems: "center" }}>
+              <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (e.g., for Sarah)"
+                style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, color: "#e2e8f0", padding: "6px 8px", fontSize: 12 }} />
+              <input type="number" value={maxUses} onChange={e => setMaxUses(e.target.value)} min={1} max={100} placeholder="Max uses"
+                style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, color: "#e2e8f0", padding: "6px 8px", fontSize: 12 }} />
+              <input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
+                style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, color: "#e2e8f0", padding: "6px 8px", fontSize: 12 }} />
+              <button onClick={create} style={{ background: "#a78bfa", color: "#0f172a", border: "none", borderRadius: 4, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Create</button>
+            </div>
+          </div>
+          {msg && <div style={{ fontSize: 12, color: "#10b981", marginBottom: 10 }}>{msg}</div>}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, color: "#cbd5e1" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #334155", color: "#64748b", textAlign: "left" }}>
+                <th style={{ padding: "8px 6px" }}>Code</th>
+                <th style={{ padding: "8px 6px" }}>Note</th>
+                <th style={{ padding: "8px 6px" }}>Uses</th>
+                <th style={{ padding: "8px 6px" }}>Status</th>
+                <th style={{ padding: "8px 6px" }}>Expires</th>
+                <th style={{ padding: "8px 6px" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invites.map(i => (
+                <tr key={i.code} style={{ borderBottom: "1px solid #1e293b" }}>
+                  <td style={{ padding: "8px 6px", fontFamily: "monospace" }}>{i.code}</td>
+                  <td style={{ padding: "8px 6px" }}>{i.note || "—"}</td>
+                  <td style={{ padding: "8px 6px" }}>{i.times_used}/{i.max_uses}</td>
+                  <td style={{ padding: "8px 6px" }}>
+                    <span style={{
+                      background: i.status === "active" ? "#10b98122" : "#7f1d1d22",
+                      color:      i.status === "active" ? "#10b981"   : "#fca5a5",
+                      padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                    }}>{i.status}</span>
+                  </td>
+                  <td style={{ padding: "8px 6px", color: "#94a3b8" }}>{i.expires_at ? new Date(i.expires_at).toLocaleDateString() : "—"}</td>
+                  <td style={{ padding: "8px 6px" }}>
+                    <button onClick={() => navigator.clipboard.writeText(shareUrl(i.code))} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "#334155", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
+                      Copy link
+                    </button>
+                    <button onClick={() => remove(i.code)} style={{ fontSize: 11, padding: "3px 8px", background: "#7f1d1d", border: "none", borderRadius: 4, color: "#fee2e2", cursor: "pointer" }}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    function AdminAudit() {
+      const [events, setEvents] = React.useState(null);
+      const [filterType, setFilterType] = React.useState("");
+      const [filterUser, setFilterUser] = React.useState("");
+
+      const load = React.useCallback(async () => {
+        const qs = new URLSearchParams();
+        if (filterType) qs.set("event_type", filterType);
+        if (filterUser) qs.set("user_sub",   filterUser);
+        qs.set("limit", "200");
+        const r = await fetch(`/api/admin/audit-events?${qs}`, { cache: "no-store" });
+        setEvents(r.ok ? await r.json() : []);
+      }, [filterType, filterUser]);
+      React.useEffect(() => { load(); }, [load]);
+
+      if (events === null) return <div style={{ color: "#64748b" }}>Loading…</div>;
+      return (
+        <div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+            <input value={filterType} onChange={e => setFilterType(e.target.value)} placeholder="event_type (e.g. auth.login.success)"
+              style={{ flex: 1, background: "#1e293b", border: "1px solid #334155", borderRadius: 4, color: "#e2e8f0", padding: "6px 8px", fontSize: 12 }} />
+            <input value={filterUser} onChange={e => setFilterUser(e.target.value)} placeholder="user_sub (full Apple sub)"
+              style={{ flex: 2, background: "#1e293b", border: "1px solid #334155", borderRadius: 4, color: "#e2e8f0", padding: "6px 8px", fontSize: 12 }} />
+            <button onClick={() => { setFilterType(""); setFilterUser(""); }} style={{ fontSize: 12, padding: "6px 10px", background: "#334155", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
+              Clear
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>{events.length} events (most recent first)</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, color: "#cbd5e1" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #334155", color: "#64748b", textAlign: "left" }}>
+                <th style={{ padding: "6px 4px" }}>Time</th>
+                <th style={{ padding: "6px 4px" }}>Event</th>
+                <th style={{ padding: "6px 4px" }}>User</th>
+                <th style={{ padding: "6px 4px" }}>IP</th>
+                <th style={{ padding: "6px 4px" }}>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map(e => (
+                <tr key={e.id} style={{ borderBottom: "1px solid #1e293b" }}>
+                  <td style={{ padding: "6px 4px", color: "#94a3b8", whiteSpace: "nowrap" }}>{new Date(e.created_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "medium" })}</td>
+                  <td style={{ padding: "6px 4px", fontFamily: "monospace" }}>{e.event_type}</td>
+                  <td style={{ padding: "6px 4px", color: "#94a3b8" }} title={e.user_sub || ""}>{e.user_sub ? e.user_sub.slice(0, 12) + "…" : "—"}</td>
+                  <td style={{ padding: "6px 4px", color: "#94a3b8" }}>{e.ip || "—"}</td>
+                  <td style={{ padding: "6px 4px", color: "#94a3b8", fontFamily: "monospace", fontSize: 10 }}>{e.details ? JSON.stringify(e.details).slice(0, 80) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
     function RestPickerModal({ restSecs, onChange, onStart, onCancel }) {
       return (
         <div style={{
@@ -8131,7 +8379,7 @@
       });
 
       // History state
-      const [view, setView]                       = useState("generator"); // "generator" | "history"
+      const [view, setView]                       = useState("generator"); // "generator" | "history" | "admin"
       const [history, setHistory]                 = useState(() => loadLocalHistory());
       const [historyLoaded, setHistoryLoaded]     = useState(false);
       const [favorites, setFavorites]             = useState([]);
@@ -8162,6 +8410,7 @@
       const [authenticated, setAuthenticated] = useState(null);
       const [authMode,      setAuthMode]      = useState(null); // "open" | "apple"
       const [authError,     setAuthError]     = useState(null);
+      const [me,            setMe]            = useState(null); // /api/me payload (for is_admin gate, etc.)
 
       // On mount: check auth status via session cookie (set by /auth/callback)
       useEffect(() => {
@@ -8175,7 +8424,10 @@
           .then(data => {
             setAuthenticated(data.authenticated);
             setAuthMode(data.mode === "open" ? "open" : "apple");
-            if (data.authenticated) refreshCsrf();
+            if (data.authenticated) {
+              refreshCsrf();
+              fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
+            }
           })
           .catch(() => { setAuthenticated(false); setAuthMode(null); });
       }, []);
@@ -8701,6 +8953,12 @@
                       Sign out
                     </a>
                   )}
+                  {me?.is_admin && (
+                    <button onClick={() => setView(v => v === "admin" ? "generator" : "admin")} title="Admin"
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #a78bfa", background: view === "admin" ? "#a78bfa" : "#1e293b", color: view === "admin" ? "#0f172a" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      {view === "admin" ? "⏎ Back" : "🛡 Admin"}
+                    </button>
+                  )}
                   <button onClick={() => setShowProfile(true)} title="Account"
                     style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
                     👤
@@ -8716,6 +8974,8 @@
           </div>
 
           <div style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
+
+            {view === "admin" && <AdminView />}
 
             {view === "history" && (
               <HistoryView
