@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 14:21 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 14:32 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6824,15 +6824,18 @@
     // ═══════════════════════════════════════════════════════════════
     //  SAVE-TO-HISTORY FORM — appears below a freshly generated workout
     // ═══════════════════════════════════════════════════════════════
-    function StarRating({ value, onChange, size = 18, readOnly = false }) {
+    function StarRating({ value, onChange, size = 18, readOnly = false, allowToggleClear = true, showClear = false }) {
       // value: null or 1..5
+      // allowToggleClear: when true, clicking the current-value star sets back to null
+      //                   when false, clicking always sets to N (no toggle-off)
+      // showClear: when true and editable, render a small × clear button when a value is set
       return (
         <div style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
           {[1,2,3,4,5].map(n => {
             const filled = value != null && n <= value;
             return (
               <span key={n}
-                onClick={readOnly ? undefined : () => onChange(value === n ? null : n)}
+                onClick={readOnly ? undefined : () => onChange(allowToggleClear && value === n ? null : n)}
                 title={readOnly ? `${value || 0}/5` : `${n} star${n>1?'s':''}`}
                 style={{
                   fontSize: size, lineHeight: 1, cursor: readOnly ? "default" : "pointer",
@@ -6842,6 +6845,15 @@
                 }}>★</span>
             );
           })}
+          {!readOnly && showClear && value != null && (
+            <span onClick={() => onChange(null)}
+              title="Clear rating"
+              style={{
+                marginLeft: 4, fontSize: Math.max(10, size - 4), lineHeight: 1,
+                cursor: "pointer", color: "#64748b", userSelect: "none",
+                padding: "0 4px", borderRadius: 4,
+              }}>✕</span>
+          )}
         </div>
       );
     }
@@ -6911,7 +6923,7 @@
     // ═══════════════════════════════════════════════════════════════
     //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
     // ═══════════════════════════════════════════════════════════════
-    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite }) {
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onUpdateDifficulty, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite }) {
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | sub string
       const [weekMode,     setWeekMode]     = useState("all"); // "all" | "4wk"
@@ -7201,11 +7213,15 @@
                     )}
                     <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} {(entry.poolMode === "50m" || entry.poolMode === "25m") ? "m" : "yds"}</span>
                     {entry.estimatedMin && <span style={{ fontSize: 11, color: "#64748b" }}>~{entry.estimatedMin} min</span>}
-                    {entry.difficulty != null && (
-                      <span title={`Self-rated difficulty: ${entry.difficulty}/5`}>
-                        <StarRating value={entry.difficulty} size={14} readOnly />
-                      </span>
-                    )}
+                    <span title={entry.difficulty != null ? `Self-rated difficulty: ${entry.difficulty}/5 — click to change` : "Click to rate difficulty (1–5)"}>
+                      <StarRating
+                        value={entry.difficulty ?? null}
+                        size={14}
+                        allowToggleClear={false}
+                        showClear
+                        onChange={n => onUpdateDifficulty(entry.id, n)}
+                      />
+                    </span>
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button onClick={() => setExpandedId(isExpanded ? null : entry.id)}
@@ -8974,6 +8990,28 @@
         } catch (err) { console.error("Failed to update notes:", err); }
       }, []);
 
+      // PATCH difficulty (1–5 or null). Optimistic; reverts on failure.
+      const handleUpdateDifficulty = useCallback(async (id, difficulty) => {
+        const prevHistory = history;
+        setHistory(prev => {
+          const next = prev.map(e => e.id === id ? { ...e, difficulty } : e);
+          saveLocalHistory(next);
+          return next;
+        });
+        try {
+          const res = await fetch(`${API_BASE}/workouts/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ difficulty }),
+          });
+          if (!res.ok) throw new Error(`PATCH failed: ${res.status}`);
+        } catch (err) {
+          console.error("Failed to update difficulty:", err);
+          setHistory(prevHistory);
+          saveLocalHistory(prevHistory);
+        }
+      }, [history]);
+
       const handleDelete = useCallback(async (id) => {
         setHistory(prev => {
           const next = prev.filter(e => e.id !== id);
@@ -9132,6 +9170,7 @@
                 historyLoaded={historyLoaded}
                 onUpdateNotes={handleUpdateNotes}
                 onUpdateCompleted={handleUpdateCompleted}
+                onUpdateDifficulty={handleUpdateDifficulty}
                 onDelete={handleDelete}
                 onLoadAndPrint={handleLoadAndPrint}
                 onRepeat={handleRepeatFromHistory}
