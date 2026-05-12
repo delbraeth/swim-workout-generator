@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 04:30 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 04:50 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -8436,6 +8436,12 @@
                 Sign in with Apple
               </div>
             </a>
+            <div style={{ marginTop: 28, fontSize: 11, color: "#475569" }}>
+              By signing in you agree to our{" "}
+              <a href="/terms.html" style={{ color: "#64748b", textDecoration: "underline" }}>Terms</a>
+              {" "}and{" "}
+              <a href="/privacy.html" style={{ color: "#64748b", textDecoration: "underline" }}>Privacy Policy</a>.
+            </div>
           </div>
         </div>
       );
