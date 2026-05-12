@@ -237,6 +237,8 @@ export async function dbCreateSession({ userSub, ip = null, userAgent = null, tt
     "INSERT INTO `sessions` (`id`, `user_sub`, `created_at`, `expires_at`, `last_seen_at`, `ip`, `user_agent`) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [id, userSub, nowDt(), futureDt(ttlSeconds), nowDt(), ip, userAgent ? String(userAgent).slice(0, 255) : null]
   );
+  // Stamp the user's last-login timestamp as a side effect.
+  await pool.query("UPDATE `users` SET `last_login_at` = NOW(3) WHERE `sub` = ?", [userSub]);
   return id;
 }
 
