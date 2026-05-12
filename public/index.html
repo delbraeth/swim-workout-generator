@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 15:41 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 15:45 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -8139,10 +8139,114 @@
       );
     }
 
+    function NextEventRow({ value, onSave, onClear }) {
+      const [editing, setEditing] = React.useState(false);
+      const [draftName, setDraftName] = React.useState("");
+      const [draftDate, setDraftDate] = React.useState("");
+      const startEdit = () => {
+        setDraftName(value?.name || "");
+        setDraftDate(value?.date || "");
+        setEditing(true);
+      };
+      const commit = async () => {
+        const ok = await onSave(draftName, draftDate);
+        if (ok) setEditing(false);
+      };
+      const isSet = value && value.name && value.date;
+      // Display "N days" relative to today for the read-only view.
+      const daysLabel = (() => {
+        if (!isSet) return null;
+        const today = new Date(); today.setHours(0,0,0,0);
+        const target = new Date(`${value.date}T00:00:00`);
+        if (isNaN(target)) return null;
+        const d = Math.round((target - today) / 86400000);
+        if (d < 0) return `${Math.abs(d)}d ago`;
+        if (d === 0) return "today!";
+        if (d === 1) return "tomorrow";
+        return `${d} days`;
+      })();
+      return (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          background: "#1e293b", border: "1px solid #334155",
+          borderRadius: 8, padding: "8px 12px",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>🏁 Next event</div>
+            {!editing && isSet && (
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ color: "#93c5fd", fontWeight: 700 }}>{value.name}</span>
+                <span> · {value.date}</span>
+                {daysLabel && <span style={{ color: "#475569" }}> · {daysLabel}</span>}
+              </div>
+            )}
+          </div>
+          {editing ? (
+            <>
+              <input type="text" autoFocus value={draftName}
+                placeholder="Event name"
+                maxLength={80}
+                onChange={e => setDraftName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+                style={{
+                  width: 140, padding: "4px 8px", fontSize: 13,
+                  background: "#0f172a", color: "#e2e8f0",
+                  border: "1px solid #3b82f6", borderRadius: 6, outline: "none",
+                }} />
+              <input type="date" value={draftDate}
+                onChange={e => setDraftDate(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+                style={{
+                  padding: "4px 6px", fontSize: 13,
+                  background: "#0f172a", color: "#e2e8f0",
+                  border: "1px solid #3b82f6", borderRadius: 6, outline: "none",
+                  colorScheme: "dark",
+                }} />
+              <button onClick={commit}
+                style={{ padding: "4px 10px", borderRadius: 6, border: "none",
+                  background: "#3b82f6", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                Save
+              </button>
+              <button onClick={() => setEditing(false)}
+                style={{ padding: "4px 8px", borderRadius: 6,
+                  border: "1px solid #334155", background: "transparent",
+                  color: "#64748b", fontSize: 11, cursor: "pointer" }}>
+                Cancel
+              </button>
+            </>
+          ) : isSet ? (
+            <>
+              <button onClick={startEdit}
+                style={{ padding: "4px 10px", borderRadius: 6,
+                  border: "1px solid #334155", background: "transparent",
+                  color: "#cbd5e1", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                Edit
+              </button>
+              <button onClick={onClear}
+                title="Remove this event"
+                style={{ padding: "4px 8px", borderRadius: 6,
+                  border: "1px solid #334155", background: "transparent",
+                  color: "#fca5a5", fontSize: 11, cursor: "pointer" }}>
+                ✕
+              </button>
+            </>
+          ) : (
+            <button onClick={startEdit}
+              style={{ padding: "4px 12px", borderRadius: 6, border: "1px dashed #475569",
+                background: "transparent", color: "#93c5fd",
+                fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              + Set an event
+            </button>
+          )}
+        </div>
+      );
+    }
+
     function ProfileModal({ onClose, onProfileChange }) {
       const [me, setMe]             = React.useState(null);
       const [sessions, setSessions] = React.useState([]);
       const [goals, setGoals]       = React.useState([]);
+      const [nextEvent, setNextEventLocal] = React.useState(null); // { name, date } | null
       const [loading, setLoading]   = React.useState(true);
       const [revoking, setRevoking] = React.useState(false);
       const [revokeMsg, setRevokeMsg] = React.useState(null);
@@ -8150,14 +8254,16 @@
       const loadAll = React.useCallback(async () => {
         setLoading(true);
         try {
-          const [meRes, sessRes, goalsRes] = await Promise.all([
+          const [meRes, sessRes, goalsRes, settingsRes] = await Promise.all([
             fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
             fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/goals", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
+            fetch("/api/settings", { cache: "no-store" }).then(r => r.ok ? r.json() : {}),
           ]);
           setMe(meRes);
           setSessions(Array.isArray(sessRes) ? sessRes : []);
           setGoals(Array.isArray(goalsRes) ? goalsRes : []);
+          setNextEventLocal(settingsRes?.next_event && settingsRes.next_event.name && settingsRes.next_event.date ? settingsRes.next_event : null);
         } finally {
           setLoading(false);
         }
@@ -8209,6 +8315,34 @@
         });
         if (res.ok) {
           setGoals(prev => prev.filter(g => g.metric !== metric));
+        }
+      };
+
+      const handleSaveNextEvent = async (name, date) => {
+        const trimmed = (name || "").trim();
+        if (!trimmed || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+        const res = await fetch("/api/settings/extra", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify({ next_event: { name: trimmed, date } }),
+        });
+        if (res.ok) {
+          setNextEventLocal({ name: trimmed, date });
+          if (onProfileChange) onProfileChange();
+          return true;
+        }
+        return false;
+      };
+
+      const handleClearNextEvent = async () => {
+        const res = await fetch("/api/settings/extra", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify({ next_event: null }),
+        });
+        if (res.ok) {
+          setNextEventLocal(null);
+          if (onProfileChange) onProfileChange();
         }
       };
 
@@ -8364,6 +8498,9 @@
                           onDelete={() => handleDeleteGoal(m.id)} />
                       );
                     })}
+                    <NextEventRow value={nextEvent}
+                      onSave={handleSaveNextEvent}
+                      onClear={handleClearNextEvent} />
                   </div>
                 </div>
 
@@ -9157,6 +9294,7 @@
       const [historyLoaded, setHistoryLoaded]     = useState(false);
       const [favorites, setFavorites]             = useState([]);
       const [goals, setGoals]                     = useState([]);
+      const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [loadedFromHistoryId, setLoadedFromHistoryId] = useState(null);
       const [saveStatus, setSaveStatus]           = useState(null); // null | "saving" | "saved" | "error"
       const [saveError, setSaveError]             = useState(null);
@@ -9242,17 +9380,21 @@
       useEffect(() => { refreshGoals(); }, [refreshGoals]);
 
       // On mount: fetch user settings (slider range + default pace)
-      useEffect(() => {
-        fetch(`${API_BASE}/settings`, { cache: "no-store" })
+      const refreshSettings = useCallback(() => {
+        return fetch(`${API_BASE}/settings`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : {})
           .then(s => {
             if (s.sliderMin) setSliderMin(s.sliderMin);
             if (s.sliderMax) { setSliderMax(s.sliderMax); setMaxYards(v => Math.min(v, s.sliderMax)); }
             if (s.paceInput) setPaceInput(s.paceInput);
             if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
+            // Q: next-event countdown lives in settings.extra; dbGetSettings
+            // spreads extra into the top-level response.
+            setNextEvent(s.next_event && s.next_event.name && s.next_event.date ? s.next_event : null);
           })
           .catch(() => {});
       }, []);
+      useEffect(() => { refreshSettings(); }, [refreshSettings]);
 
       // Debounced settings save — fires 1.5s after the last change
       const saveSettingsTimerRef = React.useRef(null);
@@ -9766,6 +9908,20 @@
         setView("generator");
       }, []);
 
+      // Q: derive countdown state for the next event chip. Returns null when no
+      // event is set OR when the event date is more than 1 day in the past.
+      // Past day-of (i.e. yesterday) is treated as cleared from display — the
+      // underlying settings.extra.next_event row stays put until the user edits it.
+      const nextEventCountdown = useMemo(() => {
+        if (!nextEvent || !nextEvent.date) return null;
+        const today = new Date(); today.setHours(0,0,0,0);
+        const target = new Date(`${nextEvent.date}T00:00:00`);
+        if (isNaN(target)) return null;
+        const days = Math.round((target - today) / 86400000);
+        if (days < 0) return null; // past — hide display, keep data
+        return { name: nextEvent.name || "Your event", days };
+      }, [nextEvent]);
+
       // P: derive the display name used for personalization throughout the app.
       // Falls back display_name → initials → null. Possessive needs the first
       // word only, so "Patrick James" → "Patrick" → "Patrick's workout."
@@ -9941,8 +10097,8 @@
 
             {view === "generator" && <>
 
-            {/* Pool mode toggle */}
-            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            {/* Pool mode toggle + next-event countdown (Q, right-justified) */}
+            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Pool</span>
               <div style={{ display: "flex", background: "#0f172a", borderRadius: 8, border: "1px solid #334155", overflow: "hidden" }}>
                 {[["25y","SCY"],["25m","SCM"],["50m","LCM"]].map(([mode, label]) => (
@@ -9957,6 +10113,31 @@
                   </button>
                 ))}
               </div>
+              {nextEventCountdown && (
+                <div title={`${nextEventCountdown.name} — ${nextEvent.date}`}
+                  style={{
+                    marginLeft: "auto",
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "5px 11px", borderRadius: 999,
+                    background: nextEventCountdown.days === 0 ? "#fbbf2422" : "#1e3a5f",
+                    border: `1px solid ${nextEventCountdown.days === 0 ? "#fbbf24" : "#3b82f6"}`,
+                    color: nextEventCountdown.days === 0 ? "#fde68a" : "#93c5fd",
+                    fontSize: 12, fontWeight: 700,
+                  }}>
+                  🏁
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
+                    {nextEventCountdown.name}
+                  </span>
+                  <span style={{ color: "#64748b", fontWeight: 400 }}>·</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {nextEventCountdown.days === 0
+                      ? "today!"
+                      : nextEventCountdown.days === 1
+                        ? "1 day"
+                        : `${nextEventCountdown.days} days`}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Workout type selector */}
@@ -10414,13 +10595,17 @@
                 setShowProfile(false);
                 // Refresh cached /api/me so header gates + initials stay current
                 fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
-                // Refresh goals so stats-panel progress bars reflect edits made in the modal
+                // Refresh goals + settings so stats-panel progress bars and the
+                // Q next-event chip reflect edits made in the modal.
                 refreshGoals();
+                refreshSettings();
               }}
               onProfileChange={() => {
-                // Live-refresh the App-level `me` so header personalization
-                // updates immediately without waiting for modal close.
+                // Live-refresh App-level `me` (for header personalization) and
+                // settings (for the next-event chip) so changes appear immediately
+                // even if the modal stays open.
                 fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
+                refreshSettings();
               }} />
           )}
         </div>
