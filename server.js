@@ -52,7 +52,7 @@ import { fileURLToPath } from "url";
 import {
   dbActive, pingDb,
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
-  dbGetSettings, dbUpsertSettings,
+  dbGetSettings, dbUpsertSettings, dbPatchSettingsExtra,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbIsUser, dbIsAdmin, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
@@ -722,6 +722,34 @@ app.get("/api/settings", requireAuth, async (req, res) => {
 app.post("/api/settings", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     await dbUpsertSettings(req.userSub, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Merge-patch `settings.extra` (JSON blob). Keys with null value are deleted.
+// Currently used by item Q (next-event countdown).
+app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const patch = req.body || {};
+    if (typeof patch !== "object" || Array.isArray(patch)) {
+      return res.status(400).json({ error: "object body required" });
+    }
+    // Validate next_event shape if present.
+    if ("next_event" in patch && patch.next_event !== null) {
+      const ev = patch.next_event;
+      if (typeof ev !== "object" || typeof ev.name !== "string" || typeof ev.date !== "string") {
+        return res.status(400).json({ error: "next_event must be { name, date }" });
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) {
+        return res.status(400).json({ error: "next_event.date must be YYYY-MM-DD" });
+      }
+      if (ev.name.length > 80) {
+        return res.status(400).json({ error: "next_event.name max 80 chars" });
+      }
+    }
+    await dbPatchSettingsExtra(req.userSub, patch);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
