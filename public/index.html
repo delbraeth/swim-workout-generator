@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 04:50 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 14:21 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6824,7 +6824,29 @@
     // ═══════════════════════════════════════════════════════════════
     //  SAVE-TO-HISTORY FORM — appears below a freshly generated workout
     // ═══════════════════════════════════════════════════════════════
-    function SaveToHistoryForm({ dateDraft, setDateDraft, initialsDraft, setInitialsDraft, noteDraft, setNoteDraft, saveStatus, saveError, onSave }) {
+    function StarRating({ value, onChange, size = 18, readOnly = false }) {
+      // value: null or 1..5
+      return (
+        <div style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
+          {[1,2,3,4,5].map(n => {
+            const filled = value != null && n <= value;
+            return (
+              <span key={n}
+                onClick={readOnly ? undefined : () => onChange(value === n ? null : n)}
+                title={readOnly ? `${value || 0}/5` : `${n} star${n>1?'s':''}`}
+                style={{
+                  fontSize: size, lineHeight: 1, cursor: readOnly ? "default" : "pointer",
+                  color: filled ? "#fbbf24" : "#475569",
+                  transition: "color 0.1s",
+                  userSelect: "none",
+                }}>★</span>
+            );
+          })}
+        </div>
+      );
+    }
+
+    function SaveToHistoryForm({ dateDraft, setDateDraft, initialsDraft, setInitialsDraft, noteDraft, setNoteDraft, difficultyDraft, setDifficultyDraft, saveStatus, saveError, onSave }) {
       const isSaved  = saveStatus === "saved";
       const isSaving = saveStatus === "saving";
       return (
@@ -6855,6 +6877,11 @@
                 rows={2}
                 style={{ width: "100%", padding: "8px 10px", background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, fontFamily: "inherit", resize: "vertical" }} />
             </div>
+          </div>
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 12 }}>
+            <label style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Difficulty</label>
+            <StarRating value={difficultyDraft} onChange={setDifficultyDraft} />
+            <span style={{ fontSize: 11, color: "#64748b" }}>{difficultyDraft ? `${difficultyDraft}/5` : "optional"}</span>
           </div>
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <button onClick={onSave} disabled={isSaving}
@@ -7174,6 +7201,11 @@
                     )}
                     <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} {(entry.poolMode === "50m" || entry.poolMode === "25m") ? "m" : "yds"}</span>
                     {entry.estimatedMin && <span style={{ fontSize: 11, color: "#64748b" }}>~{entry.estimatedMin} min</span>}
+                    {entry.difficulty != null && (
+                      <span title={`Self-rated difficulty: ${entry.difficulty}/5`}>
+                        <StarRating value={entry.difficulty} size={14} readOnly />
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button onClick={() => setExpandedId(isExpanded ? null : entry.id)}
@@ -7212,6 +7244,12 @@
                     {eqList.map(k => (
                       <span key={k} style={{ background: "#334155", color: "#cbd5e1", padding: "2px 8px", borderRadius: 999, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>{k}</span>
                     ))}
+                  </div>
+                )}
+
+                {entry.focusNote && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#93c5fd", fontWeight: 600 }}>
+                    🎯 {entry.focusNote}
                   </div>
                 )}
 
@@ -7280,7 +7318,7 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, sectionName, onClose, onNext, isLastSet, restSecs, autoStart, elapsed, unit = "yds" }) {
+    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, isLastSet, restSecs, autoStart, elapsed, unit = "yds" }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
@@ -7450,10 +7488,15 @@
                 fontSize: 28, lineHeight: 1, cursor: "pointer",
                 padding: "4px 8px", borderRadius: 8, minWidth: 44, minHeight: 44,
               }}>✕</button>
-              <div style={{ textAlign: "center" }}>
+              <div style={{ textAlign: "center", minWidth: 0, flex: 1, padding: "0 8px" }}>
                 <div style={{ fontSize: 15, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
                   {sectionName || "Pace Clock"}
                 </div>
+                {focusNote && (
+                  <div style={{ fontSize: 12, color: "#93c5fd", fontStyle: "italic", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    🎯 {focusNote}
+                  </div>
+                )}
               </div>
               <div style={{ minWidth: 44, textAlign: "right" }}>
                 {elapsed !== undefined && (
@@ -7561,10 +7604,15 @@
               fontSize: 36, lineHeight: 1, cursor: "pointer",
               padding: "4px 8px", borderRadius: 8, minWidth: 52, minHeight: 52,
             }}>✕</button>
-            <div style={{ textAlign: "center" }}>
+            <div style={{ textAlign: "center", minWidth: 0, flex: 1, padding: "0 8px" }}>
               <div style={{ fontSize: 18, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
                 {sectionName || "Pace Clock"}
               </div>
+              {focusNote && (
+                <div style={{ fontSize: 13, color: "#93c5fd", fontStyle: "italic", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  🎯 {focusNote}
+                </div>
+              )}
             </div>
             <div style={{ minWidth: 52, textAlign: "right" }}>
               {elapsed !== undefined && (
@@ -8304,6 +8352,11 @@
             <div style={{ fontSize: 15, color: s.headerText, opacity: 0.85, fontWeight: 600 }}>
               {block.totalYards.toLocaleString()} {unit}
             </div>
+            {workout.focusNote && (
+              <div style={{ marginTop: 10, fontSize: 14, color: s.headerText, opacity: 0.92, fontStyle: "italic", fontWeight: 600 }}>
+                🎯 {workout.focusNote}
+              </div>
+            )}
           </div>
 
           {/* Sets — tap any card to open the pace clock */}
@@ -8351,6 +8404,7 @@
               key={paceIdx}
               set={allSets[paceIdx].set}
               sectionName={workout.blocks[allSets[paceIdx].blockIdx].name}
+              focusNote={workout.focusNote}
               onClose={() => setPaceIdx(null)}
               onNext={handlePaceNext}
               isLastSet={paceIdx === allSets.length - 1}
@@ -8474,6 +8528,8 @@
       const [saveError, setSaveError]             = useState(null);
       const [dateDraft, setDateDraft]             = useState(() => new Date().toISOString().slice(0, 10));
       const [noteDraft, setNoteDraft]             = useState("");
+      const [difficultyDraft, setDifficultyDraft] = useState(null);    // 1–5 stars, null = unrated
+      const [focusNoteDraft, setFocusNoteDraft]   = useState("");      // pre-workout intention
       const [initialsDraft, setInitialsDraft]     = useState(() => {
         try { return normalizeInitials(localStorage.getItem(USER_INITIALS_KEY) || ""); }
         catch (_) { return ""; }
@@ -8754,6 +8810,8 @@
         setRegenError(null);
         setDateDraft(new Date().toISOString().slice(0, 10));
         setNoteDraft("");
+        setFocusNoteDraft("");
+        setDifficultyDraft(null);
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
@@ -8847,6 +8905,8 @@
           })),
           userInitials: cleanInitials,
           notes: (noteDraft || "").trim(),
+          focusNote: (focusNoteDraft || "").trim() || undefined,
+          difficulty: difficultyDraft || undefined,
           completed: dateDraft <= new Date().toISOString().slice(0, 10),
         };
         // Optimistic: add to local cache and state immediately
@@ -8876,11 +8936,13 @@
           }
           setSaveStatus("saved");
           setNoteDraft("");
+          setFocusNoteDraft("");
+          setDifficultyDraft(null);
         } catch (err) {
           setSaveStatus("error");
           setSaveError(err.message || String(err));
         }
-      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft, poolMode]);
+      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft, poolMode, focusNoteDraft, difficultyDraft]);
 
       const handleUpdateCompleted = useCallback(async (id, completed) => {
         setHistory(prev => {
@@ -8937,6 +8999,7 @@
           typeId: entry.type,
         });
         setLoadedFromHistoryId(entry.id);
+        setFocusNoteDraft(entry.focusNote || "");
         setSaveStatus(null);
         setRegenError(null);
         setView("generator");
@@ -9193,7 +9256,11 @@
                   ))}
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     <button
-                      onClick={() => { setRunWorkout(workout); setShowRestPicker(true); }}
+                      onClick={() => {
+                        const focus = (focusNoteDraft || "").trim();
+                        setRunWorkout(focus ? { ...workout, focusNote: focus } : workout);
+                        setShowRestPicker(true);
+                      }}
                       style={{
                         padding: "10px 16px", borderRadius: 8,
                         border: "1px solid #3b82f6", background: "#1e3a5f", color: "#93c5fd",
@@ -9245,10 +9312,41 @@
                   </div>
                 </div>
 
+                {/* Focus note — pre-workout intention (screen, edit-in-place) */}
+                {loadedFromHistoryId ? (
+                  focusNoteDraft && (
+                    <div className="screen-only" style={{
+                      marginBottom: 12, padding: "8px 12px",
+                      background: "#1e293b", border: "1px solid #334155",
+                      borderRadius: 8, fontSize: 13, color: "#93c5fd", fontStyle: "italic",
+                    }}>
+                      🎯 Focus: {focusNoteDraft}
+                    </div>
+                  )
+                ) : (
+                  <div className="screen-only" style={{ marginBottom: 12 }}>
+                    <input type="text" value={focusNoteDraft}
+                      onChange={e => setFocusNoteDraft(e.target.value.slice(0, 255))}
+                      placeholder="🎯 Focus for this workout (optional) — e.g. hip rotation, strong turns…"
+                      style={{
+                        width: "100%", padding: "8px 12px",
+                        background: "#0f172a", color: "#e2e8f0",
+                        border: `1px solid ${focusNoteDraft ? "#3b82f6" : "#334155"}`,
+                        borderRadius: 8, fontSize: 13, fontFamily: "inherit",
+                        transition: "border-color 0.15s",
+                      }} />
+                  </div>
+                )}
+
                 {/* Print-only header */}
                 <div className="print-only print-header">
                   <h1 className="print-title">{meta.label} Swim Workout</h1>
                   <p className="print-subtitle">{meta.description}</p>
+                  {focusNoteDraft && (
+                    <p style={{ fontSize: 14, fontStyle: "italic", color: "#000", marginTop: 6 }}>
+                      🎯 Focus: {focusNoteDraft}
+                    </p>
+                  )}
                   <div className="print-meta">
                     <span><b>Date:</b> {new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
                     <span><b>Total:</b> {workout.totalYards.toLocaleString()} {unit}</span>
@@ -9345,6 +9443,7 @@
                     dateDraft={dateDraft} setDateDraft={setDateDraft}
                     initialsDraft={initialsDraft} setInitialsDraft={handleInitialsChange}
                     noteDraft={noteDraft} setNoteDraft={setNoteDraft}
+                    difficultyDraft={difficultyDraft} setDifficultyDraft={setDifficultyDraft}
                     saveStatus={saveStatus} saveError={saveError}
                     onSave={handleSave}
                   />
