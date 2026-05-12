@@ -56,7 +56,7 @@ import {
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbIsUser, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe,
   dbCreateSession, dbGetSession, dbTouchSession,
-  dbRevokeSession, dbRevokeOthersByUser, dbListSessions,
+  dbRevokeSession, dbRevokeSessionByPrefix, dbRevokeOthersByUser, dbListSessions,
   dbGetOrCreateCsrf, dbVerifyCsrf,
 } from "./db.js";
 
@@ -475,6 +475,28 @@ app.get("/api/auth/sessions", requireAuth, async (req, res) => {
       is_current: req.sessionId && req.sessionId.startsWith(s.id_prefix),
     }));
     res.json(withCurrent);
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Revoke a single session by id prefix, scoped to the current user.
+// Refuses to revoke the current session — use /api/auth/signout for that.
+app.delete("/api/auth/sessions/:prefix", checkOrigin, requireAuth, requireCsrf, async (req, res) => {
+  try {
+    const prefix = String(req.params.prefix || "").trim();
+    if (req.sessionId && req.sessionId.startsWith(prefix)) {
+      return res.status(400).json({ error: "cannot revoke current session via this endpoint" });
+    }
+    const r = await dbRevokeSessionByPrefix(req.userSub, prefix);
+    if (!r.ok) return res.status(404).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "auth.signout.session",
+      ...reqMeta(req),
+      details:   { prefix, revoked_id: r.revoked },
+    });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
