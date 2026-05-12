@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 14:37 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 14:42 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7012,6 +7012,34 @@
         const weeksElapsed = Math.min(4, Math.max(1, (now - firstDate) / msPerWeek));
         const wkRecent     = recentCount / weeksElapsed;
 
+        // Weekly yards sparkline — last 12 ISO weeks, done-only.
+        // Bucket key = Monday of the entry's ISO week (UTC), formatted yyyy-mm-dd.
+        const SPARK_WEEKS = 12;
+        const mondayUTC = (ts) => {
+          const d = new Date(ts);
+          // JS getUTCDay: Sun=0, Mon=1, ... Sat=6 — shift so Mon=0..Sun=6
+          const dow = (d.getUTCDay() + 6) % 7;
+          const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - dow));
+          return m;
+        };
+        const fmtMonday = (d) => d.toISOString().slice(0, 10);
+        const nowMonday = mondayUTC(now);
+        const weeks = Array.from({ length: SPARK_WEEKS }).map((_, i) => {
+          const m = new Date(nowMonday);
+          m.setUTCDate(m.getUTCDate() - (SPARK_WEEKS - 1 - i) * 7);
+          return { key: fmtMonday(m), monday: m, yards: 0 };
+        });
+        const weekIdx = new Map(weeks.map((w, i) => [w.key, i]));
+        for (const e of done) {
+          if (!e.dateCompleted) continue;
+          // dateCompleted is yyyy-mm-dd; interpret as UTC midnight so week math is stable.
+          const ts = new Date(`${e.dateCompleted}T00:00:00Z`).getTime();
+          const k = fmtMonday(mondayUTC(ts));
+          const i = weekIdx.get(k);
+          if (i !== undefined) weeks[i].yards += (e.totalYards || 0);
+        }
+        const sparkMax = weeks.reduce((m, w) => Math.max(m, w.yards), 0);
+
         // Type distribution (completed only), windowed
         const winDays = typeWindow === "4wk" ? 28 : typeWindow === "12wk" ? 84 : null;
         const winCutoff = winDays === null ? -Infinity : (now - winDays * 24 * 60 * 60 * 1000);
@@ -7027,7 +7055,7 @@
           .map(([type, count]) => ({ type, count, pct: winSessions ? Math.round(count / winSessions * 100) : 0 }))
           .sort((a, b) => b.count - a.count);
 
-        return { sessions, yards, avg, wkAll, wkRecent, typeBreakdown, winSessions };
+        return { sessions, yards, avg, wkAll, wkRecent, typeBreakdown, winSessions, weeks, sparkMax };
       }, [filtered, typeWindow]);
 
       if (!historyLoaded) {
@@ -7163,6 +7191,55 @@
                 </div>
               </div>
             </div>
+            {/* Yards/week sparkline — last 12 ISO weeks */}
+            {stats.sessions > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Yards / Week</div>
+                  <div style={{ fontSize: 10, color: "#475569" }}>last 12 weeks</div>
+                  {stats.sparkMax > 0 && (
+                    <div style={{ marginLeft: "auto", fontSize: 10, color: "#64748b", fontVariantNumeric: "tabular-nums" }}>
+                      peak {stats.sparkMax.toLocaleString()}
+                    </div>
+                  )}
+                </div>
+                {stats.sparkMax > 0 ? (
+                  <svg viewBox="0 0 240 48" preserveAspectRatio="none"
+                    style={{ width: "100%", height: 48, display: "block" }}>
+                    {stats.weeks.map((w, i) => {
+                      const bw = 240 / stats.weeks.length;
+                      const x  = i * bw;
+                      const h  = (w.yards / stats.sparkMax) * 44;
+                      const y  = 48 - h;
+                      const isCurrent = i === stats.weeks.length - 1;
+                      return (
+                        <g key={w.key}>
+                          <rect
+                            x={x + 1} y={y}
+                            width={Math.max(0, bw - 2)} height={h}
+                            fill={isCurrent ? "#38bdf8" : "#3b82f6"}
+                            opacity={w.yards > 0 ? 0.95 : 0}
+                            rx={1}
+                          >
+                            <title>Week of {w.key}: {w.yards.toLocaleString()} yds</title>
+                          </rect>
+                          {/* baseline tick so empty weeks are still legible */}
+                          {w.yards === 0 && (
+                            <rect x={x + 1} y={47} width={Math.max(0, bw - 2)} height={1} fill="#334155">
+                              <title>Week of {w.key}: 0 yds</title>
+                            </rect>
+                          )}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                ) : (
+                  <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic", padding: "4px 0" }}>
+                    No completed workouts in the last 12 weeks.
+                  </div>
+                )}
+              </div>
+            )}
             {/* Type distribution bars */}
             {stats.sessions > 0 && (
               <div>
