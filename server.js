@@ -55,7 +55,7 @@ import {
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbIsUser, dbIsAdmin, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe,
-  dbAdminListUsers, dbAdminSetUserFlag, dbAdminDeleteUser,
+  dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
   dbAdminListAuditEvents,
   dbCreateSession, dbGetSession, dbTouchSession,
@@ -435,6 +435,31 @@ app.get("/api/me", requireAuth, async (req, res) => {
 app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
   try { res.json(await dbAdminListUsers()); }
   catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.patch("/api/admin/users/:sub", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const allowed = ["email", "initials", "display_name"];
+    const patch = {};
+    for (const k of allowed) if (k in (req.body || {})) patch[k] = req.body[k];
+    if ("email" in patch && patch.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.email)) {
+      return res.status(400).json({ error: "bad email format" });
+    }
+    if ("initials" in patch && patch.initials && String(patch.initials).length > 8) {
+      return res.status(400).json({ error: "initials max 8 chars" });
+    }
+    if ("display_name" in patch && patch.display_name && String(patch.display_name).length > 120) {
+      return res.status(400).json({ error: "display_name max 120 chars" });
+    }
+    const r = await dbAdminUpdateUser(req.params.sub, patch);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "admin.user.update",
+      ...reqMeta(req),
+      details:   { target_sub: req.params.sub, fields: Object.keys(patch) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 app.post("/api/admin/users/:sub/disable", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
