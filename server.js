@@ -54,7 +54,10 @@ import {
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
-  dbIsUser, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe,
+  dbIsUser, dbIsAdmin, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe,
+  dbAdminListUsers, dbAdminSetUserFlag, dbAdminDeleteUser,
+  dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
+  dbAdminListAuditEvents,
   dbCreateSession, dbGetSession, dbTouchSession,
   dbRevokeSession, dbRevokeSessionByPrefix, dbRevokeOthersByUser, dbListSessions,
   dbGetOrCreateCsrf, dbVerifyCsrf,
@@ -244,6 +247,20 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// Admin middleware — requires the authenticated user to have is_admin = 1.
+// Must be applied AFTER requireAuth (which sets req.userSub).
+async function requireAdmin(req, res, next) {
+  try {
+    if (!(await dbIsAdmin(req.userSub))) {
+      dbAuditEvent({ userSub: req.userSub, eventType: "admin.access_denied", ...reqMeta(req), details: { path: req.path, method: req.method } });
+      return res.status(403).json({ error: "admin only" });
+    }
+  } catch (err) {
+    return res.status(503).json({ error: "auth backend unavailable" });
+  }
+  next();
+}
+
 // CSRF middleware — required on cookie-authenticated writes.
 // Bearer-token requests (native iOS) are CSRF-safe and skip the check.
 async function requireCsrf(req, res, next) {
@@ -409,6 +426,76 @@ app.get("/api/me", requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// ───── Admin routes ──────────────────────────────────────────────────
+// All require: authenticated user with is_admin = 1.
+// Writes additionally require CSRF token.
+
+app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+  try { res.json(await dbAdminListUsers()); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/admin/users/:sub/disable", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    if (req.params.sub === req.userSub) return res.status(400).json({ error: "cannot disable self" });
+    const r = await dbAdminSetUserFlag(req.params.sub, "is_disabled", true);
+    dbAuditEvent({ userSub: req.userSub, eventType: "admin.user.disable", ...reqMeta(req), details: { target_sub: req.params.sub } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/admin/users/:sub/enable", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const r = await dbAdminSetUserFlag(req.params.sub, "is_disabled", false);
+    dbAuditEvent({ userSub: req.userSub, eventType: "admin.user.enable", ...reqMeta(req), details: { target_sub: req.params.sub } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/admin/users/:sub", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    if (req.params.sub === req.userSub) return res.status(400).json({ error: "cannot delete self" });
+    const r = await dbAdminDeleteUser(req.params.sub);
+    dbAuditEvent({ userSub: req.userSub, eventType: "admin.user.delete", ...reqMeta(req), details: { target_sub: req.params.sub, affected: r.affected } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/admin/invites", requireAuth, requireAdmin, async (req, res) => {
+  try { res.json(await dbAdminListInvites()); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/admin/invites", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const { note = null, maxUses = 1, expiresAt = null } = req.body || {};
+    const code = await dbAdminCreateInvite({ note, maxUses, expiresAt, createdBy: req.userSub });
+    dbAuditEvent({ userSub: req.userSub, eventType: "admin.invite.create", ...reqMeta(req), details: { code, maxUses, expiresAt, note } });
+    res.json({ ok: true, code });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/admin/invites/:code", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const r = await dbAdminDeleteInvite(req.params.code);
+    dbAuditEvent({ userSub: req.userSub, eventType: "admin.invite.delete", ...reqMeta(req), details: { code: req.params.code, affected: r.affected } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/admin/audit-events", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || "100", 10)));
+    const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
+    const events = await dbAdminListAuditEvents({
+      limit, offset,
+      eventType: req.query.event_type || null,
+      userSub:   req.query.user_sub   || null,
+    });
+    res.json(events);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // Native iOS Sign in with Apple — accepts an identityToken from ASAuthorizationAppleIDCredential,
