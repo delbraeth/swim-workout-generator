@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 15:06 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 15:13 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6982,7 +6982,7 @@
     // ═══════════════════════════════════════════════════════════════
     //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
     // ═══════════════════════════════════════════════════════════════
-    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onUpdateDifficulty, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite, recentMainLabels }) {
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onUpdateDifficulty, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite, recentMainLabels, goals = [], mySub }) {
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | sub string
       const [weekMode,     setWeekMode]     = useState("all"); // "all" | "4wk"
@@ -7117,6 +7117,39 @@
         return { sessions, yards, avg, wkAll, wkRecent, typeBreakdown, winSessions, weeks, sparkMax };
       }, [filtered, typeWindow]);
 
+      // Goal progress vs current period (ISO week Mon..Sun, or calendar month).
+      // Only counts the signed-in user's completed workouts.
+      const goalProgress = useMemo(() => {
+        if (!goals.length || !mySub) return [];
+        const now = new Date();
+        // ISO week boundaries (Mon..Sun) in local time.
+        const dow = (now.getDay() + 6) % 7; // 0 = Monday
+        const weekStart = new Date(now); weekStart.setHours(0,0,0,0); weekStart.setDate(now.getDate() - dow);
+        const weekStartMs = weekStart.getTime();
+        // Calendar month boundary in local time.
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+        let wkSessions = 0, wkYards = 0, moYards = 0;
+        for (const e of history) {
+          if (e.sub !== mySub) continue;
+          if (e.completed === false) continue;
+          if (!e.dateCompleted) continue;
+          const ts = new Date(`${e.dateCompleted}T00:00:00`).getTime();
+          if (ts >= weekStartMs) { wkSessions += 1; wkYards += (e.totalYards || 0); }
+          if (ts >= monthStart)  { moYards   += (e.totalYards || 0); }
+        }
+        const valueByMetric = {
+          workouts_per_week: wkSessions,
+          yards_per_week:    wkYards,
+          yards_per_month:   moYards,
+        };
+        return goals.map(g => ({
+          metric: g.metric,
+          target: g.target_value,
+          current: valueByMetric[g.metric] || 0,
+        }));
+      }, [goals, history, mySub]);
+
       if (!historyLoaded) {
         return <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>Loading history…</div>;
       }
@@ -7229,6 +7262,41 @@
               );
             })}
           </div>
+
+          {/* Goal progress — only renders if user has set at least one goal */}
+          {goalProgress.length > 0 && (
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
+                🎯 Goals · current period
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {goalProgress.map(gp => {
+                  const meta = GOAL_METRICS.find(m => m.id === gp.metric);
+                  if (!meta) return null;
+                  const pct = Math.min(100, gp.target > 0 ? (gp.current / gp.target) * 100 : 0);
+                  const hit = gp.current >= gp.target;
+                  const barColor = hit ? "#22c55e" : pct >= 75 ? "#3b82f6" : "#7c3aed";
+                  return (
+                    <div key={gp.metric}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12, marginBottom: 4 }}>
+                        <span style={{ color: "#cbd5e1", fontWeight: 600 }}>
+                          {meta.label}
+                          <span style={{ color: "#475569", fontWeight: 400, marginLeft: 6 }}>· this {meta.period}</span>
+                        </span>
+                        <span style={{ color: hit ? "#4ade80" : "#94a3b8", fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>
+                          {gp.current.toLocaleString()} / {gp.target.toLocaleString()} {meta.unit}
+                          {hit && <span style={{ marginLeft: 6 }}>✓</span>}
+                        </span>
+                      </div>
+                      <div style={{ background: "#0f172a", borderRadius: 4, height: 8, overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: barColor, transition: "width 0.4s" }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Stats summary */}
           <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 16 }}>
@@ -7908,9 +7976,96 @@
     // ═══════════════════════════════════════════════════════════════
     //  PROFILE / ACCOUNT MODAL — identity, stats, active sessions
     // ═══════════════════════════════════════════════════════════════
+    // Goal metric metadata — shared by ProfileModal (set/edit) and the
+    // generator stats panel (progress bars).
+    const GOAL_METRICS = [
+      { id: "workouts_per_week", label: "Workouts / week", unit: "workouts", period: "week",  defaultTarget: 3 },
+      { id: "yards_per_week",    label: "Yards / week",    unit: "yds",      period: "week",  defaultTarget: 8000 },
+      { id: "yards_per_month",   label: "Yards / month",   unit: "yds",      period: "month", defaultTarget: 32000 },
+    ];
+
+    function GoalRow({ metric, value, onSave, onDelete }) {
+      const [editing, setEditing] = React.useState(false);
+      const [draft, setDraft]     = React.useState("");
+      const startEdit = () => {
+        setDraft(String(value ?? metric.defaultTarget));
+        setEditing(true);
+      };
+      const commit = () => {
+        const v = parseInt(draft, 10);
+        if (v > 0) onSave(v);
+        setEditing(false);
+      };
+      const isSet = value != null;
+      return (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          background: "#1e293b", border: "1px solid #334155",
+          borderRadius: 8, padding: "8px 12px",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{metric.label}</div>
+            {!editing && isSet && (
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                Target: <span style={{ color: "#93c5fd", fontWeight: 700 }}>{value.toLocaleString()}</span> {metric.unit}
+              </div>
+            )}
+          </div>
+          {editing ? (
+            <>
+              <input type="number" autoFocus value={draft} min={1}
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+                style={{
+                  width: 80, padding: "4px 8px", fontSize: 13,
+                  background: "#0f172a", color: "#e2e8f0",
+                  border: "1px solid #3b82f6", borderRadius: 6, outline: "none",
+                  fontFamily: "monospace", textAlign: "right",
+                }} />
+              <button onClick={commit}
+                style={{ padding: "4px 10px", borderRadius: 6, border: "none",
+                  background: "#3b82f6", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                Save
+              </button>
+              <button onClick={() => setEditing(false)}
+                style={{ padding: "4px 8px", borderRadius: 6,
+                  border: "1px solid #334155", background: "transparent",
+                  color: "#64748b", fontSize: 11, cursor: "pointer" }}>
+                Cancel
+              </button>
+            </>
+          ) : isSet ? (
+            <>
+              <button onClick={startEdit}
+                style={{ padding: "4px 10px", borderRadius: 6,
+                  border: "1px solid #334155", background: "transparent",
+                  color: "#cbd5e1", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                Edit
+              </button>
+              <button onClick={onDelete}
+                title="Remove this goal"
+                style={{ padding: "4px 8px", borderRadius: 6,
+                  border: "1px solid #334155", background: "transparent",
+                  color: "#fca5a5", fontSize: 11, cursor: "pointer" }}>
+                ✕
+              </button>
+            </>
+          ) : (
+            <button onClick={startEdit}
+              style={{ padding: "4px 12px", borderRadius: 6, border: "1px dashed #475569",
+                background: "transparent", color: "#93c5fd",
+                fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              + Set a goal
+            </button>
+          )}
+        </div>
+      );
+    }
+
     function ProfileModal({ onClose }) {
       const [me, setMe]             = React.useState(null);
       const [sessions, setSessions] = React.useState([]);
+      const [goals, setGoals]       = React.useState([]);
       const [loading, setLoading]   = React.useState(true);
       const [revoking, setRevoking] = React.useState(false);
       const [revokeMsg, setRevokeMsg] = React.useState(null);
@@ -7918,12 +8073,14 @@
       const loadAll = React.useCallback(async () => {
         setLoading(true);
         try {
-          const [meRes, sessRes] = await Promise.all([
+          const [meRes, sessRes, goalsRes] = await Promise.all([
             fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
             fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
+            fetch("/api/goals", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
           ]);
           setMe(meRes);
           setSessions(Array.isArray(sessRes) ? sessRes : []);
+          setGoals(Array.isArray(goalsRes) ? goalsRes : []);
         } finally {
           setLoading(false);
         }
@@ -7949,6 +8106,32 @@
           setRevokeMsg(`Error: ${err.message}`);
         } finally {
           setRevoking(false);
+        }
+      };
+
+      const handleSaveGoal = async (metric, targetValue) => {
+        const v = parseInt(targetValue, 10);
+        if (!v || v <= 0) return;
+        const res = await fetch("/api/goals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify({ metric, target_value: v }),
+        });
+        if (res.ok) {
+          setGoals(prev => {
+            const without = prev.filter(g => g.metric !== metric);
+            return [...without, { metric, target_value: v }];
+          });
+        }
+      };
+
+      const handleDeleteGoal = async (metric) => {
+        const res = await fetch(`/api/goals/${encodeURIComponent(metric)}`, {
+          method: "DELETE",
+          headers: { ...csrfHeaders() },
+        });
+        if (res.ok) {
+          setGoals(prev => prev.filter(g => g.metric !== metric));
         }
       };
 
@@ -8031,6 +8214,23 @@
                       ))}
                     </div>
                   )}
+                </div>
+
+                <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                    🎯 Goals
+                  </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {GOAL_METRICS.map(m => {
+                      const existing = goals.find(g => g.metric === m.id);
+                      return (
+                        <GoalRow key={m.id} metric={m}
+                          value={existing ? existing.target_value : null}
+                          onSave={(v) => handleSaveGoal(m.id, v)}
+                          onDelete={() => handleDeleteGoal(m.id)} />
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
@@ -8822,6 +9022,7 @@
       const [history, setHistory]                 = useState(() => loadLocalHistory());
       const [historyLoaded, setHistoryLoaded]     = useState(false);
       const [favorites, setFavorites]             = useState([]);
+      const [goals, setGoals]                     = useState([]);
       const [loadedFromHistoryId, setLoadedFromHistoryId] = useState(null);
       const [saveStatus, setSaveStatus]           = useState(null); // null | "saving" | "saved" | "error"
       const [saveError, setSaveError]             = useState(null);
@@ -8896,6 +9097,15 @@
           .then(data => { if (Array.isArray(data)) setFavorites(data); })
           .catch(() => {});
       }, []);
+
+      // On mount: fetch goals (recurring targets for stats progress bars)
+      const refreshGoals = useCallback(() => {
+        fetch(`${API_BASE}/goals`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => { if (Array.isArray(data)) setGoals(data); })
+          .catch(() => {});
+      }, []);
+      useEffect(() => { refreshGoals(); }, [refreshGoals]);
 
       // On mount: fetch user settings (slider range + default pace)
       useEffect(() => {
@@ -9565,6 +9775,8 @@
                 onUpdateCompleted={handleUpdateCompleted}
                 onUpdateDifficulty={handleUpdateDifficulty}
                 recentMainLabels={recentMainLabels}
+                goals={goals}
+                mySub={me?.sub}
                 onDelete={handleDelete}
                 onLoadAndPrint={handleLoadAndPrint}
                 onRepeat={handleRepeatFromHistory}
@@ -10047,6 +10259,8 @@
               setShowProfile(false);
               // Refresh cached /api/me so header gates + initials stay current
               fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
+              // Refresh goals so stats-panel progress bars reflect edits made in the modal
+              refreshGoals();
             }} />
           )}
         </div>
