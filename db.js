@@ -612,3 +612,66 @@ export async function dbRemoveFavorite(userSub, label) {
     [userSub, label]
   );
 }
+
+// ── Goals ────────────────────────────────────────────────────────────
+// Metric set is fixed; period_start/end are NULL for recurring goals
+// (the only kind exposed by the UI in MVP). Multiple historical rows
+// per (user, metric) are allowed by the schema, but `dbSetGoal` enforces
+// "one active recurring goal per metric" by deleting prior NULL-period
+// rows before inserting.
+
+const GOAL_METRICS = ["workouts_per_week", "yards_per_week", "yards_per_month"];
+
+export async function dbListGoals(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    "SELECT `metric`, `target_value` FROM `goals` " +
+    "WHERE `user_sub` = ? AND `period_start` IS NULL AND `period_end` IS NULL " +
+    "ORDER BY `created_at` DESC",
+    [userSub]
+  );
+  // Collapse duplicates defensively — keep newest per metric.
+  const seen = new Set();
+  const out = [];
+  for (const r of rows) {
+    if (seen.has(r.metric)) continue;
+    seen.add(r.metric);
+    out.push({ metric: r.metric, target_value: Number(r.target_value) });
+  }
+  return out;
+}
+
+export async function dbSetGoal(userSub, metric, targetValue) {
+  if (!userSub) throw new Error("userSub required");
+  if (!GOAL_METRICS.includes(metric)) throw new Error("unknown metric");
+  const v = Number(targetValue);
+  if (!Number.isFinite(v) || v <= 0 || v > 1_000_000) throw new Error("invalid target_value");
+  await dbEnsureUser(userSub);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "DELETE FROM `goals` WHERE `user_sub` = ? AND `metric` = ? AND `period_start` IS NULL AND `period_end` IS NULL",
+      [userSub, metric]
+    );
+    await conn.query(
+      "INSERT INTO `goals` (`user_sub`, `metric`, `target_value`) VALUES (?, ?, ?)",
+      [userSub, metric, Math.round(v)]
+    );
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function dbDeleteGoal(userSub, metric) {
+  if (!userSub) return;
+  if (!GOAL_METRICS.includes(metric)) return;
+  await pool.query(
+    "DELETE FROM `goals` WHERE `user_sub` = ? AND `metric` = ? AND `period_start` IS NULL AND `period_end` IS NULL",
+    [userSub, metric]
+  );
+}
