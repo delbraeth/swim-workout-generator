@@ -245,8 +245,11 @@
     <a href="#pool-mode">Pool Mode</a>
     <a href="#equipment">Equipment</a>
     <a href="#quick-launch">Quick-Launch</a>
+    <a href="#recovery-mode">Recovery Mode</a>
     <a href="#generating">Generating</a>
     <a href="#focus-note">Focus Note</a>
+    <a href="#zones">Effort Zones</a>
+    <a href="#training-phase">Training Phase</a>
 
     <div class="nav-section">Workout View</div>
     <a href="#sections">Workout Sections</a>
@@ -267,6 +270,7 @@
     <a href="#history">History View</a>
     <a href="#difficulty">Difficulty Rating</a>
     <a href="#stats">Stats Panel</a>
+    <a href="#intensity">Intensity Dashboard</a>
     <a href="#goals">Goals</a>
     <a href="#copy-print">Copy &amp; Print</a>
 
@@ -483,6 +487,65 @@
       <div class="callout tip">
         <div class="callout-icon">💡</div>
         <div class="callout-body">Quick-launch only counts your own workouts (filtered by your account), not workouts logged by others sharing the device.</div>
+      </div>
+    </section>
+
+    <!-- ══ RECOVERY MODE ══ -->
+    <section id="recovery-mode">
+      <h2>Recovery Mode</h2>
+      <p>Above the workout-type selector is an <strong>Easy day</strong> toggle pill. Click to flip it on — it turns green and reads <strong>Recovery day ON</strong>. The next workout you generate is dialed back for active-recovery effort.</p>
+      <table>
+        <thead><tr><th>What changes when on</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td>Main-set pool</td><td>Filtered to options in the <strong>Easy</strong> or <strong>Aerobic</strong> effort zones only. If a type's mains are all higher-intensity, the filter falls back to the full pool and lets the other recovery levers do the work.</td></tr>
+          <tr><td>Repeat suppression</td><td>×2 and ×3 main-set variants are skipped — you'll always get the base option, no multi-round wrapping.</td></tr>
+          <tr><td>Floor drop</td><td>Minimum total drops from 1,900 yds (2,000 m) to <strong>1,200 yds (1,300 m)</strong>, so a short recovery day is allowed.</td></tr>
+          <tr><td>Interval stretch</td><td>Every set's interval is multiplied by <strong>1.10</strong> after pace scaling. <code>On 2:00</code> becomes <code>On 2:12</code>.</td></tr>
+        </tbody>
+      </table>
+      <p>The generated workout gets a green summary-bar border and a <strong>🌿 Recovery day</strong> badge so you can tell at a glance. Regenerating a section on a recovery-day workout preserves the flag — the new section also follows recovery rules.</p>
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Per-generation only.</strong> The toggle isn't persisted to settings. Flip it off and the next generate is back to normal. For a longer-term shift toward easy days, set the <a href="#training-phase">Recovery training phase</a> instead.</div>
+      </div>
+    </section>
+
+    <!-- ══ EFFORT ZONES ══ -->
+    <section id="zones">
+      <h2>Effort Zones</h2>
+      <p>Every workout block carries an effort-zone label — a small colored pill in the block header reading e.g. <strong>● THRESHOLD</strong>. The five zones, from easiest to hardest:</p>
+      <table>
+        <thead><tr><th>Zone</th><th>Color</th><th>Typical cues</th></tr></thead>
+        <tbody>
+          <tr><td>Easy</td><td><span style="color:#22c55e">■</span> Green</td><td>Recovery, warm-up, cool-down, drill technique work</td></tr>
+          <tr><td>Aerobic</td><td><span style="color:#3b82f6">■</span> Blue</td><td>Steady, moderate, sustained — most distance work</td></tr>
+          <tr><td>Threshold</td><td><span style="color:#eab308">■</span> Yellow</td><td>"Comfortably hard" — descend sets, build sets, T-pace</td></tr>
+          <tr><td>VO2</td><td><span style="color:#f97316">■</span> Orange</td><td>Fast — race-pace 100s, fast finishers</td></tr>
+          <tr><td>Anaerobic</td><td><span style="color:#ef4444">■</span> Red</td><td>All-out — sprints, top speed, blast sets</td></tr>
+        </tbody>
+      </table>
+      <p>Block-level zones reflect the <em>dominant</em> zone across all the block's sets, weighted by yardage. A 1,000-yard aerobic block with one 100-yard VO2 finisher reads as <strong>Aerobic</strong> at the block level — and the finisher set gets a small orange dot next to its <em>Reps × Dist</em>, flagging it as out-of-zone relative to its block.</p>
+      <p>Zones power three other features: the <a href="#recovery-mode">Recovery mode filter</a>, the <a href="#intensity">Intensity dashboard</a>, and the <a href="#training-phase">Training phase</a> generator bias.</p>
+    </section>
+
+    <!-- ══ TRAINING PHASE ══ -->
+    <section id="training-phase">
+      <h2>Training Phase</h2>
+      <p>A longer-term setting (weeks to months) that shapes the generator's main-set picks. Set it in <strong>Account → Goals → 📅 Training phase</strong>. Five phases:</p>
+      <table>
+        <thead><tr><th>Phase</th><th>What the generator emphasizes</th></tr></thead>
+        <tbody>
+          <tr><td>🌱 <strong>Base</strong></td><td>Aerobic foundation. Boosts easy/aerobic mains; suppresses VO2/anaerobic.</td></tr>
+          <tr><td>🔨 <strong>Build</strong></td><td>Threshold/VO2 emphasis. Boosts threshold (1.5×) and VO2 (1.3×); softens easy (0.8×).</td></tr>
+          <tr><td>⛰️ <strong>Peak</strong></td><td>Race-specific. Boosts VO2 and anaerobic (1.5× each); softens easy/aerobic.</td></tr>
+          <tr><td>📉 <strong>Taper</strong></td><td>Reduce intensity, preserve sharpness. Easy (1.5×), aerobic (1.3×); cuts VO2 (0.5×) and anaerobic (0.3×).</td></tr>
+          <tr><td>🌿 <strong>Recovery</strong></td><td>Active recovery only. Heavy boost to easy (2.0×) and aerobic (1.5×); strong cuts to everything threshold and above.</td></tr>
+        </tbody>
+      </table>
+      <p>The phase appears as a soft colored badge next to the workout summary bar on every generate. Click <strong>None</strong> (or the currently-active phase button) to clear the phase — the generator runs without phase bias.</p>
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>Phase vs. Recovery mode.</strong> The <strong>Recovery <em>phase</em></strong> is a longer-term setting that nudges every generate toward easier work. <strong>Recovery <em>mode</em></strong> is a per-generation switch that hard-filters mains and stretches intervals for one workout. They compose: a swimmer in Recovery phase can still flip on Recovery mode for an extra-easy day.</div>
       </div>
     </section>
 
@@ -724,9 +787,30 @@
           <tr><td>Avg per session</td><td>Total yards ÷ session count.</td></tr>
           <tr><td>Per week</td><td>Sessions ÷ elapsed weeks. Toggle between all-time and last 4 weeks.</td></tr>
           <tr><td>Yards / Week sparkline</td><td>Inline 12-week trend chart — one bar per ISO week. The current (in-progress) week is highlighted in lighter blue. Hover any bar for the per-week tooltip. "peak X yds" label on the right shows the maximum in the window.</td></tr>
+          <tr><td>Intensity</td><td>Zone-mix dashboard — see <a href="#intensity">Intensity Dashboard</a> below.</td></tr>
           <tr><td>Type Breakdown</td><td>Horizontal bars showing session count by workout type, color-coded to match the type badges. Top-right toggle scopes the breakdown: <strong>4 wks / 12 wks / All</strong> (default 4 wks). Percentages sum within the selected window. If the window is empty, the bars are replaced with "No completed workouts in this window."</td></tr>
         </tbody>
       </table>
+    </section>
+
+    <!-- ══ INTENSITY DASHBOARD ══ -->
+    <section id="intensity">
+      <h2>Intensity Dashboard</h2>
+      <p>A zone-mix view that lives in the stats panel, between the sparkline and the Type Breakdown. Powered by <a href="#zones">Effort Zones</a> — every set in every completed workout gets a zone (via keyword cues and interval tightness), and its <em>reps × dist</em> yards roll up into the dashboard.</p>
+
+      <h3>Stacked bar (window total)</h3>
+      <p>Single horizontal bar showing the <strong>percentage of yards in each zone</strong> across the currently-selected window (4 wks / 12 wks / All — the same toggle that scopes the Type Breakdown). Hover any segment for the exact yards + percent.</p>
+
+      <h3>80/20 ratio</h3>
+      <p>Header line on the right reads <em>"XX% easy/aerobic · YY% threshold+"</em>. Most polarized-training programs aim for ~80% of yards in the easy/aerobic zones and ~20% in threshold-and-above. The ratio lets you spot drift at a glance.</p>
+
+      <h3>Bars over time (12 weeks)</h3>
+      <p>Inline SVG, one stacked column per ISO week, easy-at-bottom → anaerobic-at-top. Column height tracks total yards (taller column = bigger week). Empty weeks render a 1px baseline tick so the time axis stays honest. Hover any segment for the zone + week + yards.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Hidden when empty.</strong> The dashboard only renders if you have completed workouts with set-level data. New accounts will see it appear after the first save.</div>
+      </div>
     </section>
 
     <!-- ══ GOALS ══ -->
@@ -757,6 +841,9 @@
         <div class="callout-icon">ℹ️</div>
         <div class="callout-body"><strong>Recurring only (for now).</strong> All goals are recurring — they reset automatically each week or month. Period-scoped goals (e.g. "10,000 yards by next Sunday") are supported in the database schema but not yet in the UI.</div>
       </div>
+
+      <h3>Training phase</h3>
+      <p>Below the next-event row is a <strong>📅 Training phase</strong> selector — five pill buttons for <strong>🌱 Base</strong>, <strong>🔨 Build</strong>, <strong>⛰️ Peak</strong>, <strong>📉 Taper</strong>, and <strong>🌿 Recovery</strong>. Click one to set the active phase; click the active one again to clear it. The phase nudges the generator's main-set picks toward zones that match the phase's intent — full table in <a href="#training-phase">Training Phase</a>.</p>
 
       <h3>Next event countdown</h3>
       <p>At the bottom of the Goals section there's a <strong>🏁 Next event</strong> row. Click <strong>+ Set an event</strong>, type a name (up to 80 characters) and pick a date, then <strong>Save</strong>. Once set, a small countdown chip appears on the pool-mode selector row, right-justified — e.g. <em>🏁 Marathon Swim · 47 days</em>.</p>
