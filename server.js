@@ -633,7 +633,7 @@ app.post("/api/auth/signout-all-others", checkOrigin, requireAuth, async (req, r
 // ───── API routes ────────────────────────────────────────────────────
 app.get("/healthz", (req, res) => res.json({ ok: true, service: "swim-workout-generator" }));
 
-app.get("/api/workouts", checkOrigin, requireAuth, async (req, res) => {
+app.get("/api/workouts", requireAuth, async (req, res) => {
   try {
     const entries = await dbListWorkouts(req.userSub);
     res.json(entries);
@@ -682,7 +682,7 @@ app.delete("/api/workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimi
 });
 
 // ───── User settings routes ──────────────────────────────────────────
-app.get("/api/settings", checkOrigin, requireAuth, async (req, res) => {
+app.get("/api/settings", requireAuth, async (req, res) => {
   try {
     res.json(await dbGetSettings(req.userSub));
   } catch (err) {
@@ -700,7 +700,7 @@ app.post("/api/settings", checkOrigin, requireAuth, requireCsrf, writeLimiter, a
 });
 
 // ───── Favorites routes (per-user) ───────────────────────────────────
-app.get("/api/favorites", checkOrigin, requireAuth, async (req, res) => {
+app.get("/api/favorites", requireAuth, async (req, res) => {
   try {
     res.json(await dbListFavorites(req.userSub));
   } catch (err) {
