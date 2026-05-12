@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-11 23:56 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 03:37 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7658,6 +7658,151 @@
       { label: "60s",    value: 60 },
     ];
 
+    // ═══════════════════════════════════════════════════════════════
+    //  PROFILE / ACCOUNT MODAL — identity, stats, active sessions
+    // ═══════════════════════════════════════════════════════════════
+    function ProfileModal({ onClose }) {
+      const [me, setMe]             = React.useState(null);
+      const [sessions, setSessions] = React.useState([]);
+      const [loading, setLoading]   = React.useState(true);
+      const [revoking, setRevoking] = React.useState(false);
+      const [revokeMsg, setRevokeMsg] = React.useState(null);
+
+      const loadAll = React.useCallback(async () => {
+        setLoading(true);
+        try {
+          const [meRes, sessRes] = await Promise.all([
+            fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
+            fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
+          ]);
+          setMe(meRes);
+          setSessions(Array.isArray(sessRes) ? sessRes : []);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      React.useEffect(() => { loadAll(); }, [loadAll]);
+
+      const handleSignoutOthers = async () => {
+        setRevoking(true); setRevokeMsg(null);
+        try {
+          const res = await fetch("/api/auth/signout-all-others", {
+            method: "POST",
+            headers: { ...csrfHeaders() },
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            setRevokeMsg(`Signed out ${data.revoked} other session(s).`);
+            await loadAll();
+          } else {
+            setRevokeMsg(`Error: ${data.error || res.status}`);
+          }
+        } catch (err) {
+          setRevokeMsg(`Error: ${err.message}`);
+        } finally {
+          setRevoking(false);
+        }
+      };
+
+      const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
+      const fmtTime = (d) => d ? new Date(d).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) : "—";
+      const poolLabel = (m) => ({ "25y": "SCY (25y)", "25m": "SCM (25m)", "50m": "LCM (50m)", "yds": "SCY (legacy)" })[m] || m;
+      const poolUnit  = (m) => (m === "50m" || m === "25m") ? "m" : "yds";
+
+      return (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        }} onClick={onClose}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
+            maxWidth: 560, width: "100%", maxHeight: "85vh", overflowY: "auto",
+            color: "#cbd5e1",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #334155" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>👤 Account</div>
+              <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 20, cursor: "pointer", padding: 4 }}>✕</button>
+            </div>
+
+            {loading ? (
+              <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>Loading…</div>
+            ) : !me ? (
+              <div style={{ padding: 40, textAlign: "center", color: "#f87171" }}>Could not load profile.</div>
+            ) : (
+              <>
+                <div style={{ padding: "18px 20px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Identity</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 16px", fontSize: 13 }}>
+                    <span style={{ color: "#64748b" }}>Initials:</span>
+                    <span style={{ color: "#e2e8f0", fontWeight: 700 }}>{me.initials || "—"}</span>
+                    <span style={{ color: "#64748b" }}>Email:</span>
+                    <span style={{ color: "#e2e8f0" }}>{me.email || "—"} {me.email_verified && <span style={{ color: "#10b981", fontSize: 11, marginLeft: 4 }}>✓ verified</span>}</span>
+                    <span style={{ color: "#64748b" }}>Member since:</span>
+                    <span style={{ color: "#e2e8f0" }}>{fmtDate(me.created_at)}</span>
+                    <span style={{ color: "#64748b" }}>Last login:</span>
+                    <span style={{ color: "#e2e8f0" }}>{fmtTime(me.last_login_at)}</span>
+                    {me.is_admin && (<>
+                      <span style={{ color: "#64748b" }}>Role:</span>
+                      <span style={{ color: "#a78bfa", fontWeight: 700 }}>Admin</span>
+                    </>)}
+                  </div>
+                </div>
+
+                <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Workouts</div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: "#e2e8f0" }}>{me.workout_count.toLocaleString()}</span>
+                    <span style={{ fontSize: 11, color: "#64748b" }}>total saved</span>
+                  </div>
+                  {me.stats_by_pool.length > 0 && (
+                    <div style={{ fontSize: 12, display: "grid", gap: 4 }}>
+                      {me.stats_by_pool.map(s => (
+                        <div key={s.pool_mode} style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: "#94a3b8" }}>{poolLabel(s.pool_mode)}</span>
+                          <span style={{ color: "#e2e8f0" }}>{s.count.toLocaleString()} workouts · {s.total.toLocaleString()} {poolUnit(s.pool_mode)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Active sessions ({sessions.length})</div>
+                    {sessions.length > 1 && (
+                      <button onClick={handleSignoutOthers} disabled={revoking} style={{ background: "#334155", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#e2e8f0", cursor: revoking ? "wait" : "pointer", fontWeight: 600 }}>
+                        {revoking ? "Revoking…" : "Sign out everywhere else"}
+                      </button>
+                    )}
+                  </div>
+                  {revokeMsg && (
+                    <div style={{ fontSize: 12, color: "#10b981", marginBottom: 12 }}>{revokeMsg}</div>
+                  )}
+                  <div style={{ display: "grid", gap: 8, fontSize: 12 }}>
+                    {sessions.map(s => (
+                      <div key={s.id_prefix} style={{ background: s.is_current ? "#1e3a5f" : "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                          <span style={{ color: "#e2e8f0", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {s.user_agent ? s.user_agent.slice(0, 70) : "Unknown browser"}
+                            {s.is_current && <span style={{ marginLeft: 8, fontSize: 10, color: "#10b981", fontWeight: 700 }}>● this device</span>}
+                          </span>
+                          <span style={{ color: "#64748b", fontSize: 10, flexShrink: 0 }}>{s.id_prefix}</span>
+                        </div>
+                        <div style={{ color: "#64748b", fontSize: 11, marginTop: 4 }}>
+                          {s.ip || "—"} · last seen {fmtTime(s.last_seen_at)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     function RestPickerModal({ restSecs, onChange, onStart, onCancel }) {
       return (
         <div style={{
@@ -7984,6 +8129,7 @@
       // Run Workout overlay: null when inactive, or the workout/entry object being stepped through
       const [runWorkout, setRunWorkout]           = useState(null);
       const [showRestPicker, setShowRestPicker]   = useState(false);
+      const [showProfile, setShowProfile]         = useState(false);
       const [restSecs,      setRestSecs]          = useState(30); // null=manual, 0/30/45/60=auto
       // Print dialog: show "save before printing?" prompt for unsaved workouts
       const [showPrintDialog, setShowPrintDialog] = useState(false);
@@ -8531,6 +8677,10 @@
                       Sign out
                     </a>
                   )}
+                  <button onClick={() => setShowProfile(true)} title="Account"
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                    👤
+                  </button>
                   <a href="/manual.html" target="_blank" rel="noopener" title="User manual"
                     style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "none", lineHeight: 1 }}>
                     ?
@@ -8911,6 +9061,9 @@
           )}
           {!showRestPicker && runWorkout && (
             <RunWorkoutOverlay workout={runWorkout} restSecs={restSecs} onClose={() => setRunWorkout(null)} unit={unit} />
+          )}
+          {showProfile && (
+            <ProfileModal onClose={() => setShowProfile(false)} />
           )}
         </div>
       );
