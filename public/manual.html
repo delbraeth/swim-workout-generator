@@ -279,6 +279,7 @@
     <a href="#user-settings">Your Settings</a>
     <a href="#account">Account &amp; Sessions</a>
     <a href="#admin">Admin (admins only)</a>
+    <a href="#feedback">Sending Feedback</a>
     <a href="#tips">Tips &amp; Tricks</a>
 
     <div class="nav-section">Legal</div>
@@ -1018,7 +1019,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
     <!-- ══ ADMIN ══ -->
     <section id="admin">
       <h2>Admin (admins only)</h2>
-      <p>If your account has the admin flag set, a purple <strong>🛡 Admin</strong> button appears in the header next to the 👤 button. Clicking it switches to the admin view, which has three tabs:</p>
+      <p>If your account has the admin flag set, a purple <strong>🛡 Admin</strong> button appears in the header next to the 👤 button. Clicking it switches to the admin view, which has four tabs:</p>
 
       <h3>Users</h3>
       <p>Table of every user with their initials, name, email, workout count, last login, and any flags (admin / disabled). Per-row actions:</p>
@@ -1038,6 +1039,14 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>Status badges</strong> — <em>active</em>, <em>exhausted</em> (all uses consumed), or <em>expired</em> (past the expiry date).</li>
       </ul>
 
+      <h3>Feedback</h3>
+      <p>User-submitted feedback (see <a href="#feedback">Sending Feedback</a> below for the user side). Filters along the top: <strong>All</strong>, <strong>New</strong> (default), <strong>Reviewed</strong>, <strong>Resolved</strong>, <strong>Dismissed</strong>. Each card shows the status pill, category emoji, subject, full body (preserves line breaks), the page and user-agent the submission came from, and the submitter's initials + name when available.</p>
+      <ul>
+        <li><strong>Status transition buttons</strong> — <code>→ Reviewed / → Resolved / → Dismissed</code>. Clicking one stamps your initials + timestamp on the row.</li>
+        <li><strong>Admin note</strong> — internal textarea. Type and click <strong>Save note</strong>. The submitter never sees this.</li>
+        <li><strong>Reviewer footer</strong> — once a status transition happens, the row gains a "Last touched by INI · time" line at the bottom.</li>
+      </ul>
+
       <h3>Audit log</h3>
       <p>Most-recent 200 security-relevant events in reverse chronological order. Each row shows the timestamp, event type, user prefix, IP, and a snippet of the details JSON. Filters:</p>
       <ul>
@@ -1045,7 +1054,23 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>user_sub</strong> — full Apple sub. Useful when investigating a specific user's activity.</li>
         <li><strong>Clear</strong> button to reset filters.</li>
       </ul>
-      <p>Event categories you'll see: <code>auth.*</code> (login/logout/signup/reject/disabled_attempt), <code>admin.*</code> (user.disable/enable/delete/update, invite.create/delete, access_denied), <code>invite.consume</code>, <code>workout.delete</code>, <code>csrf.reject</code>, <code>rate_limit.hit</code>.</p>
+      <p>Event categories you'll see: <code>auth.*</code> (login/logout/signup/reject/disabled_attempt), <code>admin.*</code> (user.disable/enable/delete/update, invite.create/delete, access_denied, feedback.update), <code>invite.consume</code>, <code>workout.delete</code>, <code>csrf.reject</code>, <code>rate_limit.hit</code>, <code>feedback.submit</code>, <code>user.profile.update</code>.</p>
+    </section>
+
+    <!-- ══ FEEDBACK ══ -->
+    <section id="feedback">
+      <h2>Sending Feedback</h2>
+      <p>Tap the 💬 button in the header (between 👤 and ?) to open the feedback modal. Pick a category, type a subject and a few sentences of detail, and tap <strong>Send</strong>.</p>
+      <table>
+        <thead><tr><th>Category</th><th>When to use it</th></tr></thead>
+        <tbody>
+          <tr><td>💡 Idea</td><td>Feature requests, "wouldn't it be cool if…" suggestions.</td></tr>
+          <tr><td>🐛 Bug</td><td>Something broken or behaving unexpectedly. Include steps to reproduce if you can.</td></tr>
+          <tr><td>✨ Praise</td><td>Something you really like. Genuinely useful signal.</td></tr>
+          <tr><td>Other</td><td>Doesn't fit the above — questions, comments, anything.</td></tr>
+        </tbody>
+      </table>
+      <p>The current page URL and your browser's user-agent string are attached automatically so admins can reproduce browser-specific issues. The submission shows up immediately in the admin Feedback tab with status <em>new</em>.</p>
     </section>
 
     <!-- ══ TIPS ══ -->
