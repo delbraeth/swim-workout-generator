@@ -201,6 +201,30 @@ export async function dbGetSettings(userSub) {
   return out;
 }
 
+// Merge-patch the JSON `extra` column. Keys with value `null` are deleted.
+// Used for ad-hoc per-user settings that don't merit dedicated columns
+// (e.g. Q's `next_event`).
+export async function dbPatchSettingsExtra(userSub, partial) {
+  if (!userSub) return;
+  if (!partial || typeof partial !== "object") return;
+  await dbEnsureUser(userSub);
+  const rows = await pool.query("SELECT `extra` FROM `settings` WHERE `user_sub` = ?", [userSub]);
+  let current = {};
+  if (rows[0]?.extra) {
+    current = typeof rows[0].extra === "string" ? JSON.parse(rows[0].extra) : rows[0].extra;
+  }
+  const merged = { ...current };
+  for (const [k, v] of Object.entries(partial)) {
+    if (v === null || v === undefined) delete merged[k];
+    else merged[k] = v;
+  }
+  await pool.query(
+    "INSERT INTO `settings` (`user_sub`, `extra`) VALUES (?, ?) " +
+    "ON DUPLICATE KEY UPDATE `extra` = VALUES(`extra`)",
+    [userSub, JSON.stringify(merged)]
+  );
+}
+
 export async function dbUpsertSettings(userSub, patch) {
   if (!userSub) return;
   await dbEnsureUser(userSub);
