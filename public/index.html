@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 16:29 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 16:32 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7283,7 +7283,45 @@
           .map(([type, count]) => ({ type, count, pct: winSessions ? Math.round(count / winSessions * 100) : 0 }))
           .sort((a, b) => b.count - a.count);
 
-        return { sessions, yards, avg, wkAll, wkRecent, typeBreakdown, winSessions, weeks, sparkMax };
+        // N4: Intensity distribution — yards per zone, derived from inferSetZone
+        // for every set in every windowed workout. Two outputs:
+        //   intensityTotals: { zoneId → yards } across the whole window
+        //   weeklyIntensity: 12-week stacked-bar series (latest 12 ISO weeks)
+        const intensityTotals = { easy: 0, aerobic: 0, threshold: 0, vo2: 0, anaerobic: 0 };
+        const weeklyIntensity = weeks.map(w => ({
+          key: w.key, monday: w.monday,
+          zones: { easy: 0, aerobic: 0, threshold: 0, vo2: 0, anaerobic: 0 },
+          total: 0,
+        }));
+        for (const e of done) {
+          if (!Array.isArray(e.blocks)) continue;
+          const ts = e.dateCompleted ? new Date(`${e.dateCompleted}T00:00:00Z`).getTime() : 0;
+          const wIdx = weekIdx.get(fmtMonday(mondayUTC(ts)));
+          const inWindow = ts >= winCutoff;
+          for (const b of e.blocks) {
+            for (const s of (b.sets || [])) {
+              const z = s.zone || inferSetZone(s, b.section);
+              const y = (s.reps || 1) * (s.dist || 0);
+              if (inWindow) intensityTotals[z] = (intensityTotals[z] || 0) + y;
+              if (wIdx !== undefined) {
+                weeklyIntensity[wIdx].zones[z] += y;
+                weeklyIntensity[wIdx].total   += y;
+              }
+            }
+          }
+        }
+        const intensityYards = Object.values(intensityTotals).reduce((s, v) => s + v, 0);
+        // 80/20 ratio: % of yards at or below aerobic vs everything threshold+.
+        const easyAerobicYards = intensityTotals.easy + intensityTotals.aerobic;
+        const hardYards        = intensityYards - easyAerobicYards;
+        const ratio8020 = intensityYards > 0
+          ? { easy: Math.round(easyAerobicYards / intensityYards * 100),
+              hard: Math.round(hardYards / intensityYards * 100) }
+          : null;
+        const weeklyIntensityMax = weeklyIntensity.reduce((m, w) => Math.max(m, w.total), 0);
+
+        return { sessions, yards, avg, wkAll, wkRecent, typeBreakdown, winSessions, weeks, sparkMax,
+                 intensityTotals, intensityYards, ratio8020, weeklyIntensity, weeklyIntensityMax };
       }, [filtered, typeWindow]);
 
       // Goal progress vs current period (ISO week Mon..Sun, or calendar month).
@@ -7545,6 +7583,97 @@
                 )}
               </div>
             )}
+            {/* N4: Intensity distribution — stacked horizontal bar + 80/20 ratio */}
+            {stats.sessions > 0 && stats.intensityYards > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Intensity</div>
+                  <div style={{ fontSize: 10, color: "#475569" }}>
+                    {typeWindow === "4wk" ? "4 wks" : typeWindow === "12wk" ? "12 wks" : "all time"}
+                  </div>
+                  {stats.ratio8020 && (
+                    <div style={{ marginLeft: "auto", fontSize: 10, fontVariantNumeric: "tabular-nums" }}>
+                      <span style={{ color: "#22c55e", fontWeight: 700 }}>{stats.ratio8020.easy}%</span>
+                      <span style={{ color: "#475569" }}> easy/aerobic </span>
+                      <span style={{ color: "#475569" }}>·</span>
+                      <span style={{ color: "#f97316", fontWeight: 700 }}> {stats.ratio8020.hard}%</span>
+                      <span style={{ color: "#475569" }}> threshold+</span>
+                    </div>
+                  )}
+                </div>
+                {/* Stacked horizontal bar */}
+                <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden", background: "#0f172a", marginBottom: 6 }}>
+                  {ZONE_ORDER.map(zId => {
+                    const y   = stats.intensityTotals[zId] || 0;
+                    const pct = stats.intensityYards > 0 ? (y / stats.intensityYards) * 100 : 0;
+                    if (pct <= 0) return null;
+                    return (
+                      <div key={zId}
+                        title={`${ZONES[zId].label}: ${y.toLocaleString()} yds · ${pct.toFixed(1)}%`}
+                        style={{ width: `${pct}%`, background: ZONES[zId].color, transition: "width 0.4s" }} />
+                    );
+                  })}
+                </div>
+                {/* Per-zone legend */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: 10 }}>
+                  {ZONE_ORDER.map(zId => {
+                    const y   = stats.intensityTotals[zId] || 0;
+                    const pct = stats.intensityYards > 0 ? (y / stats.intensityYards) * 100 : 0;
+                    return (
+                      <span key={zId} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: pct > 0 ? "#cbd5e1" : "#475569" }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: ZONES[zId].color, display: "inline-block", opacity: pct > 0 ? 1 : 0.4 }} />
+                        <span>{ZONES[zId].label}</span>
+                        <span style={{ color: "#64748b", fontVariantNumeric: "tabular-nums" }}>{pct.toFixed(0)}%</span>
+                      </span>
+                    );
+                  })}
+                </div>
+                {/* Bars-over-time: stacked weekly bars, last 12 ISO weeks */}
+                {stats.weeklyIntensityMax > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 10, color: "#475569", marginBottom: 4 }}>last 12 weeks</div>
+                    <svg viewBox="0 0 240 48" preserveAspectRatio="none"
+                      style={{ width: "100%", height: 48, display: "block" }}>
+                      {stats.weeklyIntensity.map((w, i) => {
+                        const bw = 240 / stats.weeklyIntensity.length;
+                        const x  = i * bw;
+                        const colWidth = Math.max(0, bw - 2);
+                        const totalHeight = (w.total / stats.weeklyIntensityMax) * 44;
+                        let yCursor = 48 - totalHeight;
+                        const segments = [];
+                        // Stack from easy (bottom) to anaerobic (top).
+                        for (const zId of ZONE_ORDER) {
+                          const ratio = w.total > 0 ? w.zones[zId] / w.total : 0;
+                          if (ratio <= 0) continue;
+                          const segH = totalHeight * ratio;
+                          segments.push(
+                            <rect key={zId}
+                              x={x + 1} y={yCursor}
+                              width={colWidth} height={segH}
+                              fill={ZONES[zId].color} opacity={0.95}>
+                              <title>{`${w.key} · ${ZONES[zId].label}: ${w.zones[zId].toLocaleString()} yds`}</title>
+                            </rect>
+                          );
+                          yCursor += segH;
+                        }
+                        return (
+                          <g key={w.key}>
+                            {segments}
+                            {/* baseline tick for empty weeks */}
+                            {w.total === 0 && (
+                              <rect x={x + 1} y={47} width={colWidth} height={1} fill="#334155">
+                                <title>{`${w.key}: no yards`}</title>
+                              </rect>
+                            )}
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Type distribution bars */}
             {stats.sessions > 0 && (
               <div>
