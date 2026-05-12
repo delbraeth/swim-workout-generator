@@ -749,6 +749,13 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         return res.status(400).json({ error: "next_event.name max 80 chars" });
       }
     }
+    // Validate phase enum if present (N5).
+    if ("phase" in patch && patch.phase !== null) {
+      const allowed = ["base", "build", "peak", "taper", "recovery"];
+      if (typeof patch.phase !== "string" || !allowed.includes(patch.phase)) {
+        return res.status(400).json({ error: "phase must be one of: " + allowed.join(", ") });
+      }
+    }
     await dbPatchSettingsExtra(req.userSub, patch);
     res.json({ ok: true });
   } catch (err) {
