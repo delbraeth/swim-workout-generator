@@ -55,7 +55,7 @@ import {
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbListGoals, dbSetGoal, dbDeleteGoal,
-  dbIsUser, dbIsAdmin, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe,
+  dbIsUser, dbIsAdmin, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
   dbAdminListAuditEvents,
@@ -427,6 +427,34 @@ app.get("/api/me", requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// Self-serve profile editing — display_name, email, initials. Same
+// validation rules as the admin path. Changing email also resets
+// email_verified (handled in dbUpdateMe).
+app.patch("/api/me", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const allowed = ["email", "display_name", "initials"];
+    const patch = {};
+    for (const k of allowed) if (k in (req.body || {})) patch[k] = req.body[k];
+    if ("email" in patch && patch.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.email)) {
+      return res.status(400).json({ error: "bad email format" });
+    }
+    if ("display_name" in patch && patch.display_name && String(patch.display_name).length > 120) {
+      return res.status(400).json({ error: "display_name max 120 chars" });
+    }
+    if ("initials" in patch && patch.initials && String(patch.initials).length > 8) {
+      return res.status(400).json({ error: "initials max 8 chars" });
+    }
+    const r = await dbUpdateMe(req.userSub, patch);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "user.profile.update",
+      ...reqMeta(req),
+      details:   { fields: Object.keys(patch) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // ───── Admin routes ──────────────────────────────────────────────────
