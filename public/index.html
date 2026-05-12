@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 03:51 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 03:53 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7705,6 +7705,25 @@
         }
       };
 
+      const handleRevokeOne = async (prefix) => {
+        setRevokeMsg(null);
+        try {
+          const res = await fetch(`/api/auth/sessions/${encodeURIComponent(prefix)}`, {
+            method: "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            setRevokeMsg(`Revoked session ${prefix}…`);
+            await loadAll();
+          } else {
+            setRevokeMsg(`Error: ${data.error || res.status}`);
+          }
+        } catch (err) {
+          setRevokeMsg(`Error: ${err.message}`);
+        }
+      };
+
       const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
       const fmtTime = (d) => d ? new Date(d).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) : "—";
       const poolLabel = (m) => ({ "25y": "SCY (25y)", "25m": "SCM (25m)", "50m": "LCM (50m)", "yds": "SCY (legacy)" })[m] || m;
@@ -7789,8 +7808,13 @@
                           </span>
                           <span style={{ color: "#64748b", fontSize: 10, flexShrink: 0 }}>{s.id_prefix}</span>
                         </div>
-                        <div style={{ color: "#64748b", fontSize: 11, marginTop: 4 }}>
-                          {s.ip || "—"} · last seen {fmtTime(s.last_seen_at)}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                          <span style={{ color: "#64748b", fontSize: 11 }}>{s.ip || "—"} · last seen {fmtTime(s.last_seen_at)}</span>
+                          {!s.is_current && (
+                            <button onClick={() => handleRevokeOne(s.id_prefix)} style={{ background: "transparent", border: "1px solid #475569", borderRadius: 6, padding: "2px 8px", fontSize: 10, color: "#cbd5e1", cursor: "pointer", fontWeight: 600 }}>
+                              Revoke
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
