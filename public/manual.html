@@ -263,6 +263,7 @@
     <div class="nav-section">Running a Workout</div>
     <a href="#run-mode">Run Mode</a>
     <a href="#pace-clock">Pace Clock</a>
+    <a href="#splits">Split Logging</a>
     <a href="#rest-timer">Rest Timer</a>
 
     <div class="nav-section">History &amp; Sharing</div>
@@ -690,15 +691,54 @@
       <table>
         <thead><tr><th>Element</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td>Countdown ring</td><td>Visual arc depletes as the interval counts down. Green while running, fills amber near zero.</td></tr>
+          <tr><td>Countdown</td><td>Big timer counting down the interval. Green while running, dim when paused.</td></tr>
           <tr><td>Elapsed time</td><td>Shown in the top-right corner — total time since the workout started.</td></tr>
           <tr><td>Set details</td><td>Reps × distance and description shown below the timer.</td></tr>
-          <tr><td>▶ / ⏸ button</td><td>Start and pause the clock. Tap to begin on first open.</td></tr>
-          <tr><td>↺ Reset</td><td>Resets the clock to the full interval without leaving the set.</td></tr>
+          <tr><td>▶ Start / Resume</td><td>Begin the countdown. Becomes the primary button when paused.</td></tr>
+          <tr><td>✓ Lap</td><td>Primary button while the timer is running — captures the rep's actual time and advances to the next rep. See <a href="#splits">Split Logging</a>.</td></tr>
+          <tr><td>⏸ Pause</td><td>Pauses the countdown without losing your place. Visible while running, beside Lap.</td></tr>
+          <tr><td>Skip →</td><td>Advances to the next rep without recording a split. Useful for sets you bail on.</td></tr>
+          <tr><td>↺ Reset</td><td>Resets the clock to the full interval and clears any in-progress splits for this set.</td></tr>
         </tbody>
       </table>
 
       <p>When the interval finishes, the clock flashes and (if you have a rest timer set) begins the between-set rest countdown automatically before advancing.</p>
+    </section>
+
+    <!-- ══ SPLIT LOGGING ══ -->
+    <section id="splits">
+      <h2>Split Logging</h2>
+      <p>Tap <strong>✓ Lap</strong> on the Pace Clock whenever you touch the wall on a rep. The app records your actual time vs. the expected interval, shows you the delta, and rolls the splits up into the workout when you save.</p>
+
+      <h3>What gets captured</h3>
+      <p>Each lap records a small object:</p>
+      <ul>
+        <li><strong>Rep number</strong> within the set.</li>
+        <li><strong>Actual seconds</strong> — wall-clock time elapsed since the rep started.</li>
+        <li><strong>Expected seconds</strong> — the set's interval as displayed on the pace clock.</li>
+        <li><strong>Delta</strong> — actual minus expected (negative = under-pace, positive = over).</li>
+      </ul>
+      <p>If you don't tap Lap and the timer counts down to zero on its own, a split is still recorded with delta = 0 — you made the interval exactly.</p>
+
+      <h3>Live feedback</h3>
+      <p>After each lap, a small pill appears below the rep dots:</p>
+      <ul>
+        <li><strong>last −0:08 · 1:52</strong> — your most recent delta (green if under, red if over, slate if on-pace) plus the actual time.</li>
+        <li><strong>avg ∆ −0:04 · 3/8</strong> — the running average across captured reps + the count so far. Only shown once you have 2+ laps.</li>
+      </ul>
+
+      <h3>Saving splits</h3>
+      <p>At the workout-finish screen, the summary line shows <strong>N splits captured</strong> (in green) when any were recorded. The primary CTA changes to <strong>"Log as today's session (with N splits)"</strong>. Tapping it creates a fresh history entry dated today with the splits attached as <code>actual_splits</code> on the workout payload.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Reset clears splits.</strong> If you tap ↺ Reset mid-set, the in-progress splits for that set are dropped — you're starting over. Splits already captured in earlier sets are preserved.</div>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>Skip vs. Lap.</strong> Lap records a split and advances. Skip just advances. Use Skip when you've abandoned a rep and don't want the time recorded.</div>
+      </div>
 
       <div class="callout tip">
         <div class="callout-icon">💡</div>
