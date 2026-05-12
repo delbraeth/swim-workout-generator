@@ -351,6 +351,41 @@ export async function dbAuditEvent({ userSub = null, eventType, ip = null, userA
   }
 }
 
+// ─── profile / me ───────────────────────────────────────────────────────────
+// Returns the user's identity + workout stats grouped by pool mode.
+export async function dbGetMe(sub) {
+  if (!sub) return null;
+  const conn = await pool.getConnection();
+  try {
+    const userRows = await conn.query(
+      "SELECT `sub`, `email`, `email_verified`, `display_name`, `initials`, `is_admin`, `created_at`, `last_login_at` FROM `users` WHERE `sub` = ?",
+      [sub]
+    );
+    if (!userRows[0]) return null;
+    const u = userRows[0];
+    const statsRows = await conn.query(
+      "SELECT `pool_mode`, COUNT(*) AS n, SUM(`total_yards`) AS total FROM `workouts` WHERE `user_sub` = ? GROUP BY `pool_mode`",
+      [sub]
+    );
+    const stats = statsRows.map(r => ({ pool_mode: r.pool_mode, count: Number(r.n), total: Number(r.total) }));
+    const workoutCount = stats.reduce((s, r) => s + r.count, 0);
+    return {
+      sub:            u.sub,
+      email:          u.email,
+      email_verified: !!u.email_verified,
+      display_name:   u.display_name,
+      initials:       u.initials,
+      is_admin:       !!u.is_admin,
+      created_at:     u.created_at,
+      last_login_at:  u.last_login_at,
+      workout_count:  workoutCount,
+      stats_by_pool:  stats,
+    };
+  } finally {
+    conn.release();
+  }
+}
+
 // ─── auth helpers ───────────────────────────────────────────────────────────
 export async function dbIsUser(sub) {
   if (!sub) return false;
