@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 14:42 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 14:48 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9205,6 +9205,40 @@
         return { emoji, label, totalYards: e.totalYards, unit: lastUnit, when };
       }, [history]);
 
+      // Quick-launch — last 3 completed workouts belonging to the signed-in user.
+      // Powers the pre-pool "do yesterday's again" cards above the Generate button.
+      const quickLaunch = useMemo(() => {
+        const mySub = me?.sub;
+        if (!mySub) return [];
+        const mine = history.filter(e =>
+          e.sub === mySub && e.completed !== false && e.dateCompleted && e.blocks
+        );
+        if (!mine.length) return [];
+        mine.sort((a, b) => b.dateCompleted.localeCompare(a.dateCompleted));
+        const today = new Date().toISOString().slice(0, 10);
+        return mine.slice(0, 3).map(e => {
+          const diffDays = Math.round((new Date(today) - new Date(e.dateCompleted)) / 86400000);
+          let when;
+          if      (diffDays === 0) when = "Today";
+          else if (diffDays === 1) when = "Yesterday";
+          else if (diffDays <  7)  when = `${diffDays} days ago`;
+          else if (diffDays < 14)  when = "1 week ago";
+          else                     when = `${Math.floor(diffDays / 7)} weeks ago`;
+          const unit = (e.poolMode === "50m" || e.poolMode === "25m") ? "m" : "yds";
+          const typeMeta = WORKOUT_TYPES.find(t => t.id === e.type);
+          return {
+            id: e.id,
+            entry: e,
+            emoji: typeMeta ? typeMeta.emoji : "🏊",
+            label: e.typeLabel || (typeMeta ? typeMeta.label : e.type),
+            when,
+            totalYards: e.totalYards || 0,
+            estimatedMin: e.estimatedMin,
+            unit,
+          };
+        });
+      }, [history, me]);
+
       // Auth gate — render nothing while checking, show gate if no valid code
       if (authenticated === null) return null; // still checking
       if (!authenticated) return <SignInGate authError={authError} />;
@@ -9368,6 +9402,64 @@
               {lastSession && (
                 <div style={{ textAlign: "center", color: "#64748b", fontSize: 12, marginBottom: 12, marginTop: -4 }}>
                   Last: {lastSession.emoji} {lastSession.label} · {lastSession.totalYards.toLocaleString()} {lastSession.unit} · {lastSession.when}
+                </div>
+              )}
+
+              {/* Quick-launch — last 3 of your own completed workouts (pre-pool "do yesterday's again") */}
+              {!workout && quickLaunch.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                    Pick up where you left off
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {quickLaunch.map(ql => (
+                      <div key={ql.id}
+                        onClick={() => { setRunWorkout(ql.entry); setShowRestPicker(true); }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 12,
+                          background: "#1e293b", border: "1px solid #334155", borderRadius: 10,
+                          padding: "10px 12px", cursor: "pointer",
+                          transition: "border-color 0.15s, background 0.15s",
+                          WebkitTapHighlightColor: "transparent",
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "#3b82f6"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "#334155"; }}>
+                        <div style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>{ql.emoji}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: "#fff", fontWeight: 700, lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {ql.label}
+                          </div>
+                          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                            {ql.when} · {ql.totalYards.toLocaleString()} {ql.unit}
+                            {ql.estimatedMin ? ` · ~${ql.estimatedMin} min` : ""}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRepeatFromHistory(ql.entry);
+                          }}
+                          title="Load into generator (don't auto-start)"
+                          style={{
+                            padding: "5px 10px", borderRadius: 6,
+                            border: "1px solid #334155", background: "transparent",
+                            color: "#86efac", fontSize: 11, fontWeight: 700,
+                            cursor: "pointer", flexShrink: 0,
+                          }}>
+                          🔁
+                        </button>
+                        <div style={{
+                          padding: "6px 10px", borderRadius: 6,
+                          background: "#1e3a5f", color: "#93c5fd",
+                          fontSize: 12, fontWeight: 700,
+                          display: "inline-flex", alignItems: "center", gap: 4,
+                          flexShrink: 0,
+                        }}>
+                          ▶ Run
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
