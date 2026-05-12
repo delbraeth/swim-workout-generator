@@ -730,3 +730,95 @@ export async function dbDeleteGoal(userSub, metric) {
     [userSub, metric]
   );
 }
+
+// ── Feedback (Session 5) ─────────────────────────────────────────────
+// User submissions land in the `feedback` table (migration 007). Admins
+// triage from a tab in the admin view.
+
+const FEEDBACK_CATEGORIES = ["bug", "idea", "praise", "other"];
+const FEEDBACK_STATUSES   = ["new", "reviewed", "resolved", "dismissed"];
+
+export async function dbInsertFeedback({ userSub, category, subject, body, page, userAgent }) {
+  if (!category || !FEEDBACK_CATEGORIES.includes(category)) throw new Error("bad category");
+  if (!subject || typeof subject !== "string") throw new Error("subject required");
+  if (!body    || typeof body    !== "string") throw new Error("body required");
+  if (subject.length > 255) throw new Error("subject max 255 chars");
+  if (body.length    > 10000) throw new Error("body max 10000 chars");
+  if (userSub) await dbEnsureUser(userSub);
+  const r = await pool.query(
+    "INSERT INTO `feedback` (`user_sub`, `category`, `subject`, `body`, `page`, `user_agent`) " +
+    "VALUES (?, ?, ?, ?, ?, ?)",
+    [
+      userSub || null,
+      category,
+      subject.slice(0, 255),
+      body.slice(0, 10000),
+      page ? String(page).slice(0, 255) : null,
+      userAgent ? String(userAgent).slice(0, 255) : null,
+    ]
+  );
+  return { ok: true, id: Number(r.insertId) };
+}
+
+export async function dbAdminListFeedback({ status = null, userSub = null, limit = 200 } = {}) {
+  const where = [];
+  const args  = [];
+  if (status) { where.push("f.`status` = ?"); args.push(status); }
+  if (userSub) { where.push("f.`user_sub` = ?"); args.push(userSub); }
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const cap = Math.min(Math.max(1, Number(limit) || 200), 500);
+  const rows = await pool.query(
+    "SELECT f.`id`, f.`user_sub`, f.`category`, f.`subject`, f.`body`, f.`page`, " +
+    "       f.`user_agent`, f.`status`, f.`reviewed_by`, f.`reviewed_at`, f.`admin_note`, f.`created_at`, " +
+    "       u.`initials` AS submitter_initials, u.`display_name` AS submitter_name, " +
+    "       r.`initials` AS reviewer_initials " +
+    "FROM `feedback` f " +
+    "LEFT JOIN `users` u ON u.`sub` = f.`user_sub` " +
+    "LEFT JOIN `users` r ON r.`sub` = f.`reviewed_by` " +
+    `${whereSql} ` +
+    "ORDER BY f.`created_at` DESC " +
+    `LIMIT ${cap}`,
+    args
+  );
+  return rows.map(r => ({
+    id:                 Number(r.id),
+    user_sub:           r.user_sub,
+    submitter_initials: r.submitter_initials,
+    submitter_name:     r.submitter_name,
+    category:           r.category,
+    subject:            r.subject,
+    body:               r.body,
+    page:               r.page,
+    user_agent:         r.user_agent,
+    status:             r.status,
+    reviewed_by:        r.reviewed_by,
+    reviewer_initials:  r.reviewer_initials,
+    reviewed_at:        dtToIso(r.reviewed_at),
+    admin_note:         r.admin_note,
+    created_at:         dtToIso(r.created_at),
+  }));
+}
+
+export async function dbAdminUpdateFeedback(id, { status, admin_note }, reviewerSub) {
+  const setsArr = [], vals = [];
+  if (status !== undefined) {
+    if (status !== null && !FEEDBACK_STATUSES.includes(status)) throw new Error("bad status");
+    setsArr.push("`status` = ?"); vals.push(status);
+    // Stamp reviewer when transitioning out of `new`.
+    if (status && status !== "new" && reviewerSub) {
+      setsArr.push("`reviewed_by` = ?", "`reviewed_at` = CURRENT_TIMESTAMP(3)");
+      vals.push(reviewerSub);
+    }
+  }
+  if (admin_note !== undefined) {
+    setsArr.push("`admin_note` = ?");
+    vals.push(admin_note === "" ? null : admin_note);
+  }
+  if (!setsArr.length) return { ok: true, affected: 0 };
+  vals.push(id);
+  const r = await pool.query(
+    `UPDATE \`feedback\` SET ${setsArr.join(", ")} WHERE \`id\` = ?`,
+    vals
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
