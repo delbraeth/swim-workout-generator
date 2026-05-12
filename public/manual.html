@@ -423,7 +423,16 @@
     <!-- ══ EQUIPMENT ══ -->
     <section id="equipment">
       <h2>Equipment</h2>
-      <p>Check the gear you have available before generating. The generator guarantees that every checked piece of equipment appears in at least one set — and never assigns equipment to a set if you haven't selected it.</p>
+      <p>Each equipment card has <strong>three states</strong>. Tap to cycle: <strong>off → preferred → required → off</strong>. Your selections are saved to your account and restored next time you open the app.</p>
+
+      <table>
+        <thead><tr><th>State</th><th>Look</th><th>Generator behavior</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Off</strong></td><td>Empty box, slate border</td><td>No effect — equipment may or may not appear in the workout.</td></tr>
+          <tr><td><strong>Preferred</strong> <span style="color:#94a3b8;font-size:11px;font-weight:700;">PREF</span></td><td>Soft slate check</td><td>Generator <em>boosts</em> options that include the equipment (×2 weight per matching item), but doesn't reject options that lack it.</td></tr>
+          <tr><td><strong>Required</strong> <span style="color:#fbbf24;font-size:11px;font-weight:800;">★ REQ</span></td><td>Bright blue check, amber badge</td><td>Hard filter — every generated workout <em>must</em> include the equipment.</td></tr>
+        </tbody>
+      </table>
 
       <table>
         <thead><tr><th>Item</th><th>What it affects</th></tr></thead>
@@ -436,9 +445,14 @@
         </tbody>
       </table>
 
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>Mix &amp; match.</strong> Required + Preferred compose — e.g., set Paddles to <em>Required</em> (every workout has a pull set) and Fins to <em>Preferred</em> (the generator favors workouts with kick sets, but won't force one).</div>
+      </div>
+
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>No equipment needed.</strong> Leaving all boxes unchecked generates a fully equipment-free workout — just you and the water.</div>
+        <div class="callout-body"><strong>No equipment needed.</strong> Leaving all cards on <em>off</em> generates a fully equipment-free workout — just you and the water.</div>
       </div>
     </section>
 
