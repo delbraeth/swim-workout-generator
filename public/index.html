@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 15:26 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 15:30 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7984,6 +7984,83 @@
       { id: "yards_per_month",   label: "Yards / month",   unit: "yds",      period: "month", defaultTarget: 32000 },
     ];
 
+    // Single editable row used in the Profile modal's Identity panel.
+    // Click "Edit" → input + Save/Cancel. onSave throws on validation error.
+    function EditableProfileField({ label, value, placeholder, maxLength, type = "text", transform, badge, onSave }) {
+      const [editing, setEditing] = React.useState(false);
+      const [draft, setDraft]     = React.useState("");
+      const [saving, setSaving]   = React.useState(false);
+      const [error, setError]     = React.useState(null);
+      const startEdit = () => {
+        setDraft(value || "");
+        setError(null);
+        setEditing(true);
+      };
+      const commit = async () => {
+        const v = transform ? transform(draft) : draft;
+        setSaving(true); setError(null);
+        try {
+          await onSave(v.trim());
+          setEditing(false);
+        } catch (err) {
+          setError(err.message || String(err));
+        } finally {
+          setSaving(false);
+        }
+      };
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
+          <span style={{ color: "#64748b", width: 100, flexShrink: 0 }}>{label}:</span>
+          {editing ? (
+            <>
+              <input
+                type={type}
+                value={draft}
+                autoFocus
+                maxLength={maxLength}
+                placeholder={placeholder}
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+                style={{
+                  flex: 1, minWidth: 0,
+                  padding: "5px 9px", fontSize: 13,
+                  background: "#0f172a", color: "#e2e8f0",
+                  border: "1px solid #3b82f6", borderRadius: 5, outline: "none",
+                }} />
+              <button onClick={commit} disabled={saving}
+                style={{ padding: "5px 11px", borderRadius: 5, border: "none",
+                  background: saving ? "#1e3a5f" : "#3b82f6", color: "#fff",
+                  fontSize: 12, fontWeight: 700, cursor: saving ? "default" : "pointer" }}>
+                {saving ? "…" : "Save"}
+              </button>
+              <button onClick={() => setEditing(false)} disabled={saving}
+                style={{ padding: "5px 9px", borderRadius: 5,
+                  border: "1px solid #334155", background: "transparent",
+                  color: "#64748b", fontSize: 11, cursor: "pointer" }}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <span style={{ flex: 1, color: "#e2e8f0", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {value || <span style={{ color: "#475569", fontStyle: "italic", fontWeight: 400 }}>{placeholder || "—"}</span>}
+                {badge}
+              </span>
+              <button onClick={startEdit}
+                style={{ padding: "4px 10px", borderRadius: 5,
+                  border: "1px solid #334155", background: "transparent",
+                  color: "#93c5fd", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                Edit
+              </button>
+            </>
+          )}
+          {error && (
+            <span style={{ color: "#fca5a5", fontSize: 11, marginLeft: 8 }}>{error}</span>
+          )}
+        </div>
+      );
+    }
+
     function GoalRow({ metric, value, onSave, onDelete }) {
       const [editing, setEditing] = React.useState(false);
       const [draft, setDraft]     = React.useState("");
@@ -8062,7 +8139,7 @@
       );
     }
 
-    function ProfileModal({ onClose }) {
+    function ProfileModal({ onClose, onProfileChange }) {
       const [me, setMe]             = React.useState(null);
       const [sessions, setSessions] = React.useState([]);
       const [goals, setGoals]       = React.useState([]);
@@ -8182,19 +8259,76 @@
               <>
                 <div style={{ padding: "18px 20px" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Identity</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 16px", fontSize: 13 }}>
-                    <span style={{ color: "#64748b" }}>Initials:</span>
-                    <span style={{ color: "#e2e8f0", fontWeight: 700 }}>{me.initials || "—"}</span>
-                    <span style={{ color: "#64748b" }}>Email:</span>
-                    <span style={{ color: "#e2e8f0" }}>{me.email || "—"} {me.email_verified && <span style={{ color: "#10b981", fontSize: 11, marginLeft: 4 }}>✓ verified</span>}</span>
-                    <span style={{ color: "#64748b" }}>Member since:</span>
-                    <span style={{ color: "#e2e8f0" }}>{fmtDate(me.created_at)}</span>
-                    <span style={{ color: "#64748b" }}>Last login:</span>
-                    <span style={{ color: "#e2e8f0" }}>{fmtTime(me.last_login_at)}</span>
-                    {me.is_admin && (<>
-                      <span style={{ color: "#64748b" }}>Role:</span>
-                      <span style={{ color: "#a78bfa", fontWeight: 700 }}>Admin</span>
-                    </>)}
+                  <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    <EditableProfileField
+                      label="Name"
+                      field="display_name"
+                      value={me.display_name}
+                      placeholder="Your name (used to personalize the app)"
+                      maxLength={120}
+                      onSave={async (v) => {
+                        const res = await fetch("/api/me", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                          body: JSON.stringify({ display_name: v }),
+                        });
+                        if (!res.ok) {
+                          const body = await res.json().catch(() => ({}));
+                          throw new Error(body.error || `HTTP ${res.status}`);
+                        }
+                        setMe(prev => prev ? { ...prev, display_name: v || null } : prev);
+                        if (onProfileChange) onProfileChange();
+                      }} />
+                    <EditableProfileField
+                      label="Initials"
+                      field="initials"
+                      value={me.initials}
+                      placeholder="Up to 8 characters"
+                      maxLength={8}
+                      transform={(v) => v.toUpperCase()}
+                      onSave={async (v) => {
+                        const res = await fetch("/api/me", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                          body: JSON.stringify({ initials: v }),
+                        });
+                        if (!res.ok) {
+                          const body = await res.json().catch(() => ({}));
+                          throw new Error(body.error || `HTTP ${res.status}`);
+                        }
+                        setMe(prev => prev ? { ...prev, initials: v || null } : prev);
+                        if (onProfileChange) onProfileChange();
+                      }} />
+                    <EditableProfileField
+                      label="Email"
+                      field="email"
+                      type="email"
+                      value={me.email}
+                      placeholder="you@example.com"
+                      badge={me.email_verified ? <span style={{ color: "#10b981", fontSize: 11, marginLeft: 4 }}>✓ verified</span> : null}
+                      onSave={async (v) => {
+                        const res = await fetch("/api/me", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                          body: JSON.stringify({ email: v }),
+                        });
+                        if (!res.ok) {
+                          const body = await res.json().catch(() => ({}));
+                          throw new Error(body.error || `HTTP ${res.status}`);
+                        }
+                        setMe(prev => prev ? { ...prev, email: v || null, email_verified: (v === prev.email) ? prev.email_verified : false } : prev);
+                        if (onProfileChange) onProfileChange();
+                      }} />
+                    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 16px", marginTop: 4 }}>
+                      <span style={{ color: "#64748b" }}>Member since:</span>
+                      <span style={{ color: "#e2e8f0" }}>{fmtDate(me.created_at)}</span>
+                      <span style={{ color: "#64748b" }}>Last login:</span>
+                      <span style={{ color: "#e2e8f0" }}>{fmtTime(me.last_login_at)}</span>
+                      {me.is_admin && (<>
+                        <span style={{ color: "#64748b" }}>Role:</span>
+                        <span style={{ color: "#a78bfa", fontWeight: 700 }}>Admin</span>
+                      </>)}
+                    </div>
                   </div>
                 </div>
 
@@ -8665,7 +8799,7 @@
 
     const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
 
-    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, unit = "yds" }) {
+    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, personalFirstName, unit = "yds" }) {
       const [idx, setIdx]               = useState(0);
       const [paceIdx, setPaceIdx]       = useState(null);
       const [elapsed, setElapsed]       = useState(0); // seconds since workout started
@@ -8885,7 +9019,7 @@
               }}>
                 <div style={{ fontSize: 56, marginBottom: 8 }}>🎉</div>
                 <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", marginBottom: 4 }}>
-                  Workout complete!
+                  {personalFirstName ? `Nice work, ${personalFirstName}!` : "Workout complete!"}
                 </div>
                 <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
                   {workout.totalYards.toLocaleString()} {unit} · {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
@@ -9632,6 +9766,19 @@
         setView("generator");
       }, []);
 
+      // P: derive the display name used for personalization throughout the app.
+      // Falls back display_name → initials → null. Possessive needs the first
+      // word only, so "Patrick James" → "Patrick" → "Patrick's workout."
+      const personalFirstName = useMemo(() => {
+        const dn = (me?.display_name || "").trim();
+        if (dn) {
+          const first = dn.split(/\s+/)[0];
+          if (first) return first;
+        }
+        const ini = (me?.initials || "").trim();
+        return ini || null;
+      }, [me]);
+
       // N1: recently-used main-set labels for the signed-in user (last 7 days).
       // Returns Map<label, daysAgo> — used for (a) generator weight down-bias and
       // (b) "last seen Nd ago" badges in the favorites panel + main-set blocks.
@@ -9713,7 +9860,13 @@
               <span style={{ fontSize: 36 }}>🏊‍♂️</span>
               <div style={{ flex: 1 }}>
                 <h1 style={{ fontSize: 26, fontWeight: 900, color: "#fff", margin: 0, letterSpacing: "-0.02em" }}>Swim Workout Generator</h1>
-                <p style={{ color: "#93c5fd", fontSize: 13, margin: "2px 0 0" }}>Personalized swim workouts for masters swimmers</p>
+                <p style={{ color: "#93c5fd", fontSize: 13, margin: "2px 0 0" }}>
+                  {personalFirstName
+                    ? (view === "history" ? `${personalFirstName}'s history` :
+                       view === "admin"   ? "Admin console" :
+                       `${personalFirstName}'s workouts`)
+                    : "Personalized swim workouts for masters swimmers"}
+                </p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -10251,17 +10404,24 @@
               restSecs={restSecs}
               onClose={() => setRunWorkout(null)}
               onLogAsToday={handleLogAsToday}
+              personalFirstName={personalFirstName}
               unit={unit}
             />
           )}
           {showProfile && (
-            <ProfileModal onClose={() => {
-              setShowProfile(false);
-              // Refresh cached /api/me so header gates + initials stay current
-              fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
-              // Refresh goals so stats-panel progress bars reflect edits made in the modal
-              refreshGoals();
-            }} />
+            <ProfileModal
+              onClose={() => {
+                setShowProfile(false);
+                // Refresh cached /api/me so header gates + initials stay current
+                fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
+                // Refresh goals so stats-panel progress bars reflect edits made in the modal
+                refreshGoals();
+              }}
+              onProfileChange={() => {
+                // Live-refresh the App-level `me` so header personalization
+                // updates immediately without waiting for modal close.
+                fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
+              }} />
           )}
         </div>
       );
