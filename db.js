@@ -84,12 +84,15 @@ function rowToWorkoutEntry(row) {
   if (row.date_completed) e.dateCompleted = dateToYmd(row.date_completed);
   if (row.notes)         e.notes        = row.notes;
   if (row.initials)      e.userInitials = row.initials;
+  if (row.difficulty != null) e.difficulty = Number(row.difficulty);
+  if (row.focus_note)    e.focusNote    = row.focus_note;
   return e;
 }
 
 function entryToWorkoutRow(entry) {
   const { id, sub, savedAt, dateCompleted, type, totalYards, notes,
-          userInitials, completed, poolMode, ...payload } = entry;
+          userInitials, completed, poolMode, difficulty, focusNote,
+          ...payload } = entry;
   return {
     id,
     user_sub:       sub || null,
@@ -101,6 +104,8 @@ function entryToWorkoutRow(entry) {
     notes:          notes || null,
     initials:       userInitials || null,
     completed:      (completed === false || completed === 0) ? 0 : 1,
+    difficulty:     (difficulty == null || difficulty === "") ? null : Math.max(1, Math.min(5, Number(difficulty))),
+    focus_note:     focusNote || null,
     payload:        JSON.stringify(payload),
   };
 }
@@ -146,12 +151,22 @@ export async function dbPatchWorkout(id, patch, userSub) {
   if (userSub && cur[0].user_sub && cur[0].user_sub !== userSub)
     return { ok: false, status: 403, reason: "not authorized" };
 
-  const map = { notes: "notes", dateCompleted: "date_completed", completed: "completed" };
+  const map = {
+    notes:         "notes",
+    dateCompleted: "date_completed",
+    completed:     "completed",
+    difficulty:    "difficulty",
+    focusNote:     "focus_note",
+  };
   const sets = [], vals = [];
   for (const [k, col] of Object.entries(map)) {
     if (k in patch) {
       sets.push(`\`${col}\` = ?`);
-      vals.push(k === "completed" ? (patch[k] ? 1 : 0) : patch[k]);
+      let v = patch[k];
+      if (k === "completed")  v = v ? 1 : 0;
+      if (k === "difficulty") v = (v == null || v === "") ? null : Math.max(1, Math.min(5, Number(v)));
+      if (k === "focusNote")  v = v || null;
+      vals.push(v);
     }
   }
   if (sets.length) {
