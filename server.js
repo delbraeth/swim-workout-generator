@@ -54,7 +54,7 @@ import {
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
-  dbIsUser, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent,
+  dbIsUser, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe,
   dbCreateSession, dbGetSession, dbTouchSession,
   dbRevokeSession, dbRevokeOthersByUser, dbListSessions,
   dbGetOrCreateCsrf, dbVerifyCsrf,
@@ -394,6 +394,17 @@ app.get("/api/auth/csrf", requireAuth, async (req, res) => {
     const token = await dbGetOrCreateCsrf(req.sessionId);
     if (!token) return res.status(401).json({ error: "no session" });
     res.json({ token });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Return the authenticated user's profile + workout stats. Used by the Profile UI.
+app.get("/api/me", checkOrigin, requireAuth, async (req, res) => {
+  try {
+    const me = await dbGetMe(req.userSub);
+    if (!me) return res.status(404).json({ error: "user not found" });
+    res.json(me);
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
