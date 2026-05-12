@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 15:04 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 15:06 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9422,27 +9422,6 @@
         setView("generator");
       }, []);
 
-      // Last completed session summary — must be before early returns (Rules of Hooks)
-      const lastSession = useMemo(() => {
-        const done = history.filter(e => e.completed !== false && e.dateCompleted);
-        if (!done.length) return null;
-        done.sort((a, b) => b.dateCompleted.localeCompare(a.dateCompleted));
-        const e = done[0];
-        const today = new Date().toISOString().slice(0, 10);
-        const diffDays = Math.round((new Date(today) - new Date(e.dateCompleted)) / 86400000);
-        let when;
-        if      (diffDays === 0) when = "today";
-        else if (diffDays === 1) when = "yesterday";
-        else if (diffDays <  7)  when = `${diffDays} days ago`;
-        else if (diffDays < 14)  when = "1 week ago";
-        else                     when = `${Math.floor(diffDays / 7)} weeks ago`;
-        const lastUnit = (e.poolMode === "50m" || e.poolMode === "25m") ? "m" : "yds";
-        const typeMeta = WORKOUT_TYPES.find(t => t.id === e.type);
-        const emoji = typeMeta ? typeMeta.emoji : "🏊";
-        const label = e.typeLabel || (typeMeta ? typeMeta.label : e.type);
-        return { emoji, label, totalYards: e.totalYards, unit: lastUnit, when };
-      }, [history]);
-
       // N1: recently-used main-set labels for the signed-in user (last 7 days).
       // Returns Map<label, daysAgo> — used for (a) generator weight down-bias and
       // (b) "last seen Nd ago" badges in the favorites panel + main-set blocks.
@@ -9663,13 +9642,6 @@
 
               {/* Max Yardage / Distance Slider */}
               <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} />
-
-              {/* Last session summary */}
-              {lastSession && (
-                <div style={{ textAlign: "center", color: "#64748b", fontSize: 12, marginBottom: 12, marginTop: -4 }}>
-                  Last: {lastSession.emoji} {lastSession.label} · {lastSession.totalYards.toLocaleString()} {lastSession.unit} · {lastSession.when}
-                </div>
-              )}
 
               {/* Quick-launch — last 3 of your own completed workouts (pre-pool "do yesterday's again") */}
               {!workout && quickLaunch.length > 0 && (
