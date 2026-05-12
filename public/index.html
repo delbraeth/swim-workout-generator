@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 04:17 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-12 04:26 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9427,7 +9427,11 @@
             <RunWorkoutOverlay workout={runWorkout} restSecs={restSecs} onClose={() => setRunWorkout(null)} unit={unit} />
           )}
           {showProfile && (
-            <ProfileModal onClose={() => setShowProfile(false)} />
+            <ProfileModal onClose={() => {
+              setShowProfile(false);
+              // Refresh cached /api/me so header gates + initials stay current
+              fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
+            }} />
           )}
         </div>
       );
