@@ -55,6 +55,7 @@ import {
   dbGetSettings, dbUpsertSettings, dbPatchSettingsExtra,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbListGoals, dbSetGoal, dbDeleteGoal,
+  dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   dbIsUser, dbIsAdmin, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
@@ -823,6 +824,62 @@ app.delete("/api/goals/:metric", checkOrigin, requireAuth, requireCsrf, writeLim
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ───── Feedback (Session 5) ───────────────────────────────────────────
+// User submission. category + subject + body required. page + user_agent
+// auto-captured client-side. Logs a `feedback.submit` audit event.
+app.post("/api/feedback", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { category, subject, body, page, user_agent } = req.body || {};
+    const r = await dbInsertFeedback({
+      userSub:   req.userSub,
+      category,
+      subject,
+      body,
+      page,
+      userAgent: user_agent || req.get("user-agent"),
+    });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "feedback.submit",
+      ...reqMeta(req),
+      details:   { feedback_id: r.id, category },
+    });
+    res.json({ ok: true, id: r.id });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
+});
+
+// Admin: list feedback (default filter: status=new). Optional ?status= and ?user_sub=.
+app.get("/api/admin/feedback", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { status, user_sub } = req.query;
+    res.json(await dbAdminListFeedback({ status, userSub: user_sub }));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Admin: update status and/or admin_note. Stamps reviewer/reviewed_at when
+// status transitions out of "new". Logs admin.feedback.update.
+app.patch("/api/admin/feedback/:id", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "bad id" });
+    const { status, admin_note } = req.body || {};
+    const r = await dbAdminUpdateFeedback(id, { status, admin_note }, req.userSub);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "admin.feedback.update",
+      ...reqMeta(req),
+      details:   { feedback_id: id, status, has_note: admin_note != null },
+    });
+    res.json(r);
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
   }
 });
 
