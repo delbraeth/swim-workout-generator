@@ -592,7 +592,22 @@
       <p>In the pace field above the slider, update your pace and the app rescales every interval in the current workout proportionally. This is useful when you want to try a harder or easier version of the same workout.</p>
 
       <h3>Edit a single interval</h3>
-      <p>Click any interval in the workout table to edit it inline. Type the new interval (e.g. <code>2:30</code> or <code>:45</code>), then press <kbd>Enter</kbd> or click away to commit. The estimated duration updates immediately.</p>
+      <p>Click any interval in the workout table to edit it inline. Type the new interval, then press <kbd>Enter</kbd> or click away to commit. The estimated duration updates immediately.</p>
+
+      <p>The editor accepts any of these forms — they're all normalized to the canonical <code>On M:SS</code> when saved:</p>
+      <table>
+        <thead><tr><th>You type</th><th>Stored as</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>1:30</code></td><td><code>On 1:30</code></td><td>Standard M:SS — the most common form.</td></tr>
+          <tr><td><code>:45</code></td><td><code>On :45</code></td><td>Sub-minute intervals.</td></tr>
+          <tr><td><code>90</code></td><td><code>On 1:30</code></td><td>Bare integer = total seconds (range 5–3600).</td></tr>
+          <tr><td><code>no interval</code> / <code>none</code> / <code>off</code></td><td><code>No interval — swim easy</code></td><td>Removes the interval; the set's duration falls back to 35 yd/min.</td></tr>
+        </tbody>
+      </table>
+      <p>Anything the editor can't parse (e.g. typos, decimals, hours) is rejected with an inline message, the input gets a red border, and the editor stays open so you can fix it. Press <kbd>Escape</kbd> to cancel without saving.</p>
+
+      <h3>Clear an interval (⊘ button)</h3>
+      <p>While editing, the <strong>⊘</strong> button next to the input clears the set's interval to <em>"No interval — swim easy"</em> in one click. Useful for switching a timed set to a free-swim recovery.</p>
 
       <div class="callout tip">
         <div class="callout-icon">💡</div>
