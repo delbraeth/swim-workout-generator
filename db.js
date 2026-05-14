@@ -135,9 +135,15 @@ export async function dbEnsureUser(userSub, initials = null) {
 }
 
 // ─── workouts ───────────────────────────────────────────────────────────────
+// F5 — Filter is strictly `user_sub = ?` (the legacy `OR user_sub IS NULL`
+// clause was dropped 2026-05-14 after a count confirmed zero orphan rows in
+// prod). Session 1's /api/log-workout route also rejects writes without a
+// userSub, so no new NULLs can appear. The schema still permits NULL on the
+// column for forward-compat with one-off imports; if a NULL row ever appears
+// it would be invisible here and would need an explicit migration to claim it.
 export async function dbListWorkouts(userSub) {
   const sql = userSub
-    ? "SELECT * FROM `workouts` WHERE `user_sub` IS NULL OR `user_sub` = ? ORDER BY `saved_at` DESC"
+    ? "SELECT * FROM `workouts` WHERE `user_sub` = ? ORDER BY `saved_at` DESC"
     : "SELECT * FROM `workouts` ORDER BY `saved_at` DESC";
   const rows = await pool.query(sql, userSub ? [userSub] : []);
   return rows.map(rowToWorkoutEntry);
