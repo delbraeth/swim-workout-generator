@@ -424,14 +424,26 @@ export async function dbListSessions(userSub) {
 }
 
 // ─── audit_events ───────────────────────────────────────────────────────────
-// Best-effort insert. Failures are logged and swallowed so audit issues
-// never fail user requests. Pass `details` as a plain object; it'll be JSON-stringified.
+// S5 S5 — CONTRACT: never throws, never rejects. Callers MUST NOT `.catch()`
+// or `await` this for error handling — it's fire-and-forget by design so audit
+// issues never affect user-facing requests. The function logs failures (DB
+// down, JSON.stringify on a circular `details` object, etc.) and resolves.
+// Pass `details` as a plain object; it'll be JSON-stringified.
 export async function dbAuditEvent({ userSub = null, eventType, ip = null, userAgent = null, details = null }) {
   if (!pool) return;
   try {
+    let detailsJson = null;
+    if (details) {
+      try {
+        detailsJson = JSON.stringify(details);
+      } catch (jsonErr) {
+        console.warn("[audit] details JSON.stringify failed:", jsonErr.message, "eventType=", eventType);
+        detailsJson = JSON.stringify({ __audit_error: "details_serialization_failed" });
+      }
+    }
     await pool.query(
       "INSERT INTO `audit_events` (`user_sub`, `event_type`, `ip`, `user_agent`, `details`) VALUES (?, ?, ?, ?, ?)",
-      [userSub, eventType, ip, userAgent ? String(userAgent).slice(0, 255) : null, details ? JSON.stringify(details) : null]
+      [userSub, eventType, ip, userAgent ? String(userAgent).slice(0, 255) : null, detailsJson]
     );
   } catch (err) {
     console.warn("[audit] insert failed:", err.message);
