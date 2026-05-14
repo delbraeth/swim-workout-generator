@@ -456,6 +456,11 @@
         <div class="callout-icon">ℹ️</div>
         <div class="callout-body"><strong>No equipment needed.</strong> Leaving all cards on <em>off</em> generates a fully equipment-free workout — just you and the water.</div>
       </div>
+
+      <div class="callout warn">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-body"><strong>If a Required item can't be honored</strong> — e.g., you've required both Paddles and a Kickboard but no drill + main combination at your current max-yardage covers both — the generator surfaces a red banner instead of silently producing a workout that doesn't meet your requirements. Fix by raising max-yardage, switching one item from <em>Required</em> to <em>Preferred</em>, or unpinning sections so the generator has more freedom.</div>
+      </div>
     </section>
 
     <!-- ══ GENERATING ══ -->
@@ -515,7 +520,7 @@
         <tbody>
           <tr><td>Main-set pool</td><td>Filtered to options in the <strong>Easy</strong> or <strong>Aerobic</strong> effort zones only. If a type's mains are all higher-intensity, the filter falls back to the full pool and lets the other recovery levers do the work.</td></tr>
           <tr><td>Repeat suppression</td><td>×2 and ×3 main-set variants are skipped — you'll always get the base option, no multi-round wrapping.</td></tr>
-          <tr><td>Floor drop</td><td>Minimum total drops from 1,900 yds (2,000 m) to <strong>1,200 yds (1,300 m)</strong>, so a short recovery day is allowed.</td></tr>
+          <tr><td>Floor drop</td><td>Minimum total drops from 1,900 yds (2,000 m) to <strong>1,200 yds (1,300 m)</strong>, AND the "stay close to your max" rule is suspended for the generation. Result: a recovery workout actually comes in short — e.g. with max=2,400 you can get a ~1,300 yd session instead of a forced ~2,000 yd one.</td></tr>
           <tr><td>Interval stretch</td><td>Every set's interval is multiplied by <strong>1.10</strong> after pace scaling. <code>On 2:00</code> becomes <code>On 2:12</code>.</td></tr>
         </tbody>
       </table>
@@ -613,6 +618,11 @@
         <div class="callout-icon">💡</div>
         <div class="callout-body"><strong>Sets without intervals</strong> show "No interval" — these are typically easy recovery swims. The estimated duration for these sets uses a 35 yd/min fallback.</div>
       </div>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Estimated time includes transitions.</strong> The "~N min" estimate adds +10 seconds per between-set boundary (within blocks and between blocks) on top of the raw interval × reps math. A typical 4-block workout adds ~2 minutes for transitions. Old saved entries keep whatever estimate was computed at save time and won't recompute on load.</div>
+      </div>
     </section>
 
     <!-- ══ SET DESCRIPTIONS ══ -->
@@ -625,8 +635,18 @@
     <!-- ══ SET SWAP ══ -->
     <section id="swap">
       <h2>Set Swap</h2>
-      <p>The <strong>⇄</strong> button appears on individual sets within a block. Tap it to see a shorter and longer equivalent set. Swapping rescales the interval proportionally and updates the block's total yardage.</p>
+      <p>The <strong>⇄</strong> button appears on individual sets within a block. Tap it to see a shorter and longer equivalent set. Swapping rescales the interval and updates the block's total yardage.</p>
       <p>Use set swap to fine-tune the balance within a section without regenerating the whole block.</p>
+
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body"><strong>Intervals scale non-linearly.</strong> Doubling distance doesn't simply double the interval — a 100 @ 2:00 turns into 200 @ ~4:10, not 4:00. That matches how swimmers actually slow as distance grows (Riegel-style ~1.06 exponent). For sprints, halving works the same way in reverse: the swap is a starting point — adjust ±5 sec to match your own effort.</div>
+      </div>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Longer-swap availability depends on the bank.</strong> The "longer" option only appears when the workout bank for your current pool mode actually contains sets at the target distance. SCY and SCM banks cover a wider range (25 distinct distances up to 1,500); LCM is sparser (7 distinct distances), so long-course swimmers see fewer longer-swap options.</div>
+      </div>
     </section>
 
     <!-- ══ REPEAT SETS ══ -->
