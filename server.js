@@ -51,7 +51,7 @@ import { fileURLToPath } from "url";
 
 import {
   dbActive, pingDb,
-  dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbPatchWorkout, dbDeleteWorkout,
+  dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbGetWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings, dbPatchSettingsExtra,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbListGoals, dbSetGoal, dbDeleteGoal,
@@ -672,16 +672,56 @@ app.get("/api/workouts", requireAuth, async (req, res) => {
   }
 });
 
+// Allowed enum values for workout entries — kept here (not imported) because
+// server.js is the validation boundary for /api/log-workout.
+const VALID_WORKOUT_TYPES = new Set([
+  "im", "distance", "sprint", "endurance", "technique", "mixed", "back", "breast", "fly",
+]);
+const VALID_POOL_MODES   = new Set(["25y", "25m", "50m"]);
+const REQUIRED_SECTIONS  = ["warmup", "drill", "main", "cooldown"];
+
+// Validate a workout entry's required shape. Extras are allowed (they get
+// jammed into payload JSON by db.entryToWorkoutRow). Returns null on success
+// or a string describing the first failure.
+function validateWorkoutEntry(entry) {
+  if (!entry || typeof entry !== "object")             return "entry must be an object";
+  if (typeof entry.id !== "string" || !entry.id)       return "entry.id (string) required";
+  if (!VALID_WORKOUT_TYPES.has(entry.type))            return `entry.type must be one of: ${[...VALID_WORKOUT_TYPES].join(", ")}`;
+  if (!Number.isFinite(entry.totalYards) || entry.totalYards <= 0)
+                                                       return "entry.totalYards must be a positive number";
+  if (!VALID_POOL_MODES.has(entry.poolMode))           return `entry.poolMode must be one of: ${[...VALID_POOL_MODES].join(", ")}`;
+  if (!Array.isArray(entry.blocks) || entry.blocks.length !== 4)
+                                                       return "entry.blocks must be an array of 4 sections (warmup, drill, main, cooldown)";
+  for (let i = 0; i < REQUIRED_SECTIONS.length; i++) {
+    const b = entry.blocks[i];
+    if (!b || typeof b !== "object")                   return `entry.blocks[${i}] must be an object`;
+    if (b.section !== REQUIRED_SECTIONS[i])            return `entry.blocks[${i}].section must be "${REQUIRED_SECTIONS[i]}" (got "${b.section}")`;
+    if (!Array.isArray(b.sets) || b.sets.length === 0) return `entry.blocks[${i}].sets must be a non-empty array`;
+  }
+  return null;
+}
+
 app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const entry = req.body;
-    if (!entry || !entry.id) return res.status(400).json({ error: "entry must include an id" });
-    if (req.userSub) entry.sub = req.userSub;
+    // F3 — minimal-shape validation. Required fields must be present and well-typed.
+    // Anything else is allowed and ends up in the payload JSON via entryToWorkoutRow.
+    const validationError = validateWorkoutEntry(entry);
+    if (validationError) return res.status(400).json({ error: validationError });
+    // Per the user_sub policy: new writes must be attributed to a user.
+    // Open-mode (APPLE_AUTH_ACTIVE=false) has no userSub and is rejected here.
+    // Existing legacy rows with user_sub IS NULL are preserved by dbListWorkouts.
+    if (!req.userSub) return res.status(401).json({ error: "user_sub required for new writes" });
+    entry.sub = req.userSub;
     if (await dbWorkoutExists(entry.id)) {
       return res.status(409).json({ error: "duplicate id", id: entry.id });
     }
     await dbInsertWorkout(entry);
-    res.json({ ok: true, id: entry.id, entry });
+    // F1 — read-back: return the DB's view of the row, not the client's payload.
+    // This ensures the client's optimistic state replacement reflects any
+    // server-side coercion (defaults, JSON round-tripping, type narrowing).
+    const stored = await dbGetWorkout(entry.id);
+    res.json({ ok: true, id: entry.id, entry: stored || entry });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
