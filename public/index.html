@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-14 17:16 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-14 17:48 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -282,9 +282,17 @@
         return "vo2";
       }
       if (/threshold|t.?pace|rpe ?[78]/.test(text)) return "threshold";
-      if (/easy|recovery|smooth|drill|technique/.test(text)) {
-        // Warmups and drills lean easy/aerobic — bias to easy on these cues.
-        return (sectionKey === "warmup" || sectionKey === "drill") ? "easy" : "aerobic";
+      // S4 #11 — keyword set is tighter for main than for warmup/drill. In a main
+      // set, "drill rotation" or "stroke technique" is often a sub-cue of a
+      // harder workout (e.g. "Pull with paddles + drill rotation") and shouldn't
+      // collapse the whole set to easy/aerobic. Keep those words for warmup/drill
+      // sections where they genuinely signal easy work.
+      const isWarmupOrDrill = (sectionKey === "warmup" || sectionKey === "drill");
+      const easyRegex = isWarmupOrDrill
+        ? /easy|recovery|smooth|drill|technique/
+        : /easy|recovery|smooth/;
+      if (easyRegex.test(text)) {
+        return isWarmupOrDrill ? "easy" : "aerobic";
       }
       if (/descend|build|negative.?split|strong/.test(text)) {
         // Descend/build sets typically climb into threshold by the end.
@@ -298,10 +306,28 @@
       const dist = Number(set.dist || 0);
       if (secs && dist > 0) {
         const per100 = secs / (dist / 100);
-        if (per100 < 75)  return "anaerobic";     // < 1:15/100 — sprint-tight
-        if (per100 < 95)  return "vo2";           // < 1:35/100
-        if (per100 < 115) return "threshold";     // < 1:55/100
-        if (per100 < 145) return "aerobic";       // < 2:25/100
+        // S4 #13 — Stroke factor: non-free strokes naturally have higher
+        // per-100 at the same effort, so the thresholds need to scale up or
+        // a "moderate" back/breast gets tagged harder than a "moderate" free.
+        // Heuristic detection from desc text; defaults to free (1.0) when unclear.
+        const strokeFactor =
+          /\bback/.test(text)                ? 1.09 :
+          /\bbreast/.test(text)              ? 1.18 :
+          /\bbutterfly\b|\bfly\b/.test(text) ? 1.05 :
+          /\bim\b/.test(text)                ? 1.13 :
+          1.0;
+        // S4 #15 — A short sprint (e.g. 0:52 on 50yd) computes per100 = 104,
+        // which under the old flat threshold (<75) got demoted to "threshold".
+        // For dist ≤ 50, widen the anaerobic cutoff so the fallback path
+        // catches sprint pace correctly when explicit keywords don't fire.
+        const anaerobicMax = (dist <= 50 ? 110 : 75) * strokeFactor;
+        const vo2Max       = 95  * strokeFactor;
+        const thresholdMax = 115 * strokeFactor;
+        const aerobicMax   = 145 * strokeFactor;
+        if (per100 < anaerobicMax) return "anaerobic";
+        if (per100 < vo2Max)       return "vo2";
+        if (per100 < thresholdMax) return "threshold";
+        if (per100 < aerobicMax)   return "aerobic";
         return "easy";
       }
 
@@ -5933,7 +5959,18 @@
     function pickWeighted(arr, weightFn) {
       const weights = arr.map(weightFn);
       const total = weights.reduce((s, w) => s + (w > 0 ? w : 0), 0);
-      if (total <= 0) return pick(arr);
+      if (total <= 0) {
+        // S4 #10 — defensive guard: if the weight function zeroed everything
+        // (e.g. phase × recovery filter collapsed every option's score), we
+        // fall back to uniform pick. That's a safe degradation but masks an
+        // upstream bug where the filter should have left at least one option
+        // with positive weight. Surface it in the console so the issue is
+        // visible during development.
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[pickWeighted] all weights non-positive — falling back to uniform pick", { arrLen: arr.length });
+        }
+        return pick(arr);
+      }
       let r = Math.random() * total;
       for (let i = 0; i < arr.length; i++) {
         const w = weights[i] > 0 ? weights[i] : 0;
@@ -6029,18 +6066,12 @@
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
-      const allWarmups   = is25m ? WARMUP_OPTIONS_SCM   : is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
-      const allCooldowns = is25m ? COOLDOWN_OPTIONS_SCM : is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
-      const drillList = is25m
-        ? (DRILL_OPTIONS_SCM[typeId] || DRILL_OPTIONS_SCM.mixed || DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
-        : is50m
-        ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
-        : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
-      let mainList = is25m
-        ? (MAIN_OPTIONS_SCM[typeId] || MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
-        : is50m
-        ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
-        : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
+      // Unit-aware bank lookup. Each call returns options already in the
+      // user's pool unit (converted from yd↔m if the fallback crossed banks).
+      const allWarmups   = getBankOptions("warmup",   typeId, poolMode);
+      const allCooldowns = getBankOptions("cooldown", typeId, poolMode);
+      const drillList    = getBankOptions("drill",    typeId, poolMode);
+      let   mainList     = getBankOptions("main",     typeId, poolMode);
 
       // C: recovery mode — filter mains down to easy/aerobic zone options.
       // If the filter would empty the pool, fall back to all mains and let
@@ -6075,8 +6106,14 @@
         ? Math.min(recoveryFloor, isMeters ? MIN_METERS : MIN_YARDS)
         : (isMeters ? MIN_METERS : MIN_YARDS);
       const absoluteMin = Math.max(baseAbsMin, userMin || 0);
-      // Floor scales with target; relax when pins are present (user chose those blocks)
-      const minTotal = hasPins ? absoluteMin : Math.max(absoluteMin, maxYards - 400);
+      // S3 #4 — Floor scales with target so unpinned workouts stay close to maxYards.
+      // Relaxed when (a) pins are present (user chose those blocks intentionally),
+      // or (b) recovery mode is on — recovery wants a SHORT easy day, so the
+      // -400 "stay near max" rule is dropped to let the absoluteMin (= 1200y /
+      // 1300m floor from baseAbsMin) actually bite.
+      const minTotal = (hasPins || recoveryMode)
+        ? absoluteMin
+        : Math.max(absoluteMin, maxYards - 400);
 
       const hasEquipReq = equipment && Object.keys(EQUIP_REQUIREMENTS).some(k => isEquipRequired(equipment, k));
 
@@ -6104,7 +6141,12 @@
           const affinityPool = warmupFamily
             ? validWarmups.filter(o => o.typeAffinity && o.typeAffinity.includes(warmupFamily))
             : validWarmups;
-          wu = pickBiased(affinityPool.length > 0 ? affinityPool : validWarmups, freeBudget * 0.12);
+          // S4 #12 — Use total maxYards (not freeBudget) for the floor. With
+          // pinned drill+main+cooldown, freeBudget shrinks to just the warmup's
+          // remaining share, so a 12%-of-freeBudget floor becomes essentially
+          // zero. Tying to maxYards keeps the floor proportional to the
+          // intended workout size regardless of pin state.
+          wu = pickBiased(affinityPool.length > 0 ? affinityPool : validWarmups, maxYards * 0.12);
           freeUsed += wu.totalYards;
         }
 
@@ -6145,7 +6187,11 @@
               });
           const validMain = mainPoolExpanded.filter(o => o.totalYards <= mainBudget);
           if (!validMain.length) continue;
-          const maFloor = Math.max(minMa, mainBudget * 0.65);
+          // S3 #4 — main set normally takes ≥65% of the remaining budget so
+          // workouts feel substantive. In recovery mode we want a SHORT day,
+          // so the 65% rule is dropped: any main that fits the budget is fair
+          // game, down to the absolute minimum (minMa).
+          const maFloor = recoveryMode ? minMa : Math.max(minMa, mainBudget * 0.65);
           // Weighting:
           //   base    = 1
           //   favorite× 3
@@ -6153,6 +6199,13 @@
           //   recently-used label (last 7d) × 0.25  ← N1 anti-repeat
           //   phase-zone multiplier (e.g. taper: easy×1.5, vo2×0.5) ← N5
           //   preferred-equipment match × 2 per item ← F
+          //
+          // S4 #9 — Label-keyed lookups (favorites, recentSet) are working as
+          // "anti-repeat by family": when the same conceptual workout (e.g.
+          // "IM Descend") is authored across pool modes (SCY/SCM/LCM) or types
+          // (im / mixed), they share a label, so down-weighting one down-weights
+          // all variants. That's the intended behavior. Labels that *aren't*
+          // meant to share semantics MUST stay globally unique.
           const recentSet = new Set(recentLabels);
           const phaseSpec = phase && PHASES[phase] ? PHASES[phase] : null;
           const mainWeight = (o) => {
@@ -6191,7 +6244,8 @@
 
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
-          return buildWorkout(typeId, wu, dr, ma, cd, total);
+          // S3 #19 — telemetry: how often does the random-attempt loop succeed?
+          return { ...buildWorkout(typeId, wu, dr, ma, cd, total), __genPath: "loop", __genAttempts: attempt + 1 };
         }
       }
 
@@ -6222,7 +6276,14 @@
               combinationSatisfies(d, m, equipment)
             )
           );
-          if (eqPreferred.length) drCandidates = eqPreferred;
+          // S3 #3 — if NO drill+main combination satisfies the required-equipment
+          // set, return a failure sentinel instead of silently dropping the filter.
+          // The user asked for that equipment to be required; honor it.
+          if (!eqPreferred.length) {
+            return { __generateFailure: true, reason: "equipment_unsatisfiable",
+                     error: "No drill + main combination covers all your required equipment at this max-yardage. Try lowering an item to 'preferred', or raising the max-yardage." };
+          }
+          drCandidates = eqPreferred;
         }
         dr = drCandidates[0];
         fbFree += dr.totalYards;
@@ -6248,7 +6309,14 @@
         mainCandidates = mainCandidates.slice().sort(byYardsDesc);
         if (hasEquipReq) {
           const eqMain = mainCandidates.filter(m => combinationSatisfies(dr, m, equipment));
-          if (eqMain.length) mainCandidates = eqMain;
+          // S3 #3 — defensive: the eqPreferred check above guarantees a matching
+          // main exists for the chosen drill, so this should never be empty. If
+          // it is, the invariant has been violated — fail rather than mis-satisfy.
+          if (!eqMain.length) {
+            return { __generateFailure: true, reason: "equipment_unsatisfiable_for_drill",
+                     error: "Selected drill has no compatible main set for your required equipment. Try regenerating or adjusting equipment." };
+          }
+          mainCandidates = eqMain;
         }
         ma = mainCandidates[0];
         fbFree += ma.totalYards;
@@ -6263,7 +6331,8 @@
       }
 
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
-      return buildWorkout(typeId, wu, dr, ma, cd, total);
+      // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
+      return { ...buildWorkout(typeId, wu, dr, ma, cd, total), __genPath: "fallback", __genAttempts: attempts };
     }
 
     function buildWorkout(typeId, wu, dr, ma, cd, total) {
@@ -6317,19 +6386,11 @@
       const upper = maxYards - others;
 
       let pool;
-      if (sectionKey === "warmup")        pool = is25m ? WARMUP_OPTIONS_SCM   : is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
-      else if (sectionKey === "cooldown") pool = is25m ? COOLDOWN_OPTIONS_SCM : is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
-      else if (sectionKey === "drill")    pool = is25m
-        ? (DRILL_OPTIONS_SCM[typeId] || DRILL_OPTIONS_SCM.mixed || DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
-        : is50m
-        ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
-        : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
+      if (sectionKey === "warmup")        pool = getBankOptions("warmup",   typeId, poolMode);
+      else if (sectionKey === "cooldown") pool = getBankOptions("cooldown", typeId, poolMode);
+      else if (sectionKey === "drill")    pool = getBankOptions("drill",    typeId, poolMode);
       else {
-        let basePool = is25m
-          ? (MAIN_OPTIONS_SCM[typeId] || MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
-          : is50m
-          ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
-          : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
+        let basePool = getBankOptions("main", typeId, poolMode);
         // C: in recovery mode, only consider easy/aerobic mains, no repeat variants.
         if (recoveryMode) {
           const recoveryMains = basePool.filter(o => {
@@ -6588,6 +6649,97 @@
       return formatIntervalSecs(scaled);
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  UNIT CONVERSION — yd ↔ m
+    //  Used by the bank-fallback path when a content gap forces us to
+    //  pull options authored for a different pool unit. Distances get
+    //  multiplied by 0.9144 (or 1/0.9144) and snapped to pool-realistic
+    //  increments; intervals scale by the same ratio so per-unit pace
+    //  stays equivalent. `label` and `desc` text are NOT rewritten —
+    //  see the manual / code-quality-plan memory for why.
+    // ═══════════════════════════════════════════════════════════════
+    const YARDS_PER_METER = 1 / 0.9144;
+
+    // Snap a distance to a pool-realistic increment:
+    //   ≥100 → nearest 25 (matches typical 100/150/200/400/etc authoring)
+    //   <100 → nearest 5  (captures 25/50/75 plus the occasional 15-yd
+    //                       drill cue without forcing 0)
+    function snapPoolDistance(value) {
+      if (value <= 0) return 0;
+      if (value >= 100) return Math.round(value / 25) * 25;
+      return Math.max(5, Math.round(value / 5) * 5);
+    }
+    function convertYardsToMeters(yards)   { return snapPoolDistance(yards * 0.9144); }
+    function convertMetersToYards(meters)  { return snapPoolDistance(meters * YARDS_PER_METER); }
+
+    // Convert a whole option (warmup/drill/main/cooldown) across the
+    // unit boundary. Each set's dist + interval get converted; totalYards
+    // is recomputed from the post-conversion sets. The returned option is
+    // a fresh copy; the input is untouched. fromUnit / toUnit ∈ {"yd","m"}.
+    function convertOptionUnits(option, fromUnit, toUnit) {
+      if (fromUnit === toUnit) return option;
+      const ratio = toUnit === "m" ? 0.9144 : YARDS_PER_METER;
+      const distConvert = toUnit === "m" ? convertYardsToMeters : convertMetersToYards;
+      const newSets = option.sets.map(s => ({
+        ...s,
+        dist:     distConvert(s.dist),
+        interval: scaleInterval(s.interval, ratio),
+      }));
+      const newTotal = newSets.reduce((sum, s) => sum + (s.reps || 1) * s.dist, 0);
+      return { ...option, sets: newSets, totalYards: newTotal };
+    }
+
+    // Unit-aware bank selection. Replaces the older ternary fallback that
+    // returned yard-authored options to a meters-mode user without converting.
+    // Fallback chain (defense in depth — today all three banks have full
+    // coverage for all 9 typeIds, so the cross-unit branch is dead code now):
+    //   25m → SCM → LCM → SCY    (SCM authored for 25m; LCM authored for 50m
+    //                              but same unit; SCY needs yd→m conversion)
+    //   50m → LCM → SCY          (skip SCM — different pool size)
+    //   25y → SCY                (no fallback — SCY is the universal source)
+    //
+    // `kind`   — "warmup" | "cooldown" | "drill" | "main"
+    // `typeId` — workout type (ignored for flat warmup/cooldown banks)
+    // `poolMode` — "25y" | "25m" | "50m"
+    function getBankOptions(kind, typeId, poolMode) {
+      const targetUnit = poolMode === "25y" ? "yd" : "m";
+      const byType = (kind === "drill" || kind === "main");
+
+      const TABLE = {
+        warmup: {
+          "25m": [["m", WARMUP_OPTIONS_SCM], ["m", WARMUP_OPTIONS_50M], ["yd", WARMUP_OPTIONS]],
+          "50m": [["m", WARMUP_OPTIONS_50M], ["yd", WARMUP_OPTIONS]],
+          "25y": [["yd", WARMUP_OPTIONS]],
+        },
+        cooldown: {
+          "25m": [["m", COOLDOWN_OPTIONS_SCM], ["m", COOLDOWN_OPTIONS_50M], ["yd", COOLDOWN_OPTIONS]],
+          "50m": [["m", COOLDOWN_OPTIONS_50M], ["yd", COOLDOWN_OPTIONS]],
+          "25y": [["yd", COOLDOWN_OPTIONS]],
+        },
+        drill: {
+          "25m": [["m", DRILL_OPTIONS_SCM], ["m", DRILL_OPTIONS_50M], ["yd", DRILL_OPTIONS]],
+          "50m": [["m", DRILL_OPTIONS_50M], ["yd", DRILL_OPTIONS]],
+          "25y": [["yd", DRILL_OPTIONS]],
+        },
+        main: {
+          "25m": [["m", MAIN_OPTIONS_SCM], ["m", MAIN_OPTIONS_50M], ["yd", MAIN_OPTIONS]],
+          "50m": [["m", MAIN_OPTIONS_50M], ["yd", MAIN_OPTIONS]],
+          "25y": [["yd", MAIN_OPTIONS]],
+        },
+      };
+      const chain = TABLE[kind][poolMode];
+
+      for (const [unit, data] of chain) {
+        const list = byType
+          ? (data[typeId] || data.mixed)
+          : data;
+        if (list && list.length > 0) {
+          return unit === targetUnit ? list : list.map(o => convertOptionUnits(o, unit, targetUnit));
+        }
+      }
+      return [];
+    }
+
     // Format a workout as plain text for clipboard sharing.
     function workoutToText(workout, meta, paceInput, unit = "yds") {
       if (!workout) return "";
@@ -6623,7 +6775,13 @@
     // Sum reps×interval across all sets; fall back to 35 yd/min for sets with no interval.
     function calcEstimatedMin(blocks) {
       const FALLBACK_YD_PER_MIN = 35;
+      // S4 #17 — implicit transition between sets (read board, push off, pause
+      // between reps of different sets). ~10s per boundary. Round-to-round
+      // transitions are NOT included here because `roundRestSecs` already
+      // accounts for the planned between-rounds rest.
+      const TRANSITION_SECS_PER_BOUNDARY = 10;
       let totalSecs = 0;
+      let totalBoundaries = 0;
       for (const block of blocks) {
         const rounds = block.rounds || 1;
         let blockSecs = 0;
@@ -6637,19 +6795,80 @@
         }
         totalSecs += blockSecs * rounds;
         if (rounds > 1) totalSecs += (rounds - 1) * (block.roundRestSecs ?? 30);
+        // Within-block boundaries: (sets.length - 1) per round.
+        totalBoundaries += Math.max(0, block.sets.length - 1) * rounds;
       }
+      // Block-to-block boundaries: (blocks.length - 1) — once between each adjacent pair.
+      totalBoundaries += Math.max(0, blocks.length - 1);
+      totalSecs += totalBoundaries * TRANSITION_SECS_PER_BOUNDARY;
       return Math.round(totalSecs / 60);
     }
 
-    function getEquivalents(set) {
+    // S4 #18 — Memoized cache of all `dist` values appearing in any option's
+    // sets, per pool mode. Used to gate longer-swaps: we only offer a longer
+    // version if the bank actually contains sets at that distance, rather than
+    // hardcoding a 400 cap that drifts between yd / m.
+    const _distSetCache = new Map();
+    function _distSetForMode(poolMode) {
+      const cached = _distSetCache.get(poolMode);
+      if (cached) return cached;
+      const isMeters25 = poolMode === "25m";
+      const isMeters50 = poolMode === "50m";
+      const flat   = isMeters25 ? [WARMUP_OPTIONS_SCM, COOLDOWN_OPTIONS_SCM]
+                   : isMeters50 ? [WARMUP_OPTIONS_50M, COOLDOWN_OPTIONS_50M]
+                   :              [WARMUP_OPTIONS,     COOLDOWN_OPTIONS];
+      const typed  = isMeters25 ? [DRILL_OPTIONS_SCM, MAIN_OPTIONS_SCM]
+                   : isMeters50 ? [DRILL_OPTIONS_50M, MAIN_OPTIONS_50M]
+                   :              [DRILL_OPTIONS,     MAIN_OPTIONS];
+      const dists = new Set();
+      for (const bank of flat) {
+        for (const opt of bank) for (const s of opt.sets) dists.add(s.dist);
+      }
+      for (const bank of typed) {
+        for (const typeId of Object.keys(bank)) {
+          for (const opt of bank[typeId]) for (const s of opt.sets) dists.add(s.dist);
+        }
+      }
+      _distSetCache.set(poolMode, dists);
+      return dists;
+    }
+
+    // S4 #8 — Riegel-ish exponent for distance↔interval scaling on swaps.
+    // T2 = T1 × (D2/D1)^EXP. EXP=1.06 is the standard "Riegel" coefficient
+    // for fatigue-aware time prediction in middle-distance running/swimming.
+    // Real swim data sits in the 1.05–1.10 range across stroke + pool size.
+    const RIEGEL_EXP = 1.06;
+    function riegelRatio(oldDist, newDist) {
+      return Math.pow(newDist / oldDist, RIEGEL_EXP);
+    }
+
+    // S4 #8 + #18 — getEquivalents now takes poolMode so it can:
+    //   1. Apply a Riegel-ish (non-linear) interval scale instead of a flat ratio
+    //      (linear under-corrected the interval for sprints and over-corrected
+    //      for long aerobic doubling).
+    //   2. Gate the LONGER swap on whether the bank actually contains sets at
+    //      that target distance — replaces the old hardcoded 400 cap.
+    function getEquivalents(set, poolMode = "25y") {
       const result = { shorter: null, longer: null };
       if (set.dist >= 50) {
         const newDist = set.dist / 2;
-        result.shorter = { ...set, dist: newDist, reps: set.reps * 2, interval: scaleInterval(set.interval, newDist / set.dist) };
+        result.shorter = {
+          ...set,
+          dist:     newDist,
+          reps:     set.reps * 2,
+          interval: scaleInterval(set.interval, riegelRatio(set.dist, newDist)),
+        };
       }
-      if (set.reps >= 2 && set.reps % 2 === 0 && set.dist * 2 <= 400) {
+      if (set.reps >= 2 && set.reps % 2 === 0) {
         const newDist = set.dist * 2;
-        result.longer = { ...set, dist: newDist, reps: set.reps / 2, interval: scaleInterval(set.interval, newDist / set.dist) };
+        if (_distSetForMode(poolMode).has(newDist)) {
+          result.longer = {
+            ...set,
+            dist:     newDist,
+            reps:     set.reps / 2,
+            interval: scaleInterval(set.interval, riegelRatio(set.dist, newDist)),
+          };
+        }
       }
       return result;
     }
@@ -6675,10 +6894,10 @@
       );
     }
 
-    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId }) {
+    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId, poolMode = "25y" }) {
       const eqItems = equipmentForSet(set, equipment);
       const desc = enhanceDesc(set, equipment);
-      const equiv = onToggleSwap ? getEquivalents(set) : {};
+      const equiv = onToggleSwap ? getEquivalents(set, poolMode) : {};
       const hasSwap = !!(equiv.shorter || equiv.longer);
       // H: per-set pip only when the set's zone diverges from the block's
       // dominant zone (keeps the table visually quiet most of the time).
@@ -6945,7 +7164,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y" }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -7105,6 +7324,7 @@
                           onCommitInterval={onCommitInterval}
                           onClearInterval={onClearInterval}
                           onCancelInterval={onCancelInterval}
+                          poolMode={poolMode}
                           isEditingDesc={editDescKey === `${blockIdx}-${i}`}
                           editDescDraft={editDescDraft}
                           setEditDescDraft={setEditDescDraft}
@@ -7139,20 +7359,10 @@
     // ─── Max Yardage Slider ──────────────────────────────────────────
     // Compute the minimum possible total yards for a given type
     function minYardsForType(typeId, poolMode = "25y") {
-      const is25m = poolMode === "25m";
-      const is50m = poolMode === "50m";
-      const allWarmups   = is25m ? WARMUP_OPTIONS_SCM   : is50m ? WARMUP_OPTIONS_50M   : WARMUP_OPTIONS;
-      const allCooldowns = is25m ? COOLDOWN_OPTIONS_SCM : is50m ? COOLDOWN_OPTIONS_50M : COOLDOWN_OPTIONS;
-      const drillList = is25m
-        ? (DRILL_OPTIONS_SCM[typeId] || DRILL_OPTIONS_SCM.mixed || DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
-        : is50m
-        ? (DRILL_OPTIONS_50M[typeId] || DRILL_OPTIONS_50M.mixed || DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed)
-        : (DRILL_OPTIONS[typeId] || DRILL_OPTIONS.mixed);
-      const mainList = is25m
-        ? (MAIN_OPTIONS_SCM[typeId] || MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
-        : is50m
-        ? (MAIN_OPTIONS_50M[typeId] || MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed)
-        : (MAIN_OPTIONS[typeId] || MAIN_OPTIONS.mixed);
+      const allWarmups   = getBankOptions("warmup",   typeId, poolMode);
+      const allCooldowns = getBankOptions("cooldown", typeId, poolMode);
+      const drillList    = getBankOptions("drill",    typeId, poolMode);
+      const mainList     = getBankOptions("main",     typeId, poolMode);
       const minWarmup   = Math.min(...allWarmups.map(o => o.totalYards));
       const minDrill    = Math.min(...drillList.map(o => o.totalYards));
       const minMain     = Math.min(...mainList.map(o => o.totalYards));
@@ -8109,7 +8319,7 @@
 
                 {isExpanded && entry.blocks && (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #334155" }}>
-                    {entry.blocks.map((b, i) => <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} recentMainLabels={recentMainLabels} />)}
+                    {entry.blocks.map((b, i) => <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} recentMainLabels={recentMainLabels} poolMode={entry.poolMode || "25y"} />)}
                   </div>
                 )}
               </div>
@@ -10395,6 +10605,14 @@
 
       // Per-section regeneration error: { section: "warmup"|"drill"|"main"|"cooldown", message } | null
       const [regenError, setRegenError]           = useState(null);
+      // S3 #3 — top-level generate error (e.g. required equipment unsatisfiable).
+      // Surfaced as a banner above the workout area; cleared on successful generate.
+      const [generateError, setGenerateError]     = useState(null);
+      // S4 #7 — session-local anti-repeat: every successful generate / main-regen
+      // records the picked main-set label here. Unioned with recentMainLabels (from
+      // saved history) when computing weights, so consecutive generates don't
+      // repeat the same main even before any save has happened.
+      const [sessionRecentLabels, setSessionRecentLabels] = useState(() => new Set());
       // Run Workout overlay: null when inactive, or the workout/entry object being stepped through
       const [runWorkout, setRunWorkout]           = useState(null);
       const [showRestPicker, setShowRestPicker]   = useState(false);
@@ -10714,8 +10932,19 @@
             if (pinnedSections[b.section]) pinned[b.section] = b;
           }
         }
-        const recentLabels = Array.from(recentMainLabels.keys());
+        // S4 #7 — union saved-history labels with this session's just-picked labels.
+        const recentLabels = Array.from(new Set([
+          ...recentMainLabels.keys(),
+          ...sessionRecentLabels,
+        ]));
         let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned, recentLabels, recoveryMode, phase);
+        // S3 #3 — generateWorkout returns a failure sentinel when required equipment
+        // can't be satisfied. Surface the message and bail before any post-processing.
+        if (newWorkout && newWorkout.__generateFailure) {
+          setGenerateError(newWorkout.error || "Could not build a workout matching your constraints.");
+          return;
+        }
+        setGenerateError(null);
         // Apply user's pace to intervals at generation time (not just on "Rescale all")
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
@@ -10744,6 +10973,9 @@
           newWorkout = { ...newWorkout, phase };
         }
         setWorkout(newWorkout);
+        // S4 #7 — record this session's main label for future anti-repeat.
+        const mainLabel = newWorkout.blocks && newWorkout.blocks[2] && newWorkout.blocks[2].label;
+        if (mainLabel) setSessionRecentLabels(prev => new Set([...prev, mainLabel]));
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
         setRegenError(null);
@@ -10754,7 +10986,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, recoveryMode, phase]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -10763,7 +10995,12 @@
         if (!workout || !selectedType) return;
         if (pinnedSections[sectionKey]) return; // pinned sections can't be individually regenerated
         const isRecovery = !!workout.recovery;
-        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, Array.from(recentMainLabels.keys()), isRecovery, phase);
+        // S4 #7 — same union as handleGenerate so main regenerations also avoid repeats.
+        const recentLabels = Array.from(new Set([
+          ...recentMainLabels.keys(),
+          ...sessionRecentLabels,
+        ]));
+        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, recentLabels, isRecovery, phase);
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
           return;
@@ -10794,6 +11031,11 @@
           regenWorkout = { ...regenWorkout, blocks: newBlocks, recovery: true, estimatedMin: calcEstimatedMin(newBlocks) };
         }
         setWorkout(regenWorkout);
+        // S4 #7 — if main was regenerated, record the new label for anti-repeat.
+        if (sectionKey === "main") {
+          const newMainLabel = regenWorkout.blocks && regenWorkout.blocks[2] && regenWorkout.blocks[2].label;
+          if (newMainLabel) setSessionRecentLabels(prev => new Set([...prev, newMainLabel]));
+        }
         setRegenError(null);
         setEditDescKey(null);
         setEditIntervalKey(null);
@@ -10801,20 +11043,21 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, phase]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
       }, []);
 
-      const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); setPinnedSections({}); };
-      const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); };
+      const handleTypeSelect = (id) => { setSelectedType(id); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); setGenerateError(null); setPinnedSections({}); };
+      const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); setGenerateError(null); };
       const handlePoolModeChange = (mode) => {
         setPoolMode(mode);
         setWorkout(null);
         setLoadedFromHistoryId(null);
         setSaveStatus(null);
         setRegenError(null);
+        setGenerateError(null);
         setPinnedSections({});
         setMaxYards(mode === "50m" || mode === "25m" ? 2500 : 2400);
       };
@@ -10837,6 +11080,7 @@
         setLoadedFromHistoryId(null);
         setSaveStatus(null);
         setRegenError(null);
+        setGenerateError(null);
       };
 
       // Save the current workout to history (POST to worker, optimistic local update)
@@ -11483,6 +11727,19 @@
                 }}>
                 {workout ? "🔄 Generate New Workout" : "🏊 Generate Workout"}
               </button>
+
+              {/* S3 #3 — generate-level error (e.g. required equipment unsatisfiable) */}
+              {generateError && (
+                <div role="alert" style={{
+                  background: "#fef2f2", border: "1px solid #fecaca",
+                  color: "#991b1b", borderRadius: 10, padding: "12px 16px",
+                  marginTop: -16, marginBottom: 24,
+                  display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, lineHeight: 1.4,
+                }}>
+                  <span style={{ fontSize: 16, lineHeight: 1 }}>⚠️</span>
+                  <span>{generateError}</span>
+                </div>
+              )}
             </div>
 
             {/* Workout display */}
@@ -11722,6 +11979,7 @@
                     isPinned={!!pinnedSections[block.section]}
                     onTogglePin={handleTogglePin}
                     recentMainLabels={recentMainLabels}
+                    poolMode={poolMode}
                   />
                 ))}
 
