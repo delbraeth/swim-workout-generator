@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-12 23:10 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-14 17:09 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -261,17 +261,6 @@
     };
     const PHASE_ORDER = ["base", "build", "peak", "taper", "recovery"];
 
-    // Parse "On 2:00", "On :45" → seconds (alias of parseIntervalSeconds without
-    // depending on that function's later definition).
-    function _intervalSecs(intervalStr) {
-      if (!intervalStr || /no interval/i.test(intervalStr)) return null;
-      const full = intervalStr.match(/(\d+):(\d{2})/);
-      if (full) return parseInt(full[1], 10) * 60 + parseInt(full[2], 10);
-      const sec  = intervalStr.match(/:(\d{2})/);
-      if (sec)  return parseInt(sec[1], 10);
-      return null;
-    }
-
     // Heuristic zone inference from a single set's text + interval + distance.
     // Returns one of ZONE_ORDER. Keyword cues in desc/focus dominate; interval
     // tightness (work/total ratio) is the tie-breaker when text is ambiguous.
@@ -305,7 +294,7 @@
 
       // Interval-tightness fallback: estimate seconds/100yd then bucket.
       // Tighter intervals = higher zone. This is a coarse signal.
-      const secs = _intervalSecs(set.interval);
+      const secs = parseIntervalSecs(set.interval);
       const dist = Number(set.dist || 0);
       if (secs && dist > 0) {
         const per100 = secs / (dist / 100);
@@ -5949,7 +5938,11 @@
       for (let i = 0; i < arr.length; i++) {
         const w = weights[i] > 0 ? weights[i] : 0;
         r -= w;
-        if (r <= 0) return arr[i];
+        // Strict `<` so each weight gets a half-open interval [a, b). The old
+        // `<=` boundary biased toward index 0 when r landed exactly at 0 after
+        // subtracting the first weight — measurable only for integer weights
+        // (e.g. [1,1,1] gave arr[0] a slight edge at r=1.0 exactly).
+        if (r < 0) return arr[i];
       }
       return arr[arr.length - 1];
     }
@@ -6495,8 +6488,18 @@
     //  SET SWAP HELPERS
     // ═══════════════════════════════════════════════════════════════
 
+    // Strict interval parser — the single source of truth for "how many seconds
+    // is this interval string?". Returns null for empty / no-interval / unparseable.
+    // Only accepts the canonical authored form `On M:SS` (with `M` optional, e.g.
+    // `On :45`). User-typed input from the per-set editor is canonicalized via
+    // normalizeIntervalInput BEFORE being stored, so the math only ever sees
+    // canonical strings here.
     function parseIntervalSecs(str) {
       if (!str) return null;
+      // Explicit "no interval" markers — both the canonical sentinel and any
+      // legacy / loose variant. Treated identically to unparseable: caller
+      // falls back to default behavior (yd/min for time estimate, etc.).
+      if (/no\s*interval/i.test(str)) return null;
       const m = str.match(/^On\s+(\d*):(\d{1,2})/i);
       if (!m) return null;
       const mins = m[1] === "" ? 0 : parseInt(m[1], 10);
@@ -6508,7 +6511,74 @@
     function formatIntervalSecs(secs) {
       const m = Math.floor(secs / 60);
       const s = secs % 60;
-      return `On ${m}:${String(s).padStart(2, "0")}`;
+      // Authored data uses the `On :SS` form for sub-minute intervals (e.g. "On :40").
+      // Match that convention so edited / scaled cells don't visually diverge from
+      // their authored neighbors. Math is identical either way.
+      const mPart = m === 0 ? "" : String(m);
+      return `On ${mPart}:${String(s).padStart(2, "0")}`;
+    }
+
+    // Canonical sentinel for an interval-less set. Authored data uses this
+    // exact string; clear-to-no-interval and "no interval" typed input both
+    // normalize to it.
+    const NO_INTERVAL_CANONICAL = "No interval — swim easy";
+
+    // Normalize raw user input from the per-set interval editor into either
+    // a canonical interval string or an explicit error. Permissive about
+    // input form, strict about what it stores. Returns:
+    //   { value: "On M:SS" | NO_INTERVAL_CANONICAL, secs: number | null, error: null }  // valid
+    //   { value: null, secs: null, error: null }                                          // empty → no-op
+    //   { value: null, secs: null, error: "<friendly message>" }                          // unparseable
+    //
+    // Accepted forms (case-insensitive, leading/trailing whitespace ignored):
+    //   "On 1:30"   → On 1:30   (canonical pass-through)
+    //   "1:30"      → On 1:30
+    //   ":45"       → On 0:45
+    //   "0:45"      → On 0:45
+    //   "90"        → On 1:30   (bare integer = seconds; 5–3600 range)
+    //   "no interval" / "none" / "off" → NO_INTERVAL_CANONICAL
+    //   ""          → no-op (caller closes editor without changes)
+    //
+    // Rejected: decimals, negative numbers, hour notation, anything else.
+    function normalizeIntervalInput(raw) {
+      const v = (raw == null ? "" : String(raw)).trim();
+      if (v === "") return { value: null, secs: null, error: null };
+
+      // "no interval" family — accept several common phrasings.
+      if (/^(no\s*interval|none|off|n\/a)$/i.test(v)) {
+        return { value: NO_INTERVAL_CANONICAL, secs: null, error: null };
+      }
+
+      // Strip an optional leading "On " (case-insensitive) so the rest of the
+      // logic sees only the time part. Also handle the case where the user
+      // backspaced everything except the "On" prefix — treat as empty no-op.
+      const stripped = v.replace(/^on\s*/i, "").trim();
+      if (stripped === "") return { value: null, secs: null, error: null };
+
+      // M:SS or :SS form (M optional, SS must be 1–2 digits).
+      const colonMatch = stripped.match(/^(\d*):(\d{1,2})$/);
+      if (colonMatch) {
+        const mins = colonMatch[1] === "" ? 0 : parseInt(colonMatch[1], 10);
+        const secs = parseInt(colonMatch[2], 10);
+        if (secs >= 60) {
+          return { value: null, secs: null, error: "seconds must be 0–59 (use M:SS, not S:SS)" };
+        }
+        const total = mins * 60 + secs;
+        if (total < 5)    return { value: null, secs: null, error: "interval too short (minimum 5s)" };
+        if (total > 3600) return { value: null, secs: null, error: "interval too long (max 1 hour)" };
+        return { value: formatIntervalSecs(total), secs: total, error: null };
+      }
+
+      // Bare integer = total seconds (e.g. "90" → On 1:30).
+      const intMatch = stripped.match(/^(\d+)$/);
+      if (intMatch) {
+        const total = parseInt(intMatch[1], 10);
+        if (total < 5)    return { value: null, secs: null, error: "interval too short (minimum 5s)" };
+        if (total > 3600) return { value: null, secs: null, error: "interval too long (max 1 hour)" };
+        return { value: formatIntervalSecs(total), secs: total, error: null };
+      }
+
+      return { value: null, secs: null, error: `cannot parse "${v}" — try "1:30" or "90" or "no interval"` };
     }
 
     function scaleInterval(intervalStr, ratio) {
@@ -6605,7 +6675,7 @@
       );
     }
 
-    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId }) {
+    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId }) {
       const eqItems = equipmentForSet(set, equipment);
       const desc = enhanceDesc(set, equipment);
       const equiv = onToggleSwap ? getEquivalents(set) : {};
@@ -6672,21 +6742,47 @@
               {isEditingInterval ? (() => {
                 const hasOn = /^On\s+/i.test(editIntervalDraft);
                 const timePart = hasOn ? editIntervalDraft.replace(/^On\s+/i, "") : editIntervalDraft;
+                const hasError = !!editIntervalError;
                 return (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                    {hasOn && <span style={{ color: "#94a3b8" }}>On</span>}
-                    <input
-                      autoFocus
-                      value={timePart}
-                      onChange={e => setEditIntervalDraft(hasOn ? "On " + e.target.value : e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === "Enter")  onCommitInterval(blockIdx, setIdx, editIntervalDraft);
-                        if (e.key === "Escape") onCancelInterval();
-                      }}
-                      onBlur={() => onCommitInterval(blockIdx, setIdx, editIntervalDraft)}
-                      style={{ width: 52, fontFamily: "monospace", fontSize: 12, padding: "2px 5px", borderRadius: 4, border: "1px solid #94a3b8", background: "#fff", color: "#1e293b" }}
-                    />
-                  </span>
+                  <div>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {hasOn && <span style={{ color: "#94a3b8" }}>On</span>}
+                      <input
+                        autoFocus
+                        value={timePart}
+                        onChange={e => setEditIntervalDraft(hasOn ? "On " + e.target.value : e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter")  onCommitInterval(blockIdx, setIdx, editIntervalDraft);
+                          if (e.key === "Escape") onCancelInterval();
+                        }}
+                        onBlur={() => onCommitInterval(blockIdx, setIdx, editIntervalDraft)}
+                        style={{ width: 52, fontFamily: "monospace", fontSize: 12, padding: "2px 5px", borderRadius: 4,
+                                 border: hasError ? "1px solid #dc2626" : "1px solid #94a3b8",
+                                 background: "#fff", color: "#1e293b" }}
+                      />
+                      {/* S2 — ⊘ clears to no-interval. onMouseDown preventDefault keeps
+                          focus on the input so onBlur doesn't fire and try to commit
+                          the (possibly invalid) draft before the clear takes effect. */}
+                      {onClearInterval && (
+                        <button
+                          type="button"
+                          title="Clear to no interval"
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => onClearInterval(blockIdx, setIdx)}
+                          style={{ fontSize: 14, lineHeight: 1, padding: "0 4px", borderRadius: 4,
+                                   border: "1px solid #cbd5e1", background: "#f8fafc", color: "#64748b",
+                                   cursor: "pointer" }}
+                        >
+                          ⊘
+                        </button>
+                      )}
+                    </span>
+                    {hasError && (
+                      <div style={{ fontSize: 11, color: "#dc2626", marginTop: 3, fontFamily: "inherit", fontStyle: "italic" }}>
+                        {editIntervalError}
+                      </div>
+                    )}
+                  </div>
                 );
               })() : (
                 <span
@@ -6849,7 +6945,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, onStartEditInterval, onCommitInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -7004,8 +7100,10 @@
                           isEditingInterval={editIntervalKey === `${blockIdx}-${i}`}
                           editIntervalDraft={editIntervalDraft}
                           setEditIntervalDraft={setEditIntervalDraft}
+                          editIntervalError={editIntervalKey === `${blockIdx}-${i}` ? editIntervalError : null}
                           onStartEditInterval={onStartEditInterval}
                           onCommitInterval={onCommitInterval}
+                          onClearInterval={onClearInterval}
                           onCancelInterval={onCancelInterval}
                           isEditingDesc={editDescKey === `${blockIdx}-${i}`}
                           editDescDraft={editDescDraft}
@@ -10509,31 +10607,60 @@
       // ── Per-set interval editing ──────────────────────────────────
       const [editIntervalKey,   setEditIntervalKey]   = useState(null);
       const [editIntervalDraft, setEditIntervalDraft] = useState("");
+      // S2 — inline rejection message when normalizeIntervalInput can't parse
+      // the draft. Cleared on successful commit, cancel, or next keystroke.
+      const [editIntervalError, setEditIntervalError] = useState(null);
 
       const handleStartEditInterval = useCallback((bIdx, sIdx, current) => {
         setEditIntervalKey(`${bIdx}-${sIdx}`);
         setEditIntervalDraft(current);
+        setEditIntervalError(null);
         setOpenSwapKey(null);
       }, []);
 
+      // S2 — commit goes through normalizeIntervalInput. Empty draft closes
+      // the editor without changes; unparseable input keeps the editor open
+      // and surfaces an inline error so the user can fix it; valid input is
+      // stored as the canonical string (math always sees canonical form).
       const handleCommitInterval = useCallback((bIdx, sIdx, draft) => {
-        const val = draft.trim();
-        if (val) {
+        const norm = normalizeIntervalInput(draft);
+        if (norm.error) {
+          setEditIntervalError(norm.error);
+          return; // keep editor open so user can correct
+        }
+        if (norm.value != null) {
           setWorkout(prev => {
             const newBlocks = prev.blocks.map((b, bi) => bi !== bIdx ? b : {
               ...b,
-              sets: b.sets.map((s, si) => si !== sIdx ? s : { ...s, interval: val }),
+              sets: b.sets.map((s, si) => si !== sIdx ? s : { ...s, interval: norm.value }),
             });
             return { ...prev, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
           });
         }
         setEditIntervalKey(null);
         setEditIntervalDraft("");
+        setEditIntervalError(null);
+      }, []);
+
+      // S2 — ⊘ button: clears the set's interval to the canonical no-interval
+      // sentinel. calcEstimatedMin will fall back to yd/min for that set.
+      const handleClearInterval = useCallback((bIdx, sIdx) => {
+        setWorkout(prev => {
+          const newBlocks = prev.blocks.map((b, bi) => bi !== bIdx ? b : {
+            ...b,
+            sets: b.sets.map((s, si) => si !== sIdx ? s : { ...s, interval: NO_INTERVAL_CANONICAL }),
+          });
+          return { ...prev, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
+        });
+        setEditIntervalKey(null);
+        setEditIntervalDraft("");
+        setEditIntervalError(null);
       }, []);
 
       const handleCancelInterval = useCallback(() => {
         setEditIntervalKey(null);
         setEditIntervalDraft("");
+        setEditIntervalError(null);
       }, []);
 
       // ── Round rest editing ───────────────────────────────────────
@@ -11576,9 +11703,11 @@
                     onApplySwap={handleApplySwap}
                     editIntervalKey={editIntervalKey}
                     editIntervalDraft={editIntervalDraft}
-                    setEditIntervalDraft={setEditIntervalDraft}
+                    setEditIntervalDraft={(v) => { setEditIntervalDraft(v); setEditIntervalError(null); }}
+                    editIntervalError={editIntervalError}
                     onStartEditInterval={handleStartEditInterval}
                     onCommitInterval={handleCommitInterval}
+                    onClearInterval={handleClearInterval}
                     onCancelInterval={handleCancelInterval}
                     editDescKey={editDescKey}
                     editDescDraft={editDescDraft}
