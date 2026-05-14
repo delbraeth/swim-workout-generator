@@ -78,6 +78,10 @@ const __dirname  = path.dirname(__filename);
 
 const PORT     = process.env.PORT     || 8080;
 const APP_URL  = process.env.APP_URL  || "https://veronicacassidy.com";
+// S5 S1 — when this is true the boot code refuses to start without Apple auth.
+// Hyperlift's container build sets NODE_ENV=production; local dev usually leaves
+// it unset / set to "development".
+const IS_PROD  = process.env.NODE_ENV === "production";
 
 // Apple Sign-In config — all empty until configured in Hyperlift
 const APPLE_TEAM_ID      = process.env.APPLE_TEAM_ID      || "";
@@ -102,7 +106,11 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 
-app.use(express.json({ limit: "500kb" }));
+// S5 S6 — body limit. Workouts are typically <50kb (4 blocks × ~10 sets each
+// + payload JSON); feedback / profile patches are <5kb. 100kb gives ~2× headroom
+// without enabling pathological payloads. If a future feature needs more, raise
+// it per-route rather than globally.
+app.use(express.json({ limit: "100kb" }));
 
 // ───── Rate limiters ──────────────────────────────────────────────────
 // Auth: 10/min/IP. Catches brute-force probes against /api/auth/*.
@@ -661,7 +669,20 @@ app.post("/api/auth/signout-all-others", checkOrigin, requireAuth, async (req, r
 });
 
 // ───── API routes ────────────────────────────────────────────────────
-app.get("/healthz", (req, res) => res.json({ ok: true, service: "swim-workout-generator" }));
+// S5 S2 — /healthz now probes the DB (when configured) so Hyperlift's health
+// check distinguishes "Node process is alive" from "Node process is alive AND
+// can serve API traffic." When DB is not configured (dev mode), returns ok with
+// db: "not_configured" so local testing isn't blocked.
+app.get("/healthz", async (req, res) => {
+  const base = { ok: true, service: "swim-workout-generator" };
+  if (!dbActive) return res.json({ ...base, db: "not_configured" });
+  try {
+    const r = await pingDb();
+    return res.json({ ...base, db: r.ok ? "ok" : "unknown" });
+  } catch (err) {
+    return res.status(503).json({ ok: false, service: "swim-workout-generator", db: "unreachable", error: err.message || String(err) });
+  }
+});
 
 app.get("/api/workouts", requireAuth, async (req, res) => {
   try {
@@ -935,21 +956,76 @@ app.use(express.static(path.join(__dirname, "public"), {
 
 app.use((req, res) => res.status(404).send("Not found"));
 
-app.listen(PORT, () => {
-  console.log(`[swim-workout-generator] listening on :${PORT}`);
-  if (APPLE_AUTH_ACTIVE)  console.log(`[auth] Apple Sign-In active. Gate: existing user in DB OR valid invite code`);
-  else                    console.warn("[auth] Apple auth not configured");
-  if (!dbActive)          console.warn("[db] not configured — DB env vars missing");
+// ─── Boot sequence ────────────────────────────────────────────────────
+// S5 S1+S3 — Gate prod readiness before accepting traffic:
+//   1. Refuse to start in NODE_ENV=production with Apple auth not configured.
+//   2. Await the DB ping; exit non-zero if it fails (Hyperlift restart policy
+//      will retry, which is the right behavior for transient DB-network issues).
+// In dev (NODE_ENV !== production) both checks degrade to warnings so local
+// testing without Apple/DB credentials still works.
+async function boot() {
+  // S5 S1 — prod-only auth requirement.
+  if (IS_PROD && !APPLE_AUTH_ACTIVE) {
+    console.error("[boot] FATAL: NODE_ENV=production but Apple Sign-In is not configured. " +
+                  "Set APPLE_TEAM_ID, APPLE_CLIENT_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY in the environment, " +
+                  "or unset NODE_ENV for local dev.");
+    process.exit(1);
+  }
+
+  // S5 S3 — await pingDb before listening.
+  if (dbActive) {
+    try {
+      const r = await pingDb();
+      console.log("[db]", r);
+    } catch (err) {
+      if (IS_PROD) {
+        console.error("[boot] FATAL: DB ping failed in production:", err.message);
+        process.exit(1);
+      }
+      console.warn("[db] ping failed (dev mode — continuing):", err.message);
+    }
+  } else if (IS_PROD) {
+    console.error("[boot] FATAL: NODE_ENV=production but DB env vars are missing.");
+    process.exit(1);
+  } else {
+    console.warn("[db] not configured — DB env vars missing (dev mode)");
+  }
+
+  const server = app.listen(PORT, () => {
+    console.log(`[swim-workout-generator] listening on :${PORT}`);
+    if (APPLE_AUTH_ACTIVE)  console.log(`[auth] Apple Sign-In active. Gate: existing user in DB OR valid invite code`);
+    else                    console.warn("[auth] Apple auth not configured (dev mode)");
+  });
+
+  // S5 S4 — Graceful shutdown on SIGTERM. Docker / Hyperlift send SIGTERM
+  // before SIGKILL on container stop. server.close() stops accepting new
+  // connections, finishes in-flight ones, then resolves; we exit cleanly.
+  // 10-second hard timeout in case a request is hung.
+  const shutdown = (signal) => {
+    console.log(`[boot] ${signal} received — draining connections…`);
+    const forceExit = setTimeout(() => {
+      console.warn("[boot] graceful shutdown timed out after 10s; forcing exit");
+      process.exit(1);
+    }, 10000);
+    forceExit.unref();
+    server.close(() => {
+      console.log("[boot] all connections closed; exiting cleanly");
+      process.exit(0);
+    });
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT",  () => shutdown("SIGINT"));
+
+  // Log container outbound IP at startup. Useful for confirming firewall
+  // allow rules at the DB VM if egress ever changes. Fire-and-forget — this
+  // is a diagnostic, not a readiness gate.
+  fetch("https://api.ipify.org?format=json")
+    .then(r => r.json())
+    .then(d => console.log(`[egress-ip] ${d.ip}`))
+    .catch(err => console.warn("[egress-ip] lookup failed:", err.message));
+}
+
+boot().catch(err => {
+  console.error("[boot] unexpected boot error:", err);
+  process.exit(1);
 });
-
-// Log container outbound IP at startup. Useful for confirming firewall
-// allow rules at the DB VM if egress ever changes.
-fetch("https://api.ipify.org?format=json")
-  .then(r => r.json())
-  .then(d => console.log(`[egress-ip] ${d.ip}`))
-  .catch(err => console.warn("[egress-ip] lookup failed:", err.message));
-
-// Boot-time MariaDB ping — confirms TLS handshake and credentials are good.
-pingDb()
-  .then(r => console.log("[db]", r))
-  .catch(err => console.warn("[db] ping failed:", err.message));
