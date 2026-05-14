@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-14 18:11 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-14 18:20 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6846,22 +6846,36 @@
     //   1. Apply a Riegel-ish (non-linear) interval scale instead of a flat ratio
     //      (linear under-corrected the interval for sprints and over-corrected
     //      for long aerobic doubling).
-    //   2. Gate the LONGER swap on whether the bank actually contains sets at
-    //      that target distance — replaces the old hardcoded 400 cap.
+    //   2. Gate BOTH swaps on whether the bank actually contains sets at the
+    //      target distance — catches half-yard / half-meter outputs (e.g. 75yd
+    //      shorter would be 37.5, which no pool supports) and unauthored long
+    //      distances. Replaces the old hardcoded 400 cap.
+    //   3. Suppress both swaps when the description encodes within-set
+    //      structure (e.g. "25 Fly Drill / 25 Back Drill / 25 Breast Drill"
+    //      describes a 75-yd structure that doesn't survive a 2× / ½× rescale).
+    //      Heuristic: desc contains `<digits><text>/<digits>` — a numeric
+    //      breakdown separated by a slash.
+    const STRUCTURED_DESC_RE = /\d+[a-z\s]+\/\s*\d+/i;
     function getEquivalents(set, poolMode = "25y") {
       const result = { shorter: null, longer: null };
+      // Suppress swaps entirely for sets whose desc describes a within-set
+      // numeric breakdown — the rescale would leave the displayed text wrong.
+      if (set.desc && STRUCTURED_DESC_RE.test(set.desc)) return result;
+      const dists = _distSetForMode(poolMode);
       if (set.dist >= 50) {
         const newDist = set.dist / 2;
-        result.shorter = {
-          ...set,
-          dist:     newDist,
-          reps:     set.reps * 2,
-          interval: scaleInterval(set.interval, riegelRatio(set.dist, newDist)),
-        };
+        if (dists.has(newDist)) {
+          result.shorter = {
+            ...set,
+            dist:     newDist,
+            reps:     set.reps * 2,
+            interval: scaleInterval(set.interval, riegelRatio(set.dist, newDist)),
+          };
+        }
       }
       if (set.reps >= 2 && set.reps % 2 === 0) {
         const newDist = set.dist * 2;
-        if (_distSetForMode(poolMode).has(newDist)) {
+        if (dists.has(newDist)) {
           result.longer = {
             ...set,
             dist:     newDist,
