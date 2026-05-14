@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-14 17:48 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-14 18:00 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -11130,6 +11130,17 @@
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
             body: JSON.stringify(entry),
           });
+          // S5 S7 — 409 means the server already has this entry id (a prior
+          // attempt of the same submission succeeded; this is a network retry).
+          // The optimistic local state is correct as-is; treat it as success
+          // rather than surfacing a confusing "duplicate id" error.
+          if (res.status === 409) {
+            setSaveStatus("saved");
+            setNoteDraft("");
+            setFocusNoteDraft("");
+            setDifficultyDraft(null);
+            return;
+          }
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
             throw new Error(body.error || `HTTP ${res.status}`);
@@ -11200,6 +11211,11 @@
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
             body: JSON.stringify(entry),
           });
+          // S5 S7 — same idempotent treatment as handleSave: 409 means the
+          // entry was already accepted by a prior attempt. Optimistic add stays.
+          if (res.status === 409) {
+            return { ok: true };
+          }
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
             throw new Error(body.error || `HTTP ${res.status}`);
