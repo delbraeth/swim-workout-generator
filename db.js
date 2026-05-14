@@ -71,14 +71,23 @@ function isoToDt(iso) {
 
 function rowToWorkoutEntry(row) {
   const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : (row.payload || {});
+  // F4 — Spread payload FIRST, typed columns last. If a key ever exists in
+  // both (e.g. an old payload still carrying a field that's since been promoted
+  // to a typed column), the typed column wins. entryToWorkoutRow strips the
+  // currently-typed keys before stashing payload, so today there's no overlap;
+  // this ordering defends against future schema evolution.
   const e = {
+    ...payload,
     id:            row.id,
     savedAt:       dtToIso(row.saved_at),
     type:          row.type,
     totalYards:    Number(row.total_yards),
+    // F7 — `completed` is intentionally a client-computed value at write time
+    // (the user's local calendar day decides whether the workout counts as
+    // "done today"). The server stores whatever the client sent; this just
+    // unpacks the TINYINT(1) column back to a boolean for the JS client.
     completed:     row.completed === 1 || row.completed === true,
     poolMode:      row.pool_mode,
-    ...payload,
   };
   if (row.user_sub)      e.sub          = row.user_sub;
   if (row.date_completed) e.dateCompleted = dateToYmd(row.date_completed);
@@ -99,10 +108,15 @@ function entryToWorkoutRow(entry) {
     saved_at:       isoToDt(savedAt) || isoToDt(new Date()),
     date_completed: dateCompleted || null,
     type:           type || "mixed",
-    pool_mode:      poolMode || "yds",
+    pool_mode:      poolMode || "25y",
     total_yards:    Number(totalYards) || 0,
     notes:          notes || null,
     initials:       userInitials || null,
+    // F7 — `completed` reflects the client's own "is the user's local calendar
+    // day on/before dateCompleted?" check. The server intentionally does not
+    // recompute against UTC: a user in PST swimming at 11pm should see the
+    // workout count as "today," not "tomorrow." Default 1 (truthy) matches
+    // the schema column default.
     completed:      (completed === false || completed === 0) ? 0 : 1,
     difficulty:     (difficulty == null || difficulty === "") ? null : Math.max(1, Math.min(5, Number(difficulty))),
     focus_note:     focusNote || null,
@@ -143,6 +157,14 @@ export async function dbInsertWorkout(entry) {
     `INSERT INTO \`workouts\` (\`${cols.join("`, `")}\`) VALUES (${ph})`,
     cols.map(c => row[c])
   );
+}
+
+// Read a single workout by id. Returns null if not found. Used by the insert
+// route to read-back the persisted entry so the client receives the DB's view
+// (post-coercion, post-default) rather than its own optimistic payload.
+export async function dbGetWorkout(id) {
+  const rows = await pool.query("SELECT * FROM `workouts` WHERE `id` = ? LIMIT 1", [id]);
+  return rows[0] ? rowToWorkoutEntry(rows[0]) : null;
 }
 
 export async function dbPatchWorkout(id, patch, userSub) {
