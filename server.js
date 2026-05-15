@@ -56,7 +56,7 @@ import {
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
-  dbIsUser, dbIsAdmin, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
+  dbIsUser, dbIsAdmin, dbIsCoach, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
   dbAdminListAuditEvents,
@@ -264,6 +264,22 @@ async function requireAdmin(req, res, next) {
     if (!(await dbIsAdmin(req.userSub))) {
       dbAuditEvent({ userSub: req.userSub, eventType: "admin.access_denied", ...reqMeta(req), details: { path: req.path, method: req.method } });
       return res.status(403).json({ error: "admin only" });
+    }
+  } catch (err) {
+    return res.status(503).json({ error: "auth backend unavailable" });
+  }
+  next();
+}
+
+// Coach middleware — requires the authenticated user to have is_coach = 1
+// OR is_admin = 1 (admins implicitly inherit coach access). Used to gate
+// the in-app workout-bank catalog (Phase I read-only). Must be applied
+// AFTER requireAuth.
+async function requireCoach(req, res, next) {
+  try {
+    if (!(await dbIsCoach(req.userSub))) {
+      dbAuditEvent({ userSub: req.userSub, eventType: "coach.access_denied", ...reqMeta(req), details: { path: req.path, method: req.method } });
+      return res.status(403).json({ error: "coach access required" });
     }
   } catch (err) {
     return res.status(503).json({ error: "auth backend unavailable" });
@@ -513,6 +529,23 @@ app.post("/api/admin/users/:sub/enable", checkOrigin, requireAuth, requireAdmin,
   try {
     const r = await dbAdminSetUserFlag(req.params.sub, "is_disabled", false);
     dbAuditEvent({ userSub: req.userSub, eventType: "admin.user.enable", ...reqMeta(req), details: { target_sub: req.params.sub } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Coach role toggle — body { granted: true|false }. Admins implicitly have
+// coach capability via dbIsCoach, so toggling this is mainly for non-admin
+// users who should be able to browse the workout-bank catalog.
+app.post("/api/admin/users/:sub/coach", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const granted = !!(req.body && req.body.granted);
+    const r = await dbAdminSetUserFlag(req.params.sub, "is_coach", granted);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: granted ? "admin.user.coach.grant" : "admin.user.coach.revoke",
+      ...reqMeta(req),
+      details:   { target_sub: req.params.sub },
+    });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
