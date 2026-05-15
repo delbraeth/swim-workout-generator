@@ -13,6 +13,9 @@
 //   GET  /api/favorites             → list favorited main-set labels
 //   POST /api/favorites             → add a label
 //   DELETE /api/favorites/:label    → remove a label
+//   GET  /api/favorite-sets         → list favorited set IDs (per-user)
+//   POST /api/favorite-sets         → add a set ID
+//   DELETE /api/favorite-sets/:id   → remove a set ID
 //   GET  /api/settings              → user prefs (slider bounds, pace input)
 //   POST /api/settings              → update prefs
 //   GET  /healthz                   → liveness probe
@@ -54,6 +57,7 @@ import {
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbGetWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings, dbPatchSettingsExtra,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
+  dbListFavoriteSets, dbAddFavoriteSet, dbRemoveFavoriteSet,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   dbIsUser, dbIsAdmin, dbIsCoach, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
@@ -882,6 +886,38 @@ app.delete("/api/favorites/:label", checkOrigin, requireAuth, requireCsrf, write
   try {
     const label = decodeURIComponent(req.params.label);
     await dbRemoveFavorite(req.userSub, label);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ───── Set-level favorites (set IDs from assign_set_ids.py) ────────────
+app.get("/api/favorite-sets", requireAuth, async (req, res) => {
+  try {
+    res.json(await dbListFavoriteSets(req.userSub));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post("/api/favorite-sets", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { setId } = req.body || {};
+    if (!setId || typeof setId !== "string") return res.status(400).json({ error: "setId required" });
+    await dbAddFavoriteSet(req.userSub, setId);
+    res.json({ ok: true });
+  } catch (err) {
+    // dbAddFavoriteSet throws on bad ID format; surface as 400 not 500.
+    if (/bad set_id format/.test(err.message)) return res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.delete("/api/favorite-sets/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const setId = decodeURIComponent(req.params.id);
+    await dbRemoveFavoriteSet(req.userSub, setId);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
