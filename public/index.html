@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 08:15 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 08:20 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6740,6 +6740,40 @@
       return [];
     }
 
+    // ─── Catalog data accessor (used by CatalogView) ────────────────────
+    // Returns the AUTHORED options for a given (kind, typeId, poolMode)
+    // tuple — no cross-unit fallback, no conversion, no .mixed fallback.
+    // The catalog browse intentionally shows the bank as authored, so a
+    // coach can see what's actually in each bucket per pool mode.
+    //
+    // typeId === "all" (only valid for kind=drill/main) returns ALL typed
+    // entries flattened, with each option carrying its source `_typeId`.
+    //
+    // Phase III note: when editable bank lands, this is the right hook
+    // to merge in DB overrides (or whatever the writeback mechanism becomes).
+    function getCatalogList(kind, typeId, poolMode) {
+      const BANKS = {
+        warmup:   { "25y": WARMUP_OPTIONS,   "25m": WARMUP_OPTIONS_SCM,   "50m": WARMUP_OPTIONS_50M   },
+        cooldown: { "25y": COOLDOWN_OPTIONS, "25m": COOLDOWN_OPTIONS_SCM, "50m": COOLDOWN_OPTIONS_50M },
+        drill:    { "25y": DRILL_OPTIONS,    "25m": DRILL_OPTIONS_SCM,    "50m": DRILL_OPTIONS_50M    },
+        main:     { "25y": MAIN_OPTIONS,     "25m": MAIN_OPTIONS_SCM,     "50m": MAIN_OPTIONS_50M     },
+      };
+      const bank = BANKS[kind] && BANKS[kind][poolMode];
+      if (!bank) return [];
+      const isFlat = (kind === "warmup" || kind === "cooldown");
+      if (isFlat) {
+        return bank.map((o, i) => ({ ...o, _typeId: null, _idx: i }));
+      }
+      if (typeId === "all") {
+        const out = [];
+        for (const t of Object.keys(bank)) {
+          (bank[t] || []).forEach((o, i) => out.push({ ...o, _typeId: t, _idx: i }));
+        }
+        return out;
+      }
+      return (bank[typeId] || []).map((o, i) => ({ ...o, _typeId: typeId, _idx: i }));
+    }
+
     // Format a workout as plain text for clipboard sharing.
     function workoutToText(workout, meta, paceInput, unit = "yds") {
       if (!workout) return "";
@@ -9647,6 +9681,123 @@
     // ═══════════════════════════════════════════════════════════════
     //  ADMIN VIEW — users, invites, audit log
     // ═══════════════════════════════════════════════════════════════
+    // ─── Catalog view (Phase I read-only browse) ────────────────────────
+    // Coach-gated. Walks the AUTHORED workout-set bank for the selected
+    // pool mode / section / type and lists labels + totalYards + set count.
+    // Session C will add per-option expand-to-detail. Session B is the shell.
+    const CATALOG_SECTIONS = ["warmup", "drill", "main", "cooldown"];
+    const CATALOG_TYPES    = ["all", "im", "distance", "sprint", "endurance", "technique", "mixed", "back", "breast", "fly"];
+
+    function CatalogView() {
+      const [poolMode, setPoolMode] = React.useState("25y");
+      const [section,  setSection]  = React.useState("main");
+      const [typeId,   setTypeId]   = React.useState("all");
+
+      // typeId only applies to typed banks (drill/main). For warmup/cooldown
+      // we ignore it. Reset to "all" when switching to a typed section so
+      // the list doesn't surprise-empty after a flat-section browse.
+      const isTyped = (section === "drill" || section === "main");
+
+      const list = React.useMemo(
+        () => getCatalogList(section, isTyped ? typeId : null, poolMode),
+        [section, typeId, poolMode, isTyped],
+      );
+
+      const tabStyle = (active, color = "#3b82f6") => ({
+        padding: "6px 12px", border: "none", borderRadius: 6,
+        background: active ? color : "#1e293b",
+        color: active ? "#0f172a" : "#94a3b8",
+        fontSize: 12, fontWeight: 700, cursor: "pointer",
+        marginRight: 6, marginBottom: 6,
+      });
+
+      return (
+        <div>
+          <h2 style={{ color: "#e2e8f0", marginTop: 0 }}>📚 Workout Catalog</h2>
+          <p style={{ color: "#94a3b8", fontSize: 13, marginTop: -8, marginBottom: 16 }}>
+            Coach-only read-only browse of the workout-set bank as authored.
+            No cross-unit conversion or fallback — see what's actually in each bucket per pool mode.
+          </p>
+
+          {/* Pool mode toggle */}
+          <div style={{ marginBottom: 12 }}>
+            <span style={{ color: "#64748b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 10 }}>Mode</span>
+            {["25y", "25m", "50m"].map(m => (
+              <button key={m} onClick={() => setPoolMode(m)} style={tabStyle(poolMode === m, "#60a5fa")}>{m}</button>
+            ))}
+          </div>
+
+          {/* Section filter */}
+          <div style={{ marginBottom: 12 }}>
+            <span style={{ color: "#64748b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 10 }}>Section</span>
+            {CATALOG_SECTIONS.map(s => (
+              <button key={s} onClick={() => setSection(s)} style={tabStyle(section === s, "#22c55e")}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Type filter — only meaningful for drill/main */}
+          {isTyped && (
+            <div style={{ marginBottom: 16 }}>
+              <span style={{ color: "#64748b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 10 }}>Type</span>
+              {CATALOG_TYPES.map(t => (
+                <button key={t} onClick={() => setTypeId(t)} style={tabStyle(typeId === t, "#a78bfa")}>{t}</button>
+              ))}
+            </div>
+          )}
+
+          {/* Result count */}
+          <div style={{ color: "#64748b", fontSize: 12, marginBottom: 12 }}>
+            {list.length} option{list.length === 1 ? "" : "s"}
+          </div>
+
+          {/* List */}
+          {list.length === 0 ? (
+            <div style={{ color: "#94a3b8", fontStyle: "italic", padding: 20, textAlign: "center", border: "1px dashed #334155", borderRadius: 8 }}>
+              No options in this bucket. (Bank may not have authored content for this combination.)
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {list.map(opt => {
+                const declared = opt.totalYards || 0;
+                const actual   = (opt.sets || []).reduce((s, st) => s + (st.reps || 1) * (st.dist || 0), 0);
+                const mismatch = declared !== actual;
+                const labelText = opt.label || `(unlabeled ${section} #${opt._idx})`;
+                return (
+                  <div key={`${opt._typeId || section}-${opt._idx}`}
+                    style={{
+                      background: "#1e293b", border: "1px solid #334155", borderRadius: 8,
+                      padding: "10px 14px", display: "flex", alignItems: "center", gap: 12,
+                      flexWrap: "wrap",
+                    }}>
+                    <strong style={{ color: "#e2e8f0", fontSize: 14, flex: "0 0 auto" }}>{labelText}</strong>
+                    {opt._typeId && (
+                      <span style={{ background: "#334155", color: "#a78bfa", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
+                        {opt._typeId}
+                      </span>
+                    )}
+                    <span style={{ color: "#94a3b8", fontSize: 12, fontFamily: "monospace" }}>
+                      {declared.toLocaleString()} {poolMode === "25y" ? "yd" : "m"}
+                    </span>
+                    <span style={{ color: "#64748b", fontSize: 12 }}>
+                      · {(opt.sets || []).length} set{(opt.sets || []).length === 1 ? "" : "s"}
+                    </span>
+                    {mismatch && (
+                      <span title={`Σ reps×dist = ${actual} but totalYards = ${declared}`}
+                        style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
+                        ⚠ sum mismatch (actual {actual})
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function AdminView() {
       const [tab, setTab] = React.useState("users");
 
@@ -11526,6 +11677,12 @@
                       Sign out
                     </a>
                   )}
+                  {me?.is_coach && (
+                    <button onClick={() => setView(v => v === "catalog" ? "generator" : "catalog")} title="Workout-bank catalog (coach access)"
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #60a5fa", background: view === "catalog" ? "#60a5fa" : "#1e293b", color: view === "catalog" ? "#0f172a" : "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      {view === "catalog" ? "⏎ Back" : "📚 Catalog"}
+                    </button>
+                  )}
                   {me?.is_admin && (
                     <button onClick={() => setView(v => v === "admin" ? "generator" : "admin")} title="Admin"
                       style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #a78bfa", background: view === "admin" ? "#a78bfa" : "#1e293b", color: view === "admin" ? "#0f172a" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
@@ -11552,7 +11709,8 @@
 
           <div style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
 
-            {view === "admin" && <AdminView />}
+            {view === "admin"   && <AdminView />}
+            {view === "catalog" && <CatalogView />}
 
             {view === "history" && (
               <HistoryView
