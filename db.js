@@ -457,7 +457,7 @@ export async function dbGetMe(sub) {
   const conn = await pool.getConnection();
   try {
     const userRows = await conn.query(
-      "SELECT `sub`, `email`, `email_verified`, `display_name`, `initials`, `is_admin`, `created_at`, `last_login_at` FROM `users` WHERE `sub` = ?",
+      "SELECT `sub`, `email`, `email_verified`, `display_name`, `initials`, `is_admin`, `is_coach`, `created_at`, `last_login_at` FROM `users` WHERE `sub` = ?",
       [sub]
     );
     if (!userRows[0]) return null;
@@ -475,6 +475,9 @@ export async function dbGetMe(sub) {
       display_name:   u.display_name,
       initials:       u.initials,
       is_admin:       !!u.is_admin,
+      // Coach is granted by either explicit is_coach flag OR is_admin (admin
+      // implicitly has coach capability). Mirrors dbIsCoach's check.
+      is_coach:       !!(u.is_coach || u.is_admin),
       created_at:     u.created_at,
       last_login_at:  u.last_login_at,
       workout_count:  workoutCount,
@@ -504,11 +507,24 @@ export async function dbIsAdmin(sub) {
   return rows.length > 0;
 }
 
+// Coach access tier — separate from admin. Used to gate the workout-bank
+// catalog (Phase I read-only). Admins implicitly inherit coach capability,
+// so this returns true when the user is admin OR coach. Disabled users
+// always return false regardless of flags.
+export async function dbIsCoach(sub) {
+  if (!sub) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `users` WHERE `sub` = ? AND (`is_coach` = 1 OR `is_admin` = 1) AND `is_disabled` = 0 LIMIT 1",
+    [sub]
+  );
+  return rows.length > 0;
+}
+
 // ─── admin helpers ──────────────────────────────────────────────────────────
 export async function dbAdminListUsers() {
   const rows = await pool.query(`
     SELECT u.sub, u.email, u.email_verified, u.display_name, u.initials,
-           u.is_admin, u.is_disabled, u.created_at, u.last_login_at,
+           u.is_admin, u.is_coach, u.is_disabled, u.created_at, u.last_login_at,
            COALESCE(w.cnt, 0) AS workout_count
       FROM users u
       LEFT JOIN (SELECT user_sub, COUNT(*) AS cnt FROM workouts GROUP BY user_sub) w
@@ -518,7 +534,7 @@ export async function dbAdminListUsers() {
   return rows.map(r => ({
     sub: r.sub, email: r.email, email_verified: !!r.email_verified,
     display_name: r.display_name, initials: r.initials,
-    is_admin: !!r.is_admin, is_disabled: !!r.is_disabled,
+    is_admin: !!r.is_admin, is_coach: !!r.is_coach, is_disabled: !!r.is_disabled,
     created_at: r.created_at, last_login_at: r.last_login_at,
     workout_count: Number(r.workout_count),
   }));
@@ -526,7 +542,11 @@ export async function dbAdminListUsers() {
 
 export async function dbAdminSetUserFlag(sub, field, value) {
   if (!sub) return { ok: false, reason: "no_sub" };
-  if (field !== "is_disabled" && field !== "is_admin") return { ok: false, reason: "bad_field" };
+  // Whitelist of toggleable boolean fields. is_coach was added 2026-05-15
+  // for the in-app catalog (coach access tier). is_admin already implies
+  // coach via dbIsCoach, so explicit coach toggle is for non-admin users
+  // who should be able to browse the catalog.
+  if (!["is_disabled", "is_admin", "is_coach"].includes(field)) return { ok: false, reason: "bad_field" };
   await pool.query(`UPDATE \`users\` SET \`${field}\` = ? WHERE \`sub\` = ?`, [value ? 1 : 0, sub]);
   return { ok: true };
 }
