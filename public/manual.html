@@ -280,6 +280,7 @@
     <a href="#account">Account &amp; Sessions</a>
     <a href="#admin">Admin (admins only)</a>
     <a href="#catalog">Workout Catalog (coaches)</a>
+    <a href="#parse-intent">Parse Intent (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
     <a href="#tips">Tips &amp; Tricks</a>
 
@@ -1137,6 +1138,50 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <div class="callout-icon">ℹ️</div>
         <div class="callout-body"><strong>Read-only by design.</strong> The catalog is browse + flag only. Phase III (editable bank for admins) is deferred — it needs an architecture decision on where edits write back to. Today the source-of-truth is the bank constants in <code>public/index.html</code>; fixes happen by editing source.</div>
       </div>
+    </section>
+
+    <!-- ══ PARSE INTENT ══ -->
+    <section id="parse-intent">
+      <h2>Parse Intent (coach shorthand)</h2>
+      <p>Above the <strong>Generate Workout</strong> button there's a <strong>✏️ Parse intent…</strong> button that opens a modal where you can type a coach-style one-liner. The parser extracts what it recognizes, shows you the parsed pieces as chips, and applies them to the form when you click <strong>Apply</strong>. Designed for coaches who think in shorthand — no need to navigate the workout-type chips, slider, and pace input separately.</p>
+
+      <h3>What it understands</h3>
+      <table>
+        <thead><tr><th>Category</th><th>Recognized vocabulary</th><th>Examples</th></tr></thead>
+        <tbody>
+          <tr><td>Workout type</td><td><code>im</code>, <code>distance</code>, <code>sprint</code>, <code>endurance</code>, <code>technique</code>, <code>mixed</code>, <code>back</code>, <code>breast</code>, <code>fly</code></td><td>"im 2400", "back 60 min"</td></tr>
+          <tr><td>Distance</td><td><code>2k</code> (= 2000 yd), <code>2400 yd</code>/<code>2400 yards</code>, <code>1500 m</code>/<code>1500 meters</code></td><td>"sprint 1500 m", "im 2k"</td></tr>
+          <tr><td>Duration</td><td><code>25 min</code>, <code>1 hr</code>, <code>2 hours</code> — converted to yards using your current pace</td><td>"easy 60 min"</td></tr>
+          <tr><td>Pace</td><td><code>@ M:SS</code> per 100 (e.g. <code>@ 2:00</code>)</td><td>"threshold 25 min @ 2:00"</td></tr>
+          <tr><td>Zone</td><td><code>easy</code>, <code>aerobic</code>, <code>threshold</code>, <code>vo2</code>, <code>anaerobic</code></td><td>Captured but not applied to a form control yet — visible in the chip preview only.</td></tr>
+          <tr><td>Recovery mode</td><td><code>recovery</code>, <code>easy day</code></td><td>"recovery, just kicking"</td></tr>
+          <tr><td>Equipment</td><td><code>paddles</code>, <code>fins</code>, <code>snorkel</code>, <code>kickboard</code>, <code>pull buoy</code> / <code>pullbuoy</code></td><td>"im 2k with paddles and snorkel"</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Behavior</h3>
+      <ul>
+        <li><strong>Distance vs duration:</strong> if both are present, distance wins (more direct).</li>
+        <li><strong>Multiple types:</strong> the first parsed type wins. "im technique" → IM is selected, "technique" shows in the chip preview.</li>
+        <li><strong>Equipment:</strong> set to <em>preferred</em> (×2 weight in the picker), not required. Promote to required manually if you need a hard filter.</li>
+        <li><strong>Sprint:</strong> matched as a workout type, not a zone (since "sprint workout" is the more common usage).</li>
+        <li><strong>Out-of-range values:</strong> paces below 0:30 or above 5:00, distances below 500 or above 10000, durations below 15 min or above 240 min are silently ignored — they show up in the unparsed remainder.</li>
+        <li><strong>Connector words</strong> like <em>with / and / a / the / of / on / at / for / to</em> are stripped from the unparsed remainder. Unknown words remain visible so you can see what wasn't recognized.</li>
+      </ul>
+
+      <h3>Examples</h3>
+      <table>
+        <thead><tr><th>Input</th><th>What gets applied</th></tr></thead>
+        <tbody>
+          <tr><td><code>easy 2k aerobic</code></td><td>Distance → 2000 yd. Zone tokens visible in chip preview only.</td></tr>
+          <tr><td><code>threshold 25 min @ 2:00</code></td><td>Pace → 2:00. Distance computed from duration + pace ≈ 1000 yd.</td></tr>
+          <tr><td><code>im 2400 yards with paddles</code></td><td>Type → IM. Distance → 2400 yd. Paddles → preferred.</td></tr>
+          <tr><td><code>back 60 min</code></td><td>Type → back. Distance computed from duration + current pace.</td></tr>
+          <tr><td><code>recovery, just kicking</code></td><td>Recovery mode on. "kicking" stays in unparsed.</td></tr>
+        </tbody>
+      </table>
+
+      <p><em>Vocabulary will expand opportunistically.</em> If you find yourself typing words the parser doesn't catch, send feedback (💡 Idea) and they'll get added.</p>
     </section>
 
     <!-- ══ FEEDBACK ══ -->
