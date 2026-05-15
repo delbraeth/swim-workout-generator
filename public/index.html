@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 03:40 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 03:56 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -950,10 +950,7 @@
             { reps: 1, dist: 800, desc: "Freestyle — negative split (second 400 faster than first)", interval: "On 17:00", focus: "Pace control over distance, build gradually" },
             { reps: 4, dist: 100, desc: "Freestyle — strong, finish the workout",                     interval: "On 2:15",  focus: "Hold form despite fatigue" },
           ]},
-        { label: "CSS 10×100", totalYards: 1000, sets: [
-            { reps: 10, dist: 100, desc: "Freestyle — Critical Swim Speed pace, hold ALL 10 reps the same", interval: "On 2:10", focus: "Find and hold your CSS — sustainable for 1500m/1650y" },
-          ]},
-        { label: "1000 Continuous", totalYards: 1000, sets: [
+                { label: "1000 Continuous", totalYards: 1000, sets: [
             { reps: 1, dist: 1000, desc: "Freestyle — steady aerobic, negative split (second 500 faster)", interval: "On 22:00", focus: "Build and sustain pace over distance" },
           ]},
         { label: "Distance Pyramid 300 Apex", totalYards: 1200, sets: [
@@ -966,10 +963,7 @@
             { reps: 1, dist:  50, desc: "Freestyle — ALL OUT",                           interval: "On 1:00", focus: "Top speed close" },
             { reps: 2, dist: 100, desc: "Easy choice — active recovery",                 interval: "No interval — swim easy", focus: "Recover gracefully" },
           ]},
-        { label: "50s on the Minute", totalYards: 1200, sets: [
-            { reps: 24, dist: 50, desc: "Freestyle — steady pace, on the :60 (test endurance)", interval: "On 1:00", focus: "Sustain pace and form across high-volume 50s" },
-          ]},
-        { label: "800 + Closing 100s", totalYards: 1200, sets: [
+                { label: "800 + Closing 100s", totalYards: 1200, sets: [
             { reps: 1, dist: 800, desc: "Freestyle — steady aerobic, build last 200",        interval: "On 17:00", focus: "Long swim with progression" },
             { reps: 4, dist: 100, desc: "Freestyle — fast (faster than 800 pace)",            interval: "On 2:15",  focus: "Pick up pace under fatigue" },
           ]},
@@ -1011,10 +1005,7 @@
             { reps: 1, dist: 200, desc: "Freestyle — match peak pace if possible",          interval: "On 4:15", focus: "Hold the line on the way back down" },
             { reps: 1, dist: 100, desc: "Freestyle — near-max effort to close",             interval: "On 2:10", focus: "Finish faster than you started" },
           ]},
-        { label: "8×150 Repeats", totalYards: 1200, sets: [
-            { reps: 8, dist: 150, desc: "Freestyle — steady aerobic pace, hold all 8 identical", interval: "On 3:10", focus: "Classic Masters repeat set — consistency over speed" },
-          ]},
-        { label: "300s Descend", totalYards: 1200, sets: [
+                { label: "300s Descend", totalYards: 1200, sets: [
             { reps: 4, dist: 300, desc: "Freestyle — descend 1→4 (each 300 faster)", interval: "On 6:30", focus: "Mid-distance descend, build pace" },
           ]},
         { label: "600 + 4×100", totalYards: 1000, sets: [
@@ -1050,10 +1041,7 @@
             { reps: 8, dist: 50, desc: "Choice stroke — ALL OUT sprint", interval: "On 1:30", focus: "Speed after distance load" },
             { reps: 1, dist: 200, desc: "Easy backstroke — close", interval: "On 5:30", focus: "Cool down" },
           ]},
-        { label: "Lactate-Threshold 150s", totalYards: 1200, sets: [
-            { reps: 8, dist: 150, desc: "Freestyle — threshold pace (RPE 8/10), even effort", interval: "On 2:45", focus: "Lactate threshold in mid-distance reps" },
-          ]},
-        { label: "Negative-Split 400s", totalYards: 1200, sets: [
+                { label: "Negative-Split 400s", totalYards: 1200, sets: [
             { reps: 3, dist: 400, desc: "Freestyle — negative split (second 200 faster than first)", interval: "On 8:30", focus: "Practice closing pace within each 400" },
           ]},
         { label: "1500 Continuous", totalYards: 1500, sets: [
@@ -1081,10 +1069,7 @@
             { reps: 1, dist: 1000, desc: "Pull (buoy) — continuous, smooth long stroke", interval: "On 21:00", focus: "Long-pull aerobic base", eq: "pull" },
             { reps: 3, dist: 100, desc: "Freestyle — apply pull mechanics", interval: "On 2:15", focus: "Translate to swim" },
           ]},
-        { label: "CSS Holdover", totalYards: 1200, sets: [
-            { reps: 12, dist: 100, desc: "Freestyle — CSS pace, hold ALL 12 reps the same", interval: "On 2:10", focus: "Critical Swim Speed under accumulated load" },
-          ]},
-        { label: "Long Aerobic 500", totalYards: 1100, sets: [
+                { label: "Long Aerobic 500", totalYards: 1100, sets: [
             { reps: 2, dist: 500, desc: "Freestyle — steady aerobic, even effort", interval: "On 11:00", focus: "Aerobic base in mid-distance reps" },
             { reps: 1, dist: 100, desc: "Easy backstroke — close", interval: "On 2:45", focus: "Cool down" },
           ]},
@@ -1100,17 +1085,11 @@
             { reps: 4, dist: 250, desc: "Freestyle — threshold pace (RPE 7-8/10)", interval: "On 4:30", focus: "Sustained threshold mid-distance" },
             { reps: 1, dist: 100, desc: "Easy choice — close-out", interval: "No interval — swim easy", focus: "Cool down" },
           ]},
-        { label: "Race-Pace 100s", totalYards: 1000, sets: [
-            { reps: 10, dist: 100, desc: "Freestyle — at race-distance pace, hold all 10", interval: "On 2:10", focus: "Race pace under volume" },
-          ]},
-        { label: "Tempo Pull 200s", totalYards: 1200, sets: [
+                { label: "Tempo Pull 200s", totalYards: 1200, sets: [
             { reps: 4, dist: 200, desc: "Pull (buoy) — tempo pace, smooth long stroke", interval: "On 4:15", focus: "Pull endurance at tempo", eq: "pull" },
             { reps: 4, dist: 100, desc: "Freestyle — apply the pull tempo to full stroke", interval: "On 2:15", focus: "Carry pull pattern into swim" },
           ]},
-        { label: "8×150 Build", totalYards: 1200, sets: [
-            { reps: 8, dist: 150, desc: "Freestyle — build pace 1-4, then descend 5-8", interval: "On 2:45", focus: "Two-block build into the threshold" },
-          ]},
-        { label: "Overdistance 1200", totalYards: 1200, sets: [
+                { label: "Overdistance 1200", totalYards: 1200, sets: [
             { reps: 1, dist: 1200, desc: "Freestyle — continuous overdistance, build last 400", interval: "On 26:00", focus: "Beyond mile-distance fitness" },
           ]},
         { label: "Distance Kick + Free", totalYards: 1100, sets: [
@@ -1121,10 +1100,7 @@
             { reps: 4, dist: 200, desc: "Freestyle — threshold pace", interval: "On 4:15", focus: "Threshold base" },
             { reps: 4, dist: 100, desc: "Freestyle — threshold pace", interval: "On 2:10", focus: "Same pace, shorter rep" },
           ]},
-        { label: "Build-Per-100", totalYards: 1000, sets: [
-            { reps: 10, dist: 100, desc: "Freestyle — first 25 easy, build through 100", interval: "On 2:00", focus: "Internal build per rep" },
-          ]},
-        { label: "Triple 400 Endurance", totalYards: 1200, sets: [
+                { label: "Triple 400 Endurance", totalYards: 1200, sets: [
             { reps: 3, dist: 400, desc: "Freestyle — moderate aerobic, even splits", interval: "On 9:00", focus: "Aerobic base in 400-yard reps" },
           ]},
         { label: "Stroke Sprinkle Distance", totalYards: 1100, sets: [
@@ -1145,10 +1121,7 @@
         { label: "Four 600s Distance", totalYards: 2400, sets: [
             { reps: 4, dist: 600, desc: "Freestyle — aerobic pace, even splits, hold form to the end", interval: "On 11:00", focus: "High-volume distance endurance" },
           ]},
-        { label: "Distance 100s Repeat Unit", totalYards: 400, sets: [
-            { reps: 4, dist: 100, desc: "Freestyle — aerobic pace, even effort, count strokes on last 25", interval: "On 2:10", focus: "Steady-state aerobic — designed to repeat 2–3×" },
-          ]},
-        { label: "Distance 200s Repeat Unit", totalYards: 500, sets: [
+                { label: "Distance 200s Repeat Unit", totalYards: 500, sets: [
             { reps: 2, dist: 200, desc: "Freestyle — aerobic pace, negative split (second 100 faster)", interval: "On 4:15", focus: "Pacing discipline each round" },
             { reps: 1, dist: 100, desc: "Freestyle — moderate, hold form from the 200s", interval: "On 2:05", focus: "Extend endurance without rest" },
           ]},
@@ -1445,11 +1418,7 @@
             { reps: 20, dist: 50, desc: "Choice stroke — ALL OUT or near-max (full recovery)", interval: "On 1:30", focus: "Sprint capacity block" },
             { reps: 10, dist: 100, desc: "Freestyle — strong (not sprinting), hold pace", interval: "On 2:30", focus: "Aerobic close after sprint block" },
           ]},
-        { label: "Sprint Marathon 2400", totalYards: 2400, sets: [
-            { reps: 8, dist: 200, desc: "Freestyle — strong, descend 1→4 then repeat (1→4)", interval: "On 4:30", focus: "Sustained speed over distance" },
-            { reps: 8, dist: 100, desc: "Choice stroke — fast (near race pace)", interval: "On 2:00", focus: "Speed layer after distance block" },
-          ]},
-        { label: "Sprint 50s Repeat Unit", totalYards: 400, sets: [
+                { label: "Sprint 50s Repeat Unit", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "Freestyle or choice — ALL OUT every rep, leave it on the wall", interval: "On 1:45", focus: "Max speed — designed to repeat 2–3×" },
           ]},
         { label: "Sprint 50+100 Repeat Unit", totalYards: 500, sets: [
@@ -1606,7 +1575,7 @@
             { reps: 1, dist: 100, desc: "Easy choice — close-out", interval: "No interval — swim easy", focus: "Cool down" },
           ]},
         { label: "Aerobic 150s", totalYards: 1200, sets: [
-            { reps: 8, dist: 150, desc: "Freestyle — aerobic pace (RPE 6/10), smooth long stroke", interval: "On 2:30", focus: "Aerobic volume in shorter reps" },
+            { reps: 8, dist: 150, desc: "Freestyle — aerobic pace (RPE 6/10), smooth long stroke", interval: "On 3:00", focus: "Aerobic volume in shorter reps" },
           ]},
         { label: "Pull-Heavy 200s", totalYards: 1200, sets: [
             { reps: 6, dist: 200, desc: "Pull (buoy) — moderate, smooth long stroke", interval: "On 4:15", focus: "Pull endurance volume", eq: "pull" },
@@ -1696,7 +1665,38 @@
         { label: "Endurance 200s Repeat Unit", totalYards: 600, sets: [
             { reps: 3, dist: 200, desc: "Freestyle — aerobic pace, aim for identical splits each rep", interval: "On 4:15", focus: "Pacing consistency — make each round match the last" },
           ]},
-      ],
+      { label: "CSS 10×100", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Freestyle — Critical Swim Speed pace, hold ALL 10 reps the same", interval: "On 2:10", focus: "Find and hold your CSS — sustainable for 1500m/1650y" },
+          ]},
+        { label: "50s on the Minute", totalYards: 1200, sets: [
+            { reps: 24, dist: 50, desc: "Freestyle — steady pace, on the :60 (test endurance)", interval: "On 1:00", focus: "Sustain pace and form across high-volume 50s" },
+          ]},
+        { label: "8×150 Repeats", totalYards: 1200, sets: [
+            { reps: 8, dist: 150, desc: "Freestyle — steady aerobic pace, hold all 8 identical", interval: "On 3:10", focus: "Classic Masters repeat set — consistency over speed" },
+          ]},
+        { label: "Lactate-Threshold 150s", totalYards: 1200, sets: [
+            { reps: 8, dist: 150, desc: "Freestyle — threshold pace (RPE 8/10), even effort", interval: "On 2:45", focus: "Lactate threshold in mid-distance reps" },
+          ]},
+        { label: "CSS Holdover", totalYards: 1200, sets: [
+            { reps: 12, dist: 100, desc: "Freestyle — CSS pace, hold ALL 12 reps the same", interval: "On 2:10", focus: "Critical Swim Speed under accumulated load" },
+          ]},
+        { label: "Race-Pace 100s", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Freestyle — at race-distance pace, hold all 10", interval: "On 2:10", focus: "Race pace under volume" },
+          ]},
+        { label: "8×150 Build", totalYards: 1200, sets: [
+            { reps: 8, dist: 150, desc: "Freestyle — build pace 1-4, then descend 5-8", interval: "On 2:45", focus: "Two-block build into the threshold" },
+          ]},
+        { label: "Build-Per-100", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Freestyle — first 25 easy, build through 100", interval: "On 2:00", focus: "Internal build per rep" },
+          ]},
+        { label: "Distance 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — aerobic pace, even effort, count strokes on last 25", interval: "On 2:10", focus: "Steady-state aerobic — designed to repeat 2–3×" },
+          ]},
+        { label: "Sprint Marathon 2400", totalYards: 2400, sets: [
+            { reps: 8, dist: 200, desc: "Freestyle — strong, descend 1→4 then repeat (1→4)", interval: "On 4:30", focus: "Sustained speed over distance" },
+            { reps: 8, dist: 100, desc: "Choice stroke — fast (near race pace)", interval: "On 2:00", focus: "Speed layer after distance block" },
+          ]},
+        ],
       technique: [
         { label: "Kick + Drill + Swim", totalYards: 1000, sets: [
             { reps: 8, dist:  75, desc: "25 Kick / 25 Drill / 25 Swim — same stroke each rep (your choice)", interval: "On 1:45", focus: "Apply the drill directly into the swim", eq: "kickPart" },
@@ -3913,10 +3913,7 @@
             { reps: 1, dist: 800, desc: "Freestyle — negative split (second 400 faster than first)", interval: "On 17:50", focus: "Pace control over distance, build gradually" },
             { reps: 4, dist: 100, desc: "Freestyle — strong, finish the workout",                     interval: "On 2:20",  focus: "Hold form despite fatigue" },
           ]},
-        { label: "CSS 10×100", totalYards: 1000, sets: [
-            { reps: 10, dist: 100, desc: "Freestyle — Critical Swim Speed pace, hold ALL 10 reps the same", interval: "On 2:15", focus: "Find and hold your CSS — sustainable for 1500m/1650y" },
-          ]},
-        { label: "1000 Continuous", totalYards: 1000, sets: [
+                { label: "1000 Continuous", totalYards: 1000, sets: [
             { reps: 1, dist: 1000, desc: "Freestyle — steady aerobic, negative split (second 500 faster)", interval: "On 23:05", focus: "Build and sustain pace over distance" },
           ]},
         { label: "Distance Pyramid 300 Apex", totalYards: 1200, sets: [
@@ -3929,10 +3926,7 @@
             { reps: 1, dist:  50, desc: "Freestyle — ALL OUT",                           interval: "On 1:05", focus: "Top speed close" },
             { reps: 2, dist: 100, desc: "Easy choice — active recovery",                 interval: "No interval — swim easy", focus: "Recover gracefully" },
           ]},
-        { label: "50s on the Minute", totalYards: 1200, sets: [
-            { reps: 24, dist: 50, desc: "Freestyle — steady pace, on the :60 (test endurance)", interval: "On 1:05", focus: "Sustain pace and form across high-volume 50s" },
-          ]},
-        { label: "800 + Closing 100s", totalYards: 1200, sets: [
+                { label: "800 + Closing 100s", totalYards: 1200, sets: [
             { reps: 1, dist: 800, desc: "Freestyle — steady aerobic, build last 200",        interval: "On 17:50", focus: "Long swim with progression" },
             { reps: 4, dist: 100, desc: "Freestyle — fast (faster than 800 pace)",            interval: "On 2:20",  focus: "Pick up pace under fatigue" },
           ]},
@@ -3974,10 +3968,7 @@
             { reps: 1, dist: 200, desc: "Freestyle — match peak pace if possible",          interval: "On 4:30", focus: "Hold the line on the way back down" },
             { reps: 1, dist: 100, desc: "Freestyle — near-max effort to close",             interval: "On 2:15", focus: "Finish faster than you started" },
           ]},
-        { label: "8×150 Repeats", totalYards: 1200, sets: [
-            { reps: 8, dist: 150, desc: "Freestyle — steady aerobic pace, hold all 8 identical", interval: "On 3:20", focus: "Classic Masters repeat set — consistency over speed" },
-          ]},
-        { label: "300s Descend", totalYards: 1200, sets: [
+                { label: "300s Descend", totalYards: 1200, sets: [
             { reps: 4, dist: 300, desc: "Freestyle — descend 1→4 (each 300 faster)", interval: "On 6:50", focus: "Mid-distance descend, build pace" },
           ]},
         { label: "600 + 4×100", totalYards: 1000, sets: [
@@ -4013,10 +4004,7 @@
             { reps: 8, dist: 50, desc: "Choice stroke — ALL OUT sprint", interval: "On 1:35", focus: "Speed after distance load" },
             { reps: 1, dist: 200, desc: "Easy backstroke — close", interval: "On 5:45", focus: "Cool down" },
           ]},
-        { label: "Lactate-Threshold 150s", totalYards: 1200, sets: [
-            { reps: 8, dist: 150, desc: "Freestyle — threshold pace (RPE 8/10), even effort", interval: "On 2:55", focus: "Lactate threshold in mid-distance reps" },
-          ]},
-        { label: "Negative-Split 400s", totalYards: 1200, sets: [
+                { label: "Negative-Split 400s", totalYards: 1200, sets: [
             { reps: 3, dist: 400, desc: "Freestyle — negative split (second 200 faster than first)", interval: "On 8:55", focus: "Practice closing pace within each 400" },
           ]},
         { label: "1500 Continuous", totalYards: 1500, sets: [
@@ -4044,10 +4032,7 @@
             { reps: 1, dist: 1000, desc: "Pull (buoy) — continuous, smooth long stroke", interval: "On 22:05", focus: "Long-pull aerobic base", eq: "pull" },
             { reps: 3, dist: 100, desc: "Freestyle — apply pull mechanics", interval: "On 2:20", focus: "Translate to swim" },
           ]},
-        { label: "CSS Holdover", totalYards: 1200, sets: [
-            { reps: 12, dist: 100, desc: "Freestyle — CSS pace, hold ALL 12 reps the same", interval: "On 2:15", focus: "Critical Swim Speed under accumulated load" },
-          ]},
-        { label: "Long Aerobic 500", totalYards: 1100, sets: [
+                { label: "Long Aerobic 500", totalYards: 1100, sets: [
             { reps: 2, dist: 500, desc: "Freestyle — steady aerobic, even effort", interval: "On 11:35", focus: "Aerobic base in mid-distance reps" },
             { reps: 1, dist: 100, desc: "Easy backstroke — close", interval: "On 2:55", focus: "Cool down" },
           ]},
@@ -4063,17 +4048,11 @@
             { reps: 4, dist: 250, desc: "Freestyle — threshold pace (RPE 7-8/10)", interval: "On 4:45", focus: "Sustained threshold mid-distance" },
             { reps: 1, dist: 100, desc: "Easy choice — close-out", interval: "No interval — swim easy", focus: "Cool down" },
           ]},
-        { label: "Race-Pace 100s", totalYards: 1000, sets: [
-            { reps: 10, dist: 100, desc: "Freestyle — at race-distance pace, hold all 10", interval: "On 2:15", focus: "Race pace under volume" },
-          ]},
-        { label: "Tempo Pull 200s", totalYards: 1200, sets: [
+                { label: "Tempo Pull 200s", totalYards: 1200, sets: [
             { reps: 4, dist: 200, desc: "Pull (buoy) — tempo pace, smooth long stroke", interval: "On 4:30", focus: "Pull endurance at tempo", eq: "pull" },
             { reps: 4, dist: 100, desc: "Freestyle — apply the pull tempo to full stroke", interval: "On 2:20", focus: "Carry pull pattern into swim" },
           ]},
-        { label: "8×150 Build", totalYards: 1200, sets: [
-            { reps: 8, dist: 150, desc: "Freestyle — build pace 1-4, then descend 5-8", interval: "On 2:55", focus: "Two-block build into the threshold" },
-          ]},
-        { label: "Overdistance 1200", totalYards: 1200, sets: [
+                { label: "Overdistance 1200", totalYards: 1200, sets: [
             { reps: 1, dist: 1200, desc: "Freestyle — continuous overdistance, build last 400", interval: "On 27:20", focus: "Beyond mile-distance fitness" },
           ]},
         { label: "Distance Kick + Free", totalYards: 1100, sets: [
@@ -4084,10 +4063,7 @@
             { reps: 4, dist: 200, desc: "Freestyle — threshold pace", interval: "On 4:30", focus: "Threshold base" },
             { reps: 4, dist: 100, desc: "Freestyle — threshold pace", interval: "On 2:15", focus: "Same pace, shorter rep" },
           ]},
-        { label: "Build-Per-100", totalYards: 1000, sets: [
-            { reps: 10, dist: 100, desc: "Freestyle — first 25 easy, build through 100", interval: "On 2:05", focus: "Internal build per rep" },
-          ]},
-        { label: "Triple 400 Endurance", totalYards: 1200, sets: [
+                { label: "Triple 400 Endurance", totalYards: 1200, sets: [
             { reps: 3, dist: 400, desc: "Freestyle — moderate aerobic, even splits", interval: "On 9:25", focus: "Aerobic base in 400-yard reps" },
           ]},
         { label: "Stroke Sprinkle Distance", totalYards: 1100, sets: [
@@ -4108,10 +4084,7 @@
         { label: "Four 600s Distance", totalYards: 2400, sets: [
             { reps: 4, dist: 600, desc: "Freestyle — aerobic pace, even splits, hold form to the end", interval: "On 11:35", focus: "High-volume distance endurance" },
           ]},
-        { label: "Distance 100s Repeat Unit", totalYards: 400, sets: [
-            { reps: 4, dist: 100, desc: "Freestyle — aerobic pace, even effort, count strokes on last 25", interval: "On 2:15", focus: "Steady-state aerobic — designed to repeat 2–3×" },
-          ]},
-        { label: "Distance 200s Repeat Unit", totalYards: 500, sets: [
+                { label: "Distance 200s Repeat Unit", totalYards: 500, sets: [
             { reps: 2, dist: 200, desc: "Freestyle — aerobic pace, negative split (second 100 faster)", interval: "On 4:30", focus: "Pacing discipline each round" },
             { reps: 1, dist: 100, desc: "Freestyle — moderate, hold form from the 200s", interval: "On 2:10", focus: "Extend endurance without rest" },
           ]},
@@ -4408,11 +4381,7 @@
             { reps: 20, dist: 50, desc: "Choice stroke — ALL OUT or near-max (full recovery)", interval: "On 1:35", focus: "Sprint capacity block" },
             { reps: 10, dist: 100, desc: "Freestyle — strong (not sprinting), hold pace", interval: "On 2:40", focus: "Aerobic close after sprint block" },
           ]},
-        { label: "Sprint Marathon 2400", totalYards: 2400, sets: [
-            { reps: 8, dist: 200, desc: "Freestyle — strong, descend 1→4 then repeat (1→4)", interval: "On 4:45", focus: "Sustained speed over distance" },
-            { reps: 8, dist: 100, desc: "Choice stroke — fast (near race pace)", interval: "On 2:05", focus: "Speed layer after distance block" },
-          ]},
-        { label: "Sprint 50s Repeat Unit", totalYards: 400, sets: [
+                { label: "Sprint 50s Repeat Unit", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "Freestyle or choice — ALL OUT every rep, leave it on the wall", interval: "On 1:50", focus: "Max speed — designed to repeat 2–3×" },
           ]},
         { label: "Sprint 50+100 Repeat Unit", totalYards: 500, sets: [
@@ -4569,7 +4538,7 @@
             { reps: 1, dist: 100, desc: "Easy choice — close-out", interval: "No interval — swim easy", focus: "Cool down" },
           ]},
         { label: "Aerobic 150s", totalYards: 1200, sets: [
-            { reps: 8, dist: 150, desc: "Freestyle — aerobic pace (RPE 6/10), smooth long stroke", interval: "On 2:40", focus: "Aerobic volume in shorter reps" },
+            { reps: 8, dist: 150, desc: "Freestyle — aerobic pace (RPE 6/10), smooth long stroke", interval: "On 3:10", focus: "Aerobic volume in shorter reps" },
           ]},
         { label: "Pull-Heavy 200s", totalYards: 1200, sets: [
             { reps: 6, dist: 200, desc: "Pull (buoy) — moderate, smooth long stroke", interval: "On 4:30", focus: "Pull endurance volume", eq: "pull" },
@@ -4659,7 +4628,38 @@
         { label: "Endurance 200s Repeat Unit", totalYards: 600, sets: [
             { reps: 3, dist: 200, desc: "Freestyle — aerobic pace, aim for identical splits each rep", interval: "On 4:30", focus: "Pacing consistency — make each round match the last" },
           ]},
-      ],
+      { label: "CSS 10×100", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Freestyle — Critical Swim Speed pace, hold ALL 10 reps the same", interval: "On 2:15", focus: "Find and hold your CSS — sustainable for 1500m/1650y" },
+          ]},
+        { label: "50s on the Minute", totalYards: 1200, sets: [
+            { reps: 24, dist: 50, desc: "Freestyle — steady pace, on the :60 (test endurance)", interval: "On 1:05", focus: "Sustain pace and form across high-volume 50s" },
+          ]},
+        { label: "8×150 Repeats", totalYards: 1200, sets: [
+            { reps: 8, dist: 150, desc: "Freestyle — steady aerobic pace, hold all 8 identical", interval: "On 3:20", focus: "Classic Masters repeat set — consistency over speed" },
+          ]},
+        { label: "Lactate-Threshold 150s", totalYards: 1200, sets: [
+            { reps: 8, dist: 150, desc: "Freestyle — threshold pace (RPE 8/10), even effort", interval: "On 2:55", focus: "Lactate threshold in mid-distance reps" },
+          ]},
+        { label: "CSS Holdover", totalYards: 1200, sets: [
+            { reps: 12, dist: 100, desc: "Freestyle — CSS pace, hold ALL 12 reps the same", interval: "On 2:15", focus: "Critical Swim Speed under accumulated load" },
+          ]},
+        { label: "Race-Pace 100s", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Freestyle — at race-distance pace, hold all 10", interval: "On 2:15", focus: "Race pace under volume" },
+          ]},
+        { label: "8×150 Build", totalYards: 1200, sets: [
+            { reps: 8, dist: 150, desc: "Freestyle — build pace 1-4, then descend 5-8", interval: "On 2:55", focus: "Two-block build into the threshold" },
+          ]},
+        { label: "Build-Per-100", totalYards: 1000, sets: [
+            { reps: 10, dist: 100, desc: "Freestyle — first 25 easy, build through 100", interval: "On 2:05", focus: "Internal build per rep" },
+          ]},
+        { label: "Distance 100s Repeat Unit", totalYards: 400, sets: [
+            { reps: 4, dist: 100, desc: "Freestyle — aerobic pace, even effort, count strokes on last 25", interval: "On 2:15", focus: "Steady-state aerobic — designed to repeat 2–3×" },
+          ]},
+        { label: "Sprint Marathon 2400", totalYards: 2400, sets: [
+            { reps: 8, dist: 200, desc: "Freestyle — strong, descend 1→4 then repeat (1→4)", interval: "On 4:45", focus: "Sustained speed over distance" },
+            { reps: 8, dist: 100, desc: "Choice stroke — fast (near race pace)", interval: "On 2:05", focus: "Speed layer after distance block" },
+          ]},
+        ],
       technique: [
         { label: "Kick + Drill + Swim", totalYards: 1000, sets: [
             { reps: 8, dist:  75, desc: "25 Kick / 25 Drill / 25 Swim — same stroke each rep (your choice)", interval: "On 1:50", focus: "Apply the drill directly into the swim", eq: "kickPart" },
