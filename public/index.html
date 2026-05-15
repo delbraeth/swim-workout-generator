@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 08:55 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 09:00 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9811,8 +9811,14 @@
                        background: "#1e293b", color: "#cbd5e1", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
               🖨 Print catalog (expanded)
             </button>
-            <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 8, marginBottom: 16 }}>
+            <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 8, marginBottom: 8 }}>
               Read-only browse of the workout-set bank as authored. No cross-unit conversion or fallback — see what's actually in each bucket per pool mode.
+            </p>
+            <p style={{ color: "#fbbf24", fontSize: 12, marginTop: 0, marginBottom: 16, padding: "8px 12px",
+                        background: "#1e293b", border: "1px solid #334155", borderRadius: 6 }}>
+              ⚠️ All intervals are calibrated for a <strong>masters baseline of 2:00/100yd</strong> (≈2:11/100m for SCM).
+              On the workout page, set your actual pace and click <em>Rescale</em> to scale every interval proportionally.
+              Faster swimmers tighten; slower swimmers loosen.
             </p>
           </div>
           <div className="print-only" style={{ marginBottom: 16 }}>
