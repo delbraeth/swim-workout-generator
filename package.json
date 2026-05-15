@@ -11,7 +11,7 @@
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.0",
     "helmet": "^8.0.0",
-    "mariadb": "^3.4.0"
+    "mariadb": "^3.5.2"
   },
   "engines": {
     "node": ">=20.0.0"
