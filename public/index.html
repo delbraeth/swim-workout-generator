@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 08:36 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 08:43 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -378,31 +378,31 @@
     // ═══════════════════════════════════════════════════════════════
 
     const WARMUP_OPTIONS = [
-      { typeAffinity: ["sprint"], totalYards: 400, sets: [
+      { label: "Easy Free 400", typeAffinity: ["sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, steady breathing" },
         ]},
-      { typeAffinity: ["technique", "sprint"], totalYards: 400, sets: [
+      { label: "Free Warmup (400 yd)", typeAffinity: ["technique", "sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle", interval: "No interval", focus: "Settle into rhythm" },
           { reps: 4, dist:  50, desc: "25 Drill / 25 Easy Swim (stroke choice)", interval: "On 1:15", focus: "Feel for the water" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 400, sets: [
+      { label: "Free Warmup + Streamline (400 yd)", typeAffinity: ["endurance"], totalYards: 400, sets: [
           { reps: 1, dist: 300, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Gradually wake up" },
           { reps: 4, dist:  25, desc: "Kick (no board, streamlined)", interval: "On :40", focus: "Loosen hips and ankles" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 500, sets: [
+      { label: "Back Warmup + Pull (500 yd)", typeAffinity: ["endurance"], totalYards: 500, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — easy, focus on long stroke", interval: "No interval", focus: "Prime the aerobic engine" },
           { reps: 4, dist:  25, desc: "Backstroke — easy, open the shoulders", interval: "On :45", focus: "Counter the freestyle pull" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 600, sets: [
+      { label: "Free Warmup + Pull (600 yd)", typeAffinity: ["endurance"], totalYards: 600, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Aerobic warm-up, long stroke" },
           { reps: 4, dist:  50, desc: "Pull (buoy) — easy, focus on catch and extension", interval: "On 1:20", focus: "Upper-body prime before main set", eq: "pull" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 700, sets: [
+      { label: "Back Warmup + Pull (700 yd)", typeAffinity: ["endurance"], totalYards: 700, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle — settle in, count strokes", interval: "No interval", focus: "Efficiency awareness from the first lap" },
           { reps: 2, dist: 100, desc: "Kick (board optional) — moderate, even effort", interval: "On 2:30", focus: "Activate legs", eq: "kick" },
           { reps: 1, dist: 100, desc: "Easy backstroke — open the shoulders, counter freestyle pull", interval: "No interval", focus: "All-around warm-up close" },
         ]},
-      { typeAffinity: ["technique", "endurance"], totalYards: 800, sets: [
+      { label: "Free Warmup + Build (800 yd)", typeAffinity: ["technique", "endurance"], totalYards: 800, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — very easy, nose down, minimal head movement", interval: "No interval", focus: "Prime body position and breathing pattern" },
           { reps: 4, dist:  50, desc: "Stroke drills — choice, one focus per 50", interval: "On 1:20", focus: "Technical warm-up" },
           { reps: 1, dist: 200, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Ramp up the aerobic engine before main set" },
@@ -411,264 +411,264 @@
 
     const DRILL_OPTIONS = {
       im: [
-        { totalYards: 300, sets: [
+        { label: "IM 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "25 Fly Drill / 25 Back Drill / 25 Breast Drill", interval: "On 2:30", focus: "Feel each IM stroke before the main set" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "IM Kick (400 yd)", totalYards: 400, sets: [
             { reps: 8, dist: 25, desc: "Stroke drills — 2 each: fly, back, breast, free", interval: "On :40",  focus: "Isolate technique per stroke" },
             { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:45", focus: "Kick rhythm for each stroke", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "IM Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:45", focus: "Wake up legs across IM strokes",   eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — alternate 50 free / 50 stroke choice", interval: "On 2:15", focus: "Upper-body warm-up before IM main set", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "IM Kick (200 yd)", totalYards: 200, sets: [
             { reps: 4, dist: 25, desc: "Stroke drills — 1 each: fly, back, breast, free", interval: "On :40", focus: "Brief all-stroke activation" },
             { reps: 4, dist: 25, desc: "IM kick — 6 yards each stroke, no board",         interval: "On :45", focus: "Kick priming across all four strokes" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "IM 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "100 IM — 25 each stroke, easy (not race pace)", interval: "On 2:30", focus: "Stroke flow and transition practice" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "IM 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "100 IM — 25 drill each stroke, smooth transitions", interval: "On 2:30", focus: "Full-stroke drill sequence before IM main set" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "IM 5×100", totalYards: 500, sets: [
             { reps: 5, dist: 100, desc: "100 IM — 25 drill each stroke (fly, back, breast, free)", interval: "On 2:30", focus: "High-rep IM drill sequence before long set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "IM 6×100", totalYards: 600, sets: [
             { reps: 6, dist: 100, desc: "100 IM — 25 each stroke drill, emphasize transitions", interval: "On 2:30", focus: "Full IM drill volume" },
           ]},
       ],
       distance: [
-        { totalYards: 300, sets: [
+        { label: "Pull 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 2:15", focus: "Prime the pull pattern before distance work", eq: "pull" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 2:15", focus: "Upper body endurance, long stroke", eq: "pull" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Build (400 yd)", totalYards: 400, sets: [
             { reps: 6, dist: 50, desc: "Kick — moderate effort (board optional)",  interval: "On 1:45", focus: "Leg conditioning and body position", eq: "kick" },
             { reps: 2, dist: 50, desc: "Freestyle — build from easy to moderate",  interval: "On 1:15", focus: "Prime aerobic engine for main set" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Catch-Up (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — moderate, focus on body position (board optional)", interval: "On 1:45", focus: "Leg conditioning before distance work", eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — long stroke, focus on catch",              interval: "On 2:15", focus: "Upper-body endurance setup",            eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Pull 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "Pull (buoy) — easy, focus on catch engagement", interval: "On 1:15", focus: "Quick pull priming before distance work", eq: "pull" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Kick 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Kick — moderate, even effort (board optional)", interval: "On 1:45", focus: "Leg priming for distance main set", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Free 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Freestyle — long stroke, nose-down position, minimal head movement", interval: "On 2:15", focus: "Head position and body alignment for distance work", eq: "snorkel" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Pull 5×100", totalYards: 500, sets: [
             { reps: 5, dist: 100, desc: "Pull (buoy) — moderate pace, high-elbow catch, long extension", interval: "On 2:15", focus: "Extended upper-body priming for long distance set", eq: "pull" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Catch-Up 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 catch-up drill / 25 easy swim — stay relaxed, long stroke", interval: "On 1:15", focus: "Technique-heavy priming before long distance main set" },
           ]},
       ],
       sprint: [
-        { totalYards: 300, sets: [
+        { label: "Build 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "25 Easy / 25 Build (NOT all-out yet)", interval: "On 1:15", focus: "Activate fast-twitch, save energy for main set" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Streamline + Build (300 yd)", totalYards: 300, sets: [
             { reps: 4, dist: 50, desc: "Underwater kick off wall (10m), easy swim out", interval: "On 1:00", focus: "Streamline and underwaters", eq: "underkick" },
             { reps: 4, dist: 25, desc: "Tempo build — easy to fast (not all out)",       interval: "On :45",  focus: "Turnover prep, no sprinting yet" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — sharp tempo build (board optional)",   interval: "On 1:45", focus: "Activate sprint leg drive",   eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — fast build, focus on hand speed", interval: "On 2:15", focus: "Activate upper-body power",   eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Underwater + Build (200 yd)", totalYards: 200, sets: [
             { reps: 4, dist: 25, desc: "ALL OUT 12m sprint + easy swim out", interval: "On :40", focus: "Explosive neuromuscular activation" },
             { reps: 4, dist: 25, desc: "Build to 80% — not all out yet",     interval: "On :40", focus: "Speed priming without early fatigue" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Streamline 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "25 underwater kick off wall + 25 easy swim", interval: "On 1:00", focus: "Streamline and breakout priming" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Build 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 sprint effort / 25 easy — ramp to 90% by rep 6–8", interval: "On 1:15", focus: "Graduated sprint activation" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Build 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 build (easy → 85%) / 25 easy — increase intensity each rep", interval: "On 1:30", focus: "Progressive sprint activation over volume" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Build 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 build (ramp to 90%) / 25 easy — last 4 reps at 95%", interval: "On 1:30", focus: "Full sprint priming with high volume" },
           ]},
       ],
       endurance: [
-        { totalYards: 400, sets: [
+        { label: "Pull 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Pull (buoy) — easy/moderate, relaxed stroke", interval: "On 2:15", focus: "Aerobic priming, conserve energy", eq: "pull" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Kick 300", totalYards: 300, sets: [
             { reps: 1, dist: 300, desc: "Kick — choice of stroke, easy pace (board optional)", interval: "No interval", focus: "Leg warm-up, build base endurance", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — easy/moderate, focus on rhythm (board optional)", interval: "On 1:45", focus: "Aerobic leg priming",        eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — relaxed stroke, long extension",          interval: "On 2:15", focus: "Aerobic upper-body warm-up", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Free 2×100", totalYards: 200, sets: [
             { reps: 2, dist: 100, desc: "Freestyle — smooth stroke, relaxed breathing, easy pace", interval: "On 2:15", focus: "Aerobic priming — stay relaxed" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Kick 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Kick — easy aerobic pace (board optional)", interval: "On 2:15", focus: "Leg priming for long set", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 catch-up drill / 25 easy swim — relaxed stroke", interval: "On 1:15", focus: "Stroke efficiency before long aerobic set" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Free 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Freestyle — easy pace, flat head, focus on hip rotation and body line", interval: "On 1:15", focus: "Aerobic priming with body alignment focus", eq: "snorkel" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Pull 5×100", totalYards: 500, sets: [
             { reps: 5, dist: 100, desc: "Pull (buoy) — relaxed, smooth stroke, aerobic pace", interval: "On 2:15", focus: "Extended aerobic priming, save legs for long main set", eq: "pull" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Catch-Up 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 catch-up drill / 25 easy swim — stay completely relaxed throughout", interval: "On 1:15", focus: "Stroke efficiency and aerobic priming before long set" },
           ]},
       ],
       technique: [
-        { totalYards: 400, sets: [
+        { label: "Free 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 Drill / 25 Easy Swim — same stroke each rep (your choice)", interval: "On 1:25", focus: "Feel the drill translate into the swim" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Kick 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 (same stroke)", interval: "On 1:40", focus: "Layered skill building — kick → drill → apply", eq: "kickPart" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — slow, focus on stroke alignment (board optional)", interval: "On 1:45", focus: "Isolate leg technique",     eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — high-elbow catch, long stroke",            interval: "On 2:15", focus: "Isolate upper-body technique", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Free 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "25 drill (your choice) / 25 easy swim — feel the difference", interval: "On 1:15", focus: "Brief drill activation" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Fingertip Drag 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Fingertip drag drill — 25 drill / 25 swim, same stroke", interval: "On 1:15", focus: "Hand path and elbow height awareness" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 catch-up drill / 25 swim — focus on full extension", interval: "On 1:15", focus: "Stroke timing and long extension" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "Freestyle — 25 catch-up drill / 25 swim, flat head position", interval: "On 1:15", focus: "Stroke mechanics with consistent head position", eq: "snorkel" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Free 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 drill (your choice) / 25 swim — isolate and apply each rep", interval: "On 1:20", focus: "High-rep technique priming before technique set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Catch-Up 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 drill / 25 swim — rotate drills every 2 reps (catch-up, fingertip drag, side kick)", interval: "On 1:20", focus: "Broad technique warm-up with variety" },
           ]},
       ],
       mixed: [
-        { totalYards: 300, sets: [
+        { label: "Kick 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 — stroke choice", interval: "On 1:40", focus: "All-around activation before varied main set", eq: "kickPart" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Tempo (400 yd)", totalYards: 400, sets: [
             { reps: 6, dist: 50, desc: "Drill/Swim by 25 — your stroke choice",    interval: "On 1:00", focus: "Skill warm-up" },
             { reps: 4, dist: 25, desc: "Fast tempo (not all out) — choice stroke",  interval: "On :45",  focus: "Activate speed system" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — moderate, choice of stroke (board optional)", interval: "On 1:45", focus: "Leg activation",                eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — moderate, smooth rotation",           interval: "On 2:15", focus: "Upper-body warm-up before mix", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Free (200 yd)", totalYards: 200, sets: [
             { reps: 4, dist: 25, desc: "Choice stroke drill — activate technique", interval: "On :45", focus: "Brief all-around drill activation" },
             { reps: 4, dist: 25, desc: "Choice stroke swim — apply the drill",     interval: "On :45", focus: "Drill translation before mixed set" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Free 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Mixed stroke — 50 drill of choice / 50 swim", interval: "On 2:15", focus: "Variety technique priming" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Free 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Alternating stroke — 50 stroke A drill / 50 stroke B drill", interval: "On 2:15", focus: "Cross-stroke skill work" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Free 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "Freestyle — 25 drill of choice / 25 swim, flat head throughout", interval: "On 1:15", focus: "Technique variety with consistent head position", eq: "snorkel" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Free 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 drill choice / 25 swim — alternate stroke every other rep", interval: "On 1:15", focus: "All-around technique priming before mixed set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Kick 8×75", totalYards: 600, sets: [
             { reps: 8, dist: 75, desc: "25 kick / 25 drill / 25 swim — stroke choice per rep", interval: "On 2:00", focus: "Layered skill warm-up across strokes", eq: "kickPart" },
           ]},
       ],
       back: [
-        { totalYards: 300, sets: [
+        { label: "Back Single-Arm 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "25 single-arm backstroke / 25 double-arm back drill / 25 backstroke swim", interval: "On 2:30", focus: "Lead arm extension and stroke timing in back" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Back Streamline 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Backstroke kick — 25 streamline (no board) / 25 with board", interval: "On 1:45", focus: "Body position on the back, hip drive", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Back Kick + Catch-Up (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Backstroke kick — easy/moderate (board optional)", interval: "On 1:45", focus: "Leg conditioning for back",     eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — backstroke pull pattern, focus on catch", interval: "On 2:15", focus: "Upper-body work for back", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Back Single-Arm 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "Backstroke — 25 single-arm / 25 full stroke", interval: "On 1:30", focus: "Lead arm and rotation activation" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Back Single-Arm 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Backstroke — 25 single-arm (L) / 25 single-arm (R) / 50 full stroke", interval: "On 2:30", focus: "Each arm isolated then integrated" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Back 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 back elbow-lead drill / 25 backstroke swim", interval: "On 1:30", focus: "High-elbow catch on backstroke" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Back Single-Arm 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 single-arm backstroke / 25 full backstroke — alternate lead arm each rep", interval: "On 1:30", focus: "High-rep arm isolation before back set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Back Single-Arm 6×100", totalYards: 600, sets: [
             { reps: 6, dist: 100, desc: "Backstroke — 25 single-arm (L) / 25 single-arm (R) / 50 full stroke", interval: "On 2:30", focus: "Full arm isolation and integration at volume" },
           ]},
       ],
       breast: [
-        { totalYards: 300, sets: [
+        { label: "Breast Pull 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "25 breast pull-only (no kick) / 25 breast kick (board) / 25 breast swim", interval: "On 2:00", focus: "Isolate then integrate the breast components" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Breast Kick 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Breaststroke kick (board) — focus on power and recovery", interval: "On 1:30", focus: "Breast kick rhythm and power", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Breast Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Breaststroke kick (board) — moderate effort", interval: "On 1:30", focus: "Power kick",          eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — breaststroke pull pattern",     interval: "On 2:30", focus: "Strong pull-glide cycle", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Breast Pull 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "25 breast pull-only / 25 full breaststroke — feel the integration", interval: "On 1:30", focus: "Pull activation before kick integration" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Breast Pull 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Breast — 25 kick only (board) / 25 pull only / 50 full stroke", interval: "On 2:30", focus: "Isolated-then-integrated breast work" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Breast Pull 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 breast timing drill (2-kick 1-pull) / 25 full breaststroke", interval: "On 1:30", focus: "Timing drill into race stroke" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Breast Pull 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 breaststroke pull-only (no kick, glide) / 25 full breaststroke", interval: "On 1:30", focus: "High-rep pull activation before breast set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Breast Pull 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 breaststroke pull-only / 25 full breaststroke — feel pull integration on every rep", interval: "On 1:30", focus: "High-rep pull priming for long breast set" },
           ]},
       ],
       fly: [
-        { totalYards: 300, sets: [
+        { label: "Fly Single-Arm 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "25 fly drill (3-3-3 or single-arm) / 25 freestyle easy", interval: "On 1:30", focus: "Build fly tolerance with active recovery" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Back Streamline 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Dolphin kick — alternate streamline on stomach / on back", interval: "On 1:45", focus: "Dolphin rhythm without arm fatigue", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Fly Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Dolphin kick (board) — focus on rhythm",                                 interval: "On 1:45", focus: "Sustained kick base for fly",       eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — 25 fly pull / 75 freestyle pull (recovery in arm pattern)", interval: "On 2:00", focus: "Build fly catch with free recovery", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Fly Streamline 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "25 dolphin kick streamline / 25 easy freestyle", interval: "On 1:15", focus: "Dolphin activation without arm fatigue" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Fly Single-Arm 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "25 single-arm fly (alternate L/R each rep) / 25 easy freestyle", interval: "On 1:30", focus: "Arm mechanics and undulation before fly set" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Fly Build 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 fly drill (your choice) / 25 freestyle easy", interval: "On 1:30", focus: "Build fly tolerance, recover on free" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Fly Single-Arm 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 fly drill (single-arm or 3-3-3) / 25 freestyle easy", interval: "On 1:30", focus: "Extended fly drill volume with free recovery" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Fly Single-Arm 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 fly drill (alternate: single-arm L, single-arm R, 3-3-3 each group) / 25 freestyle easy", interval: "On 1:30", focus: "High-rep fly drill variety before main set" },
           ]},
       ],
@@ -2949,21 +2949,21 @@
     };
 
     const COOLDOWN_OPTIONS = [
-      { totalYards: 200, sets: [
+      { label: "Cool-Down — Easy Free 200", totalYards: 200, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Bring heart rate down, flush the muscles" },
         ]},
-      { totalYards: 250, sets: [
+      { label: "Cool-Down — Back (250 yd)", totalYards: 250, sets: [
           { reps: 1, dist: 150, desc: "Easy Backstroke or choice",           interval: "No interval", focus: "Let lactic acid clear, open the chest" },
           { reps: 1, dist: 100, desc: "Easy Freestyle — progressively slower", interval: "No interval", focus: "Full cool-down — slowest laps of the day" },
         ]},
-      { totalYards: 200, sets: [
+      { label: "Cool-Down — Easy Back 50", totalYards: 200, sets: [
           { reps: 4, dist: 50, desc: "Easy alternating: Freestyle / Backstroke (swap each length)", interval: "On 1:20", focus: "Gentle recovery — no effort, just move" },
         ]},
-      { totalYards: 300, sets: [
+      { label: "Cool-Down — Back (300 yd)", totalYards: 300, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Flush the muscles, lower heart rate" },
           { reps: 1, dist: 100, desc: "Easy backstroke — gentle on the shoulders", interval: "No interval", focus: "Open the chest, counter freestyle pull" },
         ]},
-      { totalYards: 400, sets: [
+      { label: "Cool-Down — Back (400 yd)", totalYards: 400, sets: [
           { reps: 1, dist: 200, desc: "Easy backstroke or choice — progressively slower", interval: "No interval", focus: "Let lactic acid clear, open the chest" },
           { reps: 1, dist: 100, desc: "Easy freestyle — very easy, focus on long glide", interval: "No interval", focus: "Wind down heart rate" },
           { reps: 4, dist:  25, desc: "Easy kick choice — no board, streamlined", interval: "On :45", focus: "Gentle leg flush after a big set" },
@@ -2979,43 +2979,43 @@
 
     const WARMUP_OPTIONS_50M = [
       // --- Sprint affinity ---
-      { typeAffinity: ["sprint"], totalYards: 400, sets: [
+      { label: "Easy Free 400", typeAffinity: ["sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, settle into long-course rhythm" },
         ]},
-      { typeAffinity: ["sprint"], totalYards: 500, sets: [
+      { label: "Free Warmup (400 yd)", typeAffinity: ["sprint"], totalYards: 500, sets: [
           { reps: 1, dist: 300, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Ease into the long-course pool" },
           { reps: 4, dist:  50, desc: "Build: easy first 25m, strong second 25m", interval: "On 1:20", focus: "Wake up fast-twitch before sprint work" },
         ]},
-      { typeAffinity: ["sprint"], totalYards: 600, sets: [
+      { label: "Free Warmup + Streamline (400 yd)", typeAffinity: ["sprint"], totalYards: 600, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle — steady pace, long stroke", interval: "No interval", focus: "Full-body warm-up before fast work" },
           { reps: 4, dist:  50, desc: "Descend 1→4: add speed each length", interval: "On 1:20", focus: "Gradual race-pace activation" },
         ]},
       // --- Technique affinity ---
-      { typeAffinity: ["technique"], totalYards: 400, sets: [
+      { label: "Back Warmup + Pull (500 yd)", typeAffinity: ["technique"], totalYards: 400, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle — focus on long, smooth stroke", interval: "No interval", focus: "Settle into good mechanics" },
           { reps: 4, dist:  50, desc: "Drill choice — fingertip drag or catch-up drill", interval: "On 1:20", focus: "Isolate recovery and front-end catch" },
         ]},
-      { typeAffinity: ["technique"], totalYards: 500, sets: [
+      { label: "Free Warmup + Pull (600 yd)", typeAffinity: ["technique"], totalYards: 500, sets: [
           { reps: 1, dist: 300, desc: "Easy Freestyle", interval: "No interval", focus: "Settle into the long-course pool" },
           { reps: 4, dist:  50, desc: "Stroke drill choice — one focus per length", interval: "On 1:20", focus: "Feel for the water" },
         ]},
-      { typeAffinity: ["technique"], totalYards: 700, sets: [
+      { label: "Back Warmup + Pull (700 yd)", typeAffinity: ["technique"], totalYards: 700, sets: [
           { reps: 1, dist: 500, desc: "Easy Freestyle — breathe every 3, focus on rotation", interval: "No interval", focus: "Long warm-up before detailed drill work" },
           { reps: 4, dist:  50, desc: "Drill choice — one focus per length, reset between", interval: "On 1:30", focus: "Prime stroke mechanics before technique main" },
         ]},
       // --- Endurance affinity ---
-      { typeAffinity: ["endurance"], totalYards: 400, sets: [
+      { label: "Free Warmup + Build (800 yd)", typeAffinity: ["endurance"], totalYards: 400, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle — build effort from 30% to 60%", interval: "No interval", focus: "Gradual aerobic engine warm-up" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 500, sets: [
+      { label: "Free Warmup + Kick (500 yd)", typeAffinity: ["endurance"], totalYards: 500, sets: [
           { reps: 1, dist: 300, desc: "Easy Freestyle — relaxed, long-course rhythm", interval: "No interval", focus: "Ease into aerobic work" },
           { reps: 4, dist:  50, desc: "Kick (board) — steady pace, hips up", interval: "On 1:30", focus: "Engage legs before endurance main", eq: "kick" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 600, sets: [
+      { label: "Free Warmup + Streamline (600 yd)", typeAffinity: ["endurance"], totalYards: 600, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Warm up the aerobic engine gradually" },
           { reps: 4, dist:  50, desc: "Kick (no board, streamlined) — 1 length each", interval: "On 1:30", focus: "Loosen hips and ankles", eq: "kick" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 800, sets: [
+      { label: "Free Warmup + Catch-Up (800 yd)", typeAffinity: ["endurance"], totalYards: 800, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle — aerobic pace, breathe every 3", interval: "No interval", focus: "Thorough warm-up for long-distance work" },
           { reps: 2, dist: 100, desc: "Pull (buoy) — moderate, high elbow catch", interval: "On 2:30", focus: "Upper body activation", eq: "pull" },
           { reps: 4, dist:  50, desc: "Kick (board) — easy to moderate", interval: "On 1:30", focus: "Leg conditioning before the long main set", eq: "kick" },
@@ -3023,71 +3023,71 @@
     ];
 
     const COOLDOWN_OPTIONS_50M = [
-      { totalYards: 200, sets: [
+      { label: "Cool-Down — Easy Free 200", totalYards: 200, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Bring heart rate down, flush the muscles" },
         ]},
-      { totalYards: 300, sets: [
+      { label: "Cool-Down — Back (250 yd)", totalYards: 300, sets: [
           { reps: 1, dist: 200, desc: "Easy Backstroke — open the chest, decelerate", interval: "No interval", focus: "Clear the lactic acid" },
           { reps: 1, dist: 100, desc: "Easy Freestyle — progressively slower", interval: "No interval", focus: "Slowest lengths of the day" },
         ]},
-      { totalYards: 400, sets: [
+      { label: "Cool-Down — Easy Back 50", totalYards: 400, sets: [
           { reps: 4, dist: 100, desc: "Easy alternating: Freestyle / Backstroke (swap each 100)", interval: "On 2:30", focus: "Gentle recovery — no effort, just move" },
         ]},
     ];
 
     const DRILL_OPTIONS_50M = {
       distance: [
-        { totalYards: 300, sets: [
+        { label: "Pull 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 2:30", focus: "Prime the pull pattern before distance work", eq: "pull" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 2:30", focus: "Upper body endurance, long stroke", eq: "pull" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Build (400 yd)", totalYards: 400, sets: [
             { reps: 2, dist: 200, desc: "Pull (buoy) — steady aerobic, focus on long stroke", interval: "On 5:00", focus: "Build the aerobic base before distance main set", eq: "pull" },
           ]},
       ],
       endurance: [
-        { totalYards: 300, sets: [
+        { label: "Pull 4×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 2:30", focus: "Prime the pull pattern before endurance work", eq: "pull" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick 300", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 2:30", focus: "Upper body endurance before long main set", eq: "pull" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Kick (board) — steady pace, even split", interval: "On 2:45", focus: "Leg conditioning before endurance main", eq: "kick" },
           ]},
       ],
       sprint: [
-        { totalYards: 200, sets: [
+        { label: "Build 6×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "Build: easy first 25m / fast second 25m", interval: "On 1:30", focus: "Prime fast-twitch before sprint main" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Streamline + Build (300 yd)", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Moderate to strong — 1 length each, crisp turns", interval: "On 1:20", focus: "Sharpen stroke rate for sprint main" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Build: 50m easy / 50m strong — 2 lengths each", interval: "On 2:30", focus: "Controlled activation into sprint mode" },
           ]},
       ],
       technique: [
-        { totalYards: 300, sets: [
+        { label: "Free 8×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Stroke drills — choice, one focus per length", interval: "On 1:20", focus: "Isolate weak points before technique main" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick 4×75", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "50m drill / 50m swim — alternate focus", interval: "On 2:30", focus: "Bridge from drill isolation to full-stroke application" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "Single-arm or catch-up drill — alternate focus each length", interval: "On 1:20", focus: "Rotation control and high-elbow catch" },
           ]},
       ],
       mixed: [
-        { totalYards: 300, sets: [
+        { label: "Kick 4×75", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "50m drill / 50m strong swim", interval: "On 2:30", focus: "Sharpen technique then apply it at speed" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Tempo (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Alternating: Pull (odd reps) / Free strong (even reps)", interval: "On 2:30", focus: "Upper body endurance with speed contrast", eq: "pull" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 500, sets: [
             { reps: 2, dist:  50, desc: "Sprint — 1 length, max effort",                    interval: "On 1:30", focus: "Wake up fast-twitch" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — easy recovery between sprints",       interval: "On 2:30", focus: "Active recovery, reinforce catch", eq: "pull" },
             { reps: 2, dist:  50, desc: "Sprint — 1 length, hold top-end speed",             interval: "On 1:30", focus: "Close the drill with speed" },
@@ -3095,46 +3095,46 @@
           ]},
       ],
       im: [
-        { totalYards: 200, sets: [
+        { label: "IM 4×75", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "IM stroke sequence — one stroke per 50m: fly / back / breast / free", interval: "On 1:30", focus: "Prime each stroke before IM main set" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "IM Kick (400 yd)", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Stroke drill rotation — fly drill / back drill / breast drill / free easy / repeat", interval: "On 1:20", focus: "Isolate weak points across all four strokes" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "IM Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "IM — one stroke per 50m (drill first 50m, swim second 50m)", interval: "On 2:45", focus: "Bridge drill feel into full-stroke IM rhythm" },
           ]},
       ],
       back: [
-        { totalYards: 200, sets: [
+        { label: "Back Single-Arm 4×75", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "Backstroke — alternating single-arm / full-stroke each length", interval: "On 1:20", focus: "Isolate the pulling pattern and high-elbow catch" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Back Streamline 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Backstroke — alternating elbow-lead drill / full-stroke swim", interval: "On 1:20", focus: "Sharpen rotation and catch before backstroke main" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Back Kick + Catch-Up (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Backstroke — 50m drill (count strokes) / 50m swim (hold your count)", interval: "On 2:30", focus: "Transfer stroke efficiency to full backstroke" },
           ]},
       ],
       breast: [
-        { totalYards: 200, sets: [
+        { label: "Breast Pull 4×75", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "Breaststroke — alternating pull-only / full-stroke each length", interval: "On 1:20", focus: "Isolate the pull phase and high elbow recovery" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Breast Kick 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Breaststroke — alternating kick-only / full-stroke each length", interval: "On 1:30", focus: "Build kick power and timing before breaststroke main" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Breast Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Breaststroke — 50m pull-only / 50m full-stroke, focus on glide", interval: "On 2:30", focus: "Connect the pull to a patient, powerful stroke cycle" },
           ]},
       ],
       fly: [
-        { totalYards: 200, sets: [
+        { label: "Fly Single-Arm 6×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "Alternating: fly drill (single-arm or finger-drag) / easy freestyle", interval: "On 1:20", focus: "Activate butterfly without fatiguing before the main set" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Back Streamline 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Alternating: underwater dolphin kick / easy freestyle recovery", interval: "On 1:20", focus: "Build the undulation rhythm and kick power for fly" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Fly Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "50m single-arm fly (alternate arms each length) / 50m easy freestyle", interval: "On 2:30", focus: "Isolate each arm's pull before full-butterfly main set" },
           ]},
       ],
@@ -3319,31 +3319,31 @@
     // ═══════════════════════════════════════════════════════════════
 
     const WARMUP_OPTIONS_SCM = [
-      { typeAffinity: ["sprint"], totalYards: 400, sets: [
+      { label: "Easy Free 400", typeAffinity: ["sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, steady breathing" },
         ]},
-      { typeAffinity: ["technique", "sprint"], totalYards: 400, sets: [
+      { label: "Free Warmup (400 yd)", typeAffinity: ["technique", "sprint"], totalYards: 400, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle", interval: "No interval", focus: "Settle into rhythm" },
           { reps: 4, dist:  50, desc: "25 Drill / 25 Easy Swim (stroke choice)", interval: "On 1:20", focus: "Feel for the water" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 400, sets: [
+      { label: "Free Warmup + Streamline (400 yd)", typeAffinity: ["endurance"], totalYards: 400, sets: [
           { reps: 1, dist: 300, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Gradually wake up" },
           { reps: 4, dist:  25, desc: "Kick (no board, streamlined)", interval: "On :40", focus: "Loosen hips and ankles" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 500, sets: [
+      { label: "Back Warmup + Pull (500 yd)", typeAffinity: ["endurance"], totalYards: 500, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — easy, focus on long stroke", interval: "No interval", focus: "Prime the aerobic engine" },
           { reps: 4, dist:  25, desc: "Backstroke — easy, open the shoulders", interval: "On :45", focus: "Counter the freestyle pull" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 600, sets: [
+      { label: "Free Warmup + Pull (600 yd)", typeAffinity: ["endurance"], totalYards: 600, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Aerobic warm-up, long stroke" },
           { reps: 4, dist:  50, desc: "Pull (buoy) — easy, focus on catch and extension", interval: "On 1:25", focus: "Upper-body prime before main set", eq: "pull" },
         ]},
-      { typeAffinity: ["endurance"], totalYards: 700, sets: [
+      { label: "Back Warmup + Pull (700 yd)", typeAffinity: ["endurance"], totalYards: 700, sets: [
           { reps: 1, dist: 400, desc: "Easy Freestyle — settle in, count strokes", interval: "No interval", focus: "Efficiency awareness from the first lap" },
           { reps: 2, dist: 100, desc: "Kick (board optional) — moderate, even effort", interval: "On 2:40", focus: "Activate legs", eq: "kick" },
           { reps: 1, dist: 100, desc: "Easy backstroke — open the shoulders, counter freestyle pull", interval: "No interval", focus: "All-around warm-up close" },
         ]},
-      { typeAffinity: ["technique", "endurance"], totalYards: 800, sets: [
+      { label: "Free Warmup + Build (800 yd)", typeAffinity: ["technique", "endurance"], totalYards: 800, sets: [
           { reps: 1, dist: 400, desc: "Freestyle — very easy, nose down, minimal head movement", interval: "No interval", focus: "Prime body position and breathing pattern" },
           { reps: 4, dist:  50, desc: "Stroke drills — choice, one focus per 50", interval: "On 1:25", focus: "Technical warm-up" },
           { reps: 1, dist: 200, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Ramp up the aerobic engine before main set" },
@@ -3351,21 +3351,21 @@
     ];
 
     const COOLDOWN_OPTIONS_SCM = [
-      { totalYards: 200, sets: [
+      { label: "Cool-Down — Easy Free 200", totalYards: 200, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Bring heart rate down, flush the muscles" },
         ]},
-      { totalYards: 250, sets: [
+      { label: "Cool-Down — Back (250 yd)", totalYards: 250, sets: [
           { reps: 1, dist: 150, desc: "Easy Backstroke or choice",           interval: "No interval", focus: "Let lactic acid clear, open the chest" },
           { reps: 1, dist: 100, desc: "Easy Freestyle — progressively slower", interval: "No interval", focus: "Full cool-down — slowest laps of the day" },
         ]},
-      { totalYards: 200, sets: [
+      { label: "Cool-Down — Easy Back 50", totalYards: 200, sets: [
           { reps: 4, dist: 50, desc: "Easy alternating: Freestyle / Backstroke (swap each length)", interval: "On 1:25", focus: "Gentle recovery — no effort, just move" },
         ]},
-      { totalYards: 300, sets: [
+      { label: "Cool-Down — Back (300 yd)", totalYards: 300, sets: [
           { reps: 1, dist: 200, desc: "Easy Freestyle — long, relaxed stroke", interval: "No interval", focus: "Flush the muscles, lower heart rate" },
           { reps: 1, dist: 100, desc: "Easy backstroke — gentle on the shoulders", interval: "No interval", focus: "Open the chest, counter freestyle pull" },
         ]},
-      { totalYards: 400, sets: [
+      { label: "Cool-Down — Back (400 yd)", totalYards: 400, sets: [
           { reps: 1, dist: 200, desc: "Easy backstroke or choice — progressively slower", interval: "No interval", focus: "Let lactic acid clear, open the chest" },
           { reps: 1, dist: 100, desc: "Easy freestyle — very easy, focus on long glide", interval: "No interval", focus: "Wind down heart rate" },
           { reps: 4, dist:  25, desc: "Easy kick choice — no board, streamlined", interval: "On :45", focus: "Gentle leg flush after a big set" },
@@ -3374,264 +3374,264 @@
 
     const DRILL_OPTIONS_SCM = {
       im: [
-        { totalYards: 300, sets: [
+        { label: "IM 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "25 Fly Drill / 25 Back Drill / 25 Breast Drill", interval: "On 2:40", focus: "Feel each IM stroke before the main set" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "IM Kick (400 yd)", totalYards: 400, sets: [
             { reps: 8, dist: 25, desc: "Stroke drills — 2 each: fly, back, breast, free", interval: "On :40",  focus: "Isolate technique per stroke" },
             { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:50", focus: "Kick rhythm for each stroke", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "IM Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "IM order kick — 12.5 yards each stroke",          interval: "On 1:50", focus: "Wake up legs across IM strokes",   eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — alternate 50 free / 50 stroke choice", interval: "On 2:20", focus: "Upper-body warm-up before IM main set", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "IM Kick (200 yd)", totalYards: 200, sets: [
             { reps: 4, dist: 25, desc: "Stroke drills — 1 each: fly, back, breast, free", interval: "On :40", focus: "Brief all-stroke activation" },
             { reps: 4, dist: 25, desc: "IM kick — 6 yards each stroke, no board",         interval: "On :45", focus: "Kick priming across all four strokes" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "IM 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "100 IM — 25 each stroke, easy (not race pace)", interval: "On 2:40", focus: "Stroke flow and transition practice" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "IM 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "100 IM — 25 drill each stroke, smooth transitions", interval: "On 2:40", focus: "Full-stroke drill sequence before IM main set" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "IM 5×100", totalYards: 500, sets: [
             { reps: 5, dist: 100, desc: "100 IM — 25 drill each stroke (fly, back, breast, free)", interval: "On 2:40", focus: "High-rep IM drill sequence before long set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "IM 6×100", totalYards: 600, sets: [
             { reps: 6, dist: 100, desc: "100 IM — 25 each stroke drill, emphasize transitions", interval: "On 2:40", focus: "Full IM drill volume" },
           ]},
       ],
       distance: [
-        { totalYards: 300, sets: [
+        { label: "Pull 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Pull (buoy) — easy/moderate, focus on catch", interval: "On 2:20", focus: "Prime the pull pattern before distance work", eq: "pull" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Pull (buoy) — moderate pace, high elbow catch", interval: "On 2:20", focus: "Upper body endurance, long stroke", eq: "pull" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Build (400 yd)", totalYards: 400, sets: [
             { reps: 6, dist: 50, desc: "Kick — moderate effort (board optional)",  interval: "On 1:50", focus: "Leg conditioning and body position", eq: "kick" },
             { reps: 2, dist: 50, desc: "Freestyle — build from easy to moderate",  interval: "On 1:20", focus: "Prime aerobic engine for main set" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Catch-Up (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — moderate, focus on body position (board optional)", interval: "On 1:50", focus: "Leg conditioning before distance work", eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — long stroke, focus on catch",              interval: "On 2:20", focus: "Upper-body endurance setup",            eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Pull 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "Pull (buoy) — easy, focus on catch engagement", interval: "On 1:20", focus: "Quick pull priming before distance work", eq: "pull" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Kick 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Kick — moderate, even effort (board optional)", interval: "On 1:50", focus: "Leg priming for distance main set", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Free 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Freestyle — long stroke, nose-down position, minimal head movement", interval: "On 2:20", focus: "Head position and body alignment for distance work", eq: "snorkel" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Pull 5×100", totalYards: 500, sets: [
             { reps: 5, dist: 100, desc: "Pull (buoy) — moderate pace, high-elbow catch, long extension", interval: "On 2:20", focus: "Extended upper-body priming for long distance set", eq: "pull" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Catch-Up 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 catch-up drill / 25 easy swim — stay relaxed, long stroke", interval: "On 1:20", focus: "Technique-heavy priming before long distance main set" },
           ]},
       ],
       sprint: [
-        { totalYards: 300, sets: [
+        { label: "Build 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "25 Easy / 25 Build (NOT all-out yet)", interval: "On 1:20", focus: "Activate fast-twitch, save energy for main set" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Streamline + Build (300 yd)", totalYards: 300, sets: [
             { reps: 4, dist: 50, desc: "Underwater kick off wall (10m), easy swim out", interval: "On 1:05", focus: "Streamline and underwaters", eq: "underkick" },
             { reps: 4, dist: 25, desc: "Tempo build — easy to fast (not all out)",       interval: "On :45",  focus: "Turnover prep, no sprinting yet" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — sharp tempo build (board optional)",   interval: "On 1:50", focus: "Activate sprint leg drive",   eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — fast build, focus on hand speed", interval: "On 2:20", focus: "Activate upper-body power",   eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Underwater + Build (200 yd)", totalYards: 200, sets: [
             { reps: 4, dist: 25, desc: "ALL OUT 12m sprint + easy swim out", interval: "On :40", focus: "Explosive neuromuscular activation" },
             { reps: 4, dist: 25, desc: "Build to 80% — not all out yet",     interval: "On :40", focus: "Speed priming without early fatigue" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Streamline 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "25 underwater kick off wall + 25 easy swim", interval: "On 1:05", focus: "Streamline and breakout priming" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Build 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 sprint effort / 25 easy — ramp to 90% by rep 6–8", interval: "On 1:20", focus: "Graduated sprint activation" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Build 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 build (easy → 85%) / 25 easy — increase intensity each rep", interval: "On 1:35", focus: "Progressive sprint activation over volume" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Build 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 build (ramp to 90%) / 25 easy — last 4 reps at 95%", interval: "On 1:35", focus: "Full sprint priming with high volume" },
           ]},
       ],
       endurance: [
-        { totalYards: 400, sets: [
+        { label: "Pull 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Pull (buoy) — easy/moderate, relaxed stroke", interval: "On 2:20", focus: "Aerobic priming, conserve energy", eq: "pull" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Kick 300", totalYards: 300, sets: [
             { reps: 1, dist: 300, desc: "Kick — choice of stroke, easy pace (board optional)", interval: "No interval", focus: "Leg warm-up, build base endurance", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — easy/moderate, focus on rhythm (board optional)", interval: "On 1:50", focus: "Aerobic leg priming",        eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — relaxed stroke, long extension",          interval: "On 2:20", focus: "Aerobic upper-body warm-up", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Free 2×100", totalYards: 200, sets: [
             { reps: 2, dist: 100, desc: "Freestyle — smooth stroke, relaxed breathing, easy pace", interval: "On 2:20", focus: "Aerobic priming — stay relaxed" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Kick 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Kick — easy aerobic pace (board optional)", interval: "On 2:20", focus: "Leg priming for long set", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 catch-up drill / 25 easy swim — relaxed stroke", interval: "On 1:20", focus: "Stroke efficiency before long aerobic set" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Free 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Freestyle — easy pace, flat head, focus on hip rotation and body line", interval: "On 1:20", focus: "Aerobic priming with body alignment focus", eq: "snorkel" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Pull 5×100", totalYards: 500, sets: [
             { reps: 5, dist: 100, desc: "Pull (buoy) — relaxed, smooth stroke, aerobic pace", interval: "On 2:20", focus: "Extended aerobic priming, save legs for long main set", eq: "pull" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Catch-Up 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 catch-up drill / 25 easy swim — stay completely relaxed throughout", interval: "On 1:20", focus: "Stroke efficiency and aerobic priming before long set" },
           ]},
       ],
       technique: [
-        { totalYards: 400, sets: [
+        { label: "Free 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 Drill / 25 Easy Swim — same stroke each rep (your choice)", interval: "On 1:30", focus: "Feel the drill translate into the swim" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Kick 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 (same stroke)", interval: "On 1:45", focus: "Layered skill building — kick → drill → apply", eq: "kickPart" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — slow, focus on stroke alignment (board optional)", interval: "On 1:50", focus: "Isolate leg technique",     eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — high-elbow catch, long stroke",            interval: "On 2:20", focus: "Isolate upper-body technique", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Free 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "25 drill (your choice) / 25 easy swim — feel the difference", interval: "On 1:20", focus: "Brief drill activation" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Fingertip Drag 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Fingertip drag drill — 25 drill / 25 swim, same stroke", interval: "On 1:20", focus: "Hand path and elbow height awareness" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 catch-up drill / 25 swim — focus on full extension", interval: "On 1:20", focus: "Stroke timing and long extension" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Catch-Up 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "Freestyle — 25 catch-up drill / 25 swim, flat head position", interval: "On 1:20", focus: "Stroke mechanics with consistent head position", eq: "snorkel" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Free 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 drill (your choice) / 25 swim — isolate and apply each rep", interval: "On 1:25", focus: "High-rep technique priming before technique set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Catch-Up 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 drill / 25 swim — rotate drills every 2 reps (catch-up, fingertip drag, side kick)", interval: "On 1:25", focus: "Broad technique warm-up with variety" },
           ]},
       ],
       mixed: [
-        { totalYards: 300, sets: [
+        { label: "Kick 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "Kick 25 / Drill 25 / Swim 25 — stroke choice", interval: "On 1:45", focus: "All-around activation before varied main set", eq: "kickPart" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Tempo (400 yd)", totalYards: 400, sets: [
             { reps: 6, dist: 50, desc: "Drill/Swim by 25 — your stroke choice",    interval: "On 1:05", focus: "Skill warm-up" },
             { reps: 4, dist: 25, desc: "Fast tempo (not all out) — choice stroke",  interval: "On :45",  focus: "Activate speed system" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Kick — moderate, choice of stroke (board optional)", interval: "On 1:50", focus: "Leg activation",                eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — moderate, smooth rotation",           interval: "On 2:20", focus: "Upper-body warm-up before mix", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Free (200 yd)", totalYards: 200, sets: [
             { reps: 4, dist: 25, desc: "Choice stroke drill — activate technique", interval: "On :45", focus: "Brief all-around drill activation" },
             { reps: 4, dist: 25, desc: "Choice stroke swim — apply the drill",     interval: "On :45", focus: "Drill translation before mixed set" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Free 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Mixed stroke — 50 drill of choice / 50 swim", interval: "On 2:20", focus: "Variety technique priming" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Free 4×100", totalYards: 400, sets: [
             { reps: 4, dist: 100, desc: "Alternating stroke — 50 stroke A drill / 50 stroke B drill", interval: "On 2:20", focus: "Cross-stroke skill work" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Free 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "Freestyle — 25 drill of choice / 25 swim, flat head throughout", interval: "On 1:20", focus: "Technique variety with consistent head position", eq: "snorkel" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Free 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 drill choice / 25 swim — alternate stroke every other rep", interval: "On 1:20", focus: "All-around technique priming before mixed set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Kick 8×75", totalYards: 600, sets: [
             { reps: 8, dist: 75, desc: "25 kick / 25 drill / 25 swim — stroke choice per rep", interval: "On 2:05", focus: "Layered skill warm-up across strokes", eq: "kickPart" },
           ]},
       ],
       back: [
-        { totalYards: 300, sets: [
+        { label: "Back Single-Arm 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "25 single-arm backstroke / 25 double-arm back drill / 25 backstroke swim", interval: "On 2:40", focus: "Lead arm extension and stroke timing in back" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Back Streamline 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Backstroke kick — 25 streamline (no board) / 25 with board", interval: "On 1:50", focus: "Body position on the back, hip drive", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Back Kick + Catch-Up (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Backstroke kick — easy/moderate (board optional)", interval: "On 1:50", focus: "Leg conditioning for back",     eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — backstroke pull pattern, focus on catch", interval: "On 2:20", focus: "Upper-body work for back", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Back Single-Arm 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "Backstroke — 25 single-arm / 25 full stroke", interval: "On 1:35", focus: "Lead arm and rotation activation" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Back Single-Arm 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Backstroke — 25 single-arm (L) / 25 single-arm (R) / 50 full stroke", interval: "On 2:40", focus: "Each arm isolated then integrated" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Back 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 back elbow-lead drill / 25 backstroke swim", interval: "On 1:35", focus: "High-elbow catch on backstroke" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Back Single-Arm 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 single-arm backstroke / 25 full backstroke — alternate lead arm each rep", interval: "On 1:35", focus: "High-rep arm isolation before back set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Back Single-Arm 6×100", totalYards: 600, sets: [
             { reps: 6, dist: 100, desc: "Backstroke — 25 single-arm (L) / 25 single-arm (R) / 50 full stroke", interval: "On 2:40", focus: "Full arm isolation and integration at volume" },
           ]},
       ],
       breast: [
-        { totalYards: 300, sets: [
+        { label: "Breast Pull 4×75", totalYards: 300, sets: [
             { reps: 4, dist: 75, desc: "25 breast pull-only (no kick) / 25 breast kick (board) / 25 breast swim", interval: "On 2:05", focus: "Isolate then integrate the breast components" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Breast Kick 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Breaststroke kick (board) — focus on power and recovery", interval: "On 1:35", focus: "Breast kick rhythm and power", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Breast Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Breaststroke kick (board) — moderate effort", interval: "On 1:35", focus: "Power kick",          eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — breaststroke pull pattern",     interval: "On 2:40", focus: "Strong pull-glide cycle", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Breast Pull 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "25 breast pull-only / 25 full breaststroke — feel the integration", interval: "On 1:35", focus: "Pull activation before kick integration" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Breast Pull 3×100", totalYards: 300, sets: [
             { reps: 3, dist: 100, desc: "Breast — 25 kick only (board) / 25 pull only / 50 full stroke", interval: "On 2:40", focus: "Isolated-then-integrated breast work" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Breast Pull 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 breast timing drill (2-kick 1-pull) / 25 full breaststroke", interval: "On 1:35", focus: "Timing drill into race stroke" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Breast Pull 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 breaststroke pull-only (no kick, glide) / 25 full breaststroke", interval: "On 1:35", focus: "High-rep pull activation before breast set" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Breast Pull 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 breaststroke pull-only / 25 full breaststroke — feel pull integration on every rep", interval: "On 1:35", focus: "High-rep pull priming for long breast set" },
           ]},
       ],
       fly: [
-        { totalYards: 300, sets: [
+        { label: "Fly Single-Arm 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "25 fly drill (3-3-3 or single-arm) / 25 freestyle easy", interval: "On 1:35", focus: "Build fly tolerance with active recovery" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Back Streamline 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "Dolphin kick — alternate streamline on stomach / on back", interval: "On 1:50", focus: "Dolphin rhythm without arm fatigue", eq: "kick" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Fly Kick + Pull (400 yd)", totalYards: 400, sets: [
             { reps: 4, dist: 50, desc: "Dolphin kick (board) — focus on rhythm",                                 interval: "On 1:50", focus: "Sustained kick base for fly",       eq: "kick" },
             { reps: 2, dist: 100, desc: "Pull (buoy) — 25 fly pull / 75 freestyle pull (recovery in arm pattern)", interval: "On 2:05", focus: "Build fly catch with free recovery", eq: "pull" },
           ]},
-        { totalYards: 200, sets: [
+        { label: "Fly Streamline 4×50", totalYards: 200, sets: [
             { reps: 4, dist: 50, desc: "25 dolphin kick streamline / 25 easy freestyle", interval: "On 1:20", focus: "Dolphin activation without arm fatigue" },
           ]},
-        { totalYards: 300, sets: [
+        { label: "Fly Single-Arm 6×50", totalYards: 300, sets: [
             { reps: 6, dist: 50, desc: "25 single-arm fly (alternate L/R each rep) / 25 easy freestyle", interval: "On 1:35", focus: "Arm mechanics and undulation before fly set" },
           ]},
-        { totalYards: 400, sets: [
+        { label: "Fly Build 8×50", totalYards: 400, sets: [
             { reps: 8, dist: 50, desc: "25 fly drill (your choice) / 25 freestyle easy", interval: "On 1:35", focus: "Build fly tolerance, recover on free" },
           ]},
-        { totalYards: 500, sets: [
+        { label: "Fly Single-Arm 10×50", totalYards: 500, sets: [
             { reps: 10, dist: 50, desc: "25 fly drill (single-arm or 3-3-3) / 25 freestyle easy", interval: "On 1:35", focus: "Extended fly drill volume with free recovery" },
           ]},
-        { totalYards: 600, sets: [
+        { label: "Fly Single-Arm 12×50", totalYards: 600, sets: [
             { reps: 12, dist: 50, desc: "25 fly drill (alternate: single-arm L, single-arm R, 3-3-3 each group) / 25 freestyle easy", interval: "On 1:35", focus: "High-rep fly drill variety before main set" },
           ]},
       ],
@@ -11861,15 +11861,17 @@
                     </a>
                   )}
                   {me?.is_coach && (
-                    <button onClick={() => setView(v => v === "catalog" ? "generator" : "catalog")} title="Workout-bank catalog (coach access)"
+                    <button onClick={() => setView(v => v === "catalog" ? "generator" : "catalog")}
+                      title={view === "catalog" ? "Back to generator" : "Workout-bank catalog (coach)"}
                       style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #60a5fa", background: view === "catalog" ? "#60a5fa" : "#1e293b", color: view === "catalog" ? "#0f172a" : "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
-                      {view === "catalog" ? "⏎ Back" : "📚 Catalog"}
+                      {view === "catalog" ? "⏎" : "📚"}
                     </button>
                   )}
                   {me?.is_admin && (
-                    <button onClick={() => setView(v => v === "admin" ? "generator" : "admin")} title="Admin"
+                    <button onClick={() => setView(v => v === "admin" ? "generator" : "admin")}
+                      title={view === "admin" ? "Back to generator" : "Admin"}
                       style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #a78bfa", background: view === "admin" ? "#a78bfa" : "#1e293b", color: view === "admin" ? "#0f172a" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
-                      {view === "admin" ? "⏎ Back" : "🛡 Admin"}
+                      {view === "admin" ? "⏎" : "🛡"}
                     </button>
                   )}
                   <button onClick={() => setShowProfile(true)} title="Account"
