@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 08:43 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 08:49 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9229,10 +9229,12 @@
     }
 
     // Session 5: user → admin feedback modal. Auto-captures page + user agent.
-    function FeedbackModal({ onClose }) {
-      const [category, setCategory] = React.useState("idea");
-      const [subject, setSubject]   = React.useState("");
-      const [body, setBody]         = React.useState("");
+    // Cat Phase II (2026-05-15): accepts initialCategory/initialSubject/initialBody
+    // so the catalog's per-option flag button can prefill an option-identity report.
+    function FeedbackModal({ onClose, initialCategory = "idea", initialSubject = "", initialBody = "" }) {
+      const [category, setCategory] = React.useState(initialCategory);
+      const [subject, setSubject]   = React.useState(initialSubject);
+      const [body, setBody]         = React.useState(initialBody);
       const [state, setState]       = React.useState("idle"); // idle | sending | sent | error
       const [error, setError]       = React.useState(null);
       const canSubmit = subject.trim().length > 0 && body.trim().length > 0 && state !== "sending";
@@ -9264,10 +9266,11 @@
       };
 
       const cats = [
-        { id: "idea",   label: "💡 Idea" },
-        { id: "bug",    label: "🐛 Bug" },
-        { id: "praise", label: "✨ Praise" },
-        { id: "other",  label: "Other" },
+        { id: "idea",         label: "💡 Idea" },
+        { id: "bug",          label: "🐛 Bug" },
+        { id: "praise",       label: "✨ Praise" },
+        { id: "catalog-flag", label: "🚩 Catalog flag" },
+        { id: "other",        label: "Other" },
       ];
 
       return (
@@ -9719,6 +9722,9 @@
       const [zoneFilter,  setZoneFilter]  = React.useState(() => new Set()); // empty = no filter
       const [expandedKey, setExpandedKey] = React.useState(null);
       const [printAll,    setPrintAll]    = React.useState(false);
+      // Phase II — flag-for-review: stores prefill values for FeedbackModal.
+      // null = modal closed; object with { subject, body } = modal open.
+      const [flagging,    setFlagging]    = React.useState(null);
 
       const isTyped = (section === "drill" || section === "main");
 
@@ -9762,6 +9768,28 @@
         if (next.has(key)) next.delete(key); else next.add(key);
         setter(next);
       };
+
+      // Phase II — open feedback modal prefilled with the option's identity.
+      // Coach can append "what to review" detail before submitting.
+      const openFlag = React.useCallback((opt) => {
+        const labelText = opt.label || `(unlabeled ${section} #${opt._idx})`;
+        const subject = `Catalog flag: ${labelText} [${poolMode}/${section}${opt._typeId ? "/" + opt._typeId : ""}]`;
+        const body = [
+          "Flagged from catalog browse.",
+          "",
+          `Label:       ${opt.label || "(unlabeled)"}`,
+          `Pool mode:   ${poolMode}`,
+          `Section:     ${section}`,
+          ...(opt._typeId ? [`Type:        ${opt._typeId}`] : []),
+          `Index:       ${opt._idx}`,
+          `Total:       ${opt.totalYards} ${poolMode === "25y" ? "yd" : "m"}`,
+          `Sets:        ${(opt.sets || []).length}`,
+          "",
+          "What to review (please fill in):",
+          "",
+        ].join("\n");
+        setFlagging({ subject, body });
+      }, [section, poolMode]);
 
       // Print: expand everything, trigger window.print, then collapse back.
       const handlePrint = React.useCallback(() => {
@@ -9929,6 +9957,17 @@
                           ⚠ sum mismatch (actual {actual})
                         </span>
                       )}
+                      {/* Phase II — flag for review. Pushes the option's identity
+                          into a prefilled feedback submission. stopPropagation so
+                          the click doesn't also toggle row expand/collapse. */}
+                      <button className="screen-only"
+                        onClick={e => { e.stopPropagation(); openFlag(opt); }}
+                        title="Flag this option for review"
+                        style={{ marginLeft: "auto", padding: "4px 8px", borderRadius: 6,
+                                 border: "1px solid #475569", background: "transparent",
+                                 color: "#94a3b8", fontSize: 12, cursor: "pointer", lineHeight: 1 }}>
+                        🚩 Flag
+                      </button>
                     </div>
 
                     {/* Expanded detail — full sets */}
@@ -9976,6 +10015,16 @@
                 );
               })}
             </div>
+          )}
+
+          {/* Phase II — flag-for-review modal (reuses FeedbackModal with prefill) */}
+          {flagging && (
+            <FeedbackModal
+              onClose={() => setFlagging(null)}
+              initialCategory="catalog-flag"
+              initialSubject={flagging.subject}
+              initialBody={flagging.body}
+            />
           )}
         </div>
       );
@@ -10057,7 +10106,7 @@
         { id: "resolved",  label: "Resolved",  color: "#22c55e" },
         { id: "dismissed", label: "Dismissed", color: "#64748b" },
       ];
-      const CAT_LABEL = { idea: "💡 Idea", bug: "🐛 Bug", praise: "✨ Praise", other: "Other" };
+      const CAT_LABEL = { idea: "💡 Idea", bug: "🐛 Bug", praise: "✨ Praise", "catalog-flag": "🚩 Catalog flag", other: "Other" };
 
       return (
         <div>
