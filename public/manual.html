@@ -279,6 +279,7 @@
     <a href="#user-settings">Your Settings</a>
     <a href="#account">Account &amp; Sessions</a>
     <a href="#admin">Admin (admins only)</a>
+    <a href="#catalog">Workout Catalog (coaches)</a>
     <a href="#feedback">Sending Feedback</a>
     <a href="#tips">Tips &amp; Tricks</a>
 
@@ -1065,6 +1066,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Table of every user with their initials, name, email, workout count, last login, and any flags (admin / disabled). Per-row actions:</p>
       <ul>
         <li><strong>Edit</strong> — open a modal to update initials, full name, or email. Server-validates email format and length limits.</li>
+        <li><strong>Coach / Un-coach</strong> — toggles <code>is_coach</code>. Grants the user access to the <a href="#catalog">Workout Catalog</a> view. Admins implicitly have coach access without needing this flag set.</li>
         <li><strong>Disable / Enable</strong> — toggles <code>is_disabled</code>. A disabled user gets 403 on every authenticated request within one call (sessions stay in the DB but the per-request check fails).</li>
         <li><strong>Delete</strong> — confirms, then permanently deletes the user. Cascade-wipes their workouts, favorites, settings, and sessions. Audit events are preserved but anonymized. <strong>NOT REVERSIBLE.</strong></li>
       </ul>
@@ -1094,7 +1096,43 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>user_sub</strong> — full Apple sub. Useful when investigating a specific user's activity.</li>
         <li><strong>Clear</strong> button to reset filters.</li>
       </ul>
-      <p>Event categories you'll see: <code>auth.*</code> (login/logout/signup/reject/disabled_attempt), <code>admin.*</code> (user.disable/enable/delete/update, invite.create/delete, access_denied, feedback.update), <code>invite.consume</code>, <code>workout.delete</code>, <code>csrf.reject</code>, <code>rate_limit.hit</code>, <code>feedback.submit</code>, <code>user.profile.update</code>.</p>
+      <p>Event categories you'll see: <code>auth.*</code> (login/logout/signup/reject/disabled_attempt), <code>admin.*</code> (user.disable/enable/delete/update, user.coach.grant/revoke, invite.create/delete, access_denied, feedback.update), <code>coach.*</code> (access_denied), <code>invite.consume</code>, <code>workout.delete</code>, <code>csrf.reject</code>, <code>rate_limit.hit</code>, <code>feedback.submit</code>, <code>user.profile.update</code>.</p>
+    </section>
+
+    <!-- ══ CATALOG (COACH) ══ -->
+    <section id="catalog">
+      <h2>Workout Catalog (coach access)</h2>
+      <p>The Catalog is a coach-gated read-only browse of the workout-set bank as authored. Use it to review what content is available per pool mode, audit interval calibration, or print a reference sheet before practice.</p>
+
+      <h3>Access</h3>
+      <p>A blue <strong>📚 Catalog</strong> button appears in the header for users with the <code>is_coach</code> flag (or <code>is_admin</code>, since admins implicitly have coach access). Granted via <strong>Admin → Users → Coach</strong>.</p>
+
+      <h3>Filters</h3>
+      <p>The catalog has five compositional filters (all combine via AND):</p>
+      <ul>
+        <li><strong>Mode</strong> — <code>25y</code> / <code>25m</code> / <code>50m</code>. The catalog shows what's actually authored for the selected pool — no cross-unit conversion or fallback. SCY and SCM tend to be similarly populated; LCM is sparser.</li>
+        <li><strong>Section</strong> — Warmup / Drill / Main / Cooldown.</li>
+        <li><strong>Type</strong> — All / im / distance / sprint / endurance / technique / mixed / back / breast / fly. Only meaningful for Drill and Main sections (Warmup and Cooldown are flat across all types).</li>
+        <li><strong>Equipment</strong> — multi-select chips (kickboard / fins / paddles / pull buoy / snorkel). Filters to options whose sets use any of the selected equipment.</li>
+        <li><strong>Zone</strong> — multi-select chips by effort zone (Easy / Aerobic / Threshold / VO2 / Anaerobic). Zone is inferred from set descriptions and intervals.</li>
+        <li><strong>Search label</strong> — text input, live filters by case-insensitive substring on the option's label. Press <kbd>Escape</kbd> to clear.</li>
+      </ul>
+
+      <h3>Browsing</h3>
+      <p>Each row shows the option's label, type badge (for typed sections), zone pill, total yardage, and set count. A red <strong>⚠ sum mismatch</strong> badge appears if the declared <code>totalYards</code> doesn't equal Σ reps × dist (a data-quality flag). Click a row to expand the full set list with reps × dist, interval, description, equipment badges, and focus.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Some options show "(unlabeled X #N)".</strong> Warmup, drill, and cooldown options were authored without explicit labels because the generator hardcodes their block names. A label backfill pass is planned to give them readable names.</div>
+      </div>
+
+      <h3>Print catalog</h3>
+      <p>The <strong>🖨 Print catalog (expanded)</strong> button forces every visible row to expand, then opens the browser print dialog. Filters are still applied — to print the entire bank, clear filters first. Each option keeps together on one page where possible (no mid-option page breaks).</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Read-only by design.</strong> Phase I of the catalog is browse-only. Future phases will add a flag-for-review button (Phase II) and editable bank for admins (Phase III); both require additional architecture work and are deferred.</div>
+      </div>
     </section>
 
     <!-- ══ FEEDBACK ══ -->
