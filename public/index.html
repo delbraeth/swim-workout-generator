@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 17:22 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 17:36 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6125,6 +6125,18 @@
         return { kind: "distance", value, unit, raw: m[0].trim() };
       });
 
+      // 2b. Bare-number distance fallback. Catches "2400 with fins" where
+      //     coach drops the unit. Default unit is yards; handleApplyIntent
+      //     converts to current pool unit if needed. Range gate (500-10000)
+      //     is loose enough to cover all swim distances; tight enough to
+      //     reject incidental small numbers and the @M:SS pace pattern
+      //     (which has been consumed in step 1 already).
+      consume(/\b(\d{3,5})\b/, m => {
+        const n = parseInt(m[1], 10);
+        if (n < 500 || n > 10000) return null;
+        return { kind: "distance", value: n, unit: "y", raw: m[0] };
+      });
+
       // 3. Duration: "25 min", "1 hr", "2 hours"
       consume(/\b(\d+)\s*(minutes?|min|hours?|hrs?|hr)\b/, m => {
         const n = parseInt(m[1], 10);
@@ -6152,18 +6164,15 @@
         remaining = remaining.slice(0, recoveryMatch.index) + " " + remaining.slice(recoveryMatch.index + recoveryMatch[0].length);
       }
 
-      // 6. Zones (after type/recovery so "sprint" already consumed as type)
-      const ZONES = ["easy","aerobic","threshold","vo2","anaerobic"];
-      for (const z of ZONES) {
-        const re = new RegExp(`\\b${z}\\b`, "i");
-        const m  = remaining.match(re);
-        if (m) {
-          tokens.push({ kind: "zone", value: z, raw: z });
-          remaining = remaining.slice(0, m.index) + " " + remaining.slice(m.index + m[0].length);
-        }
+      // 6. T-pace (informational pace reference — no numeric value)
+      const tpaceMatch = remaining.match(/@?\s*\bt-?pace\b/i);
+      if (tpaceMatch) {
+        tokens.push({ kind: "pace_ref", value: "T-pace", raw: tpaceMatch[0].trim() });
+        remaining = remaining.slice(0, tpaceMatch.index) + " " + remaining.slice(tpaceMatch.index + tpaceMatch[0].length);
       }
 
-      // 7. Equipment — phrase order matters ("pull buoy" before "buoy")
+      // 7. Equipment — multi-word phrases first ("pull buoy" before "buoy"
+      //    AND before stroke "pull") so equipment matches consume the phrase.
       const EQUIP = [
         ["paddles",   "paddles"],
         ["fins",      "fins"],
@@ -6182,14 +6191,68 @@
         }
       }
 
+      // 8. Stroke actions (kick/pull/drill/swim/scull and gerund/plural forms).
+      //    Informational only — no form-state mapping today. Future: could
+      //    bias the picker toward sets containing the matched stroke.
+      //    Runs AFTER equipment so "pull buoy" is consumed first; "pull"
+      //    on its own (or "pulling") still matches here.
+      consume(/\b(kick|pull|drill|swim|scull)(ing|s)?\b/i, m => {
+        return { kind: "stroke", value: m[1].toLowerCase(), raw: m[0] };
+      });
+
+      // 9. Zones — primary names + common effort synonyms coaches use.
+      //    Effort synonyms map to the closest zone so the chip preview shows
+      //    the canonical zone name. Run AFTER type so standalone "sprint"
+      //    has already been consumed as a type.
+      const ZONE_SYNONYMS = [
+        ["easy",      "easy"],
+        ["aerobic",   "aerobic"],
+        ["threshold", "threshold"],
+        ["vo2",       "vo2"],
+        ["anaerobic", "anaerobic"],
+        ["strong",    "threshold"],
+        ["hard",      "anaerobic"],
+        ["all-out",   "anaerobic"],
+        ["all out",   "anaerobic"],
+        ["fast",      "vo2"],
+        ["smooth",    "aerobic"],
+        ["steady",    "aerobic"],
+        ["light",     "easy"],
+        ["moderate",  "aerobic"],
+      ];
+      for (const [phrase, zone] of ZONE_SYNONYMS) {
+        const re = new RegExp(`\\b${phrase}\\b`, "i");
+        const m  = remaining.match(re);
+        if (m) {
+          tokens.push({ kind: "zone", value: zone, raw: phrase });
+          remaining = remaining.slice(0, m.index) + " " + remaining.slice(m.index + m[0].length);
+        }
+      }
+
       // Strip trivial connectors / punctuation from unparsed remainder.
+      // Expanded list captures coach filler ("today", "session", "workout",
+      // "set", "doing", "yards" stray, etc.) so the unparsed display is clean.
       const unparsed = remaining
-        .replace(/\b(with|and|a|an|the|some|just|please|also|plus|of|on|at|for|to)\b/gi, " ")
+        .replace(/\b(with|and|a|an|the|some|just|please|also|plus|of|on|at|for|to|today|session|workout|set|doing|yards|yard|meters|meter|only)\b/gi, " ")
         .replace(/[,.!?]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
 
-      return { tokens, unparsed };
+      // Dedupe (kind, value) tuples — happens when synonyms collide with
+      // canonical names (e.g. "strong threshold" → strong→threshold + threshold).
+      // Preserves first-seen ordering. Tokens with structured `value` (objects)
+      // get their JSON used as the dedup key — currently no token kind has
+      // object values so this is a future-safety guard.
+      const seen = new Set();
+      const dedupedTokens = [];
+      for (const t of tokens) {
+        const key = `${t.kind}:${typeof t.value === "object" ? JSON.stringify(t.value) : t.value}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        dedupedTokens.push(t);
+      }
+
+      return { tokens: dedupedTokens, unparsed };
     }
 
     // 2026-05-15: refactored to single options object for readability and to
@@ -9587,7 +9650,9 @@
           case "distance":  return `Distance · ${tok.value} ${tok.unit === "y" ? "yd" : "m"}`;
           case "duration":  return `Duration · ${tok.value} min`;
           case "pace":      return `Pace · ${Math.floor(tok.value/60)}:${String(tok.value%60).padStart(2,"0")}/100`;
+          case "pace_ref":  return `Pace · ${tok.value}`;
           case "zone":      return `Zone · ${tok.value}`;
+          case "stroke":    return `Stroke · ${tok.value}`;
           case "recovery":  return `Recovery mode`;
           case "equipment": return `Equipment · ${tok.value}`;
           default:          return `${tok.kind} · ${tok.value}`;
@@ -9600,7 +9665,9 @@
           case "distance":  return { bg: "#0c4a6e", border: "#0ea5e9", color: "#bae6fd" };
           case "duration":  return { bg: "#0c4a6e", border: "#0ea5e9", color: "#bae6fd" };
           case "pace":      return { bg: "#581c87", border: "#a855f7", color: "#e9d5ff" };
+          case "pace_ref":  return { bg: "#581c87", border: "#a855f7", color: "#e9d5ff" };
           case "zone":      return { bg: "#365314", border: "#65a30d", color: "#d9f99d" };
+          case "stroke":    return { bg: "#1e293b", border: "#475569", color: "#cbd5e1" };
           case "recovery":  return { bg: "#064e3b", border: "#10b981", color: "#a7f3d0" };
           case "equipment": return { bg: "#7c2d12", border: "#ea580c", color: "#fed7aa" };
           default:          return { bg: "#334155", border: "#64748b", color: "#cbd5e1" };
