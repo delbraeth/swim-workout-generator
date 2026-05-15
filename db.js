@@ -728,6 +728,41 @@ export async function dbRemoveFavorite(userSub, label) {
   );
 }
 
+// ── Per-user favorited SETS (set-level, by stable set ID) ─────────────
+// Parallel to label-favorites above but keys on the `id` field that
+// `tools/assign_set_ids.py` injected into every bank set. Used by the
+// generator to multiply pick weight of any option whose sets contain a
+// favorited set ID. Cross-pool isolation is automatic since each pool's
+// bank has independent IDs.
+export async function dbListFavoriteSets(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    "SELECT `set_id` FROM `user_favorite_sets` WHERE `user_sub` = ? ORDER BY `created_at`",
+    [userSub]
+  );
+  return rows.map(r => r.set_id);
+}
+
+export async function dbAddFavoriteSet(userSub, setId) {
+  if (!userSub || !setId) return;
+  // Sanity-bound the format we accept — IDs are `s_<6 base36>` from
+  // assign_set_ids.py. Reject anything else to keep the table clean.
+  if (!/^s_[a-z0-9]{4,16}$/.test(setId)) throw new Error("bad set_id format");
+  await dbEnsureUser(userSub);
+  await pool.query(
+    "INSERT IGNORE INTO `user_favorite_sets` (`user_sub`, `set_id`) VALUES (?, ?)",
+    [userSub, setId]
+  );
+}
+
+export async function dbRemoveFavoriteSet(userSub, setId) {
+  if (!userSub) return;
+  await pool.query(
+    "DELETE FROM `user_favorite_sets` WHERE `user_sub` = ? AND `set_id` = ?",
+    [userSub, setId]
+  );
+}
+
 // ── Goals ────────────────────────────────────────────────────────────
 // Metric set is fixed; period_start/end are NULL for recurring goals
 // (the only kind exposed by the UI in MVP). Multiple historical rows
