@@ -795,7 +795,10 @@ export async function dbDeleteGoal(userSub, metric) {
 // User submissions land in the `feedback` table (migration 007). Admins
 // triage from a tab in the admin view.
 
-const FEEDBACK_CATEGORIES = ["bug", "idea", "praise", "other"];
+// Cat Phase II (2026-05-15) added "catalog-flag" — coach-submitted reports
+// from the in-app catalog browse (each option row has a 🚩 Flag button that
+// opens the feedback modal prefilled). VARCHAR(32) on the column accommodates.
+const FEEDBACK_CATEGORIES = ["bug", "idea", "praise", "other", "catalog-flag"];
 const FEEDBACK_STATUSES   = ["new", "reviewed", "resolved", "dismissed"];
 
 export async function dbInsertFeedback({ userSub, category, subject, body, page, userAgent }) {
