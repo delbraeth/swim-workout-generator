@@ -1121,17 +1121,15 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>Browsing</h3>
       <p>Each row shows the option's label, type badge (for typed sections), zone pill, total yardage, and set count. A red <strong>⚠ sum mismatch</strong> badge appears if the declared <code>totalYards</code> doesn't equal Σ reps × dist (a data-quality flag). Click a row to expand the full set list with reps × dist, interval, description, equipment badges, and focus.</p>
 
-      <div class="callout note">
-        <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Some options show "(unlabeled X #N)".</strong> Warmup, drill, and cooldown options were authored without explicit labels because the generator hardcodes their block names. A label backfill pass is planned to give them readable names.</div>
-      </div>
+      <h3>Flag for review</h3>
+      <p>Each option row has a small <strong>🚩 Flag</strong> button on the right. Click it to open the feedback modal pre-filled with the option's identity (label, pool mode, section, type, index, total yardage, set count) and a "What to review" prompt. Add your note and submit — the flag lands in the admin Feedback tab under the <strong>🚩 Catalog flag</strong> category for triage. Useful for surfacing wrong intervals, misleading labels, mis-categorized workouts, etc.</p>
 
       <h3>Print catalog</h3>
       <p>The <strong>🖨 Print catalog (expanded)</strong> button forces every visible row to expand, then opens the browser print dialog. Filters are still applied — to print the entire bank, clear filters first. Each option keeps together on one page where possible (no mid-option page breaks).</p>
 
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Read-only by design.</strong> Phase I of the catalog is browse-only. Future phases will add a flag-for-review button (Phase II) and editable bank for admins (Phase III); both require additional architecture work and are deferred.</div>
+        <div class="callout-body"><strong>Read-only by design.</strong> The catalog is browse + flag only. Phase III (editable bank for admins) is deferred — it needs an architecture decision on where edits write back to. Today the source-of-truth is the bank constants in <code>public/index.html</code>; fixes happen by editing source.</div>
       </div>
     </section>
 
