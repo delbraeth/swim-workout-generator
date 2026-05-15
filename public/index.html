@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 15:32 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 17:13 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -11150,6 +11150,15 @@
           .catch(() => { setAuthenticated(false); setAuthMode(null); });
       }, []);
 
+      // Refresh me whenever the view changes — keeps the admin feedback-count
+      // badge accurate after triage (mark new → reviewed/resolved/dismissed
+      // happens inside AdminView; we re-pull here when the user navigates
+      // back so the badge reflects the new count). Cheap GET, indexed query.
+      useEffect(() => {
+        if (!authenticated) return;
+        fetch("/api/me").then(r => r.ok ? r.json() : null).then(d => { if (d) setMe(d); }).catch(() => {});
+      }, [view, authenticated]);
+
       // On mount: fetch live history from the API, merge with localStorage cache
       useEffect(() => {
         let cancelled = false;
@@ -12068,13 +12077,40 @@
                       {view === "catalog" ? "⏎" : "📚"}
                     </button>
                   )}
-                  {me?.is_admin && (
-                    <button onClick={() => setView(v => v === "admin" ? "generator" : "admin")}
-                      title={view === "admin" ? "Back to generator" : "Admin"}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #a78bfa", background: view === "admin" ? "#a78bfa" : "#1e293b", color: view === "admin" ? "#0f172a" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
-                      {view === "admin" ? "⏎" : "🛡"}
-                    </button>
-                  )}
+                  {me?.is_admin && (() => {
+                    const pendingFb = view === "admin" ? 0 : (me?.pending_feedback_count || 0);
+                    return (
+                      <button onClick={() => setView(v => v === "admin" ? "generator" : "admin")}
+                        title={view === "admin"
+                          ? "Back to generator"
+                          : pendingFb > 0
+                            ? `Admin — ${pendingFb} new feedback item${pendingFb === 1 ? "" : "s"}`
+                            : "Admin"}
+                        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #a78bfa", background: view === "admin" ? "#a78bfa" : "#1e293b", color: view === "admin" ? "#0f172a" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1, position: "relative" }}>
+                        {view === "admin" ? "⏎" : "🛡"}
+                        {/* Feedback-count badge — only when not on admin view AND
+                            count > 0. Hidden when viewing admin to avoid stale
+                            "look here" signal while you're already there. */}
+                        {pendingFb > 0 && (
+                          <span style={{
+                            position: "absolute",
+                            top: -6, right: -6,
+                            minWidth: 16, height: 16,
+                            padding: "0 4px",
+                            borderRadius: 8,
+                            background: "#f59e0b",
+                            color: "#0f172a",
+                            fontSize: 10, fontWeight: 800,
+                            display: "inline-flex", alignItems: "center", justifyContent: "center",
+                            border: "1px solid #0f172a",
+                            lineHeight: 1,
+                          }}>
+                            {pendingFb > 99 ? "99+" : pendingFb}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })()}
                   <button onClick={() => setShowProfile(true)} title="Account"
                     style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
                     👤
