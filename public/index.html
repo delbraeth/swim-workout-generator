@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 13:42 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 14:14 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6129,9 +6129,18 @@
 
       const attempts = (maxYards >= 3000 || hasEquipReq) ? 80 : 30;
 
+      // Favorite-label boost shared by all section pickers. Returns 3 when
+      // option's label is in the user's favorites (matching the existing
+      // mainWeight × 3 bias), 1 otherwise. Cross-mode parallels share labels,
+      // so favoriting "IM Warmup" in SCY also boosts the SCM/LCM versions.
+      const favSet = new Set(favorites || []);
+      const favBoost = (o) => (o.label && favSet.has(o.label)) ? 3 : 1;
+
       function pickBiased(arr, floor) {
         const preferred = arr.filter(o => o.totalYards >= floor);
-        return pick(preferred.length > 0 ? preferred : arr);
+        const source = preferred.length > 0 ? preferred : arr;
+        // Apply favorite × 3 bias even on the floor-filtered pool.
+        return pickWeighted(source, favBoost);
       }
 
       for (let attempt = 0; attempt < attempts; attempt++) {
@@ -6174,7 +6183,7 @@
           const drFloor = (freeBudget - freeUsed) * 0.10;
           const aboveFloor = validDrills.filter(o => o.totalYards >= drFloor);
           const drPool = aboveFloor.length > 0 ? aboveFloor : validDrills;
-          dr = pickWeighted(drPool, (o) => Math.pow(2, preferredEquipMatches(o, equipment)));
+          dr = pickWeighted(drPool, (o) => Math.pow(2, preferredEquipMatches(o, equipment)) * favBoost(o));
           freeUsed += dr.totalYards;
         }
 
@@ -6261,7 +6270,7 @@
           const remaining = freeBudget - freeUsed;
           const validCooldowns = allCooldowns.filter(o => o.totalYards <= remaining);
           if (!validCooldowns.length) continue;
-          cd = pick(validCooldowns);
+          cd = pickWeighted(validCooldowns, favBoost);
         }
 
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
@@ -6391,7 +6400,7 @@
     // Returns { workout, error }. On success, workout is a fresh object with the
     // requested section replaced. On failure, error is a human-readable reason
     // and the caller should keep the prior workout unchanged.
-    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null, recentLabels = [], recoveryMode = false, phase = null) {
+    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null, recentLabels = [], recoveryMode = false, phase = null, favorites = []) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -6469,7 +6478,10 @@
       // N1: down-weight recently-used labels (main section only — no labels elsewhere).
       // N5: layer phase multipliers on top of the recent-label down-weight.
       // F: boost options whose sets cover any "preferred" equipment (drill+main).
+      // FAV: favorite-label × 3 across all section regens (matches generateWorkout).
       const recentSet = new Set(recentLabels);
+      const favSet    = new Set(favorites || []);
+      const favBoost  = (o) => (o.label && favSet.has(o.label)) ? 3 : 1;
       const phaseSpec = phase && PHASES[phase] ? PHASES[phase] : null;
       const picked = sectionKey === "main"
         ? pickWeighted(novel, (o) => {
@@ -6481,11 +6493,12 @@
             }
             const prefMatches = preferredEquipMatches(o, equipment);
             if (prefMatches > 0) w *= Math.pow(2, prefMatches);
+            w *= favBoost(o);
             return w;
           })
         : sectionKey === "drill"
-        ? pickWeighted(novel, (o) => Math.pow(2, preferredEquipMatches(o, equipment)))
-        : pick(novel);
+        ? pickWeighted(novel, (o) => Math.pow(2, preferredEquipMatches(o, equipment)) * favBoost(o))
+        : pickWeighted(novel, favBoost);
 
       const NAME_BY_SECTION = {
         warmup:   "Warm-Up",
@@ -7082,34 +7095,7 @@
                 </span>
               )}
             </td>
-            <td style={{ padding: "10px 16px", fontSize: 12, color: "#64748b", fontStyle: "italic" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <span>{set.focus}</span>
-                {/* Per-user set-favorite ⭐. Hidden when set lacks an ID (un-IDed
-                    historical sets) or when caller didn't wire the toggle (e.g.
-                    anonymous user, or surfaces that don't support favoriting). */}
-                {set.id && onToggleFavoriteSet && (() => {
-                  const isFav = favoriteSetIds && favoriteSetIds.has(set.id);
-                  return (
-                    <button
-                      type="button"
-                      className="screen-only"
-                      onClick={(e) => { e.stopPropagation(); onToggleFavoriteSet(set.id); }}
-                      title={isFav ? "Remove this set from favorites" : "Save this set as a favorite (×3 weight per set when generating)"}
-                      style={{
-                        background: "transparent", border: "none",
-                        color: isFav ? "#f59e0b" : "#cbd5e1",
-                        fontSize: 18, lineHeight: 1, cursor: "pointer",
-                        padding: "2px 4px", opacity: isFav ? 1 : 0.5,
-                        transition: "opacity 0.15s, color 0.15s",
-                        flexShrink: 0,
-                      }}>
-                      {isFav ? "★" : "☆"}
-                    </button>
-                  );
-                })()}
-              </div>
-            </td>
+            <td style={{ padding: "10px 16px", fontSize: 12, color: "#64748b", fontStyle: "italic" }}>{set.focus}</td>
           </tr>
           {isSwapOpen && (
             <tr>
@@ -9754,7 +9740,7 @@
       return (opt.sets || []).some(s => s.eq && tags.includes(s.eq));
     }
 
-    function CatalogView({ favoriteSetIds, onToggleFavoriteSet }) {
+    function CatalogView({ favoriteSetIds, onToggleFavoriteSet, favorites, onToggleFavorite }) {
       const [poolMode,    setPoolMode]    = React.useState("25y");
       const [section,     setSection]     = React.useState("main");
       const [typeId,      setTypeId]      = React.useState("all");
@@ -10004,13 +9990,32 @@
                           ⚠ sum mismatch (actual {actual})
                         </span>
                       )}
+                      {/* Favorite ★ — toggles the existing label-favorite. Hidden
+                          when the option has no label or user not authenticated.
+                          stopPropagation so click doesn't also toggle row expand. */}
+                      {opt.label && onToggleFavorite && (() => {
+                        const isFav = favorites && favorites.includes(opt.label);
+                        return (
+                          <button className="screen-only"
+                            onClick={e => { e.stopPropagation(); onToggleFavorite(opt.label); }}
+                            title={isFav ? "Remove from favorites" : "Save as favorite — generator will pick it more often (×3 weight)"}
+                            style={{ marginLeft: "auto", padding: "2px 6px",
+                                     background: "transparent", border: "none",
+                                     color: isFav ? "#f59e0b" : "#94a3b8",
+                                     fontSize: 18, lineHeight: 1, cursor: "pointer",
+                                     opacity: isFav ? 1 : 0.6 }}>
+                            {isFav ? "★" : "☆"}
+                          </button>
+                        );
+                      })()}
                       {/* Phase II — flag for review. Pushes the option's identity
                           into a prefilled feedback submission. stopPropagation so
                           the click doesn't also toggle row expand/collapse. */}
                       <button className="screen-only"
                         onClick={e => { e.stopPropagation(); openFlag(opt); }}
                         title="Flag this option for review"
-                        style={{ marginLeft: "auto", padding: "4px 8px", borderRadius: 6,
+                        style={{ marginLeft: opt.label && onToggleFavorite ? 0 : "auto",
+                                 padding: "4px 8px", borderRadius: 6,
                                  border: "1px solid #475569", background: "transparent",
                                  color: "#94a3b8", fontSize: 12, cursor: "pointer", lineHeight: 1 }}>
                         🚩 Flag
@@ -10049,30 +10054,7 @@
                                     )}
                                   </td>
                                   <td style={{ padding: "6px 8px", color: "#94a3b8", fontStyle: "italic" }}>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                                      <span>{s.focus || "—"}</span>
-                                      {/* Per-user set-favorite — same gating as SetRow:
-                                          hide when no set ID or no toggle handler (anon). */}
-                                      {s.id && onToggleFavoriteSet && (() => {
-                                        const isFav = favoriteSetIds && favoriteSetIds.has(s.id);
-                                        return (
-                                          <button
-                                            type="button"
-                                            className="screen-only"
-                                            onClick={() => onToggleFavoriteSet(s.id)}
-                                            title={isFav ? "Remove from favorites" : "Save as favorite (×3 weight in generator)"}
-                                            style={{
-                                              background: "transparent", border: "none",
-                                              color: isFav ? "#f59e0b" : "#64748b",
-                                              fontSize: 16, lineHeight: 1, cursor: "pointer",
-                                              padding: "0 4px", opacity: isFav ? 1 : 0.6,
-                                              flexShrink: 0,
-                                            }}>
-                                            {isFav ? "★" : "☆"}
-                                          </button>
-                                        );
-                                      })()}
-                                    </div>
+                                    {s.focus || "—"}
                                   </td>
                                 </tr>
                               );
@@ -10827,32 +10809,9 @@
                     {set.reps} <span style={{ color: "#475569", fontWeight: 400 }}>×</span> {set.dist}
                     <span style={{ fontSize: 16, fontWeight: 500, color: "#64748b", marginLeft: 6 }}>{unit}</span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 4 }}>
-                    {/* Per-user favorite — stopPropagation keeps the card tap
-                        (which opens the pace clock) from firing. Hidden on
-                        un-IDed historical sets and when not authenticated. */}
-                    {set.id && onToggleFavoriteSet && (() => {
-                      const isFav = favoriteSetIds && favoriteSetIds.has(set.id);
-                      return (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); onToggleFavoriteSet(set.id); }}
-                          title={isFav ? "Remove from favorites" : "Save as favorite"}
-                          style={{
-                            background: "transparent", border: "none",
-                            color: isFav ? "#f59e0b" : "#475569",
-                            fontSize: 22, lineHeight: 1, cursor: "pointer",
-                            padding: 4, opacity: isFav ? 1 : 0.7,
-                            WebkitTapHighlightColor: "transparent",
-                          }}>
-                          {isFav ? "★" : "☆"}
-                        </button>
-                      );
-                    })()}
-                    <span style={{ fontSize: 11, color: "#334155", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      ▶ pace
-                    </span>
-                  </div>
+                  <span style={{ fontSize: 11, color: "#334155", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", paddingTop: 4 }}>
+                    ▶ pace
+                  </span>
                 </div>
                 <div style={{ fontSize: 19, color: "#e2e8f0", lineHeight: 1.45, marginBottom: 10 }}>
                   {set.desc}
@@ -11554,7 +11513,7 @@
           ...recentMainLabels.keys(),
           ...sessionRecentLabels,
         ]));
-        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, recentLabels, isRecovery, phase);
+        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, recentLabels, isRecovery, phase, favorites);
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
           return;
@@ -11597,7 +11556,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -12086,6 +12045,8 @@
               <CatalogView
                 favoriteSetIds={favoriteSets}
                 onToggleFavoriteSet={authenticated ? handleToggleFavoriteSet : null}
+                favorites={favorites}
+                onToggleFavorite={authenticated ? handleToggleFavorite : null}
               />
             )}
 
