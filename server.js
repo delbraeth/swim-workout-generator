@@ -924,6 +924,97 @@ app.delete("/api/favorite-sets/:id", checkOrigin, requireAuth, requireCsrf, writ
   }
 });
 
+// ───── One-shot admin backfill: attach set IDs to historical workouts ─────
+// Server-side equivalent of tools/backfill_set_ids_history.mjs — needed
+// because the DB firewall only allows Hyperlift's egress IP. Reads the
+// current public/index.html, builds a composite-key→id map, walks every
+// workouts row, attaches matched IDs to payload sets, and UPDATEs.
+//
+// Body: { dry_run: bool }. Default true (safe). Pass dry_run=false to commit.
+// Returns stats. Idempotent — sets that already have IDs are skipped.
+//
+// Remove this route after the one-time backfill is confirmed.
+app.post("/api/admin/backfill-set-ids", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const fs   = await import("node:fs");
+    const html = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8");
+
+    // Build composite key → set_id map from the bank.
+    const SET_WITH_ID_RE = new RegExp(
+      '\\{\\s*id:\\s*"(s_[a-z0-9]+)",\\s*' +
+      'reps:\\s*(\\d+),\\s*' +
+      'dist:\\s*(\\d+),\\s*' +
+      'desc:\\s*"([^"]*)",\\s*' +
+      'interval:\\s*"([^"]*)"' +
+      '([^}]*)\\}',
+      "g"
+    );
+    const compositeKey = (reps, dist, desc, interval, eq) =>
+      JSON.stringify([Number(reps), Number(dist), desc, interval, eq || null]);
+
+    const compositeMap = new Map();
+    let bankSetCount = 0;
+    let m;
+    while ((m = SET_WITH_ID_RE.exec(html)) !== null) {
+      const [, setId, reps, dist, desc, interval, tail] = m;
+      const eqMatch = tail.match(/\beq:\s*"([^"]*)"/);
+      const eq = eqMatch ? eqMatch[1] : null;
+      const key = compositeKey(reps, dist, desc, interval, eq);
+      if (!compositeMap.has(key)) compositeMap.set(key, setId);
+      bankSetCount++;
+    }
+
+    const dryRun = req.body && req.body.dry_run !== false; // default safe
+    const stats = {
+      workoutsScanned: 0, workoutsModified: 0,
+      setsTotal: 0, setsAlreadyIDed: 0, setsNewlyMatched: 0, setsUnmatched: 0,
+      bankSetCount, bankUniqueKeys: compositeMap.size,
+    };
+
+    // Use the existing pool — re-importing dbActive guards against pool=null.
+    if (!dbActive) return res.status(503).json({ error: "db not configured" });
+    const { pool } = await import("./db.js");
+    const rows = await pool.query("SELECT `id`, `payload` FROM `workouts`");
+    for (const row of rows) {
+      stats.workoutsScanned++;
+      const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : (row.payload || {});
+      const blocks = payload.blocks || [];
+      let touched = false;
+      for (const block of blocks) {
+        for (const s of (block.sets || [])) {
+          stats.setsTotal++;
+          if (s.id) { stats.setsAlreadyIDed++; continue; }
+          const key = compositeKey(s.reps, s.dist, s.desc, s.interval, s.eq);
+          const matched = compositeMap.get(key);
+          if (matched) { s.id = matched; stats.setsNewlyMatched++; touched = true; }
+          else stats.setsUnmatched++;
+        }
+      }
+      if (touched) {
+        stats.workoutsModified++;
+        if (!dryRun) {
+          await pool.query("UPDATE `workouts` SET `payload` = ? WHERE `id` = ?",
+            [JSON.stringify(payload), row.id]);
+        }
+      }
+    }
+
+    stats.matchRate = stats.setsTotal > 0
+      ? Number(((stats.setsNewlyMatched + stats.setsAlreadyIDed) * 100 / stats.setsTotal).toFixed(1))
+      : null;
+    stats.dry_run = dryRun;
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: dryRun ? "admin.backfill_set_ids.dryrun" : "admin.backfill_set_ids.apply",
+      ...reqMeta(req),
+      details:   { stats },
+    });
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err), stack: err.stack });
+  }
+});
+
 // ───── Goals ──────────────────────────────────────────────────────────
 // Recurring goals only (period_start = NULL). One active goal per metric.
 // Allowed metrics: workouts_per_week | yards_per_week | yards_per_month.
