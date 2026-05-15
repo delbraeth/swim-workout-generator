@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 14:14 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 15:32 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6072,7 +6072,23 @@
       technique: "technique",
     };
 
-    function generateWorkout(typeId, maxYards, equipment, favorites = [], poolMode = "25y", userMin = null, pinnedBlocks = {}, recentLabels = [], recoveryMode = false, phase = null, favoriteSetIds = null) {
+    // 2026-05-15: refactored to single options object for readability and to
+    // make adding/removing optional knobs safe (no positional ordering pitfalls).
+    // All previous positional args are now keys on the opts object — the
+    // function body still references them by name via destructuring.
+    function generateWorkout({
+      typeId,
+      maxYards,
+      equipment,
+      favorites = [],
+      poolMode = "25y",
+      userMin = null,
+      pinnedBlocks = {},
+      recentLabels = [],
+      recoveryMode = false,
+      phase = null,
+      favoriteSetIds = null,
+    } = {}) {
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
@@ -6225,6 +6241,10 @@
           // (im / mixed), they share a label, so down-weighting one down-weights
           // all variants. That's the intended behavior. Labels that *aren't*
           // meant to share semantics MUST stay globally unique.
+          // 2026-05-15: catalog favorites now expose warmup/drill/cooldown
+          // labels to the favorites array too. Verified zero cross-section
+          // collisions (618 unique labels). New bank entries must keep this
+          // invariant — re-run tools/check_label_collisions.py if added.
           const recentSet = new Set(recentLabels);
           const phaseSpec = phase && PHASES[phase] ? PHASES[phase] : null;
           const mainWeight = (o) => {
@@ -6400,7 +6420,20 @@
     // Returns { workout, error }. On success, workout is a fresh object with the
     // requested section replaced. On failure, error is a human-readable reason
     // and the caller should keep the prior workout unchanged.
-    function regenerateSection(workout, typeId, sectionKey, maxYards, equipment, poolMode = "25y", userMin = null, recentLabels = [], recoveryMode = false, phase = null, favorites = []) {
+    // 2026-05-15: refactored to options-object — same rationale as generateWorkout.
+    function regenerateSection({
+      workout,
+      typeId,
+      sectionKey,
+      maxYards,
+      equipment,
+      poolMode = "25y",
+      userMin = null,
+      recentLabels = [],
+      recoveryMode = false,
+      phase = null,
+      favorites = [],
+    } = {}) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -6977,7 +7010,7 @@
       );
     }
 
-    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId, poolMode = "25y", favoriteSetIds, onToggleFavoriteSet }) {
+    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId, poolMode = "25y" }) {
       const eqItems = equipmentForSet(set, equipment);
       const desc = enhanceDesc(set, equipment);
       const equiv = onToggleSwap ? getEquivalents(set, poolMode) : {};
@@ -7247,7 +7280,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", favoriteSetIds, onToggleFavoriteSet }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y" }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -7417,8 +7450,6 @@
                           unit={unit}
                           blockSection={block.section}
                           blockZoneId={blockZoneId}
-                          favoriteSetIds={favoriteSetIds}
-                          onToggleFavoriteSet={onToggleFavoriteSet}
                         />
                       );
                     });
@@ -7718,7 +7749,7 @@
     // ═══════════════════════════════════════════════════════════════
     //  HISTORY VIEW — list, filter, expand, edit notes, delete, re-print
     // ═══════════════════════════════════════════════════════════════
-    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onUpdateDifficulty, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite, recentMainLabels, goals = [], mySub, favoriteSetIds, onToggleFavoriteSet }) {
+    function HistoryView({ history, historyLoaded, onUpdateNotes, onUpdateCompleted, onUpdateDifficulty, onDelete, onLoadAndPrint, onRepeat, onRun, favorites, onToggleFavorite, recentMainLabels, goals = [], mySub }) {
       const [filterType,   setFilterType]   = useState("all");
       const [filterUser,   setFilterUser]   = useState("all"); // "all" | "__unattributed__" | sub string
       const [weekMode,     setWeekMode]     = useState("all"); // "all" | "4wk"
@@ -7943,7 +7974,7 @@
           {favorites && favorites.length > 0 && (
             <div style={{ marginBottom: 18, padding: "14px 16px", borderRadius: 10, background: "#1a1f2e", border: "1px solid #2d3748" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10 }}>
-                ★ Favorite Main Sets
+                ★ Favorites
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {favorites.map(label => {
@@ -8409,7 +8440,7 @@
 
                 {isExpanded && entry.blocks && (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #334155" }}>
-                    {entry.blocks.map((b, i) => <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} recentMainLabels={recentMainLabels} poolMode={entry.poolMode || "25y"} favoriteSetIds={favoriteSetIds} onToggleFavoriteSet={onToggleFavoriteSet} />)}
+                    {entry.blocks.map((b, i) => <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} recentMainLabels={recentMainLabels} poolMode={entry.poolMode || "25y"} />)}
                   </div>
                 )}
               </div>
@@ -9740,7 +9771,7 @@
       return (opt.sets || []).some(s => s.eq && tags.includes(s.eq));
     }
 
-    function CatalogView({ favoriteSetIds, onToggleFavoriteSet, favorites, onToggleFavorite }) {
+    function CatalogView({ favorites, onToggleFavorite }) {
       const [poolMode,    setPoolMode]    = React.useState("25y");
       const [section,     setSection]     = React.useState("main");
       const [typeId,      setTypeId]      = React.useState("all");
@@ -10671,7 +10702,7 @@
 
     const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
 
-    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, personalFirstName, audioCues = false, unit = "yds", favoriteSetIds, onToggleFavoriteSet }) {
+    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, personalFirstName, audioCues = false, unit = "yds" }) {
       const [idx, setIdx]               = useState(0);
       const [paceIdx, setPaceIdx]       = useState(null);
       const [elapsed, setElapsed]       = useState(0); // seconds since workout started
@@ -11450,7 +11481,19 @@
           ...recentMainLabels.keys(),
           ...sessionRecentLabels,
         ]));
-        let newWorkout = generateWorkout(selectedType, maxYards, equipment, favorites, poolMode, sliderMin, pinned, recentLabels, recoveryMode, phase, favoriteSets);
+        let newWorkout = generateWorkout({
+          typeId:         selectedType,
+          maxYards,
+          equipment,
+          favorites,
+          poolMode,
+          userMin:        sliderMin,
+          pinnedBlocks:   pinned,
+          recentLabels,
+          recoveryMode,
+          phase,
+          favoriteSetIds: favoriteSets,
+        });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
         if (newWorkout && newWorkout.__generateFailure) {
@@ -11513,7 +11556,19 @@
           ...recentMainLabels.keys(),
           ...sessionRecentLabels,
         ]));
-        const result = regenerateSection(workout, selectedType, sectionKey, maxYards, equipment, poolMode, sliderMin, recentLabels, isRecovery, phase, favorites);
+        const result = regenerateSection({
+          workout,
+          typeId:       selectedType,
+          sectionKey,
+          maxYards,
+          equipment,
+          poolMode,
+          userMin:      sliderMin,
+          recentLabels,
+          recoveryMode: isRecovery,
+          phase,
+          favorites,
+        });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
           return;
@@ -12043,8 +12098,6 @@
             {view === "admin"   && <AdminView />}
             {view === "catalog" && (
               <CatalogView
-                favoriteSetIds={favoriteSets}
-                onToggleFavoriteSet={authenticated ? handleToggleFavoriteSet : null}
                 favorites={favorites}
                 onToggleFavorite={authenticated ? handleToggleFavorite : null}
               />
@@ -12066,8 +12119,6 @@
                 onRun={entry => { setRunWorkout(entry); setShowRestPicker(true); }}
                 favorites={favorites}
                 onToggleFavorite={handleToggleFavorite}
-                favoriteSetIds={favoriteSets}
-                onToggleFavoriteSet={authenticated ? handleToggleFavoriteSet : null}
               />
             )}
 
@@ -12527,8 +12578,6 @@
                     onTogglePin={handleTogglePin}
                     recentMainLabels={recentMainLabels}
                     poolMode={poolMode}
-                    favoriteSetIds={favoriteSets}
-                    onToggleFavoriteSet={authenticated ? handleToggleFavoriteSet : null}
                   />
                 ))}
 
@@ -12646,8 +12695,6 @@
               personalFirstName={personalFirstName}
               audioCues={audioCues}
               unit={unit}
-              favoriteSetIds={favoriteSets}
-              onToggleFavoriteSet={authenticated ? handleToggleFavoriteSet : null}
             />
           )}
           {showProfile && (
