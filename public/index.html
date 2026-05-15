@@ -143,7 +143,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 03:56 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-15 08:15 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9842,17 +9842,25 @@
       }, []);
       React.useEffect(() => { load(); }, [load]);
 
-      const act = async (sub, action) => {
+      const act = async (sub, action, body = null) => {
         setMsg(null);
-        let url, method = "POST";
+        let url, method = "POST", payload = null;
         if (action === "disable") url = `/api/admin/users/${encodeURIComponent(sub)}/disable`;
         else if (action === "enable") url = `/api/admin/users/${encodeURIComponent(sub)}/enable`;
+        else if (action === "coach-grant" || action === "coach-revoke") {
+          url = `/api/admin/users/${encodeURIComponent(sub)}/coach`;
+          payload = { granted: action === "coach-grant" };
+        }
         else if (action === "delete") {
           if (!confirm(`Delete user ${sub.slice(0, 10)}…?\n\nThis cascades and wipes all their workouts, favorites, settings, and sessions. Audit events stay (anonymized). NOT REVERSIBLE.`)) return;
           url = `/api/admin/users/${encodeURIComponent(sub)}`;
           method = "DELETE";
         }
-        const r = await fetch(url, { method, headers: { ...csrfHeaders() } });
+        const r = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: payload ? JSON.stringify(payload) : undefined,
+        });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) { setMsg(`Error: ${data.error || r.status}`); return; }
         setMsg(`${action} → ok`);
@@ -9885,11 +9893,17 @@
                   <td style={{ padding: "8px 6px", color: "#94a3b8" }}>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : "—"}</td>
                   <td style={{ padding: "8px 6px" }}>
                     {u.is_admin    && <span style={{ background: "#a78bfa", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>admin</span>}
+                    {u.is_coach    && <span style={{ background: "#60a5fa", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>coach</span>}
                     {u.is_disabled && <span style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>disabled</span>}
                   </td>
                   <td style={{ padding: "8px 6px" }}>
                     <button onClick={() => setEditing(u)} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "#334155", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
                       Edit
+                    </button>
+                    <button onClick={() => act(u.sub, u.is_coach ? "coach-revoke" : "coach-grant")}
+                      title={u.is_admin ? "Admins implicitly have coach access; explicit toggle still settable for clarity." : ""}
+                      style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: u.is_coach ? "#1e40af" : "#334155", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
+                      {u.is_coach ? "Un-coach" : "Coach"}
                     </button>
                     <button onClick={() => act(u.sub, u.is_disabled ? "enable" : "disable")} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "#334155", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
                       {u.is_disabled ? "Enable" : "Disable"}
