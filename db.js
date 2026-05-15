@@ -468,20 +468,33 @@ export async function dbGetMe(sub) {
     );
     const stats = statsRows.map(r => ({ pool_mode: r.pool_mode, count: Number(r.n), total: Number(r.total) }));
     const workoutCount = stats.reduce((s, r) => s + r.count, 0);
+
+    // Pending feedback count — admins only. Drives the count badge on the
+    // 🛡 admin top-nav button so unreviewed feedback is visible at a glance.
+    // Cheap query (indexed on (status, created_at DESC) per migration 007).
+    let pendingFeedbackCount = 0;
+    if (u.is_admin) {
+      const fbRows = await conn.query(
+        "SELECT COUNT(*) AS n FROM `feedback` WHERE `status` = 'new'"
+      );
+      pendingFeedbackCount = Number(fbRows[0]?.n || 0);
+    }
+
     return {
-      sub:            u.sub,
-      email:          u.email,
-      email_verified: !!u.email_verified,
-      display_name:   u.display_name,
-      initials:       u.initials,
-      is_admin:       !!u.is_admin,
+      sub:                     u.sub,
+      email:                   u.email,
+      email_verified:          !!u.email_verified,
+      display_name:            u.display_name,
+      initials:                u.initials,
+      is_admin:                !!u.is_admin,
       // Coach is granted by either explicit is_coach flag OR is_admin (admin
       // implicitly has coach capability). Mirrors dbIsCoach's check.
-      is_coach:       !!(u.is_coach || u.is_admin),
-      created_at:     u.created_at,
-      last_login_at:  u.last_login_at,
-      workout_count:  workoutCount,
-      stats_by_pool:  stats,
+      is_coach:                !!(u.is_coach || u.is_admin),
+      created_at:              u.created_at,
+      last_login_at:           u.last_login_at,
+      workout_count:           workoutCount,
+      stats_by_pool:           stats,
+      pending_feedback_count:  pendingFeedbackCount,
     };
   } finally {
     conn.release();
