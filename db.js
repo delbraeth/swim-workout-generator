@@ -457,7 +457,7 @@ export async function dbGetMe(sub) {
   const conn = await pool.getConnection();
   try {
     const userRows = await conn.query(
-      "SELECT `sub`, `email`, `email_verified`, `display_name`, `initials`, `is_admin`, `is_coach`, `created_at`, `last_login_at` FROM `users` WHERE `sub` = ?",
+      "SELECT `sub`, `email`, `email_verified`, `display_name`, `initials`, `dob`, `is_admin`, `is_coach`, `created_at`, `last_login_at` FROM `users` WHERE `sub` = ?",
       [sub]
     );
     if (!userRows[0]) return null;
@@ -486,6 +486,11 @@ export async function dbGetMe(sub) {
       email_verified:          !!u.email_verified,
       display_name:            u.display_name,
       initials:                u.initials,
+      // DOB returned only to the user themselves (this endpoint is always
+      // self-scoped). Other endpoints expose only the derived `is_minor` to
+      // protect the raw DATE per decision #27.
+      dob:                     dateToYmd(u.dob),
+      is_minor:                isMinor(u.dob),                                // null when DOB unset
       is_admin:                !!u.is_admin,
       // Coach is granted by either explicit is_coach flag OR is_admin (admin
       // implicitly has coach capability). Mirrors dbIsCoach's check.
@@ -1123,6 +1128,198 @@ export async function dbRemoveTeamCoach(teamId, coachSub) {
     "UPDATE `team_coaches` SET `removed_at` = CURRENT_TIMESTAMP(3) " +
     "WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
     [teamId, coachSub]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// ── Managed swimmers + DOB / minor framework (R-B) ────────────────────
+// See RELATIONSHIPS_SCOPE.md. Tables: `coach_managed_swimmers` (migration
+// 012), `users.dob` (migration 013). Per decision #27 DOB is collected on
+// every athlete record; per #28 under-13 derives `is_coppa_protected` which
+// gates claim flow and parts of roster visibility.
+//
+// Minor status is ALWAYS DERIVED, never stored — a swimmer's age changes
+// silently as the calendar advances; caching is_minor would go stale.
+
+const MS_ID_RE = /^ms_[a-z0-9]{4,16}$/;
+function genManagedId() {
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "ms_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+
+// ── Pure date helpers (exported for server.js + tests) ────────────────
+// `asOf` defaults to today; passing it lets callers compute against a
+// reference date (e.g., for tests or "as-of season start" queries).
+export function computeAge(dob, asOf = new Date()) {
+  if (!dob) return null;
+  const d = (dob instanceof Date) ? dob : new Date(String(dob));
+  if (Number.isNaN(d.getTime())) return null;
+  let age = asOf.getFullYear() - d.getFullYear();
+  const m = asOf.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && asOf.getDate() < d.getDate())) age--;
+  return age;
+}
+export function isMinor(dob, asOf = new Date()) {
+  const age = computeAge(dob, asOf);
+  if (age === null) return null;                                             // unknown → caller decides
+  return age < 18;
+}
+export function isCoppaProtected(dob, asOf = new Date()) {
+  const age = computeAge(dob, asOf);
+  if (age === null) return null;
+  return age < 13;
+}
+
+// DOB sanity bounds — reject obvious nonsense at insert/update time.
+//   * Future dates → impossible (not born yet)
+//   * Before 1900 → effectively impossible for an active swimmer
+function validateDob(dob) {
+  if (!dob) return { ok: false, reason: "dob_required" };
+  const d = new Date(String(dob));
+  if (Number.isNaN(d.getTime())) return { ok: false, reason: "bad_dob_format" };
+  const now = new Date();
+  if (d > now) return { ok: false, reason: "dob_in_future" };
+  if (d.getFullYear() < 1900) return { ok: false, reason: "dob_too_old" };
+  return { ok: true };
+}
+
+function rowToManagedSwimmer(r) {
+  return {
+    id:                   r.id,
+    owner_coach_sub:      r.owner_coach_sub,
+    display_name:         r.display_name,
+    initials:             r.initials,
+    dob:                  dateToYmd(r.dob),
+    age:                  computeAge(r.dob),
+    is_minor:             isMinor(r.dob),
+    is_coppa_protected:   isCoppaProtected(r.dob),
+    parental_contact:     r.parental_contact,
+    parent_managed_flag:  !!r.parent_managed_flag,
+    pace_scy_100:         r.pace_scy_100,
+    pace_scm_100:         r.pace_scm_100,
+    pace_lcm_100:         r.pace_lcm_100,
+    archived:             !!r.archived,
+    created_at:           dtToIso(r.created_at),
+    updated_at:           dtToIso(r.updated_at),
+  };
+}
+
+export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, initials = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
+  if (!ownerSub) throw new Error("ownerSub required");
+  if (!display_name || typeof display_name !== "string") throw new Error("display_name required");
+  if (display_name.length > 120) throw new Error("display_name max 120 chars");
+  const dobCheck = validateDob(dob);
+  if (!dobCheck.ok) throw new Error(dobCheck.reason);
+  if (initials && initials.length > 4) throw new Error("initials max 4 chars");
+  if (parental_contact && parental_contact.length > 255) throw new Error("parental_contact max 255 chars");
+  await dbEnsureUser(ownerSub);
+  const id = genManagedId();
+  await pool.query(
+    "INSERT INTO `coach_managed_swimmers` " +
+    "(`id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `parental_contact`, `parent_managed_flag`, " +
+    " `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [
+      id, ownerSub, display_name.trim(), initials || null, dob,
+      parental_contact || null, parent_managed_flag ? 1 : 0,
+      pace_scy_100 || null, pace_scm_100 || null, pace_lcm_100 || null,
+    ]
+  );
+  return { ok: true, id };
+}
+
+export async function dbGetManagedSwimmer(id) {
+  if (!id || !MS_ID_RE.test(id)) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `parental_contact`, `parent_managed_flag`, " +
+    "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `archived`, `created_at`, `updated_at` " +
+    "FROM `coach_managed_swimmers` WHERE `id` = ?",
+    [id]
+  );
+  if (!rows[0]) return null;
+  return rowToManagedSwimmer(rows[0]);
+}
+
+export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived = false } = {}) {
+  if (!coachSub) return [];
+  const whereArchived = includeArchived ? "" : "AND `archived` = 0 ";
+  const rows = await pool.query(
+    "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `parental_contact`, `parent_managed_flag`, " +
+    "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `archived`, `created_at`, `updated_at` " +
+    "FROM `coach_managed_swimmers` " +
+    "WHERE `owner_coach_sub` = ? " + whereArchived +
+    "ORDER BY `archived` ASC, `display_name` ASC",
+    [coachSub]
+  );
+  return rows.map(rowToManagedSwimmer);
+}
+
+// Update allowed-fields whitelist. dob can be updated; same validation as create.
+export async function dbUpdateManagedSwimmer(id, patch) {
+  if (!id || !MS_ID_RE.test(id)) return { ok: false, reason: "bad_id" };
+  const allowed = {
+    display_name:        v => (typeof v === "string" && v.trim().length > 0 && v.length <= 120) ? v.trim() : null,
+    initials:            v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 4) ? v : undefined,
+    parental_contact:    v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 255) ? v : undefined,
+    parent_managed_flag: v => (typeof v === "boolean") ? (v ? 1 : 0) : (v === 0 || v === 1) ? v : undefined,
+    pace_scy_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
+    pace_scm_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
+    pace_lcm_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
+  };
+  const sets = [], vals = [];
+  for (const [k, validator] of Object.entries(allowed)) {
+    if (k in patch) {
+      const cleaned = validator(patch[k]);
+      if (cleaned === undefined) return { ok: false, reason: `bad_${k}` };
+      sets.push(`\`${k}\` = ?`);
+      vals.push(cleaned);
+    }
+  }
+  if ("dob" in patch) {
+    const dobCheck = validateDob(patch.dob);
+    if (!dobCheck.ok) return { ok: false, reason: dobCheck.reason };
+    sets.push("`dob` = ?");
+    vals.push(patch.dob);
+  }
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(id);
+  const r = await pool.query(
+    `UPDATE \`coach_managed_swimmers\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
+    vals
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbArchiveManagedSwimmer(id, archived = true) {
+  if (!id || !MS_ID_RE.test(id)) return { ok: false, reason: "bad_id" };
+  const r = await pool.query(
+    "UPDATE `coach_managed_swimmers` SET `archived` = ? WHERE `id` = ?",
+    [archived ? 1 : 0, id]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Lightweight ownership check for route gating.
+export async function dbIsManagedSwimmerOwnedBy(id, coachSub) {
+  if (!id || !coachSub) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `coach_managed_swimmers` WHERE `id` = ? AND `owner_coach_sub` = ? LIMIT 1",
+    [id, coachSub]
+  );
+  return rows.length > 0;
+}
+
+// ── User DOB (R-B) ────────────────────────────────────────────────────
+// Self-serve DOB write — soft-prompt at next login per decision #37, and
+// also writable from the profile if the user wants to update it.
+// Separate from dbUpdateMe (display fields) so it's clear in audit + UI.
+export async function dbUpdateMeDob(sub, dob) {
+  if (!sub) return { ok: false, reason: "no_sub" };
+  const dobCheck = validateDob(dob);
+  if (!dobCheck.ok) return { ok: false, reason: dobCheck.reason };
+  const r = await pool.query(
+    "UPDATE `users` SET `dob` = ? WHERE `sub` = ?",
+    [dob, sub]
   );
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
