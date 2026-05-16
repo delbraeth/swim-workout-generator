@@ -1186,9 +1186,17 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>DOB soft-prompt for your own account</h3>
       <p>If you signed up before DOB was required (most existing accounts), you'll see a <strong>Quick question — your date of birth</strong> modal on next app load. Enter it and Save, or tap <strong>Remind me later</strong>. The prompt is dismissable for the current browser tab; it reappears on the next session. Once you've entered your DOB, the modal stops appearing entirely. Hard gates that require DOB (joining a group, accepting a coach invite) will re-prompt unconditionally when those features ship in later stages.</p>
 
+      <h3>Bulk import (📥)</h3>
+      <p>For onboarding a real roster, use the <strong>📥 Import</strong> button at the top of the swimmers view. It accepts CSV or TSV in two ways: <strong>📁 Choose CSV file</strong> uploads a file directly; or paste content into the textarea. Either way the same parser runs.</p>
+      <p><strong>Required columns:</strong> <code>name</code>, <code>dob</code>.<br>
+      <strong>Optional columns:</strong> <code>initials</code>, <code>pace_scy_100</code>, <code>pace_scm_100</code>, <code>pace_lcm_100</code>, <code>parental_contact</code>.</p>
+      <p>Headers are case-insensitive; column order doesn't matter; extra unknown columns are ignored. DOB accepts <code>YYYY-MM-DD</code> or <code>MM/DD/YYYY</code> (both work — Excel exports often use one or the other). Click <strong>📄 Download template</strong> for a starter CSV with the header row pre-filled.</p>
+      <p><strong>Flow:</strong> upload or paste → <em>Parse</em> → preview table shows each row with a green ✓ (valid) or red ✗ (validation error, reason inline) → <em>Import N swimmers</em> commits the valid rows. The server is per-row atomic — one bad row doesn't roll back the others; the result screen shows server-side rejections (rare; mainly DB-level constraint hits) alongside the success count.</p>
+      <p>Cap at 500 rows per import call. Larger rosters: split the file and run it in batches.</p>
+
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Stage 1 only ships managed swimmers + DOB.</strong> Bulk swimmer import (CSV / paste) is a planned follow-up before Stage 2 — adding 80 swimmers one at a time isn't the intended workflow. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the full plan.</div>
+        <div class="callout-body"><strong>Stage 1 ships managed swimmers + DOB + bulk import.</strong> Groups (cohorts), lane plans, workout assignments, and the swimmer-side "Assigned to me" view come in Stages 2–5. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the full plan.</div>
       </div>
     </section>
 
