@@ -71,7 +71,7 @@ import {
   dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach, dbListCoachesForPicker,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
-  dbUpdateMeDob,
+  dbBulkCreateManagedSwimmers, dbUpdateMeDob,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1242,6 +1242,27 @@ app.post("/api/managed-swimmers/:id/archive", checkOrigin, requireAuth, requireC
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Bulk import (R-B'). Accepts an array of swimmer-shaped rows (already
+// validated and normalized client-side) and inserts them per-row-atomic.
+// Cap at 500 rows per call to prevent runaway writes; the importer chunks
+// larger files. Returns {inserted, errors: [{row_idx, error}]}.
+app.post("/api/managed-swimmers/bulk", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const rows = (req.body && req.body.rows) || [];
+    if (!Array.isArray(rows)) return res.status(400).json({ error: "rows must be array" });
+    if (rows.length === 0) return res.status(400).json({ error: "rows must be non-empty" });
+    if (rows.length > 500) return res.status(400).json({ error: "max 500 rows per call" });
+    const r = await dbBulkCreateManagedSwimmers(req.userSub, rows);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "coach.bulk_create_managed_swimmers",
+      ...reqMeta(req),
+      details:   { attempted: rows.length, inserted: r.inserted, error_count: r.errors.length },
+    });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
 });
 
 // ───── DOB self-write (relationships scope, R-B + decision #37) ──────
