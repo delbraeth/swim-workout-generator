@@ -67,6 +67,8 @@ import {
   dbCreateSession, dbGetSession, dbTouchSession,
   dbRevokeSession, dbRevokeSessionByPrefix, dbRevokeOthersByUser, dbListSessions,
   dbGetOrCreateCsrf, dbVerifyCsrf,
+  dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
+  dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1011,6 +1013,141 @@ app.patch("/api/admin/feedback/:id", checkOrigin, requireAuth, requireAdmin, req
   } catch (err) {
     res.status(400).json({ error: err.message || String(err) });
   }
+});
+
+// ───── Teams (relationships scope, Stage 1 / R-A) ────────────────────
+// See RELATIONSHIPS_SCOPE.md. v1 surfaces only the owner role; admin tier
+// is in the data model but no UI to set it until R-J. Coach-gated overall
+// (must have is_coach=1 or is_admin=1 to create a team). Inside a team,
+// gating is by team_coaches.role (owner / admin / coach). Global admin
+// does NOT auto-pass team-role checks here — use the existing /api/admin
+// routes for admin-side moderation if ever needed (not built v1).
+
+// Inline helper: returns the caller's role in this team, or null. Used as
+// a gate inside each handler so we don't need a per-team middleware factory.
+async function getCallerTeamRole(teamId, sub) {
+  return await dbGetTeamRole(teamId, sub);
+}
+
+// List teams the caller is an active coach in. Returns role per team.
+app.get("/api/teams", requireAuth, async (req, res) => {
+  try { res.json(await dbListTeamsForCoach(req.userSub)); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Create a team. Requires is_coach (or is_admin). Caller becomes owner.
+app.post("/api/teams", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { name, team_type } = req.body || {};
+    if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
+    if (!team_type) return res.status(400).json({ error: "team_type required" });
+    const r = await dbCreateTeam({ ownerSub: req.userSub, name, teamType: team_type });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.create",
+      ...reqMeta(req),
+      details:   { team_id: r.id, name, team_type },
+    });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
+});
+
+// Team detail. Requires active membership of any role.
+app.get("/api/teams/:id", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const coaches = await dbListTeamCoaches(req.params.id);
+    res.json({ ...team, viewer_role: role, coaches });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Rename a team. Owner only.
+app.patch("/api/teams/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (role !== "owner") return res.status(403).json({ error: "owner only" });
+    const { name } = req.body || {};
+    const r = await dbUpdateTeam(req.params.id, { name });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "update failed" });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.rename",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, name },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Archive / unarchive a team. Owner only. Body { archived: true|false }.
+// Per decision #13 archiving a team does NOT cascade to groups. Groups
+// don't exist yet (R-C); when they do, archive route returns a warning
+// about active groups in the response.
+app.post("/api/teams/:id/archive", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (role !== "owner") return res.status(403).json({ error: "owner only" });
+    const archived = req.body?.archived !== false;                              // default true
+    const r = await dbArchiveTeam(req.params.id, archived);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: archived ? "team.archive" : "team.unarchive",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// List a team's active coaches. Requires any-role membership.
+app.get("/api/teams/:id/coaches", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    res.json(await dbListTeamCoaches(req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Add a coach to a team. Owner only in v1 (admin tier wired in data model
+// but not exposed in UI until R-J). Body { coach_sub, role? } — role
+// defaults to "coach"; "owner" rejected (set at create only).
+app.post("/api/teams/:id/coaches", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const callerRole = await getCallerTeamRole(req.params.id, req.userSub);
+    if (callerRole !== "owner") return res.status(403).json({ error: "owner only" });
+    const { coach_sub, role = "coach" } = req.body || {};
+    if (!coach_sub) return res.status(400).json({ error: "coach_sub required" });
+    const r = await dbAddTeamCoach(req.params.id, coach_sub, role);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.add_coach",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, target_sub: coach_sub, role, reactivated: !!r.reactivated },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Remove a coach from a team (sets removed_at; row preserved). Owner only
+// in v1. Owner cannot be removed via this endpoint (would orphan FK).
+app.delete("/api/teams/:id/coaches/:sub", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const callerRole = await getCallerTeamRole(req.params.id, req.userSub);
+    if (callerRole !== "owner") return res.status(403).json({ error: "owner only" });
+    const r = await dbRemoveTeamCoach(req.params.id, req.params.sub);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.remove_coach",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, target_sub: req.params.sub },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // ───── Static files ───────────────────────────────────────────────────
