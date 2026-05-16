@@ -1251,16 +1251,17 @@ app.post("/api/managed-swimmers/:id/archive", checkOrigin, requireAuth, requireC
 // larger files. Returns {inserted, errors: [{row_idx, error}]}.
 app.post("/api/managed-swimmers/bulk", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const rows = (req.body && req.body.rows) || [];
+    const rows    = (req.body && req.body.rows) || [];
+    const team_id = (req.body && req.body.team_id) || null;
     if (!Array.isArray(rows)) return res.status(400).json({ error: "rows must be array" });
     if (rows.length === 0) return res.status(400).json({ error: "rows must be non-empty" });
     if (rows.length > 500) return res.status(400).json({ error: "max 500 rows per call" });
-    const r = await dbBulkCreateManagedSwimmers(req.userSub, rows);
+    const r = await dbBulkCreateManagedSwimmers(req.userSub, rows, { team_id });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "coach.bulk_create_managed_swimmers",
       ...reqMeta(req),
-      details:   { attempted: rows.length, inserted: r.inserted, error_count: r.errors.length },
+      details:   { attempted: rows.length, inserted: r.inserted, error_count: r.errors.length, team_id },
     });
     res.json(r);
   } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
