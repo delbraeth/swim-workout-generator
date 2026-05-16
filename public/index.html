@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-16 22:20 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-16 22:27 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10497,6 +10497,7 @@
       const [selectedId, setSelectedId] = React.useState(null);
       const [detail,     setDetail]     = React.useState(null);
       const [creating,   setCreating]   = React.useState(false);
+      const [importing,  setImporting]  = React.useState(false);
       const [form,       setForm]       = React.useState(() => emptyForm());
       const [editing,    setEditing]    = React.useState(false);
       const [msg,        setMsg]        = React.useState(null);
@@ -10714,10 +10715,14 @@
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
             <h2 style={{ color: "#e2e8f0", margin: 0 }}>🏊 Managed swimmers</h2>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <button onClick={() => setShowArch(v => !v)}
                 style={{ padding: "5px 11px", borderRadius: 6, border: "1px solid #334155", background: showArch ? "#334155" : "transparent", color: "#94a3b8", fontSize: 11, cursor: "pointer" }}>
                 {showArch ? "Hide archived" : "Show archived"}
+              </button>
+              <button onClick={() => setImporting(true)}
+                style={{ padding: "6px 14px", background: "transparent", color: "#3b82f6", border: "1px solid #3b82f6", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                📥 Import
               </button>
               <button onClick={() => setCreating(c => !c)}
                 style={{ padding: "6px 14px", background: creating ? "#334155" : "#22c55e", color: creating ? "#cbd5e1" : "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -10725,6 +10730,13 @@
               </button>
             </div>
           </div>
+
+          {importing && (
+            <BulkImportModal
+              onClose={() => setImporting(false)}
+              onImported={() => { loadList(); }}
+            />
+          )}
 
           {creating && (
             <div style={{ background: "#1e293b", border: "1px solid #22c55e", borderRadius: 10, padding: 14, marginBottom: 16 }}>
@@ -10832,6 +10844,298 @@
               onChange={e => upd("parent_managed_flag", e.target.checked)} />
             <span>Parent-managed (blocks claim flow even for 13+)</span>
           </label>
+        </div>
+      );
+    }
+
+    // ── Bulk-import helpers (R-B') ────────────────────────────────────
+    // Simple CSV/TSV parser — handles quoted strings with embedded delimiters
+    // (Excel/Sheets export shape), auto-detects comma vs tab, requires a
+    // header row. NOT a full RFC 4180 parser; handles 99% of coach exports.
+    const IMPORT_REQUIRED = ["name", "dob"];
+    const IMPORT_OPTIONAL = ["initials", "pace_scy_100", "pace_scm_100", "pace_lcm_100", "parental_contact"];
+    const IMPORT_ALL_HEADERS = [...IMPORT_REQUIRED, ...IMPORT_OPTIONAL];
+
+    function csvAutoSplit(text) {
+      // Strip BOM, normalize newlines.
+      text = text.replace(/^﻿/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      if (!text.trim()) return { rows: [], delim: "," };
+      // Auto-detect delimiter from the first line: tab if there's at least one,
+      // else comma. (Most coach exports are one or the other.)
+      const firstLine = text.split("\n", 1)[0];
+      const delim = firstLine.includes("\t") ? "\t" : ",";
+      // Tokenize line by line. State machine handles quoted fields.
+      const rows = [];
+      for (const rawLine of text.split("\n")) {
+        if (!rawLine.trim()) continue;
+        const cells = [];
+        let cur = "";
+        let inQuotes = false;
+        for (let i = 0; i < rawLine.length; i++) {
+          const ch = rawLine[i];
+          if (inQuotes) {
+            if (ch === '"') {
+              if (rawLine[i + 1] === '"') { cur += '"'; i++; }                // "" → "
+              else inQuotes = false;
+            } else cur += ch;
+          } else {
+            if (ch === '"') inQuotes = true;
+            else if (ch === delim) { cells.push(cur); cur = ""; }
+            else cur += ch;
+          }
+        }
+        cells.push(cur);
+        rows.push(cells.map(c => c.trim()));
+      }
+      return { rows, delim };
+    }
+
+    function csvParseSwimmers(text) {
+      const { rows } = csvAutoSplit(text);
+      if (!rows.length) return { ok: false, error: "No data found." };
+      const headerCells = rows[0].map(h => h.toLowerCase().trim());
+      // Validate required headers exist.
+      const missing = IMPORT_REQUIRED.filter(h => !headerCells.includes(h));
+      if (missing.length) return { ok: false, error: `Missing required column(s): ${missing.join(", ")}. Expected headers: ${IMPORT_ALL_HEADERS.join(", ")}` };
+      // Build column-index map for known headers (ignore unknown columns).
+      const idx = {};
+      for (const h of IMPORT_ALL_HEADERS) {
+        const i = headerCells.indexOf(h);
+        if (i >= 0) idx[h] = i;
+      }
+      // Convert each data row into a raw object.
+      const dataRows = [];
+      for (let r = 1; r < rows.length; r++) {
+        const obj = {};
+        for (const [h, i] of Object.entries(idx)) obj[h] = rows[r][i] || "";
+        // Skip empty rows (all known fields blank).
+        if (Object.values(obj).every(v => !v.trim())) continue;
+        dataRows.push(obj);
+      }
+      return { ok: true, dataRows };
+    }
+
+    // Normalize + validate one row. Returns {ok, normalized?, error?}.
+    function normalizeImportRow(raw) {
+      const name = (raw.name || "").trim();
+      if (!name) return { ok: false, error: "name is empty" };
+      if (name.length > 120) return { ok: false, error: "name too long (>120 chars)" };
+      const dobRaw = (raw.dob || "").trim();
+      if (!dobRaw) return { ok: false, error: "dob is empty" };
+      // Accept YYYY-MM-DD or MM/DD/YYYY (or M/D/YYYY).
+      let dob = null;
+      const isoMatch = dobRaw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      const usMatch  = dobRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (isoMatch) {
+        dob = `${isoMatch[1]}-${String(isoMatch[2]).padStart(2, "0")}-${String(isoMatch[3]).padStart(2, "0")}`;
+      } else if (usMatch) {
+        dob = `${usMatch[3]}-${String(usMatch[1]).padStart(2, "0")}-${String(usMatch[2]).padStart(2, "0")}`;
+      } else {
+        return { ok: false, error: `dob format not recognized (use YYYY-MM-DD or MM/DD/YYYY): ${dobRaw}` };
+      }
+      // Sanity-check the date is real.
+      const d = new Date(dob + "T00:00:00Z");
+      if (Number.isNaN(d.getTime())) return { ok: false, error: `dob is not a real date: ${dobRaw}` };
+      if (d > new Date()) return { ok: false, error: `dob is in the future: ${dobRaw}` };
+      if (d.getUTCFullYear() < 1900) return { ok: false, error: `dob before 1900: ${dobRaw}` };
+
+      const initials = (raw.initials || "").trim() || null;
+      if (initials && initials.length > 4) return { ok: false, error: "initials too long (>4 chars)" };
+      const pace_scy_100 = (raw.pace_scy_100 || "").trim() || null;
+      const pace_scm_100 = (raw.pace_scm_100 || "").trim() || null;
+      const pace_lcm_100 = (raw.pace_lcm_100 || "").trim() || null;
+      for (const [k, v] of [["pace_scy_100", pace_scy_100], ["pace_scm_100", pace_scm_100], ["pace_lcm_100", pace_lcm_100]]) {
+        if (v && v.length > 8) return { ok: false, error: `${k} too long (>8 chars)` };
+      }
+      const parental_contact = (raw.parental_contact || "").trim() || null;
+      if (parental_contact && parental_contact.length > 255) return { ok: false, error: "parental_contact too long (>255 chars)" };
+
+      return { ok: true, normalized: {
+        display_name: name, initials, dob,
+        pace_scy_100, pace_scm_100, pace_lcm_100,
+        parental_contact,
+      } };
+    }
+
+    function buildTemplateCSV() {
+      const header = IMPORT_ALL_HEADERS.join(",");
+      const example = "Sarah Johnson,2010-03-15,SJ,2:05,,,parent@example.com";
+      return header + "\n" + example + "\n";
+    }
+
+    function downloadTemplate() {
+      const blob = new Blob([buildTemplateCSV()], { type: "text/csv" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url; a.download = "setforge-swimmer-import-template.csv";
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+    }
+
+    function BulkImportModal({ onClose, onImported }) {
+      const [text,    setText]    = React.useState("");
+      const [parsed,  setParsed]  = React.useState(null);                    // null = unparsed; [] = empty; [{idx, raw, norm}] = parsed
+      const [result,  setResult]  = React.useState(null);                    // server response after submit
+      const [submitting, setSubmitting] = React.useState(false);
+      const [err,     setErr]     = React.useState(null);
+
+      const onFile = (e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => { setText(String(reader.result || "")); setParsed(null); setResult(null); setErr(null); };
+        reader.onerror = () => setErr("Could not read file.");
+        reader.readAsText(f);
+      };
+
+      const parse = () => {
+        setErr(null); setResult(null);
+        const p = csvParseSwimmers(text);
+        if (!p.ok) { setErr(p.error); setParsed(null); return; }
+        const rows = p.dataRows.map((raw, idx) => {
+          const v = normalizeImportRow(raw);
+          return { idx, raw, normalized: v.ok ? v.normalized : null, error: v.ok ? null : v.error };
+        });
+        setParsed(rows);
+      };
+
+      const submit = async () => {
+        if (!parsed) return;
+        const validRows = parsed.filter(r => !r.error).map(r => r.normalized);
+        if (validRows.length === 0) { setErr("No valid rows to import."); return; }
+        setSubmitting(true); setErr(null);
+        try {
+          const res = await fetch("/api/managed-swimmers/bulk", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ rows: validRows }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setResult(j);
+          if (onImported) onImported(j);
+        } catch (e) { setErr(e.message); }
+        finally { setSubmitting(false); }
+      };
+
+      const validCount   = parsed ? parsed.filter(r => !r.error).length : 0;
+      const invalidCount = parsed ? parsed.filter(r =>  r.error).length : 0;
+
+      return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16, overflow: "auto" }}>
+          <div style={{ background: "#1e293b", border: "1px solid #475569", borderRadius: 12, padding: 22, maxWidth: 720, width: "100%", maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <h3 style={{ color: "#e2e8f0", margin: 0 }}>📥 Bulk import swimmers</h3>
+              <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 18, cursor: "pointer" }}>✕</button>
+            </div>
+
+            {result ? (
+              <div>
+                <div style={{ padding: "12px 14px", background: "#22c55e22", border: "1px solid #22c55e", borderRadius: 8, marginBottom: 12 }}>
+                  <div style={{ color: "#22c55e", fontWeight: 700, fontSize: 14 }}>Imported {result.inserted} swimmer{result.inserted === 1 ? "" : "s"}</div>
+                  {result.errors && result.errors.length > 0 && (
+                    <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 6 }}>
+                      {result.errors.length} row{result.errors.length === 1 ? "" : "s"} rejected by server:
+                      <ul style={{ margin: "4px 0 0 20px", padding: 0 }}>
+                        {result.errors.map(e => (
+                          <li key={e.row_idx}>Row {e.row_idx + 1}: {e.error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <button onClick={onClose}
+                  style={{ padding: "7px 14px", background: "#3b82f6", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10, lineHeight: 1.5 }}>
+                  Required columns: <code>name</code>, <code>dob</code>. Optional: <code>initials</code>, <code>pace_scy_100</code>, <code>pace_scm_100</code>, <code>pace_lcm_100</code>, <code>parental_contact</code>. Headers are case-insensitive; extra columns are ignored. DOB accepts <code>YYYY-MM-DD</code> or <code>MM/DD/YYYY</code>.
+                </div>
+
+                <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <label style={{ padding: "5px 11px", background: "#334155", color: "#cbd5e1", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                    📁 Choose CSV file
+                    <input type="file" accept=".csv,.tsv,.txt" onChange={onFile} style={{ display: "none" }} />
+                  </label>
+                  <button onClick={downloadTemplate}
+                    style={{ padding: "5px 11px", background: "transparent", color: "#3b82f6", border: "1px solid #3b82f6", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                    📄 Download template
+                  </button>
+                </div>
+
+                <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Or paste CSV/TSV here:</label>
+                <textarea value={text} onChange={e => { setText(e.target.value); setParsed(null); setErr(null); }}
+                  placeholder="name,dob,initials,pace_scy_100,pace_scm_100,pace_lcm_100,parental_contact&#10;Sarah Johnson,2010-03-15,SJ,2:05,,,parent@example.com"
+                  rows={8}
+                  style={{ width: "100%", padding: "8px 10px", fontSize: 12, fontFamily: "monospace", background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, resize: "vertical", boxSizing: "border-box" }} />
+
+                <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+                  <button onClick={parse} disabled={!text.trim()}
+                    style={{ padding: "6px 14px", background: text.trim() ? "#3b82f6" : "#475569", color: text.trim() ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: text.trim() ? "pointer" : "not-allowed" }}>
+                    Parse
+                  </button>
+                  {parsed && (
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>
+                      {validCount} valid · {invalidCount > 0 ? <span style={{ color: "#fca5a5" }}>{invalidCount} invalid</span> : "0 invalid"}
+                    </span>
+                  )}
+                </div>
+
+                {err && <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 8 }}>{err}</div>}
+
+                {parsed && parsed.length > 0 && (
+                  <div style={{ marginTop: 14, maxHeight: 260, overflow: "auto", border: "1px solid #334155", borderRadius: 6 }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead style={{ background: "#0f172a", position: "sticky", top: 0 }}>
+                        <tr>
+                          <th style={{ padding: "6px 8px", textAlign: "left", color: "#94a3b8", fontWeight: 700 }}>#</th>
+                          <th style={{ padding: "6px 8px", textAlign: "left", color: "#94a3b8", fontWeight: 700 }}>Status</th>
+                          <th style={{ padding: "6px 8px", textAlign: "left", color: "#94a3b8", fontWeight: 700 }}>Name</th>
+                          <th style={{ padding: "6px 8px", textAlign: "left", color: "#94a3b8", fontWeight: 700 }}>DOB</th>
+                          <th style={{ padding: "6px 8px", textAlign: "left", color: "#94a3b8", fontWeight: 700 }}>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsed.map(row => (
+                          <tr key={row.idx} style={{ background: row.error ? "#dc262611" : "transparent", borderTop: "1px solid #334155" }}>
+                            <td style={{ padding: "5px 8px", color: "#64748b" }}>{row.idx + 1}</td>
+                            <td style={{ padding: "5px 8px" }}>
+                              {row.error
+                                ? <span style={{ color: "#ef4444" }}>✗</span>
+                                : <span style={{ color: "#22c55e" }}>✓</span>}
+                            </td>
+                            <td style={{ padding: "5px 8px", color: "#e2e8f0" }}>{row.raw.name || "—"}</td>
+                            <td style={{ padding: "5px 8px", color: "#cbd5e1", fontFamily: "monospace" }}>
+                              {row.normalized?.dob || row.raw.dob || "—"}
+                            </td>
+                            <td style={{ padding: "5px 8px", color: row.error ? "#fca5a5" : "#64748b", fontSize: 11 }}>
+                              {row.error || (row.normalized?.initials ? `initials: ${row.normalized.initials}` : "")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {parsed && parsed.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <button onClick={submit} disabled={submitting || validCount === 0}
+                      style={{ padding: "7px 14px", background: validCount > 0 ? "#22c55e" : "#475569", color: validCount > 0 ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: (validCount > 0 && !submitting) ? "pointer" : "not-allowed" }}>
+                      {submitting ? "Importing…" : `Import ${validCount} swimmer${validCount === 1 ? "" : "s"}`}
+                    </button>
+                    <button onClick={onClose}
+                      style={{ padding: "7px 14px", background: "#334155", color: "#cbd5e1", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer" }}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       );
     }
