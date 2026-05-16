@@ -1228,6 +1228,7 @@ function rowToManagedSwimmer(r) {
   return {
     id:                   r.id,
     owner_coach_sub:      r.owner_coach_sub,
+    team_id:              r.team_id,
     display_name:         r.display_name,
     initials:             r.initials,
     dob:                  dateToYmd(r.dob),
@@ -1246,7 +1247,19 @@ function rowToManagedSwimmer(r) {
   };
 }
 
-export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, initials = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
+// Verify the coach has an active role on the team. Used at insert/update
+// time when team_id is set on a managed swimmer to prevent a coach from
+// attaching swimmers to teams they don't belong to.
+async function coachIsOnTeam(coachSub, teamId) {
+  if (!coachSub || !teamId) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `team_coaches` WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
+    [teamId, coachSub]
+  );
+  return rows.length > 0;
+}
+
+export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, team_id = null, initials = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
   if (!ownerSub) throw new Error("ownerSub required");
   if (!display_name || typeof display_name !== "string") throw new Error("display_name required");
   if (display_name.length > 120) throw new Error("display_name max 120 chars");
@@ -1255,15 +1268,20 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
   if (initials && initials.length > 4) throw new Error("initials max 4 chars");
   if (parental_contact && parental_contact.length > 255) throw new Error("parental_contact max 255 chars");
   if (gender !== null && gender !== "" && !GENDER_VALUES.includes(gender)) throw new Error("bad gender");
+  // team_id is OPTIONAL. If provided, verify the coach belongs to it.
+  if (team_id) {
+    const ok = await coachIsOnTeam(ownerSub, team_id);
+    if (!ok) throw new Error("not a coach on this team");
+  }
   await dbEnsureUser(ownerSub);
   const id = genManagedId();
   await pool.query(
     "INSERT INTO `coach_managed_swimmers` " +
-    "(`id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
+    "(`id`, `owner_coach_sub`, `team_id`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
     " `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`) " +
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
-      id, ownerSub, display_name.trim(), initials || null, dob, gender || null,
+      id, ownerSub, team_id || null, display_name.trim(), initials || null, dob, gender || null,
       parental_contact || null, parent_managed_flag ? 1 : 0,
       pace_scy_100 || null, pace_scm_100 || null, pace_lcm_100 || null,
     ]
@@ -1274,7 +1292,7 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
 export async function dbGetManagedSwimmer(id) {
   if (!id || !MS_ID_RE.test(id)) return null;
   const rows = await pool.query(
-    "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
+    "SELECT `id`, `owner_coach_sub`, `team_id`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
     "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `archived`, `created_at`, `updated_at` " +
     "FROM `coach_managed_swimmers`WHERE `id` = ?",
     [id]
@@ -1287,7 +1305,7 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
   if (!coachSub) return [];
   const whereArchived = includeArchived ? "" : "AND `archived` = 0 ";
   const rows = await pool.query(
-    "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
+    "SELECT `id`, `owner_coach_sub`, `team_id`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
     "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `archived`, `created_at`, `updated_at` " +
     "FROM `coach_managed_swimmers`" +
     "WHERE `owner_coach_sub` = ? " + whereArchived +
@@ -1325,6 +1343,23 @@ export async function dbUpdateManagedSwimmer(id, patch) {
     sets.push("`dob` = ?");
     vals.push(patch.dob);
   }
+  // team_id needs the owning-coach-on-team check; we need the owner_sub from
+  // the row to validate. Caller (server route) verifies ownership separately;
+  // here we look up to validate the team relationship.
+  if ("team_id" in patch) {
+    const newTeamId = patch.team_id === "" ? null : patch.team_id;
+    if (newTeamId) {
+      const ownerRows = await pool.query(
+        "SELECT `owner_coach_sub` FROM `coach_managed_swimmers` WHERE `id` = ? LIMIT 1",
+        [id]
+      );
+      if (!ownerRows[0]) return { ok: false, reason: "not_found" };
+      const ok = await coachIsOnTeam(ownerRows[0].owner_coach_sub, newTeamId);
+      if (!ok) return { ok: false, reason: "not_on_team" };
+    }
+    sets.push("`team_id` = ?");
+    vals.push(newTeamId);
+  }
   if (!sets.length) return { ok: true, affected: 0 };
   vals.push(id);
   const r = await pool.query(
@@ -1357,14 +1392,25 @@ export async function dbIsManagedSwimmerOwnedBy(id, coachSub) {
 // does NOT roll back the others; instead each row's outcome is returned for
 // the UI to display. Caller (server.js route) is responsible for capping the
 // array size to prevent runaway writes.
-export async function dbBulkCreateManagedSwimmers(ownerSub, rows) {
+//
+// `team_id` is batch-level: same team applied to every row. Validated ONCE
+// before the loop to avoid 80 redundant team_coaches lookups for an 80-row
+// import. If invalid, the whole batch is rejected before any insert.
+export async function dbBulkCreateManagedSwimmers(ownerSub, rows, { team_id = null } = {}) {
   if (!ownerSub) throw new Error("ownerSub required");
   if (!Array.isArray(rows)) throw new Error("rows must be array");
   await dbEnsureUser(ownerSub);                                              // single ensure for all rows
+  if (team_id) {
+    const ok = await coachIsOnTeam(ownerSub, team_id);
+    if (!ok) throw new Error("not a coach on this team");
+  }
   const results = [];
   for (let i = 0; i < rows.length; i++) {
     try {
-      const r = await dbCreateManagedSwimmer({ ownerSub, ...rows[i] });
+      // Pass team_id through; dbCreateManagedSwimmer will re-validate, which
+      // is fine — coachIsOnTeam is cheap. We could skip the per-row check
+      // since we already validated; not worth the optimization yet.
+      const r = await dbCreateManagedSwimmer({ ownerSub, team_id, ...rows[i] });
       results.push({ row_idx: i, ok: true, id: r.id });
     } catch (err) {
       results.push({ row_idx: i, ok: false, error: err.message || String(err) });
