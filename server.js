@@ -72,6 +72,12 @@ import {
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
   dbBulkCreateManagedSwimmers, dbUpdateMeDob,
+  dbCreateGroup, dbGetGroup, dbListGroupsForTeam, dbListGroupsForCoach,
+  dbUpdateGroup, dbArchiveGroup, dbSetGroupPhase, dbGetGroupRole,
+  dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
+  dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
+  dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbListTeamEvents,
+  dbListUpcomingEventsForUser,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1283,6 +1289,280 @@ app.post("/api/me/dob", checkOrigin, requireAuth, requireCsrf, writeLimiter, asy
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Groups (Stage 2 / R-C) ────────────────────────────────────────
+// Groups belong to teams (v1 UI requires a team; data model permits
+// team_id NULL for forward compat). Permission model:
+//   * Create group: team owner or team admin
+//   * Update / archive / set phase: group primary coach (R-J adds team
+//     admin override)
+//   * Add/remove group coaches: group primary
+//   * Add/remove members: group primary or assistant
+//
+// Members in R-C are managed-only; full-account members come in R-F.
+
+async function getCallerGroupRole(groupId, sub) {
+  return await dbGetGroupRole(groupId, sub);
+}
+
+// List groups in a team. Visible to anyone with a team-coach role.
+app.get("/api/teams/:teamId/groups", requireAuth, async (req, res) => {
+  try {
+    const role = await dbGetTeamRole(req.params.teamId, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team coach" });
+    const includeArchived = req.query.archived === "1" || req.query.archived === "true";
+    res.json(await dbListGroupsForTeam(req.params.teamId, { includeArchived }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Create a group within a team. Caller must have owner or admin role on the team.
+app.post("/api/teams/:teamId/groups", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const teamId = req.params.teamId;
+    const callerTeamRole = await dbGetTeamRole(teamId, req.userSub);
+    if (callerTeamRole !== "owner" && callerTeamRole !== "admin") {
+      return res.status(403).json({ error: "team owner or admin required to create groups" });
+    }
+    const { name, pool_mode_default = null } = req.body || {};
+    if (!name) return res.status(400).json({ error: "name required" });
+    const r = await dbCreateGroup({
+      teamId,
+      primaryCoachSub: req.userSub,
+      name,
+      poolModeDefault: pool_mode_default,
+    });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.create",
+      ...reqMeta(req),
+      details:   { group_id: r.id, team_id: teamId, name },
+    });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
+});
+
+// Group detail — visible to any group coach.
+app.get("/api/groups/:id", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const group = await dbGetGroup(req.params.id);
+    if (!group) return res.status(404).json({ error: "not found" });
+    const coaches = await dbListGroupCoaches(req.params.id);
+    const members = await dbListGroupMembers(req.params.id);
+    res.json({ ...group, viewer_role: role, coaches, members });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Update group (name, pool_mode_default, roster_visible_to_members). Primary only in v1.
+app.patch("/api/groups/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (role !== "primary") return res.status(403).json({ error: "group primary coach required" });
+    const r = await dbUpdateGroup(req.params.id, req.body || {});
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.update",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, fields: Object.keys(req.body || {}) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Archive / unarchive. Primary only.
+app.post("/api/groups/:id/archive", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (role !== "primary") return res.status(403).json({ error: "group primary coach required" });
+    const archived = req.body?.archived !== false;
+    const r = await dbArchiveGroup(req.params.id, archived);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: archived ? "group.archive" : "group.unarchive",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Set or clear the current training phase (decision #39).
+app.post("/api/groups/:id/phase", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const { phase = null } = req.body || {};
+    const r = await dbSetGroupPhase(req.params.id, phase);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.phase.set",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, phase },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Group coaches list / add / remove
+app.get("/api/groups/:id/coaches", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    res.json(await dbListGroupCoaches(req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/groups/:id/coaches", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const callerRole = await getCallerGroupRole(req.params.id, req.userSub);
+    if (callerRole !== "primary") return res.status(403).json({ error: "group primary coach required" });
+    const { coach_sub, role = "assistant" } = req.body || {};
+    if (!coach_sub) return res.status(400).json({ error: "coach_sub required" });
+    const r = await dbAddGroupCoach(req.params.id, coach_sub, role);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.add_coach",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, target_sub: coach_sub, role, reactivated: !!r.reactivated },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/groups/:id/coaches/:sub", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const callerRole = await getCallerGroupRole(req.params.id, req.userSub);
+    if (callerRole !== "primary") return res.status(403).json({ error: "group primary coach required" });
+    const r = await dbRemoveGroupCoach(req.params.id, req.params.sub);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.remove_coach",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, target_sub: req.params.sub },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Group members list / add (managed-only in R-C) / remove
+app.get("/api/groups/:id/members", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    res.json(await dbListGroupMembers(req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/groups/:id/members", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const callerRole = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!callerRole) return res.status(403).json({ error: "group coach required" });
+    const { managed_id = null, role = "primary" } = req.body || {};
+    // R-C ships managed-only adds. Full-account swimmer adds land in R-F.
+    if (!managed_id) return res.status(400).json({ error: "managed_id required (full-account adds land in R-F)" });
+    // The caller must own the managed swimmer they're adding (no cross-coach
+    // adds). dbAddGroupMember doesn't enforce this; gate here.
+    const owned = await dbIsManagedSwimmerOwnedBy(managed_id, req.userSub);
+    if (!owned) return res.status(403).json({ error: "must own this managed swimmer to add them" });
+    const r = await dbAddGroupMember(req.params.id, { managedId: managed_id, role });
+    if (!r.ok) return res.status(400).json({ error: r.reason, ...r });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.add_member",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, managed_id, role, member_id: r.id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/groups/:id/members/:memberId", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const callerRole = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!callerRole) return res.status(403).json({ error: "group coach required" });
+    // Verify the member belongs to this group (preventing cross-group misuse).
+    const m = await dbGetGroupMember(req.params.memberId);
+    if (!m || m.group_id !== req.params.id) return res.status(404).json({ error: "member not in this group" });
+    const reason = (req.body && req.body.reason) || null;
+    const r = await dbRemoveGroupMember(req.params.memberId, { reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.remove_member",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, member_id: Number(req.params.memberId), reason },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Team events (decision #38) ────────────────────────────────────
+
+// Coach-only create. Caller must have any role on the team.
+app.post("/api/teams/:teamId/events", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
+    if (!callerRole) return res.status(403).json({ error: "not a team coach" });
+    const { name, date } = req.body || {};
+    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, createdByCoachSub: req.userSub });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team_event.create",
+      ...reqMeta(req),
+      details:   { event_id: r.id, team_id: req.params.teamId, name, date },
+    });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
+});
+
+// List events for a specific team. Visible to team coaches AND members of any
+// group in the team.
+app.get("/api/teams/:teamId/events", requireAuth, async (req, res) => {
+  try {
+    // Visibility check: caller must have a team-coach role OR be a swimmer
+    // in any of the team's groups. Cheap to check coach side first.
+    const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
+    if (!callerRole) {
+      // Fall back to swimmer-side check. Cheap-ish query.
+      const rows = await pool.query(
+        "SELECT 1 FROM `group_members` gm " +
+        "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+        "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` = ? LIMIT 1",
+        [req.userSub, req.params.teamId]
+      );
+      if (rows.length === 0) return res.status(403).json({ error: "no access to this team's events" });
+    }
+    res.json(await dbListTeamEvents(req.params.teamId));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Delete event. Caller must have any role on the event's team.
+app.delete("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "not found" });
+    const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!callerRole) return res.status(403).json({ error: "not a team coach" });
+    const r = await dbDeleteTeamEvent(req.params.id);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team_event.delete",
+      ...reqMeta(req),
+      details:   { event_id: req.params.id, team_id: ev.team_id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Aggregated upcoming events for the pool-mode pill row (decision #38).
+app.get("/api/events/upcoming", requireAuth, async (req, res) => {
+  try { res.json(await dbListUpcomingEventsForUser(req.userSub)); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // ───── Static files ───────────────────────────────────────────────────
