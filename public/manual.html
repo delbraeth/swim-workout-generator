@@ -280,6 +280,7 @@
     <a href="#account">Account &amp; Sessions</a>
     <a href="#admin">Admin (admins only)</a>
     <a href="#teams">Teams (coaches)</a>
+    <a href="#swimmers">Managed Swimmers (coaches)</a>
     <a href="#catalog">Workout Catalog (coaches)</a>
     <a href="#parse-intent">Parse Intent (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
@@ -1142,6 +1143,52 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
         <div class="callout-body"><strong>Stage 1 only ships teams.</strong> Groups (training cohorts), members (swimmers), lane plans, workout assignments, and the swimmer-side "Assigned to me" view come in Stages 2–5 of the relationships build. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the full plan.</div>
+      </div>
+    </section>
+
+    <!-- ══ MANAGED SWIMMERS (COACH) ══ -->
+    <section id="swimmers">
+      <h2>Managed Swimmers (coach access)</h2>
+      <p>A <strong>managed swimmer</strong> is a roster entry you (the coach) own — name, paces, contact info — for someone who doesn't have their own full-account login. Think of it as a lightweight athlete record under your care. Once <a href="#teams">Teams</a> and groups are wired up, managed swimmers can be members of your groups alongside full-account swimmers.</p>
+      <p>The Managed Swimmers view is a <strong>first-class top-level roster</strong> — it shows all your managed profiles regardless of group placement, so you can build the roster before assigning anyone to a group.</p>
+
+      <h3>Access</h3>
+      <p>A cyan <strong>🏊 Managed swimmers</strong> button appears in the header for users with the <code>is_coach</code> flag (or <code>is_admin</code>). Granted via <strong>Admin → Users → Coach</strong>.</p>
+
+      <h3>Why DOB is required</h3>
+      <p>Every managed profile <strong>must have a date of birth</strong>. The DOB drives derived compliance properties — <em>minor</em> (under 18) and <em>COPPA-protected</em> (under 13) — which gate downstream features like the claim flow (under-13 swimmers cannot be claimed into a full account) and roster visibility (groups containing minors force roster-visibility off). Minor status is computed live, never stored: a swimmer's age changes silently as the calendar advances.</p>
+      <p>DOB itself is private. Other coaches and admins only see the swimmer's <em>age</em> and a <em>minor/adult</em> pill; the raw date is visible only to the owning coach.</p>
+
+      <h3>Fields</h3>
+      <ul>
+        <li><strong>Display name</strong> (required) — how the swimmer appears in lists.</li>
+        <li><strong>Initials</strong> (optional, max 4 chars) — used in compact UIs.</li>
+        <li><strong>DOB</strong> (required) — date of birth. Bounded between 1900-01-01 and today.</li>
+        <li><strong>Paces</strong> (optional) — per pool mode (SCY / SCM / LCM), in M:SS format. Coach enters their best knowledge of the swimmer's 100-yard/100-meter cruise pace.</li>
+        <li><strong>Parental contact</strong> (optional in v1) — email or phone for the swimmer's parent or guardian. Required at app layer for under-18 swimmers in high-school teams; will be required for the claim flow when a 13–17-year-old gets a claim link.</li>
+        <li><strong>Parent-managed flag</strong> — for club-type teams, lets the coach mark a 13+ profile as parent-controlled, blocking the claim flow even though the age threshold has passed.</li>
+      </ul>
+
+      <h3>Browsing</h3>
+      <p>The roster shows non-archived swimmers by default; toggle <strong>Show archived</strong> to include archived rows. Each card shows display name, age + DOB, optional SCY pace, and a colored minor pill (red "under 13" / amber "minor" / grey "adult"). Click any card to open the detail view.</p>
+
+      <h3>Editing &amp; archive</h3>
+      <p>From the detail view, click <strong>✎ Edit</strong> to update any field including DOB (validation is re-applied; out-of-bounds dates are rejected). The <strong>Archive</strong> button soft-hides the swimmer without deleting any data — toggle back to restore. Per the scope, no managed-swimmer record is ever hard-deleted by the coach (claim migration is the only path that removes the row, and only after repointing all dependent data to the new full-account swimmer).</p>
+
+      <h3>What managed swimmers can't do (yet)</h3>
+      <ul>
+        <li><strong>Log in</strong> — managed profiles have no auth identity. The coach is the operator for all their data.</li>
+        <li><strong>Be claimed</strong> — claim-into-full-account flow lands in Stage 5 (R-I). The data model is ready (per-data-class destinations defined in the scope doc) but no UI yet.</li>
+        <li><strong>Join groups</strong> — groups + members come in Stage 2 (R-C).</li>
+        <li><strong>Receive assignments</strong> — workout assignments + the "Assigned to me" surface come in Stages 3 and 4.</li>
+      </ul>
+
+      <h3>DOB soft-prompt for your own account</h3>
+      <p>If you signed up before DOB was required (most existing accounts), you'll see a <strong>Quick question — your date of birth</strong> modal on next app load. Enter it and Save, or tap <strong>Remind me later</strong>. The prompt is dismissable for the current browser tab; it reappears on the next session. Once you've entered your DOB, the modal stops appearing entirely. Hard gates that require DOB (joining a group, accepting a coach invite) will re-prompt unconditionally when those features ship in later stages.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Stage 1 only ships managed swimmers + DOB.</strong> Bulk swimmer import (CSV / paste) is a planned follow-up before Stage 2 — adding 80 swimmers one at a time isn't the intended workflow. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the full plan.</div>
       </div>
     </section>
 
