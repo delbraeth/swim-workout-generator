@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-16 23:10 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-16 23:28 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10222,7 +10222,44 @@
       const [renameVal,   setRenameVal]   = React.useState("");
       const [addCoachSub, setAddCoachSub] = React.useState("");
       const [coachPool,   setCoachPool]   = React.useState(null);                // null = unloaded
+      // R-C additions: groups in this team, team events, and managed-roster
+      // (filtered to team) for the member-add picker inside each group.
+      const [groups,        setGroups]        = React.useState(null);             // null = unloaded
+      const [events,        setEvents]        = React.useState(null);
+      const [managedInTeam, setManagedInTeam] = React.useState(null);
+      const [creatingGroup, setCreatingGroup] = React.useState(false);
+      const [newGroupName,  setNewGroupName]  = React.useState("");
+      const [newGroupPool,  setNewGroupPool]  = React.useState("");
+      const [creatingEvent, setCreatingEvent] = React.useState(false);
+      const [newEventName,  setNewEventName]  = React.useState("");
+      const [newEventDate,  setNewEventDate]  = React.useState("");
       const [msg,         setMsg]         = React.useState(null);
+
+      const loadGroups = React.useCallback(async (teamId) => {
+        if (!teamId) { setGroups(null); return; }
+        try {
+          const res = await fetch(`/api/teams/${teamId}/groups`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setGroups(await res.json());
+        } catch (err) { setGroups([]); }
+      }, []);
+      const loadEvents = React.useCallback(async (teamId) => {
+        if (!teamId) { setEvents(null); return; }
+        try {
+          const res = await fetch(`/api/teams/${teamId}/events`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setEvents(await res.json());
+        } catch (err) { setEvents([]); }
+      }, []);
+      const loadManagedInTeam = React.useCallback(async (teamId) => {
+        if (!teamId) { setManagedInTeam(null); return; }
+        try {
+          const res = await fetch("/api/managed-swimmers", { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const all = await res.json();
+          setManagedInTeam((Array.isArray(all) ? all : []).filter(s => s.team_id === teamId && !s.archived));
+        } catch (err) { setManagedInTeam([]); }
+      }, []);
 
       const loadList = React.useCallback(async () => {
         try {
@@ -10250,7 +10287,12 @@
       }, []);
 
       React.useEffect(() => { loadList(); }, [loadList]);
-      React.useEffect(() => { loadDetail(selectedId); }, [selectedId, loadDetail]);
+      React.useEffect(() => {
+        loadDetail(selectedId);
+        loadGroups(selectedId);
+        loadEvents(selectedId);
+        loadManagedInTeam(selectedId);
+      }, [selectedId, loadDetail, loadGroups, loadEvents, loadManagedInTeam]);
 
       // Load the coach pool on first detail-open. Reused across visits to the
       // same team session; if a coach is added/removed they'll appear/disappear
@@ -10355,6 +10397,55 @@
         } catch (err) {
           setMsg(`Error: ${err.message}`);
         }
+      };
+
+      // R-C: create group within this team
+      const handleCreateGroup = async () => {
+        if (!newGroupName.trim()) { setMsg("Group name required"); return; }
+        try {
+          const res = await fetch(`/api/teams/${detail.id}/groups`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ name: newGroupName.trim(), pool_mode_default: newGroupPool || null }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setNewGroupName(""); setNewGroupPool(""); setCreatingGroup(false); setMsg(null);
+          await loadGroups(detail.id);
+        } catch (err) { setMsg(`Error creating group: ${err.message}`); }
+      };
+
+      // R-C: create team event
+      const handleCreateEvent = async () => {
+        if (!newEventName.trim()) { setMsg("Event name required"); return; }
+        if (!newEventDate)        { setMsg("Event date required"); return; }
+        try {
+          const res = await fetch(`/api/teams/${detail.id}/events`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setNewEventName(""); setNewEventDate(""); setCreatingEvent(false); setMsg(null);
+          await loadEvents(detail.id);
+        } catch (err) { setMsg(`Error creating event: ${err.message}`); }
+      };
+
+      // R-C: delete team event
+      const handleDeleteEvent = async (eventId) => {
+        if (!window.confirm("Delete this event?")) return;
+        try {
+          const res = await fetch(`/api/events/${eventId}`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await loadEvents(detail.id);
+        } catch (err) { setMsg(`Error: ${err.message}`); }
       };
 
       // ── Render ──────────────────────────────────────────────────────
@@ -10469,6 +10560,113 @@
               })()}
             </div>
 
+            {/* ── Groups in this team (R-C, amber accents) ───────────── */}
+            <div style={{ background: "#1e293b", border: "1px solid #f59e0b", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <h3 style={{ color: "#f59e0b", marginTop: 0, marginBottom: 0, fontSize: 15 }}>🏊‍♀️ Groups ({(groups || []).length})</h3>
+                {(detail.viewer_role === "owner" || detail.viewer_role === "admin") && !detail.archived && (
+                  <button onClick={() => setCreatingGroup(c => !c)}
+                    style={{ padding: "5px 11px", background: creatingGroup ? "#334155" : "#f59e0b", color: creatingGroup ? "#cbd5e1" : "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    {creatingGroup ? "Cancel" : "+ New group"}
+                  </button>
+                )}
+              </div>
+              {creatingGroup && (
+                <div style={{ background: "#0f172a", border: "1px solid #f59e0b", borderRadius: 6, padding: 10, marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, color: "#94a3b8", display: "block", marginBottom: 3 }}>Group name</label>
+                  <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+                    placeholder="e.g. Tuesday Sprint"
+                    style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5, marginBottom: 8 }} />
+                  <label style={{ fontSize: 11, color: "#94a3b8", display: "block", marginBottom: 3 }}>Default pool mode (optional)</label>
+                  <select value={newGroupPool} onChange={e => setNewGroupPool(e.target.value)}
+                    style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5, marginBottom: 10 }}>
+                    <option value="">— inherit / unspecified —</option>
+                    <option value="25y">25 yd (SCY)</option>
+                    <option value="25m">25 m (SCM)</option>
+                    <option value="50m">50 m (LCM)</option>
+                  </select>
+                  <button onClick={handleCreateGroup}
+                    style={{ padding: "6px 14px", background: "#f59e0b", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    Create group
+                  </button>
+                </div>
+              )}
+              {groups === null ? (
+                <div style={{ color: "#64748b", fontSize: 12, fontStyle: "italic" }}>Loading…</div>
+              ) : groups.length === 0 ? (
+                <div style={{ color: "#64748b", fontSize: 12, fontStyle: "italic" }}>No groups yet.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {groups.map(g => (
+                    <GroupRow key={g.id} group={g}
+                      coachPool={coachPool || []}
+                      managedInTeam={managedInTeam || []}
+                      onChanged={() => loadGroups(detail.id)} />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Team events (decision #38, amber accents) ─────────── */}
+            <div style={{ background: "#1e293b", border: "1px solid #f59e0b", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <h3 style={{ color: "#f59e0b", marginTop: 0, marginBottom: 0, fontSize: 15 }}>📅 Events ({(events || []).length})</h3>
+                {detail.viewer_role && !detail.archived && (
+                  <button onClick={() => setCreatingEvent(c => !c)}
+                    style={{ padding: "5px 11px", background: creatingEvent ? "#334155" : "#f59e0b", color: creatingEvent ? "#cbd5e1" : "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    {creatingEvent ? "Cancel" : "+ New event"}
+                  </button>
+                )}
+              </div>
+              {creatingEvent && (
+                <div style={{ background: "#0f172a", border: "1px solid #f59e0b", borderRadius: 6, padding: 10, marginBottom: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
+                    <div>
+                      <label style={{ fontSize: 11, color: "#94a3b8", display: "block", marginBottom: 3 }}>Event name</label>
+                      <input value={newEventName} onChange={e => setNewEventName(e.target.value)}
+                        placeholder="e.g. Cincinnati Invite"
+                        style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, color: "#94a3b8", display: "block", marginBottom: 3 }}>Date</label>
+                      <input type="date" value={newEventDate} onChange={e => setNewEventDate(e.target.value)}
+                        style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }} />
+                    </div>
+                  </div>
+                  <button onClick={handleCreateEvent}
+                    style={{ padding: "6px 14px", background: "#f59e0b", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    Create event
+                  </button>
+                </div>
+              )}
+              {events === null ? (
+                <div style={{ color: "#64748b", fontSize: 12, fontStyle: "italic" }}>Loading…</div>
+              ) : events.length === 0 ? (
+                <div style={{ color: "#64748b", fontSize: 12, fontStyle: "italic" }}>No events yet.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {events.map(ev => {
+                    const isPast = new Date(ev.date) < new Date(new Date().toDateString());
+                    return (
+                      <div key={ev.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, opacity: isPast ? 0.6 : 1 }}>
+                        <div>
+                          <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 13 }}>{ev.name}</span>
+                          <span style={{ marginLeft: 10, color: "#94a3b8", fontSize: 12 }}>{ev.date}</span>
+                          {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "#64748b", fontStyle: "italic" }}>(past)</span>}
+                        </div>
+                        {detail.viewer_role && (
+                          <button onClick={() => handleDeleteEvent(ev.id)}
+                            style={{ padding: "3px 9px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {msg && <div style={{ color: "#fca5a5", fontSize: 12, padding: "8px 0" }}>{msg}</div>}
           </div>
         );
@@ -10539,6 +10737,327 @@
                   </div>
                 </button>
               ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // GroupRow — expandable component for a group within TeamsView's team
+    // detail (R-C). Shows header (name, phase, member count) and expands to
+    // members + coaches + phase setter + visibility/archive controls.
+    const PHASE_OPTIONS = [
+      { v: "",         label: "—", color: "#64748b" },
+      { v: "base",     label: "Base 🌱",     color: "#22c55e" },
+      { v: "build",    label: "Build 🔨",    color: "#3b82f6" },
+      { v: "peak",     label: "Peak ⛰️",     color: "#a78bfa" },
+      { v: "taper",    label: "Taper 📉",    color: "#f59e0b" },
+      { v: "recovery", label: "Recovery 🌿", color: "#14b8a6" },
+    ];
+    function phaseOption(v) {
+      return PHASE_OPTIONS.find(p => p.v === (v || "")) || PHASE_OPTIONS[0];
+    }
+
+    function GroupRow({ group, coachPool, managedInTeam, onChanged }) {
+      const [expanded, setExpanded] = React.useState(false);
+      const [detail,   setDetail]   = React.useState(null);
+      const [addMemberId, setAddMemberId] = React.useState("");
+      const [addMemberRole, setAddMemberRole] = React.useState("primary");
+      const [addCoachSub, setAddCoachSub] = React.useState("");
+      const [err, setErr] = React.useState(null);
+
+      const load = React.useCallback(async () => {
+        if (!group?.id) return;
+        try {
+          const res = await fetch(`/api/groups/${group.id}`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setDetail(await res.json());
+          setErr(null);
+        } catch (e) { setErr(e.message); }
+      }, [group?.id]);
+      React.useEffect(() => { if (expanded) load(); }, [expanded, load]);
+
+      const isPrimary = detail?.viewer_role === "primary";
+      const phase = phaseOption(group.current_phase);
+
+      const setPhase = async (v) => {
+        try {
+          const res = await fetch(`/api/groups/${group.id}/phase`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ phase: v || null }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          if (onChanged) onChanged();                                          // refresh parent list (header reflects phase)
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      const toggleVisibility = async () => {
+        try {
+          const res = await fetch(`/api/groups/${group.id}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ roster_visible_to_members: !detail.roster_visible_to_members }),
+          });
+          const j = await res.json();
+          if (!res.ok) {
+            // Decision #28: server returns reason "minors_present_visibility_locked_off"
+            if (j.reason === "minors_present_visibility_locked_off") {
+              throw new Error("Cannot enable roster visibility — group has under-18 members. Privacy gate is enforced.");
+            }
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      const archive = async () => {
+        if (!window.confirm(`Archive group "${group.name}"? Members will be stamped as left at archive time.`)) return;
+        try {
+          const res = await fetch(`/api/groups/${group.id}/archive`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ archived: true }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          setExpanded(false);
+          if (onChanged) onChanged();
+        } catch (e) { setErr(e.message); }
+      };
+
+      const addMember = async () => {
+        if (!addMemberId) { setErr("Pick a swimmer to add"); return; }
+        try {
+          const res = await fetch(`/api/groups/${group.id}/members`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ managed_id: addMemberId, role: addMemberRole }),
+          });
+          const j = await res.json();
+          if (!res.ok) {
+            // Decision #33: surface the conflict-group name if returned
+            if (j.reason === "primary_in_other_group_same_coach") {
+              throw new Error(`Already a primary in another of your groups: ${j.conflict_group_name || j.conflict_group_id}. Either change their role here to 'secondary' or remove them from the other group first.`);
+            }
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          setAddMemberId("");
+          setErr(null);
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      const removeMember = async (memberId, name) => {
+        const reason = window.prompt(`Remove ${name} from ${group.name}? (Optional: enter a reason)`, "");
+        if (reason === null) return;                                            // cancel
+        try {
+          const res = await fetch(`/api/groups/${group.id}/members/${memberId}`, {
+            method:  "DELETE",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ reason: reason || null }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      const addCoach = async () => {
+        if (!addCoachSub) return;
+        try {
+          const res = await fetch(`/api/groups/${group.id}/coaches`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ coach_sub: addCoachSub, role: "assistant" }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          setAddCoachSub("");
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      const removeCoach = async (sub) => {
+        if (!window.confirm("Remove this coach from the group?")) return;
+        try {
+          const res = await fetch(`/api/groups/${group.id}/coaches/${encodeURIComponent(sub)}`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      // Available managed swimmers for the add-member picker = team's managed
+      // swimmers minus those already active in this group.
+      const activeMemberIds = new Set((detail?.members || []).map(m => m.member_managed_id).filter(Boolean));
+      const candidates      = (managedInTeam || []).filter(s => !activeMemberIds.has(s.id));
+      const activeCoachSubs = new Set((detail?.coaches || []).map(c => c.coach_sub));
+      const coachCandidates = (coachPool || []).filter(c => !activeCoachSubs.has(c.sub));
+
+      return (
+        <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6 }}>
+          <button onClick={() => setExpanded(e => !e)}
+            style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 12px", background: "transparent", border: "none", color: "#e2e8f0", cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>
+                  {expanded ? "▾" : "▸"} {group.name}
+                  {group.archived && <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#64748b22", border: "1px solid #64748b", color: "#94a3b8" }}>archived</span>}
+                </span>
+                {group.pool_mode_default && <span style={{ marginLeft: 8, fontSize: 10, color: "#94a3b8" }}>· {group.pool_mode_default}</span>}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {group.current_phase && (
+                  <span title={`Phase set ${group.phase_set_at ? new Date(group.phase_set_at).toLocaleDateString() : ""}`}
+                    style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: `${phase.color}22`, border: `1px solid ${phase.color}`, color: phase.color, fontWeight: 700 }}>
+                    {phase.label}
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
+          {expanded && (
+            <div style={{ padding: "0 14px 14px", borderTop: "1px solid #334155" }}>
+              {err && <div style={{ color: "#fca5a5", fontSize: 11, padding: "8px 0" }}>{err}</div>}
+              {!detail ? (
+                <div style={{ color: "#64748b", fontSize: 12, padding: "10px 0" }}>Loading…</div>
+              ) : (
+                <>
+                  {/* Members */}
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Members ({(detail.members || []).length})
+                    </div>
+                    {(detail.members || []).length === 0 && <div style={{ fontSize: 12, color: "#64748b", fontStyle: "italic" }}>No members yet.</div>}
+                    {(detail.members || []).map(m => (
+                      <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", fontSize: 12 }}>
+                        <span style={{ color: "#cbd5e1" }}>
+                          {m.display_name}
+                          <span style={{ marginLeft: 6, color: "#64748b" }}>· age {m.age}</span>
+                          <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: m.role === "primary" ? "#22c55e22" : "#33415522", border: `1px solid ${m.role === "primary" ? "#22c55e" : "#475569"}`, color: m.role === "primary" ? "#22c55e" : "#94a3b8", fontWeight: 700 }}>
+                            {m.role}
+                          </span>
+                          {m.is_coppa_protected && <span style={{ marginLeft: 4, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#dc262622", border: "1px solid #dc2626", color: "#dc2626", fontWeight: 700 }}>under 13</span>}
+                          {m.is_minor && !m.is_coppa_protected && <span style={{ marginLeft: 4, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#f59e0b22", border: "1px solid #f59e0b", color: "#f59e0b", fontWeight: 700 }}>minor</span>}
+                        </span>
+                        {detail.viewer_role && (
+                          <button onClick={() => removeMember(m.id, m.display_name)}
+                            style={{ padding: "2px 8px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {detail.viewer_role && candidates.length > 0 && (
+                      <div style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center" }}>
+                        <select value={addMemberId} onChange={e => setAddMemberId(e.target.value)}
+                          style={{ flex: 1, padding: "5px 9px", fontSize: 12, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }}>
+                          <option value="">— pick a swimmer —</option>
+                          {candidates.map(s => (
+                            <option key={s.id} value={s.id}>{s.display_name} ({s.age}y)</option>
+                          ))}
+                        </select>
+                        <select value={addMemberRole} onChange={e => setAddMemberRole(e.target.value)}
+                          style={{ padding: "5px 9px", fontSize: 12, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }}>
+                          <option value="primary">primary</option>
+                          <option value="secondary">secondary</option>
+                        </select>
+                        <button onClick={addMember} disabled={!addMemberId}
+                          style={{ padding: "5px 11px", background: addMemberId ? "#f59e0b" : "#475569", color: addMemberId ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: addMemberId ? "pointer" : "not-allowed" }}>
+                          Add
+                        </button>
+                      </div>
+                    )}
+                    {detail.viewer_role && candidates.length === 0 && (managedInTeam || []).length === 0 && (
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, fontStyle: "italic" }}>
+                        No team-affiliated managed swimmers available. Add some via 🏊 Managed swimmers.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Group coaches */}
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Coaches ({(detail.coaches || []).length})
+                    </div>
+                    {(detail.coaches || []).map(c => (
+                      <div key={c.coach_sub} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 12 }}>
+                        <span style={{ color: "#cbd5e1" }}>
+                          {c.display_name || "(no name)"}
+                          <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: c.role === "primary" ? "#a78bfa22" : "#33415522", border: `1px solid ${c.role === "primary" ? "#a78bfa" : "#475569"}`, color: c.role === "primary" ? "#a78bfa" : "#94a3b8", fontWeight: 700 }}>{c.role}</span>
+                        </span>
+                        {isPrimary && c.role !== "primary" && (
+                          <button onClick={() => removeCoach(c.coach_sub)}
+                            style={{ padding: "2px 8px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {isPrimary && coachCandidates.length > 0 && (
+                      <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
+                        <select value={addCoachSub} onChange={e => setAddCoachSub(e.target.value)}
+                          style={{ flex: 1, padding: "5px 9px", fontSize: 12, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }}>
+                          <option value="">— add an assistant coach —</option>
+                          {coachCandidates.map(c => (
+                            <option key={c.sub} value={c.sub}>{c.display_name || "(no name)"}{c.initials ? ` (${c.initials})` : ""} · …{c.sub.slice(-6)}</option>
+                          ))}
+                        </select>
+                        <button onClick={addCoach} disabled={!addCoachSub}
+                          style={{ padding: "5px 11px", background: addCoachSub ? "#3b82f6" : "#475569", color: addCoachSub ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: addCoachSub ? "pointer" : "not-allowed" }}>
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Phase + settings (primary only) */}
+                  {isPrimary && (
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        Training phase
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {PHASE_OPTIONS.map(p => {
+                          const active = (group.current_phase || "") === p.v;
+                          return (
+                            <button key={p.v} onClick={() => setPhase(p.v)}
+                              style={{ padding: "4px 10px", borderRadius: 999, border: `1px solid ${active ? p.color : "#334155"}`, background: active ? `${p.color}22` : "transparent", color: active ? p.color : "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              {p.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <button onClick={toggleVisibility}
+                          style={{ padding: "5px 11px", background: detail.roster_visible_to_members ? "#22c55e" : "#334155", color: detail.roster_visible_to_members ? "#0f172a" : "#cbd5e1", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          Roster visible to members: {detail.roster_visible_to_members ? "ON" : "OFF"}
+                        </button>
+                        <button onClick={archive}
+                          style={{ padding: "5px 11px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                          Archive group
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -13625,6 +14144,31 @@
         return { name: nextEvent.name || "Your event", days };
       }, [nextEvent]);
 
+      // R-C / decision #38: upcoming team events (across all the user's teams
+      // they're a coach on or have a group membership in). Refreshed when the
+      // user navigates between views to absorb event creates/deletes promptly.
+      const [upcomingTeamEvents, setUpcomingTeamEvents] = useState([]);
+      useEffect(() => {
+        if (!authenticated) return;
+        fetch("/api/events/upcoming", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => setUpcomingTeamEvents(Array.isArray(data) ? data : []))
+          .catch(() => setUpcomingTeamEvents([]));
+      }, [authenticated, view]);
+      // Pick the most-imminent team event for the pill. Server returns events
+      // in date-ascending order, so we just take the first non-past one.
+      const teamEventPill = useMemo(() => {
+        if (!upcomingTeamEvents.length) return null;
+        const today = new Date(); today.setHours(0,0,0,0);
+        for (const ev of upcomingTeamEvents) {
+          const target = new Date(`${ev.date}T00:00:00`);
+          if (isNaN(target)) continue;
+          const days = Math.round((target - today) / 86400000);
+          if (days >= 0) return { ...ev, days };
+        }
+        return null;
+      }, [upcomingTeamEvents]);
+
       // P: derive the display name used for personalization throughout the app.
       // Falls back display_name → initials → null. Possessive needs the first
       // word only, so "Patrick James" → "Patrick" → "Patrick's workout."
@@ -13877,10 +14421,35 @@
                   </button>
                 ))}
               </div>
+              {/* Team event pill (decision #38) — most-imminent team event
+                  across all teams the user is in. Renders to the left of the
+                  personal next_event pill. marginLeft: auto on the FIRST one
+                  pushes the pair right; subsequent siblings flow naturally. */}
+              {teamEventPill && (
+                <div title={`${teamEventPill.team_name}: ${teamEventPill.name} — ${teamEventPill.date}`}
+                  style={{
+                    marginLeft: nextEventCountdown ? 0 : "auto",
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "5px 11px", borderRadius: 999,
+                    background: teamEventPill.days === 0 ? "#f59e0b22" : "#1e3a5f",
+                    border: `1px solid ${teamEventPill.days === 0 ? "#f59e0b" : "#f59e0b"}`,
+                    color: teamEventPill.days === 0 ? "#fde68a" : "#fbbf24",
+                    fontSize: 12, fontWeight: 700,
+                  }}>
+                  📅
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
+                    {teamEventPill.team_name}: {teamEventPill.name}
+                  </span>
+                  <span style={{ color: "#64748b", fontWeight: 400 }}>·</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {teamEventPill.days === 0 ? "today!" : teamEventPill.days === 1 ? "1 day" : `${teamEventPill.days} days`}
+                  </span>
+                </div>
+              )}
               {nextEventCountdown && (
                 <div title={`${nextEventCountdown.name} — ${nextEvent.date}`}
                   style={{
-                    marginLeft: "auto",
+                    marginLeft: teamEventPill ? 6 : "auto",
                     display: "inline-flex", alignItems: "center", gap: 6,
                     padding: "5px 11px", borderRadius: 999,
                     background: nextEventCountdown.days === 0 ? "#fbbf2422" : "#1e3a5f",
