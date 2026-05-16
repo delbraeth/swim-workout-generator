@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-16 22:27 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-16 22:50 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9167,6 +9167,67 @@
 
     // Single editable row used in the Profile modal's Identity panel.
     // Click "Edit" → input + Save/Cancel. onSave throws on validation error.
+    // Profile gender row — matches EditableProfileField row layout but uses a
+    // select. Saves through PATCH /api/me (same endpoint, gender is in the
+    // allowed-fields list per migration 014 / db.js dbUpdateMe).
+    function ProfileGenderRow({ me, setMe, onProfileChange }) {
+      const [editing, setEditing] = React.useState(false);
+      const [draft,   setDraft]   = React.useState("");
+      const [saving,  setSaving]  = React.useState(false);
+      const [error,   setError]   = React.useState(null);
+      const startEdit = () => { setDraft(me?.gender || ""); setError(null); setEditing(true); };
+      const commit = async () => {
+        setSaving(true); setError(null);
+        try {
+          const res = await fetch("/api/me", {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ gender: draft || null }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          setMe(prev => prev ? { ...prev, gender: draft || null } : prev);
+          if (onProfileChange) onProfileChange();
+          setEditing(false);
+        } catch (err) { setError(err.message || String(err)); }
+        finally { setSaving(false); }
+      };
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
+          <span style={{ color: "#64748b", width: 100, flexShrink: 0 }}>Gender:</span>
+          {editing ? (
+            <>
+              <select value={draft} onChange={e => setDraft(e.target.value)} autoFocus
+                style={{ flex: 1, minWidth: 0, padding: "5px 9px", fontSize: 13, background: "#0f172a", color: "#e2e8f0", border: "1px solid #3b82f6", borderRadius: 5, outline: "none" }}>
+                {GENDER_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+              </select>
+              <button onClick={commit} disabled={saving}
+                style={{ padding: "5px 11px", borderRadius: 5, border: "none", background: saving ? "#1e3a5f" : "#3b82f6", color: "#fff", fontSize: 12, fontWeight: 700, cursor: saving ? "default" : "pointer" }}>
+                {saving ? "…" : "Save"}
+              </button>
+              <button onClick={() => setEditing(false)} disabled={saving}
+                style={{ padding: "5px 9px", borderRadius: 5, border: "1px solid #334155", background: "transparent", color: "#64748b", fontSize: 11, cursor: "pointer" }}>
+                Cancel
+              </button>
+              {error && <span style={{ color: "#fca5a5", fontSize: 11 }}>{error}</span>}
+            </>
+          ) : (
+            <>
+              <span style={{ flex: 1, color: "#e2e8f0", fontWeight: 600 }}>
+                {me?.gender ? genderLabel(me.gender) : <span style={{ color: "#475569", fontStyle: "italic", fontWeight: 400 }}>not set</span>}
+              </span>
+              <button onClick={startEdit}
+                style={{ padding: "3px 9px", borderRadius: 5, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 11, cursor: "pointer" }}>
+                Edit
+              </button>
+            </>
+          )}
+        </div>
+      );
+    }
+
     function EditableProfileField({ label, value, placeholder, maxLength, type = "text", transform, badge, onSave }) {
       const [editing, setEditing] = React.useState(false);
       const [draft, setDraft]     = React.useState("");
@@ -10015,6 +10076,9 @@
                         setMe(prev => prev ? { ...prev, email: v || null, email_verified: (v === prev.email) ? prev.email_verified : false } : prev);
                         if (onProfileChange) onProfileChange();
                       }} />
+                    {/* Gender — custom row (EditableProfileField is input-only,
+                        gender needs a select). Saves through the same PATCH /api/me. */}
+                    <ProfileGenderRow me={me} setMe={setMe} onProfileChange={onProfileChange} />
                     <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 16px", marginTop: 4 }}>
                       <span style={{ color: "#64748b" }}>Member since:</span>
                       <span style={{ color: "#e2e8f0" }}>{fmtDate(me.created_at)}</span>
@@ -10504,7 +10568,7 @@
 
       function emptyForm() {
         return {
-          display_name: "", initials: "", dob: "",
+          display_name: "", initials: "", dob: "", gender: "",
           pace_scy_100: "", pace_scm_100: "", pace_lcm_100: "",
           parental_contact: "", parent_managed_flag: false,
         };
@@ -10534,6 +10598,7 @@
             display_name:        d.display_name || "",
             initials:            d.initials || "",
             dob:                 d.dob || "",
+            gender:              d.gender || "",
             pace_scy_100:        d.pace_scy_100 || "",
             pace_scm_100:        d.pace_scm_100 || "",
             pace_lcm_100:        d.pace_lcm_100 || "",
@@ -10559,6 +10624,7 @@
               display_name:        form.display_name.trim(),
               initials:            form.initials.trim() || null,
               dob:                 form.dob,
+              gender:              form.gender || null,
               pace_scy_100:        form.pace_scy_100.trim() || null,
               pace_scm_100:        form.pace_scm_100.trim() || null,
               pace_lcm_100:        form.pace_lcm_100.trim() || null,
@@ -10585,6 +10651,7 @@
               display_name:        form.display_name.trim(),
               initials:            form.initials.trim() || null,
               dob:                 form.dob,
+              gender:              form.gender || null,
               pace_scy_100:        form.pace_scy_100.trim() || null,
               pace_scm_100:        form.pace_scm_100.trim() || null,
               pace_lcm_100:        form.pace_lcm_100.trim() || null,
@@ -10672,6 +10739,7 @@
                 <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.7 }}>
                   <div>Initials: <strong>{detail.initials || "—"}</strong></div>
                   <div>DOB: <strong>{detail.dob}</strong></div>
+                  <div>Gender: <strong>{genderLabel(detail.gender) || "—"}</strong></div>
                   <div>Paces — SCY: <strong>{detail.pace_scy_100 || "—"}</strong> · SCM: <strong>{detail.pace_scm_100 || "—"}</strong> · LCM: <strong>{detail.pace_lcm_100 || "—"}</strong></div>
                   <div>Parental contact: <strong>{detail.parental_contact || "—"}</strong></div>
                 </div>
@@ -10791,6 +10859,20 @@
       );
     }
 
+    // Gender enum constants (matches db.js GENDER_VALUES). Labels used in
+    // pickers; raw values are M / F / X / prefer_not_to_say.
+    const GENDER_OPTIONS = [
+      { v: "",                  label: "—" },
+      { v: "M",                 label: "Male" },
+      { v: "F",                 label: "Female" },
+      { v: "X",                 label: "Non-binary / other" },
+      { v: "prefer_not_to_say", label: "Prefer not to say" },
+    ];
+    function genderLabel(v) {
+      const o = GENDER_OPTIONS.find(x => x.v === (v || ""));
+      return o ? o.label : v;
+    }
+
     // Shared form component for create + edit. Pure presentation.
     function ManagedSwimmerForm({ form, setForm }) {
       const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -10801,7 +10883,7 @@
           <label style={{ ...labelStyle, marginTop: 0 }}>Display name *</label>
           <input value={form.display_name} onChange={e => upd("display_name", e.target.value)}
             placeholder="e.g. Sarah Johnson" style={inputStyle} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             <div>
               <label style={labelStyle}>Initials</label>
               <input value={form.initials} onChange={e => upd("initials", e.target.value)}
@@ -10812,9 +10894,15 @@
               <input type="date" value={form.dob} onChange={e => upd("dob", e.target.value)}
                 min={DOB_MIN} max={DOB_MAX_TODAY()} style={inputStyle} />
             </div>
+            <div>
+              <label style={labelStyle}>Gender</label>
+              <select value={form.gender || ""} onChange={e => upd("gender", e.target.value)} style={inputStyle}>
+                {GENDER_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+              </select>
+            </div>
           </div>
           <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
-            DOB is required to derive minor-protection rules. Stored privately; only the swimmer's age and minor status are surfaced.
+            DOB is required to derive minor-protection rules. Stored privately; only the swimmer's age and minor status are surfaced. Gender is optional; used for heat assignment when groups land.
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
@@ -10853,8 +10941,15 @@
     // (Excel/Sheets export shape), auto-detects comma vs tab, requires a
     // header row. NOT a full RFC 4180 parser; handles 99% of coach exports.
     const IMPORT_REQUIRED = ["name", "dob"];
-    const IMPORT_OPTIONAL = ["initials", "pace_scy_100", "pace_scm_100", "pace_lcm_100", "parental_contact"];
+    const IMPORT_OPTIONAL = ["initials", "gender", "pace_scy_100", "pace_scm_100", "pace_lcm_100", "parental_contact"];
     const IMPORT_ALL_HEADERS = [...IMPORT_REQUIRED, ...IMPORT_OPTIONAL];
+    // Accept several spellings of gender in CSV (case-insensitive). Map to enum.
+    const GENDER_CSV_MAP = {
+      "m": "M", "male": "M", "boy": "M",
+      "f": "F", "female": "F", "girl": "F",
+      "x": "X", "nb": "X", "non-binary": "X", "nonbinary": "X", "other": "X",
+      "pnts": "prefer_not_to_say", "prefer not to say": "prefer_not_to_say", "decline": "prefer_not_to_say",
+    };
 
     function csvAutoSplit(text) {
       // Strip BOM, normalize newlines.
@@ -10941,6 +11036,14 @@
 
       const initials = (raw.initials || "").trim() || null;
       if (initials && initials.length > 4) return { ok: false, error: "initials too long (>4 chars)" };
+      // Gender: tolerant CSV mapping (e.g. "Female" → "F"). Empty cell → null.
+      let gender = null;
+      const gRaw = (raw.gender || "").trim();
+      if (gRaw) {
+        const mapped = GENDER_CSV_MAP[gRaw.toLowerCase()];
+        if (!mapped) return { ok: false, error: `gender not recognized (M/F/X/PNTS or full words): ${gRaw}` };
+        gender = mapped;
+      }
       const pace_scy_100 = (raw.pace_scy_100 || "").trim() || null;
       const pace_scm_100 = (raw.pace_scm_100 || "").trim() || null;
       const pace_lcm_100 = (raw.pace_lcm_100 || "").trim() || null;
@@ -10951,7 +11054,7 @@
       if (parental_contact && parental_contact.length > 255) return { ok: false, error: "parental_contact too long (>255 chars)" };
 
       return { ok: true, normalized: {
-        display_name: name, initials, dob,
+        display_name: name, initials, dob, gender,
         pace_scy_100, pace_scm_100, pace_lcm_100,
         parental_contact,
       } };
@@ -10959,7 +11062,8 @@
 
     function buildTemplateCSV() {
       const header = IMPORT_ALL_HEADERS.join(",");
-      const example = "Sarah Johnson,2010-03-15,SJ,2:05,,,parent@example.com";
+      // Column order matches IMPORT_ALL_HEADERS: name,dob,initials,gender,pace_scy_100,pace_scm_100,pace_lcm_100,parental_contact
+      const example = "Sarah Johnson,2010-03-15,SJ,F,2:05,,,parent@example.com";
       return header + "\n" + example + "\n";
     }
 
