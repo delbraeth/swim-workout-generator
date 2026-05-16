@@ -1330,6 +1330,28 @@ export async function dbIsManagedSwimmerOwnedBy(id, coachSub) {
   return rows.length > 0;
 }
 
+// Bulk create for the import flow (R-B'). Per-row atomic — a single bad row
+// does NOT roll back the others; instead each row's outcome is returned for
+// the UI to display. Caller (server.js route) is responsible for capping the
+// array size to prevent runaway writes.
+export async function dbBulkCreateManagedSwimmers(ownerSub, rows) {
+  if (!ownerSub) throw new Error("ownerSub required");
+  if (!Array.isArray(rows)) throw new Error("rows must be array");
+  await dbEnsureUser(ownerSub);                                              // single ensure for all rows
+  const results = [];
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      const r = await dbCreateManagedSwimmer({ ownerSub, ...rows[i] });
+      results.push({ row_idx: i, ok: true, id: r.id });
+    } catch (err) {
+      results.push({ row_idx: i, ok: false, error: err.message || String(err) });
+    }
+  }
+  const inserted = results.filter(r => r.ok).length;
+  const errors   = results.filter(r => !r.ok);
+  return { inserted, errors, results };
+}
+
 // ── User DOB (R-B) ────────────────────────────────────────────────────
 // Self-serve DOB write — soft-prompt at next login per decision #37, and
 // also writable from the profile if the user wants to update it.
