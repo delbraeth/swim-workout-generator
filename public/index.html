@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-16 23:28 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-16 23:41 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10233,6 +10233,9 @@
       const [creatingEvent, setCreatingEvent] = React.useState(false);
       const [newEventName,  setNewEventName]  = React.useState("");
       const [newEventDate,  setNewEventDate]  = React.useState("");
+      const [editingEventId, setEditingEventId] = React.useState(null);
+      const [editEventName,  setEditEventName]  = React.useState("");
+      const [editEventDate,  setEditEventDate]  = React.useState("");
       const [msg,         setMsg]         = React.useState(null);
 
       const loadGroups = React.useCallback(async (teamId) => {
@@ -10430,6 +10433,35 @@
           setNewEventName(""); setNewEventDate(""); setCreatingEvent(false); setMsg(null);
           await loadEvents(detail.id);
         } catch (err) { setMsg(`Error creating event: ${err.message}`); }
+      };
+
+      // R-C polish: edit team event (inline)
+      const startEditEvent = (ev) => {
+        setEditingEventId(ev.id);
+        setEditEventName(ev.name);
+        setEditEventDate(ev.date);
+        setMsg(null);
+      };
+      const cancelEditEvent = () => {
+        setEditingEventId(null);
+        setEditEventName("");
+        setEditEventDate("");
+      };
+      const handleSaveEditEvent = async () => {
+        if (!editEventName.trim()) { setMsg("Event name required"); return; }
+        if (!editEventDate)        { setMsg("Event date required"); return; }
+        try {
+          const res = await fetch(`/api/events/${editingEventId}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          cancelEditEvent();
+          setMsg(null);
+          await loadEvents(detail.id);
+        } catch (err) { setMsg(`Error saving event: ${err.message}`); }
       };
 
       // R-C: delete team event
@@ -10646,7 +10678,28 @@
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {events.map(ev => {
-                    const isPast = new Date(ev.date) < new Date(new Date().toDateString());
+                    const isPast    = new Date(ev.date) < new Date(new Date().toDateString());
+                    const isEditing = editingEventId === ev.id;
+                    if (isEditing) {
+                      return (
+                        <div key={ev.id} style={{ padding: "8px 10px", background: "#0f172a", border: "1px solid #f59e0b", borderRadius: 6 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
+                            <input value={editEventName} onChange={e => setEditEventName(e.target.value)} placeholder="Event name"
+                              onKeyDown={e => { if (e.key === "Enter") handleSaveEditEvent(); if (e.key === "Escape") cancelEditEvent(); }}
+                              autoFocus
+                              style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }} />
+                            <input type="date" value={editEventDate} onChange={e => setEditEventDate(e.target.value)}
+                              style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }} />
+                          </div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={handleSaveEditEvent}
+                              style={{ padding: "5px 11px", background: "#22c55e", color: "#0f172a", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                            <button onClick={cancelEditEvent}
+                              style={{ padding: "5px 11px", background: "#334155", color: "#cbd5e1", border: "none", borderRadius: 5, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div key={ev.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, opacity: isPast ? 0.6 : 1 }}>
                         <div>
@@ -10655,10 +10708,16 @@
                           {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "#64748b", fontStyle: "italic" }}>(past)</span>}
                         </div>
                         {detail.viewer_role && (
-                          <button onClick={() => handleDeleteEvent(ev.id)}
-                            style={{ padding: "3px 9px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
-                            Delete
-                          </button>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={() => startEditEvent(ev)}
+                              style={{ padding: "3px 9px", background: "transparent", color: "#3b82f6", border: "1px solid #3b82f6", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                              Edit
+                            </button>
+                            <button onClick={() => handleDeleteEvent(ev.id)}
+                              style={{ padding: "3px 9px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                              Delete
+                            </button>
+                          </div>
                         )}
                       </div>
                     );
