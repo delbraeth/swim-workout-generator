@@ -1435,3 +1435,495 @@ export async function dbUpdateMeDob(sub, dob) {
   );
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
+
+// ─── Groups (Stage 2 / R-C) ───────────────────────────────────────────
+// See RELATIONSHIPS_SCOPE.md. Tables: `groups`, `group_coaches`,
+// `group_members` (migration 016). Decisions embedded:
+//   #13 archive cascade (members get left_at stamped on group archive)
+//   #18 roster visibility minor gate (enforced in dbUpdateGroup)
+//   #28 minor protections
+//   #33 one PRIMARY group per coach per swimmer (enforced in dbAddGroupMember)
+//   #39 group phase (current_phase + phase_set_at)
+
+const GROUP_PHASES = ["base", "build", "peak", "taper", "recovery"];
+const POOL_MODES   = ["25y", "25m", "50m"];
+const GROUP_COACH_ROLES  = ["primary", "assistant"];
+const GROUP_MEMBER_ROLES = ["primary", "secondary"];
+
+function genGroupId() {
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "gr_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+function genEventId() {
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "ev_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+
+function rowToGroup(r) {
+  return {
+    id:                         r.id,
+    team_id:                    r.team_id,
+    primary_coach_sub:          r.primary_coach_sub,
+    name:                       r.name,
+    pool_mode_default:          r.pool_mode_default,
+    roster_visible_to_members:  !!r.roster_visible_to_members,
+    current_phase:              r.current_phase,
+    phase_set_at:               dtToIso(r.phase_set_at),
+    archived:                   !!r.archived,
+    archived_at:                dtToIso(r.archived_at),
+    created_at:                 dtToIso(r.created_at),
+    updated_at:                 dtToIso(r.updated_at),
+  };
+}
+
+// Detect whether any currently-active member of a group is a minor. Used by
+// the visibility gate. Joins both swimmer-side (users.dob) and managed-side
+// (coach_managed_swimmers.dob); either polymorphic target is sufficient.
+async function groupHasMinorMember(groupId) {
+  if (!groupId) return false;
+  const rows = await pool.query(
+    "SELECT u.`dob` AS udob, m.`dob` AS mdob " +
+    "FROM `group_members` gm " +
+    "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
+    "LEFT JOIN `coach_managed_swimmers` m ON m.`id`  = gm.`member_managed_id` " +
+    "WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL",
+    [groupId]
+  );
+  for (const r of rows) {
+    if (isMinor(r.udob) === true) return true;
+    if (isMinor(r.mdob) === true) return true;
+  }
+  return false;
+}
+
+export async function dbCreateGroup({ teamId, primaryCoachSub, name, poolModeDefault = null }) {
+  if (!primaryCoachSub) throw new Error("primaryCoachSub required");
+  if (!name || typeof name !== "string") throw new Error("name required");
+  if (name.length > 120) throw new Error("name max 120 chars");
+  if (poolModeDefault && !POOL_MODES.includes(poolModeDefault)) throw new Error("bad pool_mode_default");
+  // If a team is specified, the primary-coach must have an active role on
+  // that team. Independent groups (team_id null) skip this check.
+  if (teamId) {
+    const ok = await coachIsOnTeam(primaryCoachSub, teamId);
+    if (!ok) throw new Error("not a coach on this team");
+  }
+  await dbEnsureUser(primaryCoachSub);
+  const id = genGroupId();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "INSERT INTO `groups` (`id`, `team_id`, `primary_coach_sub`, `name`, `pool_mode_default`) " +
+      "VALUES (?, ?, ?, ?, ?)",
+      [id, teamId || null, primaryCoachSub, name.trim(), poolModeDefault || null]
+    );
+    await conn.query(
+      "INSERT INTO `group_coaches` (`group_id`, `coach_sub`, `role`) VALUES (?, ?, 'primary')",
+      [id, primaryCoachSub]
+    );
+    await conn.commit();
+    return { ok: true, id };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function dbGetGroup(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `team_id`, `primary_coach_sub`, `name`, `pool_mode_default`, " +
+    "       `roster_visible_to_members`, `current_phase`, `phase_set_at`, " +
+    "       `archived`, `archived_at`, `created_at`, `updated_at` " +
+    "FROM `groups` WHERE `id` = ?",
+    [id]
+  );
+  if (!rows[0]) return null;
+  return rowToGroup(rows[0]);
+}
+
+export async function dbListGroupsForTeam(teamId, { includeArchived = false } = {}) {
+  if (!teamId) return [];
+  const whereArch = includeArchived ? "" : "AND `archived` = 0 ";
+  const rows = await pool.query(
+    "SELECT `id`, `team_id`, `primary_coach_sub`, `name`, `pool_mode_default`, " +
+    "       `roster_visible_to_members`, `current_phase`, `phase_set_at`, " +
+    "       `archived`, `archived_at`, `created_at`, `updated_at` " +
+    "FROM `groups` WHERE `team_id` = ? " + whereArch +
+    "ORDER BY `archived` ASC, `name` ASC",
+    [teamId]
+  );
+  return rows.map(rowToGroup);
+}
+
+export async function dbListGroupsForCoach(coachSub, { includeArchived = false } = {}) {
+  if (!coachSub) return [];
+  const whereArch = includeArchived ? "" : "AND g.`archived` = 0 ";
+  const rows = await pool.query(
+    "SELECT DISTINCT g.`id`, g.`team_id`, g.`primary_coach_sub`, g.`name`, g.`pool_mode_default`, " +
+    "       g.`roster_visible_to_members`, g.`current_phase`, g.`phase_set_at`, " +
+    "       g.`archived`, g.`archived_at`, g.`created_at`, g.`updated_at` " +
+    "FROM `groups` g " +
+    "JOIN `group_coaches` gc ON gc.`group_id` = g.`id` AND gc.`removed_at` IS NULL " +
+    "WHERE gc.`coach_sub` = ? " + whereArch +
+    "ORDER BY g.`archived` ASC, g.`name` ASC",
+    [coachSub]
+  );
+  return rows.map(rowToGroup);
+}
+
+export async function dbUpdateGroup(id, patch) {
+  if (!id) return { ok: false, reason: "no_id" };
+  const allowed = {
+    name:              v => (typeof v === "string" && v.trim().length > 0 && v.length <= 120) ? v.trim() : undefined,
+    pool_mode_default: v => (v == null || v === "") ? null : (POOL_MODES.includes(v) ? v : undefined),
+  };
+  const sets = [], vals = [];
+  for (const [k, validator] of Object.entries(allowed)) {
+    if (k in patch) {
+      const cleaned = validator(patch[k]);
+      if (cleaned === undefined) return { ok: false, reason: `bad_${k}` };
+      sets.push(`\`${k}\` = ?`);
+      vals.push(cleaned);
+    }
+  }
+  // Roster visibility — decision #18/#28 enforcement: cannot be turned ON
+  // when any active member is a minor. Turning OFF is always allowed.
+  if ("roster_visible_to_members" in patch) {
+    const target = patch.roster_visible_to_members ? 1 : 0;
+    if (target === 1) {
+      const hasMinor = await groupHasMinorMember(id);
+      if (hasMinor) return { ok: false, reason: "minors_present_visibility_locked_off" };
+    }
+    sets.push("`roster_visible_to_members` = ?");
+    vals.push(target);
+  }
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(id);
+  const r = await pool.query(
+    `UPDATE \`groups\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
+    vals
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbArchiveGroup(id, archived = true) {
+  if (!id) return { ok: false, reason: "no_id" };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "UPDATE `groups` SET `archived` = ?, `archived_at` = " +
+      (archived ? "CURRENT_TIMESTAMP(3)" : "NULL") + " WHERE `id` = ?",
+      [archived ? 1 : 0, id]
+    );
+    if (archived) {
+      // Decision #13: auto-stamp left_at on active members at archive time
+      // (clean history snapshot). Reason left null — coach can review.
+      await conn.query(
+        "UPDATE `group_members` SET `left_at` = CURRENT_TIMESTAMP(3), `reason` = COALESCE(`reason`, 'group archived') " +
+        "WHERE `group_id` = ? AND `left_at` IS NULL",
+        [id]
+      );
+    }
+    await conn.commit();
+    return { ok: true };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function dbSetGroupPhase(id, phase) {
+  if (!id) return { ok: false, reason: "no_id" };
+  if (phase !== null && phase !== "" && !GROUP_PHASES.includes(phase)) return { ok: false, reason: "bad_phase" };
+  const r = await pool.query(
+    "UPDATE `groups` SET `current_phase` = ?, `phase_set_at` = " +
+    (phase ? "CURRENT_TIMESTAMP(3)" : "NULL") + " WHERE `id` = ?",
+    [phase || null, id]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbGetGroupRole(groupId, coachSub) {
+  if (!groupId || !coachSub) return null;
+  const rows = await pool.query(
+    "SELECT `role` FROM `group_coaches` " +
+    "WHERE `group_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
+    [groupId, coachSub]
+  );
+  return rows[0]?.role || null;
+}
+
+export async function dbListGroupCoaches(groupId) {
+  if (!groupId) return [];
+  const rows = await pool.query(
+    "SELECT gc.`coach_sub`, gc.`role`, gc.`added_at`, " +
+    "       u.`display_name`, u.`initials`, u.`email` " +
+    "FROM `group_coaches` gc " +
+    "LEFT JOIN `users` u ON u.`sub` = gc.`coach_sub` " +
+    "WHERE gc.`group_id` = ? AND gc.`removed_at` IS NULL " +
+    "ORDER BY FIELD(gc.`role`, 'primary', 'assistant'), gc.`added_at` ASC",
+    [groupId]
+  );
+  return rows.map(r => ({
+    coach_sub:    r.coach_sub,
+    role:         r.role,
+    display_name: r.display_name,
+    initials:     r.initials,
+    email:        r.email,
+    added_at:     dtToIso(r.added_at),
+  }));
+}
+
+export async function dbAddGroupCoach(groupId, coachSub, role = "assistant") {
+  if (!groupId || !coachSub) return { ok: false, reason: "missing_args" };
+  if (!GROUP_COACH_ROLES.includes(role)) return { ok: false, reason: "bad_role" };
+  if (role === "primary") return { ok: false, reason: "primary_set_at_create_only" };
+  // Target must be coach-flagged.
+  const userRows = await pool.query(
+    "SELECT `is_coach`, `is_admin`, `is_disabled` FROM `users` WHERE `sub` = ?",
+    [coachSub]
+  );
+  if (!userRows[0]) return { ok: false, reason: "user_not_found" };
+  const u = userRows[0];
+  if (u.is_disabled) return { ok: false, reason: "user_disabled" };
+  if (!(u.is_coach || u.is_admin)) return { ok: false, reason: "user_not_coach" };
+  const existing = await pool.query(
+    "SELECT `role`, `removed_at` FROM `group_coaches` WHERE `group_id` = ? AND `coach_sub` = ?",
+    [groupId, coachSub]
+  );
+  if (existing[0]) {
+    if (existing[0].role === "primary") return { ok: false, reason: "already_primary" };
+    if (existing[0].removed_at === null) return { ok: false, reason: "already_active" };
+    await pool.query(
+      "UPDATE `group_coaches` SET `role` = ?, `removed_at` = NULL, `added_at` = CURRENT_TIMESTAMP(3) " +
+      "WHERE `group_id` = ? AND `coach_sub` = ?",
+      [role, groupId, coachSub]
+    );
+    return { ok: true, reactivated: true };
+  }
+  await pool.query(
+    "INSERT INTO `group_coaches` (`group_id`, `coach_sub`, `role`) VALUES (?, ?, ?)",
+    [groupId, coachSub, role]
+  );
+  return { ok: true };
+}
+
+export async function dbRemoveGroupCoach(groupId, coachSub) {
+  if (!groupId || !coachSub) return { ok: false, reason: "missing_args" };
+  const role = await dbGetGroupRole(groupId, coachSub);
+  if (role === null) return { ok: false, reason: "not_active" };
+  if (role === "primary") return { ok: false, reason: "cannot_remove_primary" };
+  const r = await pool.query(
+    "UPDATE `group_coaches` SET `removed_at` = CURRENT_TIMESTAMP(3) " +
+    "WHERE `group_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
+    [groupId, coachSub]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// ── Group members (R-C — managed-only; full-account in R-F) ──────────
+
+export async function dbListGroupMembers(groupId) {
+  if (!groupId) return [];
+  // Join both polymorphic targets — null-coalesce in the projection.
+  const rows = await pool.query(
+    "SELECT gm.`id`, gm.`member_swimmer_sub`, gm.`member_managed_id`, gm.`role`, " +
+    "       gm.`joined_at`, gm.`left_at`, gm.`reason`, " +
+    "       COALESCE(m.`display_name`, u.`display_name`) AS display_name, " +
+    "       COALESCE(m.`initials`, u.`initials`)         AS initials, " +
+    "       COALESCE(m.`dob`, u.`dob`)                   AS dob, " +
+    "       COALESCE(m.`gender`, u.`gender`)             AS gender " +
+    "FROM `group_members` gm " +
+    "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
+    "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
+    "WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL " +
+    "ORDER BY display_name ASC",
+    [groupId]
+  );
+  return rows.map(r => ({
+    id:                  Number(r.id),
+    member_swimmer_sub:  r.member_swimmer_sub,
+    member_managed_id:   r.member_managed_id,
+    role:                r.role,
+    joined_at:           dtToIso(r.joined_at),
+    display_name:        r.display_name,
+    initials:            r.initials,
+    dob:                 dateToYmd(r.dob),
+    age:                 computeAge(r.dob),
+    is_minor:            isMinor(r.dob),
+    is_coppa_protected:  isCoppaProtected(r.dob),
+    gender:              r.gender,
+  }));
+}
+
+// Decision #33 enforcement: a swimmer can be in at most ONE group as
+// 'primary' per coach. Secondary memberships are unlimited.
+// Caller must specify EITHER managedId OR swimmerSub (polymorphic target).
+export async function dbAddGroupMember(groupId, { managedId = null, swimmerSub = null, role = "primary" } = {}) {
+  if (!groupId) return { ok: false, reason: "no_group" };
+  if (!GROUP_MEMBER_ROLES.includes(role)) return { ok: false, reason: "bad_role" };
+  if ((managedId === null) === (swimmerSub === null)) return { ok: false, reason: "specify_exactly_one_target" };
+  // Resolve the target group's primary coach (needed for #33 check).
+  const grpRows = await pool.query(
+    "SELECT `primary_coach_sub` FROM `groups` WHERE `id` = ? AND `archived` = 0 LIMIT 1",
+    [groupId]
+  );
+  if (!grpRows[0]) return { ok: false, reason: "group_not_found_or_archived" };
+  const primaryCoach = grpRows[0].primary_coach_sub;
+  // For role='primary', check no other active primary membership for this
+  // swimmer exists under the same coach's other groups.
+  if (role === "primary") {
+    const targetField = managedId ? "gm.`member_managed_id`" : "gm.`member_swimmer_sub`";
+    const targetValue = managedId || swimmerSub;
+    const conflicts = await pool.query(
+      "SELECT gm.`group_id`, g.`name` AS group_name FROM `group_members` gm " +
+      "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+      `WHERE gm.\`left_at\` IS NULL AND gm.\`role\` = 'primary' AND ${targetField} = ? ` +
+      "AND g.`primary_coach_sub` = ? AND gm.`group_id` != ?",
+      [targetValue, primaryCoach, groupId]
+    );
+    if (conflicts.length > 0) {
+      return { ok: false, reason: "primary_in_other_group_same_coach", conflict_group_id: conflicts[0].group_id, conflict_group_name: conflicts[0].group_name };
+    }
+  }
+  // Also block duplicate-active rows for the same (group, member).
+  const dupField = managedId ? "`member_managed_id`" : "`member_swimmer_sub`";
+  const dupVal = managedId || swimmerSub;
+  const dups = await pool.query(
+    `SELECT 1 FROM \`group_members\` WHERE \`group_id\` = ? AND ${dupField} = ? AND \`left_at\` IS NULL LIMIT 1`,
+    [groupId, dupVal]
+  );
+  if (dups.length > 0) return { ok: false, reason: "already_active_member" };
+
+  const r = await pool.query(
+    "INSERT INTO `group_members` (`group_id`, `member_swimmer_sub`, `member_managed_id`, `role`) " +
+    "VALUES (?, ?, ?, ?)",
+    [groupId, swimmerSub || null, managedId || null, role]
+  );
+  return { ok: true, id: Number(r.insertId) };
+}
+
+export async function dbRemoveGroupMember(memberId, { reason = null } = {}) {
+  if (!memberId) return { ok: false, reason: "no_id" };
+  const r = await pool.query(
+    "UPDATE `group_members` SET `left_at` = CURRENT_TIMESTAMP(3), `reason` = ? " +
+    "WHERE `id` = ? AND `left_at` IS NULL",
+    [reason || null, Number(memberId)]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Lookup helper for member-detail endpoints (e.g., verify membership for
+// authz before allowing edit / remove).
+export async function dbGetGroupMember(memberId) {
+  if (!memberId) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `group_id`, `member_swimmer_sub`, `member_managed_id`, `role`, `joined_at`, `left_at`, `reason` " +
+    "FROM `group_members` WHERE `id` = ? LIMIT 1",
+    [Number(memberId)]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    id:                  Number(r.id),
+    group_id:            r.group_id,
+    member_swimmer_sub:  r.member_swimmer_sub,
+    member_managed_id:   r.member_managed_id,
+    role:                r.role,
+    joined_at:           dtToIso(r.joined_at),
+    left_at:             dtToIso(r.left_at),
+    reason:              r.reason,
+  };
+}
+
+// ── Team events (decision #38) ────────────────────────────────────────
+
+export async function dbCreateTeamEvent({ teamId, name, date, createdByCoachSub }) {
+  if (!teamId) throw new Error("teamId required");
+  if (!name || typeof name !== "string") throw new Error("name required");
+  if (name.length > 120) throw new Error("name max 120 chars");
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error("date must be YYYY-MM-DD");
+  const id = genEventId();
+  await pool.query(
+    "INSERT INTO `team_events` (`id`, `team_id`, `name`, `date`, `created_by_coach_sub`) " +
+    "VALUES (?, ?, ?, ?, ?)",
+    [id, teamId, name.trim(), date, createdByCoachSub || null]
+  );
+  return { ok: true, id };
+}
+
+export async function dbGetTeamEvent(eventId) {
+  if (!eventId) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `team_id`, `name`, `date`, `created_by_coach_sub`, `created_at` " +
+    "FROM `team_events` WHERE `id` = ?",
+    [eventId]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    id:        r.id,
+    team_id:   r.team_id,
+    name:      r.name,
+    date:      dateToYmd(r.date),
+    created_by_coach_sub: r.created_by_coach_sub,
+    created_at: dtToIso(r.created_at),
+  };
+}
+
+export async function dbDeleteTeamEvent(eventId) {
+  if (!eventId) return { ok: false, reason: "no_id" };
+  const r = await pool.query("DELETE FROM `team_events` WHERE `id` = ?", [eventId]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbListTeamEvents(teamId) {
+  if (!teamId) return [];
+  const rows = await pool.query(
+    "SELECT `id`, `team_id`, `name`, `date`, `created_by_coach_sub`, `created_at` " +
+    "FROM `team_events` WHERE `team_id` = ? ORDER BY `date` ASC",
+    [teamId]
+  );
+  return rows.map(r => ({
+    id: r.id, team_id: r.team_id, name: r.name,
+    date: dateToYmd(r.date),
+    created_by_coach_sub: r.created_by_coach_sub,
+    created_at: dtToIso(r.created_at),
+  }));
+}
+
+// For the pool-mode pill row: returns upcoming events across all teams the
+// user has any role on (coach via team_coaches, or member via group_members).
+// Future-dated only; sorted by nearest date first.
+export async function dbListUpcomingEventsForUser(userSub) {
+  if (!userSub) return [];
+  // Two-leg UNION: teams via team_coaches (coach side) AND teams via groups
+  // the user has a swimmer membership in. Dedupe by team_id implicitly via
+  // DISTINCT on the outer query.
+  const rows = await pool.query(
+    "SELECT DISTINCT te.`id`, te.`team_id`, t.`name` AS team_name, te.`name`, te.`date` " +
+    "FROM `team_events` te " +
+    "JOIN `teams` t ON t.`id` = te.`team_id` " +
+    "WHERE te.`date` >= CURRENT_DATE " +
+    "  AND ( " +
+    "    te.`team_id` IN (SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL) " +
+    "    OR te.`team_id` IN ( " +
+    "      SELECT g.`team_id` FROM `group_members` gm " +
+    "        JOIN `groups` g ON g.`id` = gm.`group_id` " +
+    "        WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` IS NOT NULL " +
+    "    ) " +
+    "  ) " +
+    "ORDER BY te.`date` ASC LIMIT 20",
+    [userSub, userSub]
+  );
+  return rows.map(r => ({
+    id: r.id, team_id: r.team_id, team_name: r.team_name,
+    name: r.name, date: dateToYmd(r.date),
+  }));
+}
