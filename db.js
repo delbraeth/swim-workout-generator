@@ -538,6 +538,27 @@ export async function dbIsCoach(sub) {
   return rows.length > 0;
 }
 
+// List coaches for picker UIs (Teams / group_coaches add flow).
+// Minimal info — no email, no DOB — to keep PII exposure low. Excludes the
+// caller themselves so they can't try to add themselves to a team they
+// already own.
+// Privacy note: v1 lists ALL coaches system-wide. At multi-tenant scale this
+// becomes PII leakage; scope down (e.g., "only coaches in teams I'm in") when
+// the threat model warrants.
+export async function dbListCoachesForPicker(excludeSub) {
+  const rows = await pool.query(
+    "SELECT `sub`, `display_name`, `initials` FROM `users` " +
+    "WHERE (`is_coach` = 1 OR `is_admin` = 1) AND `is_disabled` = 0 AND `sub` != ? " +
+    "ORDER BY `display_name` ASC, `initials` ASC",
+    [excludeSub || ""]
+  );
+  return rows.map(r => ({
+    sub:          r.sub,
+    display_name: r.display_name,
+    initials:     r.initials,
+  }));
+}
+
 // ─── admin helpers ──────────────────────────────────────────────────────────
 export async function dbAdminListUsers() {
   const rows = await pool.query(`
