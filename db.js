@@ -933,3 +933,196 @@ export async function dbAdminUpdateFeedback(id, { status, admin_note }, reviewer
   );
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
+
+// ── Teams (relationships scope, Stage 1 / R-A) ────────────────────────
+// See RELATIONSHIPS_SCOPE.md at repo root. Tables: `teams`, `team_coaches`
+// (migration 011). Per decision #11 the 3-tier role enum is owner/admin/coach;
+// per #25 team_type ∈ {high_school, summer, club, masters}; per #23 coach
+// removal is append-only via removed_at (no DELETE).
+
+const TEAM_TYPES = ["high_school", "summer", "club", "masters"];
+const TEAM_ROLES = ["owner", "admin", "coach"];
+
+function genTeamId() {
+  // 6 base36 chars → ~2.18B values; collision risk negligible at our scale.
+  // Same convention as set IDs (tools/assign_set_ids.py: s_xxxxxx).
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "tm_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+
+export async function dbCreateTeam({ ownerSub, name, teamType }) {
+  if (!ownerSub) throw new Error("ownerSub required");
+  if (!name || typeof name !== "string") throw new Error("name required");
+  if (name.length > 120) throw new Error("name max 120 chars");
+  if (!TEAM_TYPES.includes(teamType)) throw new Error("bad team_type");
+  await dbEnsureUser(ownerSub);
+  const id = genTeamId();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "INSERT INTO `teams` (`id`, `owner_coach_sub`, `name`, `team_type`) VALUES (?, ?, ?, ?)",
+      [id, ownerSub, name.trim(), teamType]
+    );
+    await conn.query(
+      "INSERT INTO `team_coaches` (`team_id`, `coach_sub`, `role`) VALUES (?, ?, 'owner')",
+      [id, ownerSub]
+    );
+    await conn.commit();
+    return { ok: true, id };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function dbGetTeam(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `owner_coach_sub`, `name`, `team_type`, `archived`, `created_at`, `updated_at` " +
+    "FROM `teams` WHERE `id` = ?",
+    [id]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    id:              r.id,
+    owner_coach_sub: r.owner_coach_sub,
+    name:            r.name,
+    team_type:       r.team_type,
+    archived:        !!r.archived,
+    created_at:      dtToIso(r.created_at),
+    updated_at:      dtToIso(r.updated_at),
+  };
+}
+
+export async function dbListTeamsForCoach(coachSub) {
+  if (!coachSub) return [];
+  // Active membership only (removed_at IS NULL). Sort: non-archived first, then newest.
+  const rows = await pool.query(
+    "SELECT t.`id`, t.`owner_coach_sub`, t.`name`, t.`team_type`, t.`archived`, " +
+    "       t.`created_at`, t.`updated_at`, tc.`role` " +
+    "FROM `teams` t " +
+    "JOIN `team_coaches` tc ON tc.`team_id` = t.`id` " +
+    "WHERE tc.`coach_sub` = ? AND tc.`removed_at` IS NULL " +
+    "ORDER BY t.`archived` ASC, t.`created_at` DESC",
+    [coachSub]
+  );
+  return rows.map(r => ({
+    id:              r.id,
+    owner_coach_sub: r.owner_coach_sub,
+    name:            r.name,
+    team_type:       r.team_type,
+    archived:        !!r.archived,
+    role:            r.role,                                                  // viewer's role in THIS team
+    created_at:      dtToIso(r.created_at),
+    updated_at:      dtToIso(r.updated_at),
+  }));
+}
+
+export async function dbUpdateTeam(id, { name }) {
+  if (!id) return { ok: false, reason: "no_id" };
+  // Only `name` is mutable (team_type is immutable per #25; owner change is
+  // a separate flow not built in v1).
+  if (typeof name !== "string" || !name.trim()) return { ok: false, reason: "bad_name" };
+  if (name.length > 120) return { ok: false, reason: "name_too_long" };
+  const r = await pool.query(
+    "UPDATE `teams` SET `name` = ? WHERE `id` = ?",
+    [name.trim(), id]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbArchiveTeam(id, archived = true) {
+  if (!id) return { ok: false, reason: "no_id" };
+  const r = await pool.query(
+    "UPDATE `teams` SET `archived` = ? WHERE `id` = ?",
+    [archived ? 1 : 0, id]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbGetTeamRole(teamId, coachSub) {
+  if (!teamId || !coachSub) return null;
+  const rows = await pool.query(
+    "SELECT `role` FROM `team_coaches` " +
+    "WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
+    [teamId, coachSub]
+  );
+  return rows[0]?.role || null;
+}
+
+export async function dbListTeamCoaches(teamId) {
+  if (!teamId) return [];
+  const rows = await pool.query(
+    "SELECT tc.`coach_sub`, tc.`role`, tc.`added_at`, " +
+    "       u.`display_name`, u.`initials`, u.`email` " +
+    "FROM `team_coaches` tc " +
+    "LEFT JOIN `users` u ON u.`sub` = tc.`coach_sub` " +
+    "WHERE tc.`team_id` = ? AND tc.`removed_at` IS NULL " +
+    "ORDER BY FIELD(tc.`role`, 'owner', 'admin', 'coach'), tc.`added_at` ASC",
+    [teamId]
+  );
+  return rows.map(r => ({
+    coach_sub:    r.coach_sub,
+    role:         r.role,
+    display_name: r.display_name,
+    initials:     r.initials,
+    email:        r.email,
+    added_at:     dtToIso(r.added_at),
+  }));
+}
+
+export async function dbAddTeamCoach(teamId, coachSub, role = "coach") {
+  if (!teamId || !coachSub) return { ok: false, reason: "missing_args" };
+  if (!TEAM_ROLES.includes(role)) return { ok: false, reason: "bad_role" };
+  if (role === "owner") return { ok: false, reason: "owner_set_at_create_only" };
+  // Target user must exist AND be coach-flagged (gate matches dbIsCoach but
+  // also accepts admins, since admins implicitly have coach capability).
+  const userRows = await pool.query(
+    "SELECT `is_coach`, `is_admin`, `is_disabled` FROM `users` WHERE `sub` = ?",
+    [coachSub]
+  );
+  if (!userRows[0]) return { ok: false, reason: "user_not_found" };
+  const u = userRows[0];
+  if (u.is_disabled) return { ok: false, reason: "user_disabled" };
+  if (!(u.is_coach || u.is_admin)) return { ok: false, reason: "user_not_coach" };
+  // If a removed row exists, re-activate it (stamp removed_at NULL + bump role
+  // + bump added_at). Otherwise INSERT. Owner row is never overwritten here.
+  const existing = await pool.query(
+    "SELECT `role`, `removed_at` FROM `team_coaches` WHERE `team_id` = ? AND `coach_sub` = ?",
+    [teamId, coachSub]
+  );
+  if (existing[0]) {
+    if (existing[0].role === "owner") return { ok: false, reason: "already_owner" };
+    if (existing[0].removed_at === null) return { ok: false, reason: "already_active" };
+    await pool.query(
+      "UPDATE `team_coaches` SET `role` = ?, `removed_at` = NULL, `added_at` = CURRENT_TIMESTAMP(3) " +
+      "WHERE `team_id` = ? AND `coach_sub` = ?",
+      [role, teamId, coachSub]
+    );
+    return { ok: true, reactivated: true };
+  }
+  await pool.query(
+    "INSERT INTO `team_coaches` (`team_id`, `coach_sub`, `role`) VALUES (?, ?, ?)",
+    [teamId, coachSub, role]
+  );
+  return { ok: true };
+}
+
+export async function dbRemoveTeamCoach(teamId, coachSub) {
+  if (!teamId || !coachSub) return { ok: false, reason: "missing_args" };
+  // Owner cannot be removed via this endpoint (would orphan the team's
+  // owner_coach_sub FK). Ownership transfer is its own flow (not v1).
+  const role = await dbGetTeamRole(teamId, coachSub);
+  if (role === null) return { ok: false, reason: "not_active" };
+  if (role === "owner") return { ok: false, reason: "cannot_remove_owner" };
+  const r = await pool.query(
+    "UPDATE `team_coaches` SET `removed_at` = CURRENT_TIMESTAMP(3) " +
+    "WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
+    [teamId, coachSub]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
