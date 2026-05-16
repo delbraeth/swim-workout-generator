@@ -468,7 +468,7 @@ app.get("/api/me", requireAuth, async (req, res) => {
 // email_verified (handled in dbUpdateMe).
 app.patch("/api/me", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const allowed = ["email", "display_name", "initials"];
+    const allowed = ["email", "display_name", "initials", "gender"];
     const patch = {};
     for (const k of allowed) if (k in (req.body || {})) patch[k] = req.body[k];
     if ("email" in patch && patch.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.email)) {
@@ -480,6 +480,7 @@ app.patch("/api/me", checkOrigin, requireAuth, requireCsrf, writeLimiter, async 
     if ("initials" in patch && patch.initials && String(patch.initials).length > 8) {
       return res.status(400).json({ error: "initials max 8 chars" });
     }
+    // Gender validation happens in db.js (enum check). Server just passes through.
     const r = await dbUpdateMe(req.userSub, patch);
     dbAuditEvent({
       userSub:   req.userSub,
