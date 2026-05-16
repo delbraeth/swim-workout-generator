@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-16 22:11 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-16 22:20 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10157,6 +10157,7 @@
       const [editingName, setEditingName] = React.useState(false);
       const [renameVal,   setRenameVal]   = React.useState("");
       const [addCoachSub, setAddCoachSub] = React.useState("");
+      const [coachPool,   setCoachPool]   = React.useState(null);                // null = unloaded
       const [msg,         setMsg]         = React.useState(null);
 
       const loadList = React.useCallback(async () => {
@@ -10186,6 +10187,17 @@
 
       React.useEffect(() => { loadList(); }, [loadList]);
       React.useEffect(() => { loadDetail(selectedId); }, [selectedId, loadDetail]);
+
+      // Load the coach pool on first detail-open. Reused across visits to the
+      // same team session; if a coach is added/removed they'll appear/disappear
+      // on the next page-load (acceptable freshness for a picker).
+      React.useEffect(() => {
+        if (!selectedId || coachPool !== null) return;
+        fetch("/api/coaches", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(setCoachPool)
+          .catch(() => setCoachPool([]));
+      }, [selectedId, coachPool]);
 
       const handleCreate = async () => {
         if (!createName.trim()) { setMsg("Name required"); return; }
@@ -10352,23 +10364,45 @@
                   )}
                 </div>
               ))}
-              {isOwner && !detail.archived && (
-                <div style={{ marginTop: 12, padding: "10px 0 0", borderTop: "1px solid #334155" }}>
-                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>Add a coach by their user sub:</div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input value={addCoachSub} onChange={e => setAddCoachSub(e.target.value)} placeholder="user sub (from Admin → Users)"
-                      onKeyDown={e => { if (e.key === "Enter") handleAddCoach(); }}
-                      style={{ flex: 1, padding: "6px 10px", fontSize: 12, fontFamily: "monospace", background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6 }} />
-                    <button onClick={handleAddCoach}
-                      style={{ padding: "6px 14px", background: "#60a5fa", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                      Add
-                    </button>
+              {isOwner && !detail.archived && (() => {
+                // Filter out coaches already active on this team so the picker
+                // only shows valid candidates.
+                const activeSubs = new Set((detail.coaches || []).map(c => c.coach_sub));
+                const candidates = (coachPool || []).filter(c => !activeSubs.has(c.sub));
+                return (
+                  <div style={{ marginTop: 12, padding: "10px 0 0", borderTop: "1px solid #334155" }}>
+                    <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>Add a coach:</div>
+                    {coachPool === null ? (
+                      <div style={{ fontSize: 12, color: "#64748b", fontStyle: "italic" }}>Loading coach list…</div>
+                    ) : candidates.length === 0 ? (
+                      <div style={{ fontSize: 12, color: "#64748b", fontStyle: "italic" }}>
+                        No other coaches available to add. {(coachPool.length === 0) ? "Grant the is_coach flag to a user via Admin → Users first." : "All eligible coaches are already on this team."}
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <select value={addCoachSub} onChange={e => setAddCoachSub(e.target.value)}
+                          style={{ flex: 1, padding: "6px 10px", fontSize: 13, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, cursor: "pointer" }}>
+                          <option value="">— pick a coach —</option>
+                          {candidates.map(c => (
+                            <option key={c.sub} value={c.sub}>
+                              {c.display_name || "(no name)"}
+                              {c.initials ? ` (${c.initials})` : ""}
+                              {` · …${c.sub.slice(-6)}`}
+                            </option>
+                          ))}
+                        </select>
+                        <button onClick={handleAddCoach} disabled={!addCoachSub}
+                          style={{ padding: "6px 14px", background: addCoachSub ? "#60a5fa" : "#475569", color: addCoachSub ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: addCoachSub ? "pointer" : "not-allowed" }}>
+                          Add
+                        </button>
+                      </div>
+                    )}
+                    <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
+                      Only users with the <code>is_coach</code> flag (or admin) appear. v1 adds them as role "coach"; admin tier comes later.
+                    </div>
                   </div>
-                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
-                    Target user must already exist and be coach-flagged. v1 only supports adding as role "coach"; admin tier comes later.
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {msg && <div style={{ color: "#fca5a5", fontSize: 12, padding: "8px 0" }}>{msg}</div>}
