@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-15 17:36 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-16 21:50 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10130,6 +10130,323 @@
       return (opt.sets || []).some(s => s.eq && tags.includes(s.eq));
     }
 
+    // Teams view (relationships scope, Stage 1 / R-A).
+    // Coach-gated container for the team layer of the org hierarchy. v1
+    // surfaces only the owner role; team-admin tier is in the data model
+    // but not exposed in UI until R-J. See RELATIONSHIPS_SCOPE.md.
+    const TEAM_TYPE_LABELS = {
+      high_school: "High School",
+      summer:      "Summer",
+      club:        "Club",
+      masters:     "Masters",
+    };
+    const TEAM_TYPE_DESCRIPTIONS = {
+      high_school: "FERPA-shape: minor protections, restricted disclosure, parental consent for under-18.",
+      summer:      "Mixed-age seasonal program. Minor protections apply if under-18 members present.",
+      club:        "Year-round mixed-age (USA Swimming pattern). Under-13 protections apply per member.",
+      masters:     "Adults only (18+). Minimal compliance burden.",
+    };
+
+    function TeamsView() {
+      const [teams,       setTeams]       = React.useState(null);                 // null = loading
+      const [selectedId,  setSelectedId]  = React.useState(null);
+      const [detail,      setDetail]      = React.useState(null);                 // null = unloaded/loading
+      const [creating,    setCreating]    = React.useState(false);
+      const [createName,  setCreateName]  = React.useState("");
+      const [createType,  setCreateType]  = React.useState("club");
+      const [editingName, setEditingName] = React.useState(false);
+      const [renameVal,   setRenameVal]   = React.useState("");
+      const [addCoachSub, setAddCoachSub] = React.useState("");
+      const [msg,         setMsg]         = React.useState(null);
+
+      const loadList = React.useCallback(async () => {
+        try {
+          const res = await fetch("/api/teams", { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setTeams(await res.json());
+        } catch (err) {
+          setTeams([]);
+          setMsg(`Error loading teams: ${err.message}`);
+        }
+      }, []);
+
+      const loadDetail = React.useCallback(async (id) => {
+        if (!id) { setDetail(null); return; }
+        setDetail(null);
+        try {
+          const res = await fetch(`/api/teams/${id}`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const d = await res.json();
+          setDetail(d);
+          setRenameVal(d.name);
+        } catch (err) {
+          setMsg(`Error loading team: ${err.message}`);
+        }
+      }, []);
+
+      React.useEffect(() => { loadList(); }, [loadList]);
+      React.useEffect(() => { loadDetail(selectedId); }, [selectedId, loadDetail]);
+
+      const handleCreate = async () => {
+        if (!createName.trim()) { setMsg("Name required"); return; }
+        try {
+          const res = await fetch("/api/teams", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ name: createName.trim(), team_type: createType }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setMsg(null);
+          setCreateName(""); setCreateType("club"); setCreating(false);
+          await loadList();
+          setSelectedId(j.id);
+        } catch (err) {
+          setMsg(`Error: ${err.message}`);
+        }
+      };
+
+      const handleRename = async () => {
+        if (!renameVal.trim() || renameVal === detail?.name) { setEditingName(false); return; }
+        try {
+          const res = await fetch(`/api/teams/${detail.id}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ name: renameVal.trim() }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setEditingName(false);
+          await loadList();
+          await loadDetail(detail.id);
+        } catch (err) {
+          setMsg(`Error: ${err.message}`);
+        }
+      };
+
+      const handleToggleArchive = async () => {
+        if (!detail) return;
+        const next = !detail.archived;
+        const verb = next ? "archive" : "unarchive";
+        if (!window.confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} team "${detail.name}"?`)) return;
+        try {
+          const res = await fetch(`/api/teams/${detail.id}/archive`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ archived: next }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await loadList();
+          await loadDetail(detail.id);
+        } catch (err) {
+          setMsg(`Error: ${err.message}`);
+        }
+      };
+
+      const handleAddCoach = async () => {
+        if (!addCoachSub.trim()) { setMsg("coach_sub required"); return; }
+        try {
+          const res = await fetch(`/api/teams/${detail.id}/coaches`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ coach_sub: addCoachSub.trim() }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setAddCoachSub("");
+          setMsg(null);
+          await loadDetail(detail.id);
+        } catch (err) {
+          setMsg(`Error adding coach: ${err.message}`);
+        }
+      };
+
+      const handleRemoveCoach = async (sub) => {
+        if (!window.confirm("Remove this coach from the team?")) return;
+        try {
+          const res = await fetch(`/api/teams/${detail.id}/coaches/${encodeURIComponent(sub)}`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await loadDetail(detail.id);
+        } catch (err) {
+          setMsg(`Error: ${err.message}`);
+        }
+      };
+
+      // ── Render ──────────────────────────────────────────────────────
+      const isOwner = detail?.viewer_role === "owner";
+
+      // Detail panel
+      if (selectedId && detail) {
+        return (
+          <div>
+            <button onClick={() => { setSelectedId(null); setDetail(null); setEditingName(false); setMsg(null); }}
+              style={{ marginBottom: 12, padding: "5px 11px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#94a3b8", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              ← All teams
+            </button>
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+                {editingName ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flex: 1 }}>
+                    <input value={renameVal} onChange={e => setRenameVal(e.target.value)} autoFocus
+                      onKeyDown={e => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") { setEditingName(false); setRenameVal(detail.name); } }}
+                      style={{ flex: 1, padding: "6px 10px", fontSize: 16, fontWeight: 700, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6 }} />
+                    <button onClick={handleRename} style={{ padding: "5px 11px", background: "#22c55e", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditingName(false); setRenameVal(detail.name); }} style={{ padding: "5px 11px", background: "#334155", color: "#cbd5e1", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                  </div>
+                ) : (
+                  <h2 style={{ color: "#e2e8f0", margin: 0, fontSize: 20 }}>
+                    {detail.name}
+                    {detail.archived && <span style={{ marginLeft: 10, fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#64748b22", border: "1px solid #64748b", color: "#94a3b8" }}>archived</span>}
+                    {isOwner && (
+                      <button onClick={() => setEditingName(true)} title="Rename"
+                        style={{ marginLeft: 10, padding: "3px 8px", background: "transparent", border: "1px solid #334155", borderRadius: 6, color: "#64748b", fontSize: 11, cursor: "pointer" }}>✎</button>
+                    )}
+                  </h2>
+                )}
+                <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, background: "#3b82f622", border: "1px solid #3b82f6", color: "#3b82f6", fontWeight: 700 }}>
+                  {TEAM_TYPE_LABELS[detail.team_type] || detail.team_type}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>
+                {TEAM_TYPE_DESCRIPTIONS[detail.team_type]}
+              </div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>
+                Your role in this team: <span style={{ color: "#cbd5e1", fontWeight: 700 }}>{detail.viewer_role}</span>
+                <span style={{ marginLeft: 10 }}>· Team ID: <code style={{ background: "#0f172a", padding: "1px 5px", borderRadius: 3 }}>{detail.id}</code></span>
+              </div>
+              {isOwner && (
+                <div style={{ marginTop: 12 }}>
+                  <button onClick={handleToggleArchive}
+                    style={{ padding: "5px 11px", background: detail.archived ? "#22c55e" : "#64748b", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    {detail.archived ? "Unarchive team" : "Archive team"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <h3 style={{ color: "#e2e8f0", marginTop: 0, fontSize: 15 }}>Coaches ({detail.coaches?.length || 0})</h3>
+              {(detail.coaches || []).map(c => (
+                <div key={c.coach_sub} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #334155" }}>
+                  <div>
+                    <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>
+                      {c.display_name || c.initials || "(no name)"}
+                    </span>
+                    <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: c.role === "owner" ? "#a78bfa22" : "#33415522", border: `1px solid ${c.role === "owner" ? "#a78bfa" : "#475569"}`, color: c.role === "owner" ? "#a78bfa" : "#94a3b8", fontWeight: 700 }}>{c.role}</span>
+                    <div style={{ fontSize: 10, color: "#64748b", fontFamily: "monospace", marginTop: 2 }}>{c.coach_sub}</div>
+                  </div>
+                  {isOwner && c.role !== "owner" && (
+                    <button onClick={() => handleRemoveCoach(c.coach_sub)}
+                      style={{ padding: "3px 8px", background: "transparent", border: "1px solid #ef4444", borderRadius: 6, color: "#ef4444", fontSize: 11, cursor: "pointer" }}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+              {isOwner && !detail.archived && (
+                <div style={{ marginTop: 12, padding: "10px 0 0", borderTop: "1px solid #334155" }}>
+                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>Add a coach by their user sub:</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input value={addCoachSub} onChange={e => setAddCoachSub(e.target.value)} placeholder="user sub (from Admin → Users)"
+                      onKeyDown={e => { if (e.key === "Enter") handleAddCoach(); }}
+                      style={{ flex: 1, padding: "6px 10px", fontSize: 12, fontFamily: "monospace", background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6 }} />
+                    <button onClick={handleAddCoach}
+                      style={{ padding: "6px 14px", background: "#60a5fa", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      Add
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
+                    Target user must already exist and be coach-flagged. v1 only supports adding as role "coach"; admin tier comes later.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {msg && <div style={{ color: "#fca5a5", fontSize: 12, padding: "8px 0" }}>{msg}</div>}
+          </div>
+        );
+      }
+
+      // List view
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h2 style={{ color: "#e2e8f0", margin: 0 }}>👥 Teams</h2>
+            <button onClick={() => setCreating(c => !c)}
+              style={{ padding: "6px 14px", background: creating ? "#334155" : "#22c55e", color: creating ? "#cbd5e1" : "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              {creating ? "Cancel" : "+ New team"}
+            </button>
+          </div>
+
+          {creating && (
+            <div style={{ background: "#1e293b", border: "1px solid #22c55e", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              <h3 style={{ color: "#e2e8f0", marginTop: 0, fontSize: 14 }}>Create team</h3>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Name</label>
+                <input value={createName} onChange={e => setCreateName(e.target.value)} placeholder="e.g. Cincinnati Masters"
+                  style={{ width: "100%", padding: "6px 10px", fontSize: 13, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6 }} />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Type</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {Object.keys(TEAM_TYPE_LABELS).map(t => (
+                    <button key={t} onClick={() => setCreateType(t)}
+                      style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${createType === t ? "#3b82f6" : "#334155"}`, background: createType === t ? "#3b82f622" : "transparent", color: createType === t ? "#3b82f6" : "#94a3b8", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      {TEAM_TYPE_LABELS[t]}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>
+                  {TEAM_TYPE_DESCRIPTIONS[createType]}
+                </div>
+              </div>
+              <button onClick={handleCreate}
+                style={{ padding: "7px 16px", background: "#22c55e", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                Create
+              </button>
+            </div>
+          )}
+
+          {msg && <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10 }}>{msg}</div>}
+
+          {teams === null ? (
+            <div style={{ color: "#64748b", fontSize: 13 }}>Loading…</div>
+          ) : teams.length === 0 ? (
+            <div style={{ color: "#64748b", fontSize: 13, fontStyle: "italic", padding: 20, textAlign: "center", border: "1px dashed #334155", borderRadius: 10 }}>
+              No teams yet. Create one to get started, or join an existing team via an invite code (coming in a later session).
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {teams.map(t => (
+                <button key={t.id} onClick={() => setSelectedId(t.id)}
+                  style={{ display: "block", textAlign: "left", width: "100%", padding: "12px 14px", background: t.archived ? "#1e293b88" : "#1e293b", border: "1px solid #334155", borderRadius: 10, cursor: "pointer", color: "#e2e8f0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>
+                      {t.name}
+                      {t.archived && <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#64748b22", border: "1px solid #64748b", color: "#94a3b8" }}>archived</span>}
+                    </span>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid #3b82f6", color: "#3b82f6", fontWeight: 700 }}>{TEAM_TYPE_LABELS[t.team_type] || t.team_type}</span>
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: t.role === "owner" ? "#a78bfa22" : "#33415522", border: `1px solid ${t.role === "owner" ? "#a78bfa" : "#475569"}`, color: t.role === "owner" ? "#a78bfa" : "#94a3b8", fontWeight: 700 }}>{t.role}</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function CatalogView({ favorites, onToggleFavorite }) {
       const [poolMode,    setPoolMode]    = React.useState("25y");
       const [section,     setSection]     = React.useState("main");
@@ -12510,6 +12827,13 @@
                     </a>
                   )}
                   {me?.is_coach && (
+                    <button onClick={() => setView(v => v === "teams" ? "generator" : "teams")}
+                      title={view === "teams" ? "Back to generator" : "Teams (coach)"}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #3b82f6", background: view === "teams" ? "#3b82f6" : "#1e293b", color: view === "teams" ? "#0f172a" : "#3b82f6", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      {view === "teams" ? "⏎" : "👥"}
+                    </button>
+                  )}
+                  {me?.is_coach && (
                     <button onClick={() => setView(v => v === "catalog" ? "generator" : "catalog")}
                       title={view === "catalog" ? "Back to generator" : "Workout-bank catalog (coach)"}
                       style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #60a5fa", background: view === "catalog" ? "#60a5fa" : "#1e293b", color: view === "catalog" ? "#0f172a" : "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
@@ -12571,6 +12895,7 @@
           <div style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
 
             {view === "admin"   && <AdminView />}
+            {view === "teams"   && <TeamsView />}
             {view === "catalog" && (
               <CatalogView
                 favorites={favorites}
