@@ -69,6 +69,9 @@ import {
   dbGetOrCreateCsrf, dbVerifyCsrf,
   dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
   dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach,
+  dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
+  dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
+  dbUpdateMeDob,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1145,6 +1148,107 @@ app.delete("/api/teams/:id/coaches/:sub", checkOrigin, requireAuth, requireCsrf,
       eventType: "team.remove_coach",
       ...reqMeta(req),
       details:   { team_id: req.params.id, target_sub: req.params.sub },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Managed swimmers (relationships scope, Stage 1 / R-B) ─────────
+// Coach-owned roster entries. requireCoach gates all of these. Per-resource
+// ownership check via dbIsManagedSwimmerOwnedBy — a coach can only see/edit
+// their OWN managed swimmers (no cross-coach visibility in v1).
+
+// List the caller's own managed swimmers. Optionally include archived.
+app.get("/api/managed-swimmers", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const includeArchived = req.query.archived === "1" || req.query.archived === "true";
+    res.json(await dbListManagedSwimmersForCoach(req.userSub, { includeArchived }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Create a managed swimmer in the caller's roster.
+app.post("/api/managed-swimmers", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await dbCreateManagedSwimmer({
+      ownerSub:            req.userSub,
+      display_name:        b.display_name,
+      dob:                 b.dob,
+      initials:            b.initials,
+      parental_contact:    b.parental_contact,
+      parent_managed_flag: !!b.parent_managed_flag,
+      pace_scy_100:        b.pace_scy_100,
+      pace_scm_100:        b.pace_scm_100,
+      pace_lcm_100:        b.pace_lcm_100,
+    });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "coach.create_managed_swimmer",
+      ...reqMeta(req),
+      details:   { managed_id: r.id, display_name: b.display_name },
+    });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
+});
+
+// Get a managed swimmer detail (owner only).
+app.get("/api/managed-swimmers/:id", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const owned = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
+    if (!owned) return res.status(403).json({ error: "not owner of this profile" });
+    const ms = await dbGetManagedSwimmer(req.params.id);
+    if (!ms) return res.status(404).json({ error: "not found" });
+    res.json(ms);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Update a managed swimmer (owner only). Patch shape mirrors db.js whitelist.
+app.patch("/api/managed-swimmers/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const owned = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
+    if (!owned) return res.status(403).json({ error: "not owner of this profile" });
+    const r = await dbUpdateManagedSwimmer(req.params.id, req.body || {});
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "coach.update_managed_swimmer",
+      ...reqMeta(req),
+      details:   { managed_id: req.params.id, fields: Object.keys(req.body || {}) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Archive / unarchive a managed swimmer (owner only). Body { archived: true|false }.
+app.post("/api/managed-swimmers/:id/archive", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const owned = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
+    if (!owned) return res.status(403).json({ error: "not owner of this profile" });
+    const archived = req.body?.archived !== false;
+    const r = await dbArchiveManagedSwimmer(req.params.id, archived);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: archived ? "coach.archive_managed_swimmer" : "coach.unarchive_managed_swimmer",
+      ...reqMeta(req),
+      details:   { managed_id: req.params.id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── DOB self-write (relationships scope, R-B + decision #37) ──────
+// Soft-prompt path. Modal in the UI surfaces this when me.dob is null.
+// Hard gates that require DOB (group join, coach invite accept) land in R-F.
+app.post("/api/me/dob", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { dob } = req.body || {};
+    const r = await dbUpdateMeDob(req.userSub, dob);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "user.dob.set",
+      ...reqMeta(req),
+      details:   { had_prior: false },                                        // we don't track prior; "set" is the event
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
