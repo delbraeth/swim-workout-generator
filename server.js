@@ -68,7 +68,7 @@ import {
   dbRevokeSession, dbRevokeSessionByPrefix, dbRevokeOthersByUser, dbListSessions,
   dbGetOrCreateCsrf, dbVerifyCsrf,
   dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
-  dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach,
+  dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach, dbListCoachesForPicker,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
   dbUpdateMeDob,
@@ -1035,6 +1035,14 @@ async function getCallerTeamRole(teamId, sub) {
 // List teams the caller is an active coach in. Returns role per team.
 app.get("/api/teams", requireAuth, async (req, res) => {
   try { res.json(await dbListTeamsForCoach(req.userSub)); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// List coaches for picker UIs (Teams add-coach, group_coaches add — R-C).
+// Excludes the caller. Minimal info to limit PII exposure. requireCoach.
+// See db.js dbListCoachesForPicker for the v1 privacy caveat.
+app.get("/api/coaches", requireAuth, requireCoach, async (req, res) => {
+  try { res.json(await dbListCoachesForPicker(req.userSub)); }
   catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
