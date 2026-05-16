@@ -1140,9 +1140,25 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>Archive behavior</h3>
       <p>Archiving a team is soft and reversible — click the button again to unarchive. Per the relationships scope, <strong>team archive does NOT cascade to groups</strong> (when groups exist in a later stage, archiving a team will detach them as independent groups rather than archiving them too). Groups have their own archive flow.</p>
 
+      <h3>Groups (Stage 2)</h3>
+      <p>Inside a team's detail view, the <strong>🏊‍♀️ Groups</strong> section (amber-accented) lists training cohorts in this team. Team owners and admins can create new groups; group primary coaches manage members, sub-coaches, the training phase, and roster visibility.</p>
+      <ul>
+        <li><strong>Create</strong> — name + optional default pool mode (SCY/SCM/LCM). You become the group's primary coach automatically.</li>
+        <li><strong>Expand</strong> any group row to see members + coaches + phase setter + settings.</li>
+        <li><strong>Members</strong> — pick from your team-affiliated managed swimmers (set their team in 🏊 Managed swimmers first). Each swimmer joins as <em>primary</em> or <em>secondary</em>. A swimmer can be a <strong>primary</strong> in only one of your groups at a time (e.g., their main training group); they can be <em>secondary</em> in any number (dryland, test-set crew, etc.). Full-account swimmers can't be added as members in Stage 2 — they land in Stage 4 (R-F) once the code-based join flow ships.</li>
+        <li><strong>Group coaches</strong> — you (primary) can add assistant coaches via the dropdown. Assistants can see the group + manage members but can't archive or change settings.</li>
+        <li><strong>Training phase</strong> — 5-pill toggle (Base / Build / Peak / Taper / Recovery). Lands on every member, drives generator bias when generate-for-group ships in R-D. Last-changed timestamp recorded.</li>
+        <li><strong>Roster visible to members</strong> — toggle that lets group members see each other's names. <strong>Forced off (and the server rejects enabling) when any active member is under 18.</strong> Privacy gate, no override.</li>
+        <li><strong>Archive group</strong> — soft-archive; auto-stamps left-at on all active members at archive time. Team archive does NOT cascade to groups (per scope decision #13).</li>
+      </ul>
+
+      <h3>Team events (decision #38)</h3>
+      <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. v1 captures just name + date.</p>
+      <p>Upcoming events surface on the main app via the pool-mode selector row: a <strong>📅 amber pill</strong> showing the most-imminent event across all teams you're in (as either a coach or a group member). Renders alongside your personal <strong>🏁 next-event</strong> pill — both coexist; team events take the leading position.</p>
+
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Stage 1 only ships teams.</strong> Groups (training cohorts), members (swimmers), lane plans, workout assignments, and the swimmer-side "Assigned to me" view come in Stages 2–5 of the relationships build. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the full plan.</div>
+        <div class="callout-body"><strong>Stages 1–2 complete after this deploy.</strong> Coming next: <strong>R-D</strong> (generate workouts for groups, with phase + lane assignments), <strong>R-E</strong> (lane plans), <strong>R-F</strong> (full-account swimmers can join groups via shared code), <strong>R-G</strong> ("Assigned to me" view for swimmers), and onward. See <code>RELATIONSHIPS_SCOPE.md</code> for the 5-stage plan.</div>
       </div>
     </section>
 
