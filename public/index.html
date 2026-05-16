@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-16 22:50 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-16 23:10 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10564,11 +10564,12 @@
       const [importing,  setImporting]  = React.useState(false);
       const [form,       setForm]       = React.useState(() => emptyForm());
       const [editing,    setEditing]    = React.useState(false);
+      const [teams,      setTeams]      = React.useState(null);                // coach's active teams (for picker)
       const [msg,        setMsg]        = React.useState(null);
 
       function emptyForm() {
         return {
-          display_name: "", initials: "", dob: "", gender: "",
+          display_name: "", initials: "", dob: "", gender: "", team_id: "",
           pace_scy_100: "", pace_scm_100: "", pace_lcm_100: "",
           parental_contact: "", parent_managed_flag: false,
         };
@@ -10599,6 +10600,7 @@
             initials:            d.initials || "",
             dob:                 d.dob || "",
             gender:              d.gender || "",
+            team_id:             d.team_id || "",
             pace_scy_100:        d.pace_scy_100 || "",
             pace_scm_100:        d.pace_scm_100 || "",
             pace_lcm_100:        d.pace_lcm_100 || "",
@@ -10613,6 +10615,24 @@
       React.useEffect(() => { loadList(); }, [loadList]);
       React.useEffect(() => { loadDetail(selectedId); }, [selectedId, loadDetail]);
 
+      // Load the coach's active teams once on mount for the team-picker UI.
+      // Filtered to non-archived so the picker only shows usable targets.
+      React.useEffect(() => {
+        fetch("/api/teams", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(ts => {
+            const active = (Array.isArray(ts) ? ts : []).filter(t => !t.archived);
+            setTeams(active);
+            // If the coach has exactly one team, default the create form to it.
+            // Only seed an empty form — never overwrite an in-progress edit or
+            // a form the user has already touched.
+            if (active.length === 1) {
+              setForm(f => (f.display_name === "" && f.team_id === "" ? { ...f, team_id: active[0].id } : f));
+            }
+          })
+          .catch(() => setTeams([]));
+      }, []);
+
       const submitCreate = async () => {
         if (!form.display_name.trim()) { setMsg("Name required"); return; }
         if (!form.dob) { setMsg("DOB required (compliance gate)"); return; }
@@ -10625,6 +10645,7 @@
               initials:            form.initials.trim() || null,
               dob:                 form.dob,
               gender:              form.gender || null,
+              team_id:             form.team_id || null,
               pace_scy_100:        form.pace_scy_100.trim() || null,
               pace_scm_100:        form.pace_scm_100.trim() || null,
               pace_lcm_100:        form.pace_lcm_100.trim() || null,
@@ -10635,7 +10656,10 @@
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
           setMsg(null);
-          setForm(emptyForm());
+          // Reset to empty form, but re-default team if coach has only one team.
+          const reset = emptyForm();
+          if (teams && teams.length === 1) reset.team_id = teams[0].id;
+          setForm(reset);
           setCreating(false);
           await loadList();
           setSelectedId(j.id);
@@ -10652,6 +10676,7 @@
               initials:            form.initials.trim() || null,
               dob:                 form.dob,
               gender:              form.gender || null,
+              team_id:             form.team_id || null,
               pace_scy_100:        form.pace_scy_100.trim() || null,
               pace_scm_100:        form.pace_scm_100.trim() || null,
               pace_lcm_100:        form.pace_lcm_100.trim() || null,
@@ -10734,12 +10759,13 @@
               </div>
 
               {editing ? (
-                <ManagedSwimmerForm form={form} setForm={setForm} />
+                <ManagedSwimmerForm form={form} setForm={setForm} teams={teams} />
               ) : (
                 <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.7 }}>
                   <div>Initials: <strong>{detail.initials || "—"}</strong></div>
                   <div>DOB: <strong>{detail.dob}</strong></div>
                   <div>Gender: <strong>{genderLabel(detail.gender) || "—"}</strong></div>
+                  <div>Team: <strong>{detail.team_id ? ((teams || []).find(t => t.id === detail.team_id)?.name || detail.team_id) : "— none —"}</strong></div>
                   <div>Paces — SCY: <strong>{detail.pace_scy_100 || "—"}</strong> · SCM: <strong>{detail.pace_scm_100 || "—"}</strong> · LCM: <strong>{detail.pace_lcm_100 || "—"}</strong></div>
                   <div>Parental contact: <strong>{detail.parental_contact || "—"}</strong></div>
                 </div>
@@ -10801,6 +10827,7 @@
 
           {importing && (
             <BulkImportModal
+              teams={teams || []}
               onClose={() => setImporting(false)}
               onImported={() => { loadList(); }}
             />
@@ -10809,7 +10836,7 @@
           {creating && (
             <div style={{ background: "#1e293b", border: "1px solid #22c55e", borderRadius: 10, padding: 14, marginBottom: 16 }}>
               <h3 style={{ color: "#e2e8f0", marginTop: 0, fontSize: 14 }}>Create managed swimmer</h3>
-              <ManagedSwimmerForm form={form} setForm={setForm} />
+              <ManagedSwimmerForm form={form} setForm={setForm} teams={teams} />
               <button onClick={submitCreate}
                 style={{ padding: "7px 16px", background: "#22c55e", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer", marginTop: 8 }}>
                 Create
@@ -10834,24 +10861,34 @@
                 )}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {list.map(s => (
-                  <button key={s.id} onClick={() => setSelectedId(s.id)}
-                    style={{ display: "block", textAlign: "left", width: "100%", padding: "10px 12px", background: s.archived ? "#1e293b88" : "#1e293b", border: "1px solid #334155", borderRadius: 8, cursor: "pointer", color: "#e2e8f0" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                      <div>
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>
-                          {s.display_name}
-                          {s.archived && <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#64748b22", border: "1px solid #64748b", color: "#94a3b8" }}>archived</span>}
-                        </span>
-                        <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-                          Age {s.age} · DOB {s.dob}
-                          {s.pace_scy_100 && <span> · SCY {s.pace_scy_100}</span>}
+                {list.map(s => {
+                  const teamName = s.team_id ? ((teams || []).find(t => t.id === s.team_id)?.name) : null;
+                  return (
+                    <button key={s.id} onClick={() => setSelectedId(s.id)}
+                      style={{ display: "block", textAlign: "left", width: "100%", padding: "10px 12px", background: s.archived ? "#1e293b88" : "#1e293b", border: "1px solid #334155", borderRadius: 8, cursor: "pointer", color: "#e2e8f0" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 700 }}>
+                            {s.display_name}
+                            {s.archived && <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#64748b22", border: "1px solid #64748b", color: "#94a3b8" }}>archived</span>}
+                          </span>
+                          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                            Age {s.age} · DOB {s.dob}
+                            {s.pace_scy_100 && <span> · SCY {s.pace_scy_100}</span>}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          {teamName && (
+                            <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid #3b82f6", color: "#3b82f6", fontWeight: 700 }} title="Team affiliation">
+                              {teamName}
+                            </span>
+                          )}
+                          <MinorPill swimmer={s} />
                         </div>
                       </div>
-                      <MinorPill swimmer={s} />
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -10874,15 +10911,27 @@
     }
 
     // Shared form component for create + edit. Pure presentation.
-    function ManagedSwimmerForm({ form, setForm }) {
+    function ManagedSwimmerForm({ form, setForm, teams }) {
       const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
       const inputStyle = { width: "100%", padding: "5px 9px", fontSize: 13, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 };
       const labelStyle = { display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 3, marginTop: 8 };
+      const teamOptions = Array.isArray(teams) ? teams : [];
       return (
         <div>
           <label style={{ ...labelStyle, marginTop: 0 }}>Display name *</label>
           <input value={form.display_name} onChange={e => upd("display_name", e.target.value)}
             placeholder="e.g. Sarah Johnson" style={inputStyle} />
+          {teamOptions.length > 0 && (
+            <>
+              <label style={labelStyle}>Team affiliation</label>
+              <select value={form.team_id || ""} onChange={e => upd("team_id", e.target.value)} style={inputStyle}>
+                <option value="">— no team —</option>
+                {teamOptions.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             <div>
               <label style={labelStyle}>Initials</label>
@@ -11076,12 +11125,17 @@
       setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
     }
 
-    function BulkImportModal({ onClose, onImported }) {
+    function BulkImportModal({ teams = [], onClose, onImported }) {
       const [text,    setText]    = React.useState("");
       const [parsed,  setParsed]  = React.useState(null);                    // null = unparsed; [] = empty; [{idx, raw, norm}] = parsed
       const [result,  setResult]  = React.useState(null);                    // server response after submit
       const [submitting, setSubmitting] = React.useState(false);
       const [err,     setErr]     = React.useState(null);
+      // Batch-level team picker. Default: coach's only team if there's exactly
+      // one; otherwise empty ("no team"). All imported swimmers in this run
+      // get the same team affiliation. Per-row team_id NOT supported (would
+      // require a column in the CSV; over-engineered for v1).
+      const [teamId,  setTeamId]  = React.useState(() => (teams.length === 1 ? teams[0].id : ""));
 
       const onFile = (e) => {
         const f = e.target.files?.[0];
@@ -11112,7 +11166,7 @@
           const res = await fetch("/api/managed-swimmers/bulk", {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ rows: validRows }),
+            body:    JSON.stringify({ rows: validRows, team_id: teamId || null }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
@@ -11156,8 +11210,21 @@
             ) : (
               <>
                 <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10, lineHeight: 1.5 }}>
-                  Required columns: <code>name</code>, <code>dob</code>. Optional: <code>initials</code>, <code>pace_scy_100</code>, <code>pace_scm_100</code>, <code>pace_lcm_100</code>, <code>parental_contact</code>. Headers are case-insensitive; extra columns are ignored. DOB accepts <code>YYYY-MM-DD</code> or <code>MM/DD/YYYY</code>.
+                  Required columns: <code>name</code>, <code>dob</code>. Optional: <code>initials</code>, <code>gender</code>, <code>pace_scy_100</code>, <code>pace_scm_100</code>, <code>pace_lcm_100</code>, <code>parental_contact</code>. Headers are case-insensitive; extra columns are ignored. DOB accepts <code>YYYY-MM-DD</code> or <code>MM/DD/YYYY</code>.
                 </div>
+
+                {teams.length > 0 && (
+                  <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: 10, marginBottom: 10 }}>
+                    <label style={{ fontSize: 11, color: "#94a3b8", display: "block", marginBottom: 4 }}>Attach all imported swimmers to:</label>
+                    <select value={teamId} onChange={e => setTeamId(e.target.value)}
+                      style={{ width: "100%", padding: "6px 10px", fontSize: 13, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }}>
+                      <option value="">— no team (free-floating roster) —</option>
+                      {teams.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <label style={{ padding: "5px 11px", background: "#334155", color: "#cbd5e1", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
