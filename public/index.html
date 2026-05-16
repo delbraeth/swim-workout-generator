@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-16 21:50 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-16 22:11 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10447,6 +10447,419 @@
       );
     }
 
+    // Managed Swimmers view (relationships scope, Stage 1 / R-B).
+    // First-class top-level coach roster per decision #31 — shows ALL managed
+    // swimmers regardless of group placement. Coach-gated. DOB required at
+    // create per decision #27; minor status (#28) is DERIVED, never stored.
+
+    // Bounds for the DOB date input. min: 1900-01-01 (sane lower bound);
+    // max: today (no future-born). Both as YYYY-MM-DD strings for input[type=date].
+    const DOB_MIN = "1900-01-01";
+    const DOB_MAX_TODAY = () => new Date().toISOString().slice(0, 10);
+
+    function ManagedSwimmersView() {
+      const [list,       setList]       = React.useState(null);
+      const [showArch,   setShowArch]   = React.useState(false);
+      const [selectedId, setSelectedId] = React.useState(null);
+      const [detail,     setDetail]     = React.useState(null);
+      const [creating,   setCreating]   = React.useState(false);
+      const [form,       setForm]       = React.useState(() => emptyForm());
+      const [editing,    setEditing]    = React.useState(false);
+      const [msg,        setMsg]        = React.useState(null);
+
+      function emptyForm() {
+        return {
+          display_name: "", initials: "", dob: "",
+          pace_scy_100: "", pace_scm_100: "", pace_lcm_100: "",
+          parental_contact: "", parent_managed_flag: false,
+        };
+      }
+
+      const loadList = React.useCallback(async () => {
+        try {
+          const q = showArch ? "?archived=1" : "";
+          const res = await fetch(`/api/managed-swimmers${q}`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setList(await res.json());
+        } catch (err) {
+          setList([]);
+          setMsg(`Error loading roster: ${err.message}`);
+        }
+      }, [showArch]);
+
+      const loadDetail = React.useCallback(async (id) => {
+        if (!id) { setDetail(null); return; }
+        setDetail(null);
+        try {
+          const res = await fetch(`/api/managed-swimmers/${id}`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const d = await res.json();
+          setDetail(d);
+          setForm({
+            display_name:        d.display_name || "",
+            initials:            d.initials || "",
+            dob:                 d.dob || "",
+            pace_scy_100:        d.pace_scy_100 || "",
+            pace_scm_100:        d.pace_scm_100 || "",
+            pace_lcm_100:        d.pace_lcm_100 || "",
+            parental_contact:    d.parental_contact || "",
+            parent_managed_flag: !!d.parent_managed_flag,
+          });
+        } catch (err) {
+          setMsg(`Error loading swimmer: ${err.message}`);
+        }
+      }, []);
+
+      React.useEffect(() => { loadList(); }, [loadList]);
+      React.useEffect(() => { loadDetail(selectedId); }, [selectedId, loadDetail]);
+
+      const submitCreate = async () => {
+        if (!form.display_name.trim()) { setMsg("Name required"); return; }
+        if (!form.dob) { setMsg("DOB required (compliance gate)"); return; }
+        try {
+          const res = await fetch("/api/managed-swimmers", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({
+              display_name:        form.display_name.trim(),
+              initials:            form.initials.trim() || null,
+              dob:                 form.dob,
+              pace_scy_100:        form.pace_scy_100.trim() || null,
+              pace_scm_100:        form.pace_scm_100.trim() || null,
+              pace_lcm_100:        form.pace_lcm_100.trim() || null,
+              parental_contact:    form.parental_contact.trim() || null,
+              parent_managed_flag: !!form.parent_managed_flag,
+            }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setMsg(null);
+          setForm(emptyForm());
+          setCreating(false);
+          await loadList();
+          setSelectedId(j.id);
+        } catch (err) { setMsg(`Error: ${err.message}`); }
+      };
+
+      const submitEdit = async () => {
+        try {
+          const res = await fetch(`/api/managed-swimmers/${detail.id}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({
+              display_name:        form.display_name.trim(),
+              initials:            form.initials.trim() || null,
+              dob:                 form.dob,
+              pace_scy_100:        form.pace_scy_100.trim() || null,
+              pace_scm_100:        form.pace_scm_100.trim() || null,
+              pace_lcm_100:        form.pace_lcm_100.trim() || null,
+              parental_contact:    form.parental_contact.trim() || null,
+              parent_managed_flag: !!form.parent_managed_flag,
+            }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setEditing(false);
+          setMsg(null);
+          await loadDetail(detail.id);
+          await loadList();
+        } catch (err) { setMsg(`Error: ${err.message}`); }
+      };
+
+      const handleArchive = async () => {
+        const next = !detail.archived;
+        const verb = next ? "Archive" : "Unarchive";
+        if (!window.confirm(`${verb} ${detail.display_name}?`)) return;
+        try {
+          const res = await fetch(`/api/managed-swimmers/${detail.id}/archive`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ archived: next }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await loadDetail(detail.id);
+          await loadList();
+        } catch (err) { setMsg(`Error: ${err.message}`); }
+      };
+
+      // ── Minor-indicator pill ─────────────────────────────────────────
+      function MinorPill({ swimmer }) {
+        if (swimmer.is_coppa_protected) {
+          return <span title="Under 13 — claim flow blocked per decision #28"
+            style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#dc262622", border: "1px solid #dc2626", color: "#dc2626", fontWeight: 700 }}>under 13</span>;
+        }
+        if (swimmer.is_minor) {
+          return <span title="Under 18 — minor protections apply"
+            style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#f59e0b22", border: "1px solid #f59e0b", color: "#f59e0b", fontWeight: 700 }}>minor</span>;
+        }
+        return <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#33415522", border: "1px solid #475569", color: "#94a3b8", fontWeight: 700 }}>adult</span>;
+      }
+
+      // ── Detail view ─────────────────────────────────────────────────
+      if (selectedId && detail) {
+        return (
+          <div>
+            <button onClick={() => { setSelectedId(null); setDetail(null); setEditing(false); setMsg(null); }}
+              style={{ marginBottom: 12, padding: "5px 11px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#94a3b8", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              ← All swimmers
+            </button>
+
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
+                <div>
+                  <h2 style={{ color: "#e2e8f0", margin: 0, fontSize: 20 }}>
+                    {detail.display_name}
+                    {detail.archived && <span style={{ marginLeft: 10, fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#64748b22", border: "1px solid #64748b", color: "#94a3b8" }}>archived</span>}
+                  </h2>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>Age {detail.age}</span>
+                    <MinorPill swimmer={detail} />
+                    {detail.parent_managed_flag && (
+                      <span title="Coach has flagged this profile as parent-managed; claim blocked even if 13+"
+                        style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid #3b82f6", color: "#3b82f6", fontWeight: 700 }}>parent-managed</span>
+                    )}
+                  </div>
+                </div>
+                {!editing && (
+                  <button onClick={() => setEditing(true)}
+                    style={{ padding: "5px 11px", background: "#60a5fa", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    ✎ Edit
+                  </button>
+                )}
+              </div>
+
+              {editing ? (
+                <ManagedSwimmerForm form={form} setForm={setForm} />
+              ) : (
+                <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.7 }}>
+                  <div>Initials: <strong>{detail.initials || "—"}</strong></div>
+                  <div>DOB: <strong>{detail.dob}</strong></div>
+                  <div>Paces — SCY: <strong>{detail.pace_scy_100 || "—"}</strong> · SCM: <strong>{detail.pace_scm_100 || "—"}</strong> · LCM: <strong>{detail.pace_lcm_100 || "—"}</strong></div>
+                  <div>Parental contact: <strong>{detail.parental_contact || "—"}</strong></div>
+                </div>
+              )}
+
+              <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+                {editing ? (
+                  <>
+                    <button onClick={submitEdit}
+                      style={{ padding: "6px 14px", background: "#22c55e", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditing(false); loadDetail(detail.id); }}
+                      style={{ padding: "6px 14px", background: "#334155", color: "#cbd5e1", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                  </>
+                ) : (
+                  <button onClick={handleArchive}
+                    style={{ padding: "5px 11px", background: detail.archived ? "#22c55e" : "#64748b", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    {detail.archived ? "Unarchive" : "Archive"}
+                  </button>
+                )}
+              </div>
+
+              <div style={{ fontSize: 10, color: "#64748b", marginTop: 10 }}>
+                ID <code style={{ background: "#0f172a", padding: "1px 5px", borderRadius: 3 }}>{detail.id}</code>
+                <span style={{ marginLeft: 8 }}>Owner sub ends in <code>{detail.owner_coach_sub.slice(-8)}</code></span>
+              </div>
+            </div>
+
+            {msg && <div style={{ color: "#fca5a5", fontSize: 12, padding: "8px 0" }}>{msg}</div>}
+          </div>
+        );
+      }
+
+      // ── List view ───────────────────────────────────────────────────
+      const itemsByMinor = list ? {
+        coppa:  list.filter(s => s.is_coppa_protected),
+        minor:  list.filter(s => s.is_minor && !s.is_coppa_protected),
+        adult:  list.filter(s => !s.is_minor),
+      } : null;
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+            <h2 style={{ color: "#e2e8f0", margin: 0 }}>🏊 Managed swimmers</h2>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => setShowArch(v => !v)}
+                style={{ padding: "5px 11px", borderRadius: 6, border: "1px solid #334155", background: showArch ? "#334155" : "transparent", color: "#94a3b8", fontSize: 11, cursor: "pointer" }}>
+                {showArch ? "Hide archived" : "Show archived"}
+              </button>
+              <button onClick={() => setCreating(c => !c)}
+                style={{ padding: "6px 14px", background: creating ? "#334155" : "#22c55e", color: creating ? "#cbd5e1" : "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                {creating ? "Cancel" : "+ New swimmer"}
+              </button>
+            </div>
+          </div>
+
+          {creating && (
+            <div style={{ background: "#1e293b", border: "1px solid #22c55e", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              <h3 style={{ color: "#e2e8f0", marginTop: 0, fontSize: 14 }}>Create managed swimmer</h3>
+              <ManagedSwimmerForm form={form} setForm={setForm} />
+              <button onClick={submitCreate}
+                style={{ padding: "7px 16px", background: "#22c55e", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer", marginTop: 8 }}>
+                Create
+              </button>
+            </div>
+          )}
+
+          {msg && <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10 }}>{msg}</div>}
+
+          {list === null ? (
+            <div style={{ color: "#64748b", fontSize: 13 }}>Loading…</div>
+          ) : list.length === 0 ? (
+            <div style={{ color: "#64748b", fontSize: 13, fontStyle: "italic", padding: 20, textAlign: "center", border: "1px dashed #334155", borderRadius: 10 }}>
+              No managed swimmers yet. Add one above — DOB is required for compliance gates.
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
+                {list.length} swimmer{list.length === 1 ? "" : "s"}
+                {itemsByMinor && (itemsByMinor.coppa.length + itemsByMinor.minor.length > 0) && (
+                  <span> · {itemsByMinor.coppa.length} under 13 · {itemsByMinor.minor.length} 13–17 · {itemsByMinor.adult.length} adult</span>
+                )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {list.map(s => (
+                  <button key={s.id} onClick={() => setSelectedId(s.id)}
+                    style={{ display: "block", textAlign: "left", width: "100%", padding: "10px 12px", background: s.archived ? "#1e293b88" : "#1e293b", border: "1px solid #334155", borderRadius: 8, cursor: "pointer", color: "#e2e8f0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <div>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>
+                          {s.display_name}
+                          {s.archived && <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#64748b22", border: "1px solid #64748b", color: "#94a3b8" }}>archived</span>}
+                        </span>
+                        <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                          Age {s.age} · DOB {s.dob}
+                          {s.pace_scy_100 && <span> · SCY {s.pace_scy_100}</span>}
+                        </div>
+                      </div>
+                      <MinorPill swimmer={s} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Shared form component for create + edit. Pure presentation.
+    function ManagedSwimmerForm({ form, setForm }) {
+      const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+      const inputStyle = { width: "100%", padding: "5px 9px", fontSize: 13, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 };
+      const labelStyle = { display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 3, marginTop: 8 };
+      return (
+        <div>
+          <label style={{ ...labelStyle, marginTop: 0 }}>Display name *</label>
+          <input value={form.display_name} onChange={e => upd("display_name", e.target.value)}
+            placeholder="e.g. Sarah Johnson" style={inputStyle} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div>
+              <label style={labelStyle}>Initials</label>
+              <input value={form.initials} onChange={e => upd("initials", e.target.value)}
+                placeholder="SJ" maxLength={4} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>DOB *</label>
+              <input type="date" value={form.dob} onChange={e => upd("dob", e.target.value)}
+                min={DOB_MIN} max={DOB_MAX_TODAY()} style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
+            DOB is required to derive minor-protection rules. Stored privately; only the swimmer's age and minor status are surfaced.
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div>
+              <label style={labelStyle}>SCY 100 pace</label>
+              <input value={form.pace_scy_100} onChange={e => upd("pace_scy_100", e.target.value)}
+                placeholder="2:00" maxLength={8} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>SCM 100 pace</label>
+              <input value={form.pace_scm_100} onChange={e => upd("pace_scm_100", e.target.value)}
+                placeholder="2:10" maxLength={8} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>LCM 100 pace</label>
+              <input value={form.pace_lcm_100} onChange={e => upd("pace_lcm_100", e.target.value)}
+                placeholder="2:15" maxLength={8} style={inputStyle} />
+            </div>
+          </div>
+
+          <label style={labelStyle}>Parental contact (email or phone, required for minors in high-school teams)</label>
+          <input value={form.parental_contact} onChange={e => upd("parental_contact", e.target.value)}
+            placeholder="parent@example.com" maxLength={255} style={inputStyle} />
+
+          <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 12, color: "#cbd5e1", cursor: "pointer" }}>
+            <input type="checkbox" checked={!!form.parent_managed_flag}
+              onChange={e => upd("parent_managed_flag", e.target.checked)} />
+            <span>Parent-managed (blocks claim flow even for 13+)</span>
+          </label>
+        </div>
+      );
+    }
+
+    // DOB soft-prompt modal (decision #37). Surfaces when authenticated and
+    // me.dob is null. Dismissable; sessionStorage prevents re-nagging within
+    // a single browser session. Hard gates (group join, coach invite accept)
+    // will re-prompt unconditionally when they ship in R-F.
+    const DOB_PROMPT_DISMISS_KEY = "setforge.dob_prompt_dismissed_v1";
+
+    function DobPromptModal({ onSaved, onDismiss }) {
+      const [dob, setDob] = React.useState("");
+      const [err, setErr] = React.useState(null);
+      const [saving, setSaving] = React.useState(false);
+      const save = async () => {
+        if (!dob) { setErr("Please enter your DOB or tap 'Remind me later'."); return; }
+        setSaving(true);
+        try {
+          const res = await fetch("/api/me/dob", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ dob }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          onSaved(dob);
+        } catch (e) {
+          setErr(e.message);
+        } finally { setSaving(false); }
+      };
+      return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }}>
+          <div style={{ background: "#1e293b", border: "1px solid #475569", borderRadius: 12, padding: 24, maxWidth: 460, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+            <h3 style={{ color: "#e2e8f0", marginTop: 0 }}>Quick question — your date of birth</h3>
+            <p style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>
+              We're rolling out coaching features (teams, groups, workouts assigned to you). To make sure the right compliance rules apply — especially for minor athletes — we need your DOB on file.
+            </p>
+            <p style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.5 }}>
+              Your DOB is private. Only your age and a minor/adult status indicator are visible to other coaches; the raw date is only visible to you.
+            </p>
+            <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginTop: 14, marginBottom: 4 }}>Date of birth</label>
+            <input type="date" value={dob} onChange={e => setDob(e.target.value)}
+              min={DOB_MIN} max={DOB_MAX_TODAY()}
+              style={{ width: "100%", padding: "7px 11px", fontSize: 14, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6 }} />
+            {err && <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 8 }}>{err}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+              <button onClick={onDismiss} disabled={saving}
+                style={{ padding: "7px 14px", background: "#334155", color: "#cbd5e1", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer" }}>
+                Remind me later
+              </button>
+              <button onClick={save} disabled={saving || !dob}
+                style={{ padding: "7px 14px", background: dob ? "#22c55e" : "#475569", color: dob ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: dob ? "pointer" : "not-allowed" }}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function CatalogView({ favorites, onToggleFavorite }) {
       const [poolMode,    setPoolMode]    = React.useState("25y");
       const [section,     setSection]     = React.useState("main");
@@ -11797,6 +12210,13 @@
       const [showProfile, setShowProfile]         = useState(false);
       const [showFeedback, setShowFeedback]       = useState(false);
       const [showIntentParser, setShowIntentParser] = useState(false);
+      // DOB soft-prompt dismissal (sessionStorage-backed, per decision #37).
+      // Initialized lazily from sessionStorage so the modal doesn't re-pop
+      // after dismissal within the same tab.
+      const [dobPromptDismissed, setDobPromptDismissed] = useState(() => {
+        try { return sessionStorage.getItem(DOB_PROMPT_DISMISS_KEY) === "1"; }
+        catch (_) { return false; }
+      });
       const [restSecs,      setRestSecs]          = useState(30); // null=manual, 0/30/45/60=auto
       // Print dialog: show "save before printing?" prompt for unsaved workouts
       const [showPrintDialog, setShowPrintDialog] = useState(false);
@@ -12834,6 +13254,13 @@
                     </button>
                   )}
                   {me?.is_coach && (
+                    <button onClick={() => setView(v => v === "swimmers" ? "generator" : "swimmers")}
+                      title={view === "swimmers" ? "Back to generator" : "Managed swimmers (coach)"}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #06b6d4", background: view === "swimmers" ? "#06b6d4" : "#1e293b", color: view === "swimmers" ? "#0f172a" : "#06b6d4", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      {view === "swimmers" ? "⏎" : "🏊"}
+                    </button>
+                  )}
+                  {me?.is_coach && (
                     <button onClick={() => setView(v => v === "catalog" ? "generator" : "catalog")}
                       title={view === "catalog" ? "Back to generator" : "Workout-bank catalog (coach)"}
                       style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #60a5fa", background: view === "catalog" ? "#60a5fa" : "#1e293b", color: view === "catalog" ? "#0f172a" : "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
@@ -12894,9 +13321,10 @@
 
           <div style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
 
-            {view === "admin"   && <AdminView />}
-            {view === "teams"   && <TeamsView />}
-            {view === "catalog" && (
+            {view === "admin"    && <AdminView />}
+            {view === "teams"    && <TeamsView />}
+            {view === "swimmers" && <ManagedSwimmersView />}
+            {view === "catalog"  && (
               <CatalogView
                 favorites={favorites}
                 onToggleFavorite={authenticated ? handleToggleFavorite : null}
@@ -13538,6 +13966,22 @@
             <IntentParserModal
               onClose={() => setShowIntentParser(false)}
               onApply={handleApplyIntent}
+            />
+          )}
+          {/* DOB soft-prompt (decision #37). Surfaces once per session when
+              authenticated and me.dob is null. The check is gated by
+              dobPromptDismissed (sessionStorage) so dismissal sticks for
+              the rest of the browser tab life. */}
+          {authenticated && me && me.dob === null && !dobPromptDismissed && (
+            <DobPromptModal
+              onSaved={(newDob) => {
+                setMe(prev => prev ? { ...prev, dob: newDob, is_minor: (new Date().getFullYear() - new Date(newDob).getFullYear()) < 18 } : prev);
+                setDobPromptDismissed(true);
+              }}
+              onDismiss={() => {
+                try { sessionStorage.setItem(DOB_PROMPT_DISMISS_KEY, "1"); } catch (_) {}
+                setDobPromptDismissed(true);
+              }}
             />
           )}
           {/* Footer — quiet copyright stamp at the bottom of every view. */}
