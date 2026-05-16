@@ -457,7 +457,7 @@ export async function dbGetMe(sub) {
   const conn = await pool.getConnection();
   try {
     const userRows = await conn.query(
-      "SELECT `sub`, `email`, `email_verified`, `display_name`, `initials`, `dob`, `is_admin`, `is_coach`, `created_at`, `last_login_at` FROM `users` WHERE `sub` = ?",
+      "SELECT `sub`, `email`, `email_verified`, `display_name`, `initials`, `dob`, `gender`, `is_admin`, `is_coach`, `created_at`, `last_login_at` FROM `users` WHERE `sub` = ?",
       [sub]
     );
     if (!userRows[0]) return null;
@@ -491,6 +491,7 @@ export async function dbGetMe(sub) {
       // protect the raw DATE per decision #27.
       dob:                     dateToYmd(u.dob),
       is_minor:                isMinor(u.dob),                                // null when DOB unset
+      gender:                  u.gender,                                       // M/F/X/prefer_not_to_say/null
       is_admin:                !!u.is_admin,
       // Coach is granted by either explicit is_coach flag OR is_admin (admin
       // implicitly has coach capability). Mirrors dbIsCoach's check.
@@ -594,6 +595,7 @@ export async function dbAdminSetUserFlag(sub, field, value) {
 // Self-serve profile update. Unlike dbAdminUpdateUser, this resets
 // `email_verified` to 0 whenever the email value changes (the new
 // address has not been verified through Apple's flow yet).
+const GENDER_VALUES = ["M", "F", "X", "prefer_not_to_say"];
 export async function dbUpdateMe(sub, patch) {
   if (!sub) return { ok: false, reason: "no_sub" };
   const allowed = { email: "email", display_name: "display_name", initials: "initials" };
@@ -615,6 +617,15 @@ export async function dbUpdateMe(sub, patch) {
       vals.push(patch[k] === "" ? null : patch[k]);
     }
   }
+  // Gender is opt-in for the user; null means unset. Reject unknown values.
+  if ("gender" in patch) {
+    const g = patch.gender;
+    if (g !== null && g !== "" && !GENDER_VALUES.includes(g)) {
+      return { ok: false, reason: "bad_gender" };
+    }
+    sets.push("`gender` = ?");
+    vals.push(g === "" ? null : g);
+  }
   if (resetVerified) sets.push("`email_verified` = 0");
   if (!sets.length) return { ok: true, affected: 0 };
   vals.push(sub);
@@ -631,6 +642,15 @@ export async function dbAdminUpdateUser(sub, patch) {
       sets.push(`\`${col}\` = ?`);
       vals.push(patch[k] === "" ? null : patch[k]);
     }
+  }
+  // Gender is admin-editable too. Same enum validation as dbUpdateMe.
+  if ("gender" in patch) {
+    const g = patch.gender;
+    if (g !== null && g !== "" && !GENDER_VALUES.includes(g)) {
+      return { ok: false, reason: "bad_gender" };
+    }
+    sets.push("`gender` = ?");
+    vals.push(g === "" ? null : g);
   }
   if (!sets.length) return { ok: true, affected: 0 };
   vals.push(sub);
@@ -1214,6 +1234,7 @@ function rowToManagedSwimmer(r) {
     age:                  computeAge(r.dob),
     is_minor:             isMinor(r.dob),
     is_coppa_protected:   isCoppaProtected(r.dob),
+    gender:               r.gender,
     parental_contact:     r.parental_contact,
     parent_managed_flag:  !!r.parent_managed_flag,
     pace_scy_100:         r.pace_scy_100,
@@ -1225,7 +1246,7 @@ function rowToManagedSwimmer(r) {
   };
 }
 
-export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, initials = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
+export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, initials = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
   if (!ownerSub) throw new Error("ownerSub required");
   if (!display_name || typeof display_name !== "string") throw new Error("display_name required");
   if (display_name.length > 120) throw new Error("display_name max 120 chars");
@@ -1233,15 +1254,16 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, init
   if (!dobCheck.ok) throw new Error(dobCheck.reason);
   if (initials && initials.length > 4) throw new Error("initials max 4 chars");
   if (parental_contact && parental_contact.length > 255) throw new Error("parental_contact max 255 chars");
+  if (gender !== null && gender !== "" && !GENDER_VALUES.includes(gender)) throw new Error("bad gender");
   await dbEnsureUser(ownerSub);
   const id = genManagedId();
   await pool.query(
     "INSERT INTO `coach_managed_swimmers` " +
-    "(`id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `parental_contact`, `parent_managed_flag`, " +
+    "(`id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
     " `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`) " +
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
-      id, ownerSub, display_name.trim(), initials || null, dob,
+      id, ownerSub, display_name.trim(), initials || null, dob, gender || null,
       parental_contact || null, parent_managed_flag ? 1 : 0,
       pace_scy_100 || null, pace_scm_100 || null, pace_lcm_100 || null,
     ]
@@ -1252,9 +1274,9 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, init
 export async function dbGetManagedSwimmer(id) {
   if (!id || !MS_ID_RE.test(id)) return null;
   const rows = await pool.query(
-    "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `parental_contact`, `parent_managed_flag`, " +
+    "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
     "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `archived`, `created_at`, `updated_at` " +
-    "FROM `coach_managed_swimmers` WHERE `id` = ?",
+    "FROM `coach_managed_swimmers`WHERE `id` = ?",
     [id]
   );
   if (!rows[0]) return null;
@@ -1265,9 +1287,9 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
   if (!coachSub) return [];
   const whereArchived = includeArchived ? "" : "AND `archived` = 0 ";
   const rows = await pool.query(
-    "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `parental_contact`, `parent_managed_flag`, " +
+    "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
     "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `archived`, `created_at`, `updated_at` " +
-    "FROM `coach_managed_swimmers` " +
+    "FROM `coach_managed_swimmers`" +
     "WHERE `owner_coach_sub` = ? " + whereArchived +
     "ORDER BY `archived` ASC, `display_name` ASC",
     [coachSub]
@@ -1281,6 +1303,7 @@ export async function dbUpdateManagedSwimmer(id, patch) {
   const allowed = {
     display_name:        v => (typeof v === "string" && v.trim().length > 0 && v.length <= 120) ? v.trim() : null,
     initials:            v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 4) ? v : undefined,
+    gender:              v => (v == null || v === "") ? null : (GENDER_VALUES.includes(v) ? v : undefined),
     parental_contact:    v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 255) ? v : undefined,
     parent_managed_flag: v => (typeof v === "boolean") ? (v ? 1 : 0) : (v === 0 || v === 1) ? v : undefined,
     pace_scy_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
