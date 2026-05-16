@@ -1883,6 +1883,29 @@ export async function dbDeleteTeamEvent(eventId) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// Update name / date on an existing event. team_id and created_by_coach_sub
+// are intentionally not editable — creator attribution is a tombstone.
+export async function dbUpdateTeamEvent(eventId, { name, date } = {}) {
+  if (!eventId) return { ok: false, reason: "no_id" };
+  const sets = [], vals = [];
+  if (name !== undefined) {
+    if (typeof name !== "string" || !name.trim()) return { ok: false, reason: "bad_name" };
+    if (name.length > 120) return { ok: false, reason: "name_too_long" };
+    sets.push("`name` = ?"); vals.push(name.trim());
+  }
+  if (date !== undefined) {
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return { ok: false, reason: "bad_date" };
+    sets.push("`date` = ?"); vals.push(date);
+  }
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(eventId);
+  const r = await pool.query(
+    `UPDATE \`team_events\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
+    vals
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 export async function dbListTeamEvents(teamId) {
   if (!teamId) return [];
   const rows = await pool.query(
