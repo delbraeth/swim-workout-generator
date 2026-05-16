@@ -76,7 +76,7 @@ import {
   dbUpdateGroup, dbArchiveGroup, dbSetGroupPhase, dbGetGroupRole,
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
-  dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbListTeamEvents,
+  dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
   dbListUpcomingEventsForUser,
 } from "./db.js";
 
@@ -1538,6 +1538,29 @@ app.get("/api/teams/:teamId/events", requireAuth, async (req, res) => {
       if (rows.length === 0) return res.status(403).json({ error: "no access to this team's events" });
     }
     res.json(await dbListTeamEvents(req.params.teamId));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Update event. Caller must have any role on the event's team. Editable: name, date.
+app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "not found" });
+    const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!callerRole) return res.status(403).json({ error: "not a team coach" });
+    const { name, date } = req.body || {};
+    const patch = {};
+    if (name !== undefined) patch.name = name;
+    if (date !== undefined) patch.date = date;
+    const r = await dbUpdateTeamEvent(req.params.id, patch);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team_event.update",
+      ...reqMeta(req),
+      details:   { event_id: req.params.id, team_id: ev.team_id, fields: Object.keys(patch) },
+    });
+    res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
