@@ -279,6 +279,7 @@
     <a href="#user-settings">Your Settings</a>
     <a href="#account">Account &amp; Sessions</a>
     <a href="#admin">Admin (admins only)</a>
+    <a href="#teams">Teams (coaches)</a>
     <a href="#catalog">Workout Catalog (coaches)</a>
     <a href="#parse-intent">Parse Intent (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
@@ -1104,6 +1105,44 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>Clear</strong> button to reset filters.</li>
       </ul>
       <p>Event categories you'll see: <code>auth.*</code> (login/logout/signup/reject/disabled_attempt), <code>admin.*</code> (user.disable/enable/delete/update, user.coach.grant/revoke, invite.create/delete, access_denied, feedback.update), <code>coach.*</code> (access_denied), <code>invite.consume</code>, <code>workout.delete</code>, <code>csrf.reject</code>, <code>rate_limit.hit</code>, <code>feedback.submit</code>, <code>user.profile.update</code>.</p>
+    </section>
+
+    <!-- ══ TEAMS (COACH) ══ -->
+    <section id="teams">
+      <h2>Teams (coach access)</h2>
+      <p>Teams are the institutional layer of the coaching relationship model. A team is a club / school / program / group of coaches that operates as one unit. Coaches own and join teams; groups (the actual training cohorts) live <em>inside</em> teams. <strong>Stage 1 of the relationships build ships the team layer; groups, members, and assignments come in later stages.</strong></p>
+
+      <h3>Access</h3>
+      <p>A blue <strong>👥 Teams</strong> button appears in the header for users with the <code>is_coach</code> flag (or <code>is_admin</code>, since admins implicitly have coach access). Granted via <strong>Admin → Users → Coach</strong>.</p>
+
+      <h3>Team types</h3>
+      <p>Each team has a <strong>type</strong> set at creation that drives compliance rules. Type is immutable after creation — to change it, archive and recreate.</p>
+      <ul>
+        <li><strong>High School</strong> — FERPA-shape: minor protections, restricted disclosure to non-parents, parental consent required for under-18 participants. Roster visibility forced off when minors are present.</li>
+        <li><strong>Summer</strong> — Mixed-age seasonal program. Minor protections kick in only if under-18 members are added.</li>
+        <li><strong>Club</strong> — Year-round mixed-age (USA Swimming pattern). Under-13 protections apply per member; over-13 are conventional.</li>
+        <li><strong>Masters</strong> — Adults only (18+). Minimal compliance burden. If you accidentally add an under-18 to a Masters team, the system warns but does not block.</li>
+      </ul>
+
+      <h3>Roles within a team</h3>
+      <p>Each coach in a team has one of three roles. <strong>v1 only exposes the Owner role in the UI;</strong> the Admin tier is in the data model and will be surfaced in a later session.</p>
+      <ul>
+        <li><strong>Owner</strong> — created the team. Can rename / archive the team, add and remove coaches. The owner cannot be removed via the UI (would orphan the team); ownership transfer is a planned future flow.</li>
+        <li><strong>Admin</strong> — promoted by the owner. Can add/remove coaches (not the owner) and create groups within the team. <em>UI for this comes later.</em></li>
+        <li><strong>Coach</strong> — can operate within groups they're assigned to. Read-only at the team level.</li>
+      </ul>
+
+      <h3>Creating and managing</h3>
+      <p>The Teams page shows all teams you're a member of with your role on each. To <strong>create</strong> a team, click <strong>+ New team</strong>, enter a name, pick a type, and save — you become the owner. To <strong>open</strong> a team, click its row; the detail view shows the type, coach list, and (if you're the owner) controls to rename, archive, and add/remove coaches.</p>
+      <p>To <strong>add a coach</strong>, paste their user <code>sub</code> identifier (you can copy this from <strong>Admin → Users</strong>) and click Add. The target user must already exist in the system and have the <code>is_coach</code> flag set. v1 only supports adding as role "Coach" via the UI — Admin promotions come later.</p>
+
+      <h3>Archive behavior</h3>
+      <p>Archiving a team is soft and reversible — click the button again to unarchive. Per the relationships scope, <strong>team archive does NOT cascade to groups</strong> (when groups exist in a later stage, archiving a team will detach them as independent groups rather than archiving them too). Groups have their own archive flow.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Stage 1 only ships teams.</strong> Groups (training cohorts), members (swimmers), lane plans, workout assignments, and the swimmer-side "Assigned to me" view come in Stages 2–5 of the relationships build. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the full plan.</div>
+      </div>
     </section>
 
     <!-- ══ CATALOG (COACH) ══ -->
