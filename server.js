@@ -69,6 +69,7 @@ import {
   dbGetOrCreateCsrf, dbVerifyCsrf,
   dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
   dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach, dbListCoachesForPicker,
+  dbUpdateTeamCoachRole, dbTransferGroupPrimary,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
   dbBulkCreateManagedSwimmers, dbUpdateMeDob,
@@ -85,6 +86,8 @@ import {
   dbUpdateGroupLanePlan, dbArchiveGroupLanePlan, dbSetDefaultLanePlan,
   dbCreateGroupJoinToken, dbGetGroupJoinToken, dbListGroupJoinTokens,
   dbDeleteGroupJoinToken, dbRedeemGroupJoinToken,
+  dbCreateClaimToken, dbGetClaimToken, dbListClaimTokensForManaged,
+  dbDeleteClaimToken, dbRedeemClaimToken,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1317,6 +1320,59 @@ app.post("/api/teams/:id/coaches", checkOrigin, requireAuth, requireCsrf, writeL
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// R-J: promote/demote a team coach between 'admin' and 'coach' roles.
+// Owner only. The owner's role is immutable here (ownership transfer is its
+// own flow, not v1).
+app.patch("/api/teams/:id/coaches/:sub", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const callerRole = await getCallerTeamRole(req.params.id, req.userSub);
+    if (callerRole !== "owner") return res.status(403).json({ error: "owner only" });
+    const { role } = req.body || {};
+    const r = await dbUpdateTeamCoachRole(req.params.id, req.params.sub, role);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.change_coach_role",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, target_sub: req.params.sub, new_role: role },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// R-J: transfer a group's primary coach to a different coach. Used when
+// removing a team coach who's primary on groups — actor walks through the
+// removal modal, picks a destination per group, this endpoint executes each
+// transfer atomically. Caller must be team owner (only owner can remove
+// coaches; therefore only owner can drive transfers prior to removal).
+app.post("/api/groups/:id/primary-coach", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const group = await dbGetGroup(req.params.id);
+    if (!group) return res.status(404).json({ error: "group not found" });
+    // Authorization: team owner (where applicable) OR the current primary
+    // coach (so a primary can hand off to an assistant without owner action).
+    let allowed = false;
+    if (group.team_id) {
+      const tr = await dbGetTeamRole(group.team_id, req.userSub);
+      if (tr === "owner") allowed = true;
+    }
+    const gr = await dbGetGroupRole(req.params.id, req.userSub);
+    if (gr === "primary") allowed = true;
+    if (!allowed) return res.status(403).json({ error: "team owner or current primary coach required" });
+    const { new_primary_sub } = req.body || {};
+    if (!new_primary_sub) return res.status(400).json({ error: "new_primary_sub required" });
+    const r = await dbTransferGroupPrimary(req.params.id, new_primary_sub);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.transfer_primary",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, prior_primary: r.prior_primary, new_primary: new_primary_sub },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // Remove a coach from a team (sets removed_at; row preserved). Owner only
 // in v1. Owner cannot be removed via this endpoint (would orphan FK).
 app.delete("/api/teams/:id/coaches/:sub", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
@@ -1324,7 +1380,11 @@ app.delete("/api/teams/:id/coaches/:sub", checkOrigin, requireAuth, requireCsrf,
     const callerRole = await getCallerTeamRole(req.params.id, req.userSub);
     if (callerRole !== "owner") return res.status(403).json({ error: "owner only" });
     const r = await dbRemoveTeamCoach(req.params.id, req.params.sub);
-    if (!r.ok) return res.status(400).json({ error: r.reason });
+    if (!r.ok) {
+      // R-J: surface "primary_on_groups" with the conflict list so UI can
+      // prompt for per-group transfer before retrying the remove.
+      return res.status(400).json({ error: r.reason, ...r });
+    }
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "team.remove_coach",
@@ -1663,6 +1723,103 @@ app.delete("/api/groups/:id/members/:memberId", checkOrigin, requireAuth, requir
       eventType: "group.remove_member",
       ...reqMeta(req),
       details:   { group_id: req.params.id, member_id: Number(req.params.memberId), reason },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Managed-swimmer claim tokens (Stage 5 / R-I) ──────────────────
+// Per scope §10 + Flow J. Coach issues a one-time token; swimmer (with own
+// SSO account) redeems to migrate the managed profile into their account.
+
+// Coach issues a claim token for a managed swimmer they own.
+app.post("/api/managed-swimmers/:id/claim-tokens", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const owns = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
+    if (!owns) return res.status(403).json({ error: "not owner of this managed profile" });
+    try {
+      const r = await dbCreateClaimToken({ managedId: req.params.id, issuedByCoach: req.userSub });
+      dbAuditEvent({
+        userSub:   req.userSub,
+        eventType: "managed.claim_token.issue",
+        ...reqMeta(req),
+        details:   { managed_id: req.params.id, token: r.token },
+      });
+      res.json(r);
+    } catch (e) {
+      // Surface the #28 gate errors as 400s with structured reason.
+      const msg = e.message || String(e);
+      if (msg === "claim_blocked_under_13" || msg === "claim_blocked_parent_managed") {
+        return res.status(400).json({ error: msg, reason: msg });
+      }
+      throw e;
+    }
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/managed-swimmers/:id/claim-tokens", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const owns = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
+    if (!owns) return res.status(403).json({ error: "not owner of this managed profile" });
+    const includeRedeemed = req.query.redeemed === "1";
+    const includeExpired  = req.query.expired === "1";
+    res.json(await dbListClaimTokensForManaged(req.params.id, { includeRedeemed, includeExpired }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/claim-tokens/:token", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const tok = await dbGetClaimToken(req.params.token);
+    if (!tok) return res.status(404).json({ error: "not found" });
+    if (tok.issued_by_coach !== req.userSub) return res.status(403).json({ error: "only issuer can revoke" });
+    const r = await dbDeleteClaimToken(req.params.token);
+    if (r.affected === 0) return res.status(409).json({ error: "token already redeemed or expired" });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "managed.claim_token.revoke",
+      ...reqMeta(req),
+      details:   { token: req.params.token, managed_id: tok.managed_id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Preview a claim token (lets the swimmer see who/what they're about to
+// claim BEFORE committing). Token itself is the secret; any authed user
+// can look it up.
+app.get("/api/claim-tokens/:token/preview", requireAuth, async (req, res) => {
+  try {
+    const tok = await dbGetClaimToken(req.params.token);
+    if (!tok) return res.status(404).json({ error: "invalid_token" });
+    res.json({
+      managed_id:   tok.managed_id,
+      managed_name: tok.managed_name,
+      coach_name:   tok.coach_name,
+      expires_at:   tok.expires_at,
+      is_expired:   tok.is_expired,
+      is_redeemed:  tok.is_redeemed,
+    });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Swimmer redeems the token. Server validates + runs the atomic migration
+// per Flow J. Returns the identity-diff payload for the post-claim review
+// screen (#30).
+app.post("/api/claim-tokens/:token/redeem", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbRedeemClaimToken(req.params.token, req.userSub);
+    if (!r.ok) return res.status(400).json({ error: r.reason, ...r });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "managed.claim_token.redeem",
+      ...reqMeta(req),
+      details:   {
+        token: req.params.token,
+        managed_id: r.managed_id,
+        coach_sub: r.coach_sub,
+        diff_field_count: (r.identity_diff || []).length,
+        repointed: r.repointed,
+      },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
