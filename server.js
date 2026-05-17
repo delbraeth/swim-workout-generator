@@ -78,6 +78,8 @@ import {
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
   dbListUpcomingEventsForUser,
+  dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
+  dbListCoachTargets,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -786,15 +788,117 @@ app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter
     if (await dbWorkoutExists(entry.id)) {
       return res.status(409).json({ error: "duplicate id", id: entry.id });
     }
+
+    // R-D — optional assign_to clause for fanout. Validate BEFORE the insert
+    // so we can reject early and avoid an orphan workout if the fanout would
+    // fail. Two shapes:
+    //   { assign_to: { group_id: "gr_..." } } — fan out to every active
+    //       member of the group; each gets a row keyed to their stored
+    //       pace per the workout's poolMode (managed-only in Stage 3).
+    //   { assign_to: { managed_id: "ms_..." } } — single private-student
+    //       assignment.
+    const assignTo = entry.assign_to || (req.body && req.body.assign_to) || null;
+    let assignmentPlan = null;                                                  // computed targets[] for fanout
+    if (assignTo) {
+      if (assignTo.group_id) {
+        const groupRole = await dbGetGroupRole(assignTo.group_id, req.userSub);
+        if (!groupRole) return res.status(403).json({ error: "not a coach on this group" });
+        const members = await dbListGroupMembers(assignTo.group_id);
+        if (members.length === 0) return res.status(400).json({ error: "group has no active members" });
+        // Build targets[] — managed-only in Stage 3. Skip swimmer-sub members
+        // (R-F will accept them once full-account joining is built; until
+        // then they'd just be skipped here, but Stage 3 groups can't contain
+        // them anyway).
+        assignmentPlan = { group_id: assignTo.group_id, targets: [] };
+        for (const m of members) {
+          if (!m.member_managed_id) continue;                                   // skip full-account in Stage 3
+          const pace = await resolveManagedPaceForRoute(m.member_managed_id, entry.poolMode);
+          assignmentPlan.targets.push({
+            managed_id: m.member_managed_id,
+            lane_pace:  pace,
+          });
+        }
+        if (assignmentPlan.targets.length === 0) {
+          return res.status(400).json({ error: "no Stage-3-assignable members in this group (managed-only in R-D)" });
+        }
+      } else if (assignTo.managed_id) {
+        const owns = await dbIsManagedSwimmerOwnedBy(assignTo.managed_id, req.userSub);
+        if (!owns) return res.status(403).json({ error: "must own this managed swimmer to assign" });
+        const pace = await resolveManagedPaceForRoute(assignTo.managed_id, entry.poolMode);
+        assignmentPlan = { group_id: null, targets: [{ managed_id: assignTo.managed_id, lane_pace: pace }] };
+      } else {
+        return res.status(400).json({ error: "assign_to must have group_id or managed_id" });
+      }
+    }
+
     await dbInsertWorkout(entry);
+    let assignmentSummary = null;
+    if (assignmentPlan) {
+      try {
+        const r = await dbBulkCreateAssignments({
+          workoutId: entry.id,
+          groupId:   assignmentPlan.group_id,
+          targets:   assignmentPlan.targets,
+        });
+        assignmentSummary = { count: r.count, ids: r.ids, group_id: assignmentPlan.group_id };
+        dbAuditEvent({
+          userSub:   req.userSub,
+          eventType: assignmentPlan.group_id ? "workout.assign_to_group" : "workout.assign_to_managed",
+          ...reqMeta(req),
+          details:   { workout_id: entry.id, group_id: assignmentPlan.group_id, count: r.count },
+        });
+      } catch (err) {
+        // Workout already inserted; surface assignment error but keep workout.
+        // Coach can retry assignment via a follow-up endpoint (not in v1 — for
+        // R-D they'll just delete and re-save if needed).
+        return res.status(500).json({ ok: false, id: entry.id, error: "workout saved but assignment fanout failed: " + (err.message || String(err)) });
+      }
+    }
+
     // F1 — read-back: return the DB's view of the row, not the client's payload.
     // This ensures the client's optimistic state replacement reflects any
     // server-side coercion (defaults, JSON round-tripping, type narrowing).
     const stored = await dbGetWorkout(entry.id);
-    res.json({ ok: true, id: entry.id, entry: stored || entry });
+    res.json({ ok: true, id: entry.id, entry: stored || entry, assignment: assignmentSummary });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// Tiny local helper to avoid exposing resolveManagedPace from db.js. It maps
+// pool mode → the correct pace column and returns null if unset.
+async function resolveManagedPaceForRoute(managedId, poolMode) {
+  if (!managedId || !poolMode) return null;
+  const ms = await dbGetManagedSwimmer(managedId);
+  if (!ms) return null;
+  if (poolMode === "25y") return ms.pace_scy_100 || null;
+  if (poolMode === "25m") return ms.pace_scm_100 || null;
+  if (poolMode === "50m") return ms.pace_lcm_100 || null;
+  return null;
+}
+
+// Coach-targets list for the generate-for picker (R-D). Returns active
+// groups the caller coaches with member counts + current_phase + team name.
+app.get("/api/picker/coach-targets", requireAuth, requireCoach, async (req, res) => {
+  try { res.json(await dbListCoachTargets(req.userSub)); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// List assignments for a workout. Visible to the workout owner (coach) OR
+// to any target swimmer (R-G "Assigned to me" prep).
+app.get("/api/workouts/:id/assignments", requireAuth, async (req, res) => {
+  try {
+    const w = await dbGetWorkout(req.params.id);
+    if (!w) return res.status(404).json({ error: "workout not found" });
+    const isOwner = w.sub === req.userSub;
+    const isTarget = !isOwner;                                                 // we'll verify after fetch
+    const list = await dbListAssignmentsForWorkout(req.params.id);
+    if (!isOwner) {
+      const userIsTarget = list.some(a => a.target_swimmer_sub === req.userSub);
+      if (!userIsTarget) return res.status(403).json({ error: "not authorized" });
+    }
+    res.json(list);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 app.patch("/api/workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
