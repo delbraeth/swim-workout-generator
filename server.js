@@ -80,6 +80,8 @@ import {
   dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
   dbListCoachTargets,
+  dbCreateGroupLanePlan, dbGetGroupLanePlan, dbListGroupLanePlans,
+  dbUpdateGroupLanePlan, dbArchiveGroupLanePlan, dbSetDefaultLanePlan,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -803,23 +805,56 @@ app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter
       if (assignTo.group_id) {
         const groupRole = await dbGetGroupRole(assignTo.group_id, req.userSub);
         if (!groupRole) return res.status(403).json({ error: "not a coach on this group" });
-        const members = await dbListGroupMembers(assignTo.group_id);
-        if (members.length === 0) return res.status(400).json({ error: "group has no active members" });
-        // Build targets[] — managed-only in Stage 3. Skip swimmer-sub members
-        // (R-F will accept them once full-account joining is built; until
-        // then they'd just be skipped here, but Stage 3 groups can't contain
-        // them anyway).
-        assignmentPlan = { group_id: assignTo.group_id, targets: [] };
-        for (const m of members) {
-          if (!m.member_managed_id) continue;                                   // skip full-account in Stage 3
-          const pace = await resolveManagedPaceForRoute(m.member_managed_id, entry.poolMode);
-          assignmentPlan.targets.push({
-            managed_id: m.member_managed_id,
-            lane_pace:  pace,
-          });
-        }
-        if (assignmentPlan.targets.length === 0) {
-          return res.status(400).json({ error: "no Stage-3-assignable members in this group (managed-only in R-D)" });
+
+        // R-E: if assign_to includes lane_plan_id, the plan is authoritative
+        // for the member list (with lane_pace + lane_idx + lane_label from
+        // the plan). Otherwise fall back to all-current-members each at
+        // their stored pace (R-D behavior).
+        if (assignTo.lane_plan_id) {
+          const plan = await dbGetGroupLanePlan(assignTo.lane_plan_id);
+          if (!plan) return res.status(404).json({ error: "lane plan not found" });
+          if (plan.group_id !== assignTo.group_id) return res.status(400).json({ error: "lane plan does not belong to this group" });
+          if (plan.archived) return res.status(400).json({ error: "lane plan is archived" });
+
+          // Build a set of currently-active managed IDs in this group so we
+          // can skip stale member references in the plan (per scope §7).
+          const currentMembers = await dbListGroupMembers(assignTo.group_id);
+          const activeManaged  = new Set(currentMembers.map(m => m.member_managed_id).filter(Boolean));
+
+          assignmentPlan = { group_id: assignTo.group_id, lane_plan_id: assignTo.lane_plan_id, targets: [] };
+          for (const lane of (plan.plan_data?.lanes || [])) {
+            for (const m of (lane.members || [])) {
+              // Stage 3 is managed-only; skip full-account swimmer refs.
+              if (!m.managed_id) continue;
+              // Stale-member skip: not in the current group → omit.
+              if (!activeManaged.has(m.managed_id)) continue;
+              assignmentPlan.targets.push({
+                managed_id:  m.managed_id,
+                lane_idx:    lane.idx,
+                lane_label:  lane.label || null,
+                lane_pace:   lane.target_pace_100 || null,
+              });
+            }
+          }
+          if (assignmentPlan.targets.length === 0) {
+            return res.status(400).json({ error: "lane plan has no Stage-3-assignable members (all stale, full-account, or empty)" });
+          }
+        } else {
+          // R-D fallback: no plan → all-current-members at stored pace.
+          const members = await dbListGroupMembers(assignTo.group_id);
+          if (members.length === 0) return res.status(400).json({ error: "group has no active members" });
+          assignmentPlan = { group_id: assignTo.group_id, targets: [] };
+          for (const m of members) {
+            if (!m.member_managed_id) continue;                                 // skip full-account in Stage 3
+            const pace = await resolveManagedPaceForRoute(m.member_managed_id, entry.poolMode);
+            assignmentPlan.targets.push({
+              managed_id: m.member_managed_id,
+              lane_pace:  pace,
+            });
+          }
+          if (assignmentPlan.targets.length === 0) {
+            return res.status(400).json({ error: "no Stage-3-assignable members in this group (managed-only in R-D)" });
+          }
         }
       } else if (assignTo.managed_id) {
         const owns = await dbIsManagedSwimmerOwnedBy(assignTo.managed_id, req.userSub);
@@ -836,16 +871,17 @@ app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter
     if (assignmentPlan) {
       try {
         const r = await dbBulkCreateAssignments({
-          workoutId: entry.id,
-          groupId:   assignmentPlan.group_id,
-          targets:   assignmentPlan.targets,
+          workoutId:  entry.id,
+          groupId:    assignmentPlan.group_id,
+          lanePlanId: assignmentPlan.lane_plan_id || null,
+          targets:    assignmentPlan.targets,
         });
-        assignmentSummary = { count: r.count, ids: r.ids, group_id: assignmentPlan.group_id };
+        assignmentSummary = { count: r.count, ids: r.ids, group_id: assignmentPlan.group_id, lane_plan_id: assignmentPlan.lane_plan_id || null };
         dbAuditEvent({
           userSub:   req.userSub,
           eventType: assignmentPlan.group_id ? "workout.assign_to_group" : "workout.assign_to_managed",
           ...reqMeta(req),
-          details:   { workout_id: entry.id, group_id: assignmentPlan.group_id, count: r.count },
+          details:   { workout_id: entry.id, group_id: assignmentPlan.group_id, lane_plan_id: assignmentPlan.lane_plan_id || null, count: r.count },
         });
       } catch (err) {
         // Workout already inserted; surface assignment error but keep workout.
@@ -1600,6 +1636,90 @@ app.delete("/api/groups/:id/members/:memberId", checkOrigin, requireAuth, requir
       eventType: "group.remove_member",
       ...reqMeta(req),
       details:   { group_id: req.params.id, member_id: Number(req.params.memberId), reason },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Group lane plans (Stage 3 / R-E) ──────────────────────────────
+// Per scope §7 + decision #14. Coach-managed reusable lane configs per
+// group. Read: any group coach. Write: group primary coach only in v1.
+
+app.get("/api/groups/:id/lane-plans", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const includeArchived = req.query.archived === "1" || req.query.archived === "true";
+    res.json(await dbListGroupLanePlans(req.params.id, { includeArchived }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/groups/:id/lane-plans", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (role !== "primary") return res.status(403).json({ error: "group primary coach required" });
+    const { name, is_default = false, plan_data } = req.body || {};
+    if (!plan_data) return res.status(400).json({ error: "plan_data required" });
+    const r = await dbCreateGroupLanePlan({ groupId: req.params.id, name, is_default: !!is_default, plan_data });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.lane_plan.create",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, plan_id: r.id, name, is_default: !!is_default, lane_count: (plan_data.lanes || []).length },
+    });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
+});
+
+app.patch("/api/lane-plans/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const plan = await dbGetGroupLanePlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "not found" });
+    const role = await getCallerGroupRole(plan.group_id, req.userSub);
+    if (role !== "primary") return res.status(403).json({ error: "group primary coach required" });
+    const r = await dbUpdateGroupLanePlan(req.params.id, req.body || {});
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.lane_plan.update",
+      ...reqMeta(req),
+      details:   { plan_id: req.params.id, group_id: plan.group_id, fields: Object.keys(req.body || {}) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/lane-plans/:id/archive", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const plan = await dbGetGroupLanePlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "not found" });
+    const role = await getCallerGroupRole(plan.group_id, req.userSub);
+    if (role !== "primary") return res.status(403).json({ error: "group primary coach required" });
+    const archived = req.body?.archived !== false;
+    const r = await dbArchiveGroupLanePlan(req.params.id, archived);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: archived ? "group.lane_plan.archive" : "group.lane_plan.unarchive",
+      ...reqMeta(req),
+      details:   { plan_id: req.params.id, group_id: plan.group_id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/lane-plans/:id/default", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const plan = await dbGetGroupLanePlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "not found" });
+    const role = await getCallerGroupRole(plan.group_id, req.userSub);
+    if (role !== "primary") return res.status(403).json({ error: "group primary coach required" });
+    const r = await dbSetDefaultLanePlan(plan.group_id, req.params.id);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.lane_plan.set_default",
+      ...reqMeta(req),
+      details:   { plan_id: req.params.id, group_id: plan.group_id },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
