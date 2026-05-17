@@ -1156,6 +1156,28 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. v1 captures just name + date.</p>
       <p>Upcoming events surface on the main app via the pool-mode selector row: a <strong>📅 amber pill</strong> showing the most-imminent event across all teams you're in (as either a coach or a group member). Renders alongside your personal <strong>🏁 next-event</strong> pill — both coexist; team events take the leading position.</p>
 
+      <h3>Claim flow (Stage 5 / R-I)</h3>
+      <p>The coach-managed → full-account-swimmer migration. Coaches build managed profiles over time (paces, DOB, group memberships, assignments); when a swimmer is ready to take ownership of their account, the coach issues a one-time claim code that transfers everything atomically.</p>
+
+      <h4>Coach side</h4>
+      <p>In a managed swimmer's detail panel (🏊 Managed Swimmers → click a swimmer): scroll to the <strong>Claim link</strong> section. Confirmation dialog spells out exactly what claim does — silent identity overwrite per decision #24 (name/DOB/gender from managed profile become the swimmer's), then all assignments + coach notes + group memberships repointed to the swimmer's account, then the managed profile DELETED. 30-day expiry; revocable until redeemed.</p>
+      <p><strong>Blocked when:</strong> swimmer is under 13 (COPPA-protected, decision #28) or the profile has the parent-managed flag set (decision #25, club-type override). The button shows the reason and disables.</p>
+
+      <h4>Swimmer side</h4>
+      <p>In 👤 Profile, scroll to <strong>Claim a managed profile</strong>. Paste the code, click Look up to preview ("you're about to claim [name] from coach [name]"), then Confirm claim. The atomic migration runs, and you see a post-claim diff screen showing exactly which identity fields changed on your account (per decision #30 — no silent overwrites without disclosure).</p>
+      <p><strong>Group conflict resolution:</strong> if the managed profile was a primary in a coach's group AND your account is already a primary in a DIFFERENT group of the same coach (decision #33), the claim fails with the conflicting group names so you can leave one and retry.</p>
+
+      <h3>Admin tier + coach lifecycle (Stage 5 / R-J)</h3>
+      <p>Three-tier team permissions (decision #11) are now exposed in the UI.</p>
+      <ul>
+        <li><strong>Owner</strong> (created the team) — can rename, archive, add/remove/promote/demote any coach. Immutable role.</li>
+        <li><strong>Admin</strong> — promoted by the owner. Can create groups, add/remove team coaches at the coach tier. Cannot remove the owner.</li>
+        <li><strong>Coach</strong> — can operate within groups they're assigned to. Read-only at the team level.</li>
+      </ul>
+      <p>When adding a coach to a team, the owner picks <em>coach</em> or <em>admin</em>. Each row has ↑ Admin / ↓ Coach promote/demote buttons (owner only).</p>
+      <p><strong>Removing a coach who's primary on groups:</strong> the system refuses with a list of conflicting groups + an inline modal that lets the owner pick a new primary for each group (other team coaches). Confirm → transfers execute atomically, then removal completes.</p>
+      <p><strong>Archiving a team with active groups</strong> (decision #13 / Flow M): warning dialog appears explaining that archive does NOT cascade — groups will be detached as independent (team_id set to NULL). On confirm, the team archives + all its groups are detached in one transaction.</p>
+
       <h3>Assigned to me (Stage 4 / R-G)</h3>
       <p>When a coach generates a workout for a group you're in, it lands in your <strong>📥 Assigned to me</strong> view (teal button in the top nav, visible to all authenticated users — you don't need to be a coach to use it). Filter the list by completion state (Not started / Partial / Complete / Missed / All).</p>
       <p><strong>Each row</strong> shows the workout type + total yardage, the coach who assigned it, the group + lane info if applicable, and your current completion state. Click a row to expand it inline — you'll see the full workout blocks plus action buttons.</p>
