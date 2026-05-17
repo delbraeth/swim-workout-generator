@@ -1156,6 +1156,29 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. v1 captures just name + date.</p>
       <p>Upcoming events surface on the main app via the pool-mode selector row: a <strong>📅 amber pill</strong> showing the most-imminent event across all teams you're in (as either a coach or a group member). Renders alongside your personal <strong>🏁 next-event</strong> pill — both coexist; team events take the leading position.</p>
 
+      <h3>Inviting full-account swimmers (Stage 4 / R-F)</h3>
+      <p>To bring a swimmer with their own login account into a group (vs the managed-profile path), use the <strong>code-based join flow</strong>. Per the scope's code-only decision (#6), the app generates a short opaque code; the coach hands it to the swimmer out-of-band (text message, in person, email — whatever's convenient); the swimmer redeems it inside the app.</p>
+
+      <h4>Coach side</h4>
+      <p>In a group's expanded view (primary coach only, group must not be archived):</p>
+      <ol>
+        <li><strong>Invite full-account swimmers</strong> subsection → <strong>+ Issue join code</strong></li>
+        <li>Pick role on join: <em>primary</em> (their main training group) or <em>secondary</em> (additional, e.g., dryland)</li>
+        <li>Click <strong>Issue code</strong> → 10-character lowercase code displayed prominently</li>
+        <li><strong>Copy</strong> button → share the code with the swimmer out-of-band</li>
+        <li>Code is valid for 30 days. Outstanding (unredeemed) codes show below; primary coach can <strong>Revoke</strong> any that haven't been redeemed yet.</li>
+      </ol>
+
+      <h4>Swimmer side</h4>
+      <p>Anyone with an authenticated account (not just coaches) can join groups they've been invited to:</p>
+      <ol>
+        <li>👤 Profile modal → scroll to <strong>Join a group</strong> section</li>
+        <li>Paste the code, click <strong>Look up</strong> → preview shows which group + what role</li>
+        <li><strong>Join group</strong> → membership created instantly</li>
+      </ol>
+      <p><strong>DOB gate:</strong> the first time a swimmer joins any group, they're prompted to enter their date of birth (inline, on the redeem screen). This is required for minor-protection compliance. Once entered, future joins skip this step.</p>
+      <p><strong>One-primary-per-coach rule (decision #33):</strong> a swimmer can be a <em>primary</em> in only one of a given coach's groups at a time. If a coach issues a primary-role code and the swimmer is already a primary in another of that coach's groups, the redemption errors with the conflicting group's name and guidance: leave the other group first, or ask the coach for a secondary-role code instead.</p>
+
       <h3>Lane plans (Stage 3 / R-E)</h3>
       <p>Inside an expanded group with 2+ members, primary coaches see a <strong>Lane plans</strong> section. Lane plans are reusable per-group configurations of swimmers into named lanes with target paces (e.g. "Tuesday config: Sprint @ 1:50, Aerobic @ 2:05, Recovery @ 2:20"). Each plan stores: name, default flag, and an ordered list of lanes (label + target pace + member chips).</p>
       <p><strong>Build a plan:</strong> click <em>+ New plan</em>, name it, then for each lane: set label + target pace, then add swimmers from the group via the per-lane dropdown. A swimmer can be in at most one lane per plan. Click <em>+ Add lane</em> to append more lanes. Save when done. A plan can be marked default — only one plan per group can be default at a time.</p>
