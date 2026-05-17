@@ -79,6 +79,7 @@ import {
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
   dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
+  dbListAssignmentsForSwimmer, dbListAssignmentsForGroup,
   dbListCoachTargets,
   dbCreateGroupLanePlan, dbGetGroupLanePlan, dbListGroupLanePlans,
   dbUpdateGroupLanePlan, dbArchiveGroupLanePlan, dbSetDefaultLanePlan,
@@ -1662,6 +1663,82 @@ app.delete("/api/groups/:id/members/:memberId", checkOrigin, requireAuth, requir
       eventType: "group.remove_member",
       ...reqMeta(req),
       details:   { group_id: req.params.id, member_id: Number(req.params.memberId), reason },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Workout assignments — completion (Stage 4 / R-G) ──────────────
+// Swimmer-side "Assigned to me" + Flow N coach-mark-on-behalf path.
+
+// List the caller's assignments. Optional ?state= filter (not_started /
+// partial / complete / missed). Authenticated users only — returns ONLY the
+// caller's own assignments.
+app.get("/api/me/assignments", requireAuth, async (req, res) => {
+  try {
+    const state = req.query.state || null;
+    res.json(await dbListAssignmentsForSwimmer(req.userSub, { state }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// List a group's assignments (coach-mark-on-behalf view, Flow N). Any
+// group coach can read. Used in GroupRow's "Recent assignments" subsection.
+app.get("/api/groups/:id/assignments", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const state = req.query.state || null;
+    res.json(await dbListAssignmentsForGroup(req.params.id, { state }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Update an assignment's completion state + splits + difficulty + focus_note.
+// Auth: target swimmer (self-log path) OR coach on the source group (Flow N
+// coach-mark-on-behalf path). For coach-marked updates, stamp
+// completed_by_coach_sub so the swimmer sees the "marked by coach" tag.
+app.patch("/api/assignments/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const a = await dbGetAssignment(req.params.id);
+    if (!a) return res.status(404).json({ error: "not found" });
+
+    // Authorization: caller is either the target swimmer, OR a coach on the
+    // assignment's source group. Managed-targets can only be coach-marked
+    // (no login = no self-write path).
+    const isTargetSwimmer = a.target_swimmer_sub === req.userSub;
+    const isGroupCoach    = a.assigned_via_group_id
+                          ? !!(await dbGetGroupRole(a.assigned_via_group_id, req.userSub))
+                          : false;
+    if (!isTargetSwimmer && !isGroupCoach) {
+      return res.status(403).json({ error: "not target or group coach" });
+    }
+
+    // Allowed fields. completion_state required for state transitions; the
+    // rest optional. completed_by_coach_sub set automatically by server for
+    // coach-marked updates; clients can't set it directly.
+    const patch = {};
+    const b = req.body || {};
+    if ("completion_state" in b) patch.completion_state = b.completion_state;
+    if ("splits_payload"   in b) patch.splits_payload   = b.splits_payload;
+    if ("difficulty"       in b) patch.difficulty       = b.difficulty;
+    if ("focus_note"       in b) patch.focus_note       = b.focus_note;
+    // Server determines coach-marked vs self-marked. If the caller is the
+    // group coach AND NOT the target swimmer, this is a coach-mark-on-behalf.
+    if (isGroupCoach && !isTargetSwimmer) {
+      patch.completed_by_coach_sub = req.userSub;
+    } else {
+      // Self-log path explicitly clears any prior coach-mark stamp (swimmer
+      // is now claiming the completion themselves).
+      patch.completed_by_coach_sub = null;
+    }
+
+    const r = await dbUpdateAssignmentCompletion(req.params.id, patch);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: isGroupCoach && !isTargetSwimmer ? "assignment.coach_marked" : "assignment.self_logged",
+      ...reqMeta(req),
+      details:   { assignment_id: Number(req.params.id), workout_id: a.workout_id, completion_state: patch.completion_state },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
