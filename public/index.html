@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-16 23:41 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-17 01:23 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -13763,7 +13763,7 @@
           pinnedBlocks:   pinned,
           recentLabels,
           recoveryMode,
-          phase,
+          phase: effectivePhase,                                               // R-D: group-context override (#39)
           favoriteSetIds: favoriteSets,
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
@@ -13771,6 +13771,18 @@
         if (newWorkout && newWorkout.__generateFailure) {
           setGenerateError(newWorkout.error || "Could not build a workout matching your constraints.");
           return;
+        }
+        // R-D: stamp assignment target onto the workout so the pill renders in
+        // the workout-display header AND survives to history (the payload JSON
+        // round-trips this field).
+        if (generateForTarget) {
+          newWorkout.assignment_target = {
+            kind:         "group",
+            group_id:     generateForTarget.id,
+            group_name:   generateForTarget.name,
+            member_count: generateForTarget.member_count,
+            phase:        generateForTarget.current_phase || null,
+          };
         }
         setGenerateError(null);
         // Apply user's pace to intervals at generation time (not just on "Rescale all")
@@ -13957,7 +13969,16 @@
           recovery: workout.recovery ? true : undefined,
           phase: workout.phase || undefined,
           completed: dateDraft <= new Date().toISOString().slice(0, 10),
+          // R-D: assignment metadata snapshot persists in payload JSON so
+          // history loads can render the pill without an extra fetch.
+          assignment_target: workout.assignment_target || undefined,
         };
+        // R-D: include assign_to for fanout when generate-for picker is set.
+        // Server validates caller has access to the group + writes assignment
+        // rows in the same /api/log-workout call.
+        if (generateForTarget?.id) {
+          entry.assign_to = { group_id: generateForTarget.id };
+        }
         // Optimistic: add to local cache and state immediately
         setHistory(prev => {
           const next = mergeById(prev, [entry]);
@@ -14202,6 +14223,28 @@
         if (days < 0) return null; // past — hide display, keep data
         return { name: nextEvent.name || "Your event", days };
       }, [nextEvent]);
+
+      // R-D: generate-for picker. State = group_id string OR "myself".
+      // coachTargets is the loaded list of groups the user coaches (with
+      // member counts + current_phase). Loaded once when authenticated and
+      // is_coach. Defaults to "myself" — solo training is the default flow.
+      const [generateForId, setGenerateForId] = useState("myself");
+      const [coachTargets,   setCoachTargets]  = useState([]);
+      useEffect(() => {
+        if (!authenticated || !me?.is_coach) { setCoachTargets([]); return; }
+        fetch("/api/picker/coach-targets", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => setCoachTargets(Array.isArray(data) ? data : []))
+          .catch(() => setCoachTargets([]));
+      }, [authenticated, me?.is_coach, view]);
+      // Resolve the currently-selected target (or null for "myself").
+      const generateForTarget = useMemo(() => {
+        if (generateForId === "myself" || !generateForId) return null;
+        return coachTargets.find(t => t.id === generateForId) || null;
+      }, [generateForId, coachTargets]);
+      // Effective phase: group's current_phase overrides the user's personal
+      // phase when generating for a group (decision #39).
+      const effectivePhase = generateForTarget?.current_phase || phase;
 
       // R-C / decision #38: upcoming team events (across all the user's teams
       // they're a coach on or have a group membership in). Refreshed when the
@@ -14691,6 +14734,46 @@
                 ✏️ Parse intent…
               </button>
 
+              {/* R-D: generate-for picker (coach-only). Lists solo private
+                  students separately from multi-member groups per decision
+                  #35. State sticks across generations. Phase from the
+                  selected group overrides personal phase (decision #39). */}
+              {me?.is_coach && coachTargets.length > 0 && (() => {
+                const solos  = coachTargets.filter(t => t.member_count === 1);
+                const groups = coachTargets.filter(t => t.member_count >= 2);
+                return (
+                  <div style={{ marginBottom: 10, padding: "10px 12px", background: "#0f172a", border: "1px solid #f59e0b", borderRadius: 8 }}>
+                    <label style={{ display: "block", fontSize: 11, color: "#f59e0b", marginBottom: 4, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Generate for
+                    </label>
+                    <select value={generateForId} onChange={e => setGenerateForId(e.target.value)}
+                      style={{ width: "100%", padding: "6px 10px", fontSize: 13, background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5 }}>
+                      <option value="myself">Myself (solo training, no assignment)</option>
+                      {solos.length > 0 && (
+                        <optgroup label="Private students">
+                          {solos.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}{t.team_name ? ` · ${t.team_name}` : ""}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {groups.length > 0 && (
+                        <optgroup label="Groups">
+                          {groups.map(t => (
+                            <option key={t.id} value={t.id}>{t.name} ({t.member_count}{t.team_name ? ` · ${t.team_name}` : ""}{t.current_phase ? ` · ${t.current_phase}` : ""})</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                    {generateForTarget && (
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                        Workout will save to <strong>your history</strong> and fan out as <strong>{generateForTarget.member_count} assignment{generateForTarget.member_count === 1 ? "" : "s"}</strong> to {generateForTarget.name}'s members.
+                        {generateForTarget.current_phase && <span> Phase override: <strong>{generateForTarget.current_phase}</strong>.</span>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Generate Button */}
               <button
                 onClick={handleGenerate}
@@ -14762,6 +14845,19 @@
                       </span>
                     );
                   })()}
+                  {workout.assignment_target && (
+                    <span title={`Generated for ${workout.assignment_target.group_name} — ${workout.assignment_target.member_count} swimmer${workout.assignment_target.member_count === 1 ? "" : "s"}`}
+                      style={{
+                        background: "#f59e0b1f",
+                        border: "1px solid #f59e0b",
+                        color: "#f59e0b",
+                        borderRadius: 999, padding: "4px 12px",
+                        fontSize: 12, fontWeight: 700,
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                      }}>
+                      → {workout.assignment_target.group_name} ({workout.assignment_target.member_count})
+                    </span>
+                  )}
                   {[
                     [(poolMode === "50m" || poolMode === "25m") ? "Total Distance" : "Total Yardage", `${workout.totalYards.toLocaleString()} ${unit}`],
                     ["Est. Duration",   `~${workout.estimatedMin} min`],
