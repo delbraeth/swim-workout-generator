@@ -82,6 +82,8 @@ import {
   dbListCoachTargets,
   dbCreateGroupLanePlan, dbGetGroupLanePlan, dbListGroupLanePlans,
   dbUpdateGroupLanePlan, dbArchiveGroupLanePlan, dbSetDefaultLanePlan,
+  dbCreateGroupJoinToken, dbGetGroupJoinToken, dbListGroupJoinTokens,
+  dbDeleteGroupJoinToken, dbRedeemGroupJoinToken,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1636,6 +1638,108 @@ app.delete("/api/groups/:id/members/:memberId", checkOrigin, requireAuth, requir
       eventType: "group.remove_member",
       ...reqMeta(req),
       details:   { group_id: req.params.id, member_id: Number(req.params.memberId), reason },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Group join tokens (Stage 4 / R-F) ─────────────────────────────
+// Code-based join flow per decision #6 (no email). Coach issues a token,
+// hands it to the swimmer out-of-band. Swimmer redeems via the app.
+// Permission: any group coach can issue; only the swimmer themselves can
+// redeem.
+
+// Coach issues a token. Returns the token string + expiry — coach shares
+// it out-of-band. Token is 30-day expiry per scope.
+app.post("/api/groups/:id/join-tokens", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const { intended_role = "primary" } = req.body || {};
+    const r = await dbCreateGroupJoinToken({
+      groupId:       req.params.id,
+      issuedByCoach: req.userSub,
+      intendedRole:  intended_role,
+    });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.join_token.issue",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, token: r.token, intended_role },
+    });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
+});
+
+// Coach lists outstanding tokens for a group (default: unredeemed +
+// unexpired). Coach UI uses this to show "you have N pending invites."
+app.get("/api/groups/:id/join-tokens", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const includeRedeemed = req.query.redeemed === "1";
+    const includeExpired  = req.query.expired === "1";
+    res.json(await dbListGroupJoinTokens(req.params.id, { includeRedeemed, includeExpired }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Coach revokes an unredeemed token (e.g., sent to wrong person, decided
+// not to add). Redeemed tokens cannot be revoked — they've already created
+// a membership.
+app.delete("/api/join-tokens/:token", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const tok = await dbGetGroupJoinToken(req.params.token);
+    if (!tok) return res.status(404).json({ error: "not found" });
+    const role = await getCallerGroupRole(tok.group_id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const r = await dbDeleteGroupJoinToken(req.params.token);
+    if (r.affected === 0) return res.status(409).json({ error: "token already redeemed or expired" });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.join_token.revoke",
+      ...reqMeta(req),
+      details:   { token: req.params.token, group_id: tok.group_id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Pre-redeem preview: swimmer can look up a token they were given to see
+// which group they're about to join, without committing. Open to any auth'd
+// user (the token itself is the secret).
+app.get("/api/join-tokens/:token/preview", requireAuth, async (req, res) => {
+  try {
+    const tok = await dbGetGroupJoinToken(req.params.token);
+    if (!tok) return res.status(404).json({ error: "invalid_token" });
+    res.json({
+      group_id:      tok.group_id,
+      group_name:    tok.group_name,
+      intended_role: tok.intended_role,
+      expires_at:    tok.expires_at,
+      is_expired:    tok.is_expired,
+      is_redeemed:   tok.is_redeemed,
+    });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Swimmer redeems. Requires DOB on file (per scope R-F note "DOB collection
+// at this point if swimmer doesn't have it"); surfaces "dob_required" so
+// the UI can prompt before retrying. Atomic group-membership write per #33.
+app.post("/api/join-tokens/:token/redeem", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    // Hard gate: DOB required per scope (joining a group is a meaningful
+    // commitment that triggers compliance derivations).
+    const me = await dbGetMe(req.userSub);
+    if (!me) return res.status(404).json({ error: "user not found" });
+    if (!me.dob) return res.status(400).json({ error: "dob_required", reason: "dob_required" });
+
+    const r = await dbRedeemGroupJoinToken(req.params.token, req.userSub);
+    if (!r.ok) return res.status(400).json({ error: r.reason, ...r });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "group.join_token.redeem",
+      ...reqMeta(req),
+      details:   { token: req.params.token, group_id: r.group_id, role: r.role, member_id: r.member_id },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
