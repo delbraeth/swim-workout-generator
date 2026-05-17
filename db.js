@@ -1921,6 +1921,213 @@ export async function dbListTeamEvents(teamId) {
   }));
 }
 
+// Compact "what can I generate for?" list for the generate-for picker.
+// Returns active (non-archived) groups the coach is on, with member count
+// and team name for grouping in the UI. Used to populate the picker per
+// decision #35 (Private students = groups where count = 1, top-level
+// section; Groups = count >= 2). Single query — picker shouldn't fan out.
+export async function dbListCoachTargets(coachSub) {
+  if (!coachSub) return [];
+  const rows = await pool.query(
+    "SELECT g.`id`, g.`name`, g.`current_phase`, g.`team_id`, t.`name` AS team_name, " +
+    "       COUNT(gm.`id`) AS member_count " +
+    "FROM `groups` g " +
+    "JOIN `group_coaches` gc ON gc.`group_id` = g.`id` AND gc.`removed_at` IS NULL " +
+    "LEFT JOIN `teams` t ON t.`id` = g.`team_id` " +
+    "LEFT JOIN `group_members` gm ON gm.`group_id` = g.`id` AND gm.`left_at` IS NULL " +
+    "WHERE gc.`coach_sub` = ? AND g.`archived` = 0 " +
+    "GROUP BY g.`id`, g.`name`, g.`current_phase`, g.`team_id`, t.`name` " +
+    "ORDER BY g.`name` ASC",
+    [coachSub]
+  );
+  return rows.map(r => ({
+    kind:           "group",
+    id:             r.id,
+    name:           r.name,
+    current_phase:  r.current_phase,
+    team_id:        r.team_id,
+    team_name:      r.team_name,
+    member_count:   Number(r.member_count),
+  }));
+}
+
+// ── Workout assignments (Stage 3 / R-D) ──────────────────────────────
+// Per scope §8 / decisions #4, #34. Bulk-create at workout-save time; per-
+// member fanout for groups OR single row for private-students/managed.
+// completion_state defaults to 'not_started'; R-G writes splits/difficulty
+// /completion via dbUpdateAssignmentCompletion.
+
+const COMPLETION_STATES = ["not_started", "partial", "complete", "missed"];
+
+// Resolve a target's pace for a given pool mode. Returns the swimmer's
+// stored pace or null if missing. R-D uses managed paces (managed-only in
+// Stage 3); R-F extends to full-account swimmers (their pace is single-
+// valued in settings.pace_input — a different shape, addressed at R-F).
+async function resolveManagedPace(managedId, poolMode) {
+  if (!managedId || !poolMode) return null;
+  const col = poolMode === "25y" ? "pace_scy_100"
+            : poolMode === "25m" ? "pace_scm_100"
+            : poolMode === "50m" ? "pace_lcm_100"
+            : null;
+  if (!col) return null;
+  const rows = await pool.query(
+    `SELECT \`${col}\` AS pace FROM \`coach_managed_swimmers\` WHERE \`id\` = ? LIMIT 1`,
+    [managedId]
+  );
+  return rows[0]?.pace || null;
+}
+
+// Bulk insert assignments for a workout. Targets is an array of objects:
+//   { swimmer_sub OR managed_id, lane_pace?, lane_idx?, lane_label?,
+//     lane_interval_overrides? }
+// All in a single transaction — if any insert fails, the whole batch rolls
+// back. The caller has already validated the targets exist + caller has
+// permission. group_id is shared across all rows in this batch.
+export async function dbBulkCreateAssignments({ workoutId, groupId = null, lanePlanId = null, targets }) {
+  if (!workoutId) throw new Error("workoutId required");
+  if (!Array.isArray(targets) || targets.length === 0) throw new Error("targets required");
+  const wid = String(workoutId);                                               // VARCHAR(32) in DB
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const inserted = [];
+    for (const t of targets) {
+      if ((t.swimmer_sub == null) === (t.managed_id == null)) {
+        throw new Error("each target must specify exactly one of swimmer_sub or managed_id");
+      }
+      const r = await conn.query(
+        "INSERT INTO `workout_assignments` " +
+        "(`workout_id`, `assigned_via_group_id`, `assigned_via_lane_plan_id`, " +
+        " `target_swimmer_sub`, `target_managed_id`, " +
+        " `lane_idx`, `lane_label`, `lane_pace`, `lane_interval_overrides`) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          wid, groupId || null, lanePlanId || null,
+          t.swimmer_sub || null, t.managed_id || null,
+          t.lane_idx == null ? null : t.lane_idx,
+          t.lane_label || null,
+          t.lane_pace || null,
+          t.lane_interval_overrides ? JSON.stringify(t.lane_interval_overrides) : null,
+        ]
+      );
+      inserted.push(Number(r.insertId));
+    }
+    await conn.commit();
+    return { ok: true, ids: inserted, count: inserted.length };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+// List assignments for a single workout with target identity surfaced.
+// Used by the coach-side history badge + (future) the assigned-to-me view.
+export async function dbListAssignmentsForWorkout(workoutId) {
+  if (!workoutId) return [];
+  const rows = await pool.query(
+    "SELECT wa.`id`, wa.`workout_id`, wa.`assigned_via_group_id`, wa.`assigned_via_lane_plan_id`, " +
+    "       wa.`target_swimmer_sub`, wa.`target_managed_id`, wa.`lane_idx`, wa.`lane_label`, wa.`lane_pace`, " +
+    "       wa.`assigned_at`, wa.`completion_state`, wa.`completed_at`, wa.`completed_by_coach_sub`, " +
+    "       wa.`difficulty`, wa.`focus_note`, " +
+    "       COALESCE(m.`display_name`, u.`display_name`) AS target_name, " +
+    "       COALESCE(m.`initials`,     u.`initials`)     AS target_initials, " +
+    "       g.`name`                                      AS group_name " +
+    "FROM `workout_assignments` wa " +
+    "LEFT JOIN `coach_managed_swimmers` m ON m.`id`  = wa.`target_managed_id` " +
+    "LEFT JOIN `users` u                  ON u.`sub` = wa.`target_swimmer_sub` " +
+    "LEFT JOIN `groups` g                 ON g.`id`  = wa.`assigned_via_group_id` " +
+    "WHERE wa.`workout_id` = ? " +
+    "ORDER BY target_name ASC",
+    [String(workoutId)]
+  );
+  return rows.map(r => ({
+    id:                       Number(r.id),
+    workout_id:               r.workout_id,                                    // VARCHAR(32), keep as string
+    assigned_via_group_id:    r.assigned_via_group_id,
+    assigned_via_lane_plan_id: r.assigned_via_lane_plan_id,
+    target_swimmer_sub:       r.target_swimmer_sub,
+    target_managed_id:        r.target_managed_id,
+    target_name:              r.target_name,
+    target_initials:          r.target_initials,
+    group_name:               r.group_name,
+    lane_idx:                 r.lane_idx,
+    lane_label:               r.lane_label,
+    lane_pace:                r.lane_pace,
+    assigned_at:              dtToIso(r.assigned_at),
+    completion_state:         r.completion_state,
+    completed_at:             dtToIso(r.completed_at),
+    completed_by_coach_sub:   r.completed_by_coach_sub,
+    difficulty:               r.difficulty,
+    focus_note:               r.focus_note,
+  }));
+}
+
+// Single-assignment fetch for R-G (auth checks before update).
+export async function dbGetAssignment(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT * FROM `workout_assignments` WHERE `id` = ? LIMIT 1",
+    [Number(id)]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    id:                       Number(r.id),
+    workout_id:               r.workout_id,                                    // VARCHAR(32), keep as string
+    assigned_via_group_id:    r.assigned_via_group_id,
+    assigned_via_lane_plan_id: r.assigned_via_lane_plan_id,
+    target_swimmer_sub:       r.target_swimmer_sub,
+    target_managed_id:        r.target_managed_id,
+    completion_state:         r.completion_state,
+  };
+}
+
+// Pre-built for R-G — swimmer-side completion logging AND coach-mark-on-
+// behalf path. Allowed fields per scope: completion_state, completed_at,
+// completed_by_coach_sub, splits_payload, difficulty, focus_note.
+export async function dbUpdateAssignmentCompletion(id, patch = {}) {
+  if (!id) return { ok: false, reason: "no_id" };
+  const sets = [], vals = [];
+  if ("completion_state" in patch) {
+    if (!COMPLETION_STATES.includes(patch.completion_state)) return { ok: false, reason: "bad_state" };
+    sets.push("`completion_state` = ?");
+    vals.push(patch.completion_state);
+    // Auto-stamp completed_at on terminal states unless caller provided one.
+    if (!("completed_at" in patch) && (patch.completion_state === "complete" || patch.completion_state === "partial" || patch.completion_state === "missed")) {
+      sets.push("`completed_at` = CURRENT_TIMESTAMP(3)");
+    }
+  }
+  if ("completed_at" in patch) {
+    sets.push("`completed_at` = ?");
+    vals.push(patch.completed_at || null);
+  }
+  if ("completed_by_coach_sub" in patch) {
+    sets.push("`completed_by_coach_sub` = ?");
+    vals.push(patch.completed_by_coach_sub || null);
+  }
+  if ("splits_payload" in patch) {
+    sets.push("`splits_payload` = ?");
+    vals.push(patch.splits_payload ? JSON.stringify(patch.splits_payload) : null);
+  }
+  if ("difficulty" in patch) {
+    sets.push("`difficulty` = ?");
+    vals.push(patch.difficulty == null ? null : Number(patch.difficulty));
+  }
+  if ("focus_note" in patch) {
+    sets.push("`focus_note` = ?");
+    vals.push(patch.focus_note || null);
+  }
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(Number(id));
+  const r = await pool.query(
+    `UPDATE \`workout_assignments\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
+    vals
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 // For the pool-mode pill row: returns upcoming events across all teams the
 // user has any role on (coach via team_coaches, or member via group_members).
 // Future-dated only; sorted by nearest date first.
