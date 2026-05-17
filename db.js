@@ -1921,6 +1921,194 @@ export async function dbListTeamEvents(teamId) {
   }));
 }
 
+// ── Group join tokens (Stage 4 / R-F) ────────────────────────────────
+// Per scope §11 + decision #6 (code-only, no email). Coach issues a token
+// pinned to a group + role; swimmer redeems via the app (out-of-band hand-
+// off — text, in person, etc.). 30-day default expiry. Decision #33
+// enforcement (one PRIMARY per coach per swimmer) happens here at redeem
+// time — surfaces conflict info if the swimmer is already a primary in
+// another of this coach's groups.
+
+function genJoinToken() {
+  // 10 base36 chars = 36^10 ≈ 3.6e15 possibilities; collision risk
+  // negligible even with millions of outstanding tokens. Lower-case + digits
+  // is easy to share aloud.
+  const bytes = crypto.randomBytes(8);
+  const n     = BigInt("0x" + bytes.toString("hex"));
+  return n.toString(36).padStart(10, "0").slice(0, 10);
+}
+
+const JOIN_TOKEN_DAYS = 30;
+
+export async function dbCreateGroupJoinToken({ groupId, issuedByCoach, intendedRole = "primary" }) {
+  if (!groupId || !issuedByCoach) throw new Error("groupId + issuedByCoach required");
+  if (!GROUP_MEMBER_ROLES.includes(intendedRole)) throw new Error("bad intended_role");
+  const token     = genJoinToken();
+  const expiresAt = new Date(Date.now() + JOIN_TOKEN_DAYS * 86400 * 1000)
+    .toISOString().slice(0, 19).replace("T", " ");
+  await pool.query(
+    "INSERT INTO `group_join_tokens` (`token`, `group_id`, `intended_role`, `issued_by_coach`, `expires_at`) " +
+    "VALUES (?, ?, ?, ?, ?)",
+    [token, groupId, intendedRole, issuedByCoach, expiresAt]
+  );
+  return { ok: true, token, expires_at: dtToIso(new Date(expiresAt + "Z")) };
+}
+
+export async function dbGetGroupJoinToken(token) {
+  if (!token) return null;
+  const rows = await pool.query(
+    "SELECT t.`token`, t.`group_id`, t.`intended_role`, t.`issued_by_coach`, t.`issued_at`, " +
+    "       t.`expires_at`, t.`redeemed_at`, t.`redeemed_by_swimmer_sub`, " +
+    "       g.`name` AS group_name, g.`primary_coach_sub` " +
+    "FROM `group_join_tokens` t " +
+    "LEFT JOIN `groups` g ON g.`id` = t.`group_id` " +
+    "WHERE t.`token` = ? LIMIT 1",
+    [token]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    token:                    r.token,
+    group_id:                 r.group_id,
+    group_name:               r.group_name,
+    primary_coach_sub:        r.primary_coach_sub,
+    intended_role:            r.intended_role,
+    issued_by_coach:          r.issued_by_coach,
+    issued_at:                dtToIso(r.issued_at),
+    expires_at:               dtToIso(r.expires_at),
+    redeemed_at:              dtToIso(r.redeemed_at),
+    redeemed_by_swimmer_sub:  r.redeemed_by_swimmer_sub,
+    is_expired:               r.expires_at ? new Date(r.expires_at) < new Date() : false,
+    is_redeemed:              !!r.redeemed_at,
+  };
+}
+
+export async function dbListGroupJoinTokens(groupId, { includeRedeemed = false, includeExpired = false } = {}) {
+  if (!groupId) return [];
+  let where = "`group_id` = ?";
+  if (!includeRedeemed) where += " AND `redeemed_at` IS NULL";
+  if (!includeExpired)  where += " AND `expires_at` > NOW()";
+  const rows = await pool.query(
+    "SELECT `token`, `group_id`, `intended_role`, `issued_by_coach`, `issued_at`, " +
+    "       `expires_at`, `redeemed_at`, `redeemed_by_swimmer_sub` " +
+    "FROM `group_join_tokens` " +
+    "WHERE " + where + " " +
+    "ORDER BY `issued_at` DESC LIMIT 50",
+    [groupId]
+  );
+  return rows.map(r => ({
+    token:           r.token,
+    group_id:        r.group_id,
+    intended_role:   r.intended_role,
+    issued_by_coach: r.issued_by_coach,
+    issued_at:       dtToIso(r.issued_at),
+    expires_at:      dtToIso(r.expires_at),
+    redeemed_at:     dtToIso(r.redeemed_at),
+    redeemed_by_swimmer_sub: r.redeemed_by_swimmer_sub,
+    is_expired:      r.expires_at ? new Date(r.expires_at) < new Date() : false,
+    is_redeemed:     !!r.redeemed_at,
+  }));
+}
+
+export async function dbDeleteGroupJoinToken(token) {
+  if (!token) return { ok: false, reason: "no_token" };
+  const r = await pool.query(
+    "DELETE FROM `group_join_tokens` WHERE `token` = ? AND `redeemed_at` IS NULL",
+    [token]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Atomic redeem: validate, enforce #33, insert group_members, stamp token.
+// Returns rich response: success or specific failure reason (expired, already
+// redeemed, #33 conflict with conflict_group_name, etc.).
+export async function dbRedeemGroupJoinToken(token, swimmerSub) {
+  if (!token || !swimmerSub) return { ok: false, reason: "missing_args" };
+  await dbEnsureUser(swimmerSub);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // SELECT FOR UPDATE so concurrent redeems serialize and only one wins.
+    const tokRows = await conn.query(
+      "SELECT t.`token`, t.`group_id`, t.`intended_role`, t.`expires_at`, t.`redeemed_at`, " +
+      "       g.`primary_coach_sub`, g.`archived`, g.`name` AS group_name " +
+      "FROM `group_join_tokens` t " +
+      "LEFT JOIN `groups` g ON g.`id` = t.`group_id` " +
+      "WHERE t.`token` = ? FOR UPDATE",
+      [token]
+    );
+    if (!tokRows[0]) {
+      await conn.rollback();
+      return { ok: false, reason: "invalid_token" };
+    }
+    const t = tokRows[0];
+    if (t.redeemed_at) {
+      await conn.rollback();
+      return { ok: false, reason: "already_redeemed" };
+    }
+    if (t.expires_at && new Date(t.expires_at) < new Date()) {
+      await conn.rollback();
+      return { ok: false, reason: "expired" };
+    }
+    if (t.archived) {
+      await conn.rollback();
+      return { ok: false, reason: "group_archived" };
+    }
+    // Already an active member of this group?
+    const existingMember = await conn.query(
+      "SELECT 1 FROM `group_members` WHERE `group_id` = ? AND `member_swimmer_sub` = ? AND `left_at` IS NULL LIMIT 1",
+      [t.group_id, swimmerSub]
+    );
+    if (existingMember.length > 0) {
+      await conn.rollback();
+      return { ok: false, reason: "already_in_group" };
+    }
+    // Decision #33: if intended_role='primary', check no other active primary
+    // for this swimmer under the same coach's groups.
+    if (t.intended_role === "primary") {
+      const conflicts = await conn.query(
+        "SELECT g.`id`, g.`name` FROM `group_members` gm " +
+        "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+        "WHERE gm.`left_at` IS NULL AND gm.`role` = 'primary' AND gm.`member_swimmer_sub` = ? " +
+        "AND g.`primary_coach_sub` = ? AND gm.`group_id` != ?",
+        [swimmerSub, t.primary_coach_sub, t.group_id]
+      );
+      if (conflicts.length > 0) {
+        await conn.rollback();
+        return {
+          ok: false,
+          reason: "primary_in_other_group_same_coach",
+          conflict_group_id:   conflicts[0].id,
+          conflict_group_name: conflicts[0].name,
+        };
+      }
+    }
+    // Insert the membership row.
+    const ins = await conn.query(
+      "INSERT INTO `group_members` (`group_id`, `member_swimmer_sub`, `role`) VALUES (?, ?, ?)",
+      [t.group_id, swimmerSub, t.intended_role]
+    );
+    // Stamp the token redeemed.
+    await conn.query(
+      "UPDATE `group_join_tokens` SET `redeemed_at` = CURRENT_TIMESTAMP(3), `redeemed_by_swimmer_sub` = ? WHERE `token` = ?",
+      [swimmerSub, token]
+    );
+    await conn.commit();
+    return {
+      ok:           true,
+      group_id:     t.group_id,
+      group_name:   t.group_name,
+      role:         t.intended_role,
+      member_id:    Number(ins.insertId),
+    };
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) {}
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
 // ── Lane plans (Stage 3 / R-E) ────────────────────────────────────────
 // Per scope §7 + decision #14. Persistent reusable per-group lane configs.
 // plan_data JSON shape:
