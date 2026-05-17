@@ -1921,6 +1921,178 @@ export async function dbListTeamEvents(teamId) {
   }));
 }
 
+// ── Lane plans (Stage 3 / R-E) ────────────────────────────────────────
+// Per scope §7 + decision #14. Persistent reusable per-group lane configs.
+// plan_data JSON shape:
+//   { lanes: [ { idx, label, target_pace_100, members: [{swimmer_sub|managed_id}, ...] } ] }
+// Stale member refs tolerated; UI shows "(removed)" and fanout skips them.
+// Plan is authoritative member list for generation — members not in plan = no assignment.
+
+function genLanePlanId() {
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "lp_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+
+function rowToLanePlan(r) {
+  let plan_data = r.plan_data;
+  // mariadb driver may return JSON column as parsed object OR as string;
+  // normalize to object for consistent client/server consumption.
+  if (typeof plan_data === "string") {
+    try { plan_data = JSON.parse(plan_data); } catch (_) { plan_data = { lanes: [] }; }
+  }
+  return {
+    id:         r.id,
+    group_id:   r.group_id,
+    name:       r.name,
+    is_default: !!r.is_default,
+    plan_data,
+    archived:   !!r.archived,
+    created_at: dtToIso(r.created_at),
+    updated_at: dtToIso(r.updated_at),
+  };
+}
+
+// Light shape-validation on plan_data. Doesn't deeply verify member refs
+// (those are tolerated stale) — just structural sanity.
+function validatePlanData(pd) {
+  if (!pd || typeof pd !== "object") return "plan_data must be an object";
+  if (!Array.isArray(pd.lanes)) return "plan_data.lanes must be an array";
+  for (let i = 0; i < pd.lanes.length; i++) {
+    const l = pd.lanes[i];
+    if (!l || typeof l !== "object") return `lane[${i}] must be an object`;
+    if (typeof l.label !== "string" || l.label.length > 40) return `lane[${i}].label must be a string ≤40 chars`;
+    if (l.target_pace_100 && (typeof l.target_pace_100 !== "string" || l.target_pace_100.length > 8))
+      return `lane[${i}].target_pace_100 must be a string ≤8 chars`;
+    if (!Array.isArray(l.members)) return `lane[${i}].members must be an array`;
+    for (let j = 0; j < l.members.length; j++) {
+      const m = l.members[j];
+      if (!m || typeof m !== "object") return `lane[${i}].members[${j}] must be an object`;
+      if ((m.swimmer_sub == null) === (m.managed_id == null))
+        return `lane[${i}].members[${j}] must specify exactly one of swimmer_sub or managed_id`;
+    }
+  }
+  return null;
+}
+
+export async function dbCreateGroupLanePlan({ groupId, name, is_default = false, plan_data }) {
+  if (!groupId) throw new Error("groupId required");
+  if (!name || typeof name !== "string" || !name.trim()) throw new Error("name required");
+  if (name.length > 120) throw new Error("name max 120 chars");
+  const err = validatePlanData(plan_data);
+  if (err) throw new Error(err);
+  const id = genLanePlanId();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // If this plan is being created as default, clear any existing default
+    // for the group first (only one default at a time).
+    if (is_default) {
+      await conn.query(
+        "UPDATE `group_lane_plans` SET `is_default` = 0 WHERE `group_id` = ? AND `is_default` = 1",
+        [groupId]
+      );
+    }
+    await conn.query(
+      "INSERT INTO `group_lane_plans` (`id`, `group_id`, `name`, `is_default`, `plan_data`) VALUES (?, ?, ?, ?, ?)",
+      [id, groupId, name.trim(), is_default ? 1 : 0, JSON.stringify(plan_data)]
+    );
+    await conn.commit();
+    return { ok: true, id };
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) {}
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function dbGetGroupLanePlan(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `group_id`, `name`, `is_default`, `plan_data`, `archived`, `created_at`, `updated_at` " +
+    "FROM `group_lane_plans` WHERE `id` = ?",
+    [id]
+  );
+  if (!rows[0]) return null;
+  return rowToLanePlan(rows[0]);
+}
+
+export async function dbListGroupLanePlans(groupId, { includeArchived = false } = {}) {
+  if (!groupId) return [];
+  const whereArch = includeArchived ? "" : "AND `archived` = 0 ";
+  const rows = await pool.query(
+    "SELECT `id`, `group_id`, `name`, `is_default`, `plan_data`, `archived`, `created_at`, `updated_at` " +
+    "FROM `group_lane_plans` WHERE `group_id` = ? " + whereArch +
+    "ORDER BY `is_default` DESC, `name` ASC",
+    [groupId]
+  );
+  return rows.map(rowToLanePlan);
+}
+
+export async function dbUpdateGroupLanePlan(id, patch = {}) {
+  if (!id) return { ok: false, reason: "no_id" };
+  const sets = [], vals = [];
+  if ("name" in patch) {
+    if (typeof patch.name !== "string" || !patch.name.trim()) return { ok: false, reason: "bad_name" };
+    if (patch.name.length > 120) return { ok: false, reason: "name_too_long" };
+    sets.push("`name` = ?");
+    vals.push(patch.name.trim());
+  }
+  if ("plan_data" in patch) {
+    const err = validatePlanData(patch.plan_data);
+    if (err) return { ok: false, reason: err };
+    sets.push("`plan_data` = ?");
+    vals.push(JSON.stringify(patch.plan_data));
+  }
+  // is_default handled via dbSetDefaultLanePlan (transactional clear+set).
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(id);
+  const r = await pool.query(
+    `UPDATE \`group_lane_plans\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
+    vals
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbArchiveGroupLanePlan(id, archived = true) {
+  if (!id) return { ok: false, reason: "no_id" };
+  // Archiving the default clears its default flag (a plan can't be the
+  // default AND archived).
+  const r = await pool.query(
+    "UPDATE `group_lane_plans` SET `archived` = ?, `is_default` = CASE WHEN ? = 1 THEN 0 ELSE `is_default` END " +
+    "WHERE `id` = ?",
+    [archived ? 1 : 0, archived ? 1 : 0, id]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbSetDefaultLanePlan(groupId, planId) {
+  if (!groupId || !planId) return { ok: false, reason: "missing_args" };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "UPDATE `group_lane_plans` SET `is_default` = 0 WHERE `group_id` = ? AND `is_default` = 1",
+      [groupId]
+    );
+    const r = await conn.query(
+      "UPDATE `group_lane_plans` SET `is_default` = 1 WHERE `id` = ? AND `group_id` = ? AND `archived` = 0",
+      [planId, groupId]
+    );
+    if (Number(r.affectedRows || 0) === 0) {
+      await conn.rollback();
+      return { ok: false, reason: "plan_not_found_or_archived" };
+    }
+    await conn.commit();
+    return { ok: true };
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) {}
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
 // Compact "what can I generate for?" list for the generate-for picker.
 // Returns active (non-archived) groups the coach is on, with member count
 // and team name for grouping in the UI. Used to populate the picker per
