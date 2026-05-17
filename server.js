@@ -52,6 +52,12 @@ import helmet    from "helmet";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 
+// Stamped by _deploy.py at commit time (same mechanism as the BUILD_ID const
+// in public/index.html). Logged at boot so the Hyperlift application log
+// confirms which build the container is actually running — useful for
+// disambiguating "deploy hung" vs "deploy succeeded but stale cache".
+const BUILD_ID = "2026-05-17 23:31 UTC";
+
 import {
   dbActive, pingDb,
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbGetWorkout, dbPatchWorkout, dbDeleteWorkout,
@@ -2245,6 +2251,12 @@ async function boot() {
   };
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT",  () => shutdown("SIGINT"));
+
+  // Build-version stamp. Logged immediately before the egress-ip diagnostic
+  // so you can confirm in the Hyperlift app log which build is actually
+  // running. If the stamp still reads "2026-05-17 23:31 UTC" verbatim, the deploy
+  // didn't transform server.js (check _deploy.py FILES list).
+  console.log(`[build-id] ${BUILD_ID}`);
 
   // Log container outbound IP at startup. Useful for confirming firewall
   // allow rules at the DB VM if egress ever changes. Fire-and-forget — this
