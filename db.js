@@ -2424,6 +2424,120 @@ export async function dbListAssignmentsForWorkout(workoutId) {
   }));
 }
 
+// Swimmer-side list (R-G "Assigned to me"). Joins workouts for payload,
+// coach (workout owner) for attribution, and group/plan for context. Returns
+// the full canonical workout payload alongside the assignment row so the
+// swimmer-side viewer doesn't need a separate fetch per row.
+export async function dbListAssignmentsForSwimmer(swimmerSub, { state = null, includeCompleted = true, limit = 100 } = {}) {
+  if (!swimmerSub) return [];
+  const where = ["wa.`target_swimmer_sub` = ?"];
+  const vals  = [swimmerSub];
+  if (state) {
+    if (!COMPLETION_STATES.includes(state)) throw new Error("bad state");
+    where.push("wa.`completion_state` = ?");
+    vals.push(state);
+  } else if (!includeCompleted) {
+    where.push("wa.`completion_state` IN ('not_started','partial')");
+  }
+  const cap = Math.min(Math.max(1, Number(limit) || 100), 500);
+  const rows = await pool.query(
+    "SELECT wa.`id`, wa.`workout_id`, wa.`assigned_via_group_id`, wa.`assigned_via_lane_plan_id`, " +
+    "       wa.`lane_idx`, wa.`lane_label`, wa.`lane_pace`, wa.`assigned_at`, " +
+    "       wa.`completion_state`, wa.`completed_at`, wa.`completed_by_coach_sub`, " +
+    "       wa.`difficulty`, wa.`focus_note`, " +
+    "       w.`saved_at`, w.`type`, w.`total_yards`, w.`pool_mode`, w.`payload`, " +
+    "       w.`user_sub` AS coach_sub, " +
+    "       g.`name`                                AS group_name, " +
+    "       cu.`display_name`                       AS coach_name " +
+    "FROM `workout_assignments` wa " +
+    "JOIN `workouts` w  ON w.`id`  = wa.`workout_id` " +
+    "LEFT JOIN `groups` g  ON g.`id`  = wa.`assigned_via_group_id` " +
+    "LEFT JOIN `users` cu ON cu.`sub` = w.`user_sub` " +
+    "WHERE " + where.join(" AND ") + " " +
+    "ORDER BY wa.`assigned_at` DESC " +
+    `LIMIT ${cap}`,
+    vals
+  );
+  return rows.map(r => ({
+    id:                       Number(r.id),
+    workout_id:               r.workout_id,
+    assigned_via_group_id:    r.assigned_via_group_id,
+    assigned_via_lane_plan_id: r.assigned_via_lane_plan_id,
+    group_name:               r.group_name,
+    coach_sub:                r.coach_sub,
+    coach_name:               r.coach_name,
+    lane_idx:                 r.lane_idx,
+    lane_label:               r.lane_label,
+    lane_pace:                r.lane_pace,
+    assigned_at:              dtToIso(r.assigned_at),
+    completion_state:         r.completion_state,
+    completed_at:             dtToIso(r.completed_at),
+    completed_by_coach_sub:   r.completed_by_coach_sub,
+    difficulty:               r.difficulty,
+    focus_note:               r.focus_note,
+    // Workout payload — swimmer needs this to view/run the workout.
+    workout: {
+      id:           r.workout_id,
+      savedAt:      dtToIso(r.saved_at),
+      type:         r.type,
+      totalYards:   Number(r.total_yards),
+      poolMode:     r.pool_mode,
+      ...(typeof r.payload === "string" ? JSON.parse(r.payload) : (r.payload || {})),
+    },
+  }));
+}
+
+// Coach-side list (R-G coach-mark-on-behalf). All assignments via a given
+// group, with target identity surfaced. Used in GroupRow's "Recent
+// assignments" panel.
+export async function dbListAssignmentsForGroup(groupId, { state = null, limit = 100 } = {}) {
+  if (!groupId) return [];
+  const where = ["wa.`assigned_via_group_id` = ?"];
+  const vals  = [groupId];
+  if (state) {
+    if (!COMPLETION_STATES.includes(state)) throw new Error("bad state");
+    where.push("wa.`completion_state` = ?");
+    vals.push(state);
+  }
+  const cap = Math.min(Math.max(1, Number(limit) || 100), 500);
+  const rows = await pool.query(
+    "SELECT wa.`id`, wa.`workout_id`, wa.`assigned_via_lane_plan_id`, " +
+    "       wa.`target_swimmer_sub`, wa.`target_managed_id`, " +
+    "       wa.`lane_idx`, wa.`lane_label`, wa.`lane_pace`, " +
+    "       wa.`assigned_at`, wa.`completion_state`, wa.`completed_at`, wa.`completed_by_coach_sub`, " +
+    "       wa.`difficulty`, wa.`focus_note`, " +
+    "       w.`type`, w.`total_yards`, w.`saved_at`, " +
+    "       COALESCE(m.`display_name`, u.`display_name`) AS target_name " +
+    "FROM `workout_assignments` wa " +
+    "JOIN `workouts` w  ON w.`id`  = wa.`workout_id` " +
+    "LEFT JOIN `coach_managed_swimmers` m ON m.`id`  = wa.`target_managed_id` " +
+    "LEFT JOIN `users`                  u ON u.`sub` = wa.`target_swimmer_sub` " +
+    "WHERE " + where.join(" AND ") + " " +
+    "ORDER BY wa.`assigned_at` DESC, target_name ASC " +
+    `LIMIT ${cap}`,
+    vals
+  );
+  return rows.map(r => ({
+    id:                       Number(r.id),
+    workout_id:               r.workout_id,
+    target_swimmer_sub:       r.target_swimmer_sub,
+    target_managed_id:        r.target_managed_id,
+    target_name:              r.target_name,
+    lane_idx:                 r.lane_idx,
+    lane_label:               r.lane_label,
+    lane_pace:                r.lane_pace,
+    workout_type:             r.type,
+    workout_total_yards:      Number(r.total_yards),
+    workout_saved_at:         dtToIso(r.saved_at),
+    assigned_at:              dtToIso(r.assigned_at),
+    completion_state:         r.completion_state,
+    completed_at:             dtToIso(r.completed_at),
+    completed_by_coach_sub:   r.completed_by_coach_sub,
+    difficulty:               r.difficulty,
+    focus_note:               r.focus_note,
+  }));
+}
+
 // Single-assignment fetch for R-G (auth checks before update).
 export async function dbGetAssignment(id) {
   if (!id) return null;
