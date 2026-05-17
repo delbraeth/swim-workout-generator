@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-17 02:00 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-17 02:22 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10960,6 +10960,244 @@
       );
     }
 
+    // AssignedToMeView (Stage 4 / R-G) — swimmer-side list of workouts
+    // assigned to them by coaches. Filterable by completion state. Click a
+    // row to expand the workout in place; mark complete / partial / missed
+    // inline OR run via Run-mode (which then writes back to the assignment).
+    const COMPLETION_LABELS = {
+      not_started: { label: "Not started", color: "#64748b" },
+      partial:     { label: "Partial",     color: "#f59e0b" },
+      complete:    { label: "Complete",    color: "#22c55e" },
+      missed:      { label: "Missed",      color: "#ef4444" },
+    };
+
+    function AssignedToMeView({ onRunAssignment }) {
+      const [list,       setList]       = React.useState(null);
+      const [stateFilter, setStateFilter] = React.useState("");                  // "" = all
+      const [expandedId, setExpandedId] = React.useState(null);
+      const [msg,        setMsg]        = React.useState(null);
+
+      const load = React.useCallback(async () => {
+        try {
+          const q = stateFilter ? `?state=${encodeURIComponent(stateFilter)}` : "";
+          const res = await fetch(`/api/me/assignments${q}`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setList(await res.json());
+        } catch (e) { setList([]); setMsg(e.message); }
+      }, [stateFilter]);
+      React.useEffect(() => { load(); }, [load]);
+
+      const markState = async (assignmentId, state, extra = {}) => {
+        try {
+          const res = await fetch(`/api/assignments/${assignmentId}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ completion_state: state, ...extra }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setMsg(e.message); }
+      };
+
+      const handleMarkComplete = (a) => {
+        const diffStr = window.prompt(`Mark "${a.workout?.typeLabel || a.workout?.type}" complete. Difficulty 1-5 (optional, leave blank):`, "");
+        if (diffStr === null) return;
+        const extra = {};
+        const d = parseInt(diffStr, 10);
+        if (Number.isFinite(d) && d >= 1 && d <= 5) extra.difficulty = d;
+        markState(a.id, "complete", extra);
+      };
+      const handleMarkPartial = (a) => {
+        const note = window.prompt("Mark partial. Optional note (what you completed / why):", "");
+        if (note === null) return;
+        markState(a.id, "partial", note ? { focus_note: note.slice(0, 255) } : {});
+      };
+      const handleMarkMissed = (a) => {
+        const note = window.prompt("Mark missed. Optional reason:", "");
+        if (note === null) return;
+        markState(a.id, "missed", note ? { focus_note: note.slice(0, 255) } : {});
+      };
+
+      const counts = list ? list.reduce((acc, a) => { acc[a.completion_state] = (acc[a.completion_state] || 0) + 1; return acc; }, {}) : {};
+
+      return (
+        <div>
+          <h2 style={{ color: "#e2e8f0", marginTop: 0 }}>📥 Assigned to me</h2>
+
+          <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+            {[{ id: "", label: "All", n: list?.length || 0 }, ...Object.keys(COMPLETION_LABELS).map(k => ({ id: k, label: COMPLETION_LABELS[k].label, n: counts[k] || 0 }))].map(f => {
+              const active = stateFilter === f.id;
+              const color  = COMPLETION_LABELS[f.id]?.color || "#a78bfa";
+              return (
+                <button key={f.id || "all"} onClick={() => setStateFilter(f.id)}
+                  style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${active ? color : "#334155"}`, background: active ? `${color}22` : "transparent", color: active ? color : "#94a3b8", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {f.label} ({f.n})
+                </button>
+              );
+            })}
+          </div>
+
+          {msg && <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10 }}>{msg}</div>}
+
+          {list === null ? (
+            <div style={{ color: "#64748b", fontSize: 13 }}>Loading…</div>
+          ) : list.length === 0 ? (
+            <div style={{ color: "#64748b", fontSize: 13, fontStyle: "italic", padding: 20, textAlign: "center", border: "1px dashed #334155", borderRadius: 10 }}>
+              No assigned workouts {stateFilter ? `in "${COMPLETION_LABELS[stateFilter]?.label}"` : "yet"}. When a coach generates a workout for a group you're in, it shows up here.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {list.map(a => {
+                const meta = COMPLETION_LABELS[a.completion_state] || COMPLETION_LABELS.not_started;
+                const isExpanded = expandedId === a.id;
+                const isCoachMarked = !!a.completed_by_coach_sub;
+                return (
+                  <div key={a.id} style={{ background: "#1e293b", border: `1px solid ${meta.color}`, borderRadius: 10, overflow: "hidden" }}>
+                    <button onClick={() => setExpandedId(isExpanded ? null : a.id)}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "12px 14px", background: "transparent", border: "none", color: "#e2e8f0", cursor: "pointer" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <div>
+                          <span style={{ fontSize: 14, fontWeight: 700 }}>
+                            {isExpanded ? "▾" : "▸"} {a.workout?.typeLabel || a.workout?.type} · {a.workout?.totalYards} {a.workout?.poolMode === "25y" ? "yd" : "m"}
+                          </span>
+                          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3 }}>
+                            From <strong>{a.coach_name || "(coach)"}</strong>
+                            {a.group_name && <> · group <strong>{a.group_name}</strong></>}
+                            {a.lane_label && <> · lane <strong>{a.lane_label}</strong>{a.lane_pace ? ` @ ${a.lane_pace}` : ""}</>}
+                            · assigned {new Date(a.assigned_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 10, padding: "3px 9px", borderRadius: 999, background: `${meta.color}22`, border: `1px solid ${meta.color}`, color: meta.color, fontWeight: 700 }}>
+                          {meta.label}{isCoachMarked ? " (by coach)" : ""}
+                        </span>
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div style={{ padding: "0 14px 14px", borderTop: "1px solid #334155" }}>
+                        {a.workout?.blocks && (
+                          <div style={{ marginTop: 10 }}>
+                            {a.workout.blocks.map((b, i) => (
+                              <WorkoutBlock key={i} block={b} equipment={a.workout.equipment || {}}
+                                recentMainLabels={new Map()} poolMode={a.workout.poolMode || "25y"} />
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+                          {a.completion_state !== "complete" && (
+                            <button onClick={() => { if (onRunAssignment) onRunAssignment(a); }}
+                              style={{ padding: "7px 14px", background: "#22c55e", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                              ▶ Run this workout
+                            </button>
+                          )}
+                          <button onClick={() => handleMarkComplete(a)}
+                            style={{ padding: "7px 12px", background: "transparent", color: "#22c55e", border: "1px solid #22c55e", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                            ✓ Mark complete
+                          </button>
+                          <button onClick={() => handleMarkPartial(a)}
+                            style={{ padding: "7px 12px", background: "transparent", color: "#f59e0b", border: "1px solid #f59e0b", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                            ◐ Mark partial
+                          </button>
+                          <button onClick={() => handleMarkMissed(a)}
+                            style={{ padding: "7px 12px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                            ✕ Mark missed
+                          </button>
+                        </div>
+                        {a.focus_note && (
+                          <div style={{ marginTop: 10, padding: 8, background: "#0f172a", border: "1px solid #334155", borderRadius: 5, fontSize: 11, color: "#cbd5e1" }}>
+                            <span style={{ color: "#64748b" }}>Note:</span> {a.focus_note}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // GroupAssignmentsPanel — coach-mark-on-behalf (Flow N, R-G). Lists
+    // recent assignments fanned out from this group + lets the coach mark
+    // any swimmer's completion state from the deck. Sets completed_by_coach_sub
+    // so the swimmer sees "marked by coach" on their side.
+    function GroupAssignmentsPanel({ groupId, isGroupCoach }) {
+      const [list, setList] = React.useState(null);
+      const [err,  setErr]  = React.useState(null);
+
+      const load = React.useCallback(async () => {
+        try {
+          const res = await fetch(`/api/groups/${groupId}/assignments`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setList(await res.json());
+        } catch (e) { setErr(e.message); setList([]); }
+      }, [groupId]);
+      React.useEffect(() => { if (isGroupCoach) load(); }, [isGroupCoach, load]);
+
+      const markState = async (assignmentId, state) => {
+        try {
+          const res = await fetch(`/api/assignments/${assignmentId}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ completion_state: state }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      if (!isGroupCoach) return null;
+
+      return (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Recent assignments ({list ? list.length : "—"})
+            </div>
+          </div>
+          {err && <div style={{ color: "#fca5a5", fontSize: 11, marginBottom: 6 }}>{err}</div>}
+          {!list ? (
+            <div style={{ fontSize: 12, color: "#64748b", fontStyle: "italic" }}>Loading…</div>
+          ) : list.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#64748b", fontStyle: "italic" }}>No assignments yet. Generate a workout for this group to start the loop.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 280, overflow: "auto" }}>
+              {list.map(a => {
+                const meta = COMPLETION_LABELS[a.completion_state] || COMPLETION_LABELS.not_started;
+                const isCoachMarked = !!a.completed_by_coach_sub;
+                return (
+                  <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 9px", background: "#0f172a", border: "1px solid #334155", borderRadius: 4, fontSize: 11 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: "#cbd5e1", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {a.target_name || "(unknown)"} · {a.workout_type} {a.workout_total_yards}
+                        {a.lane_label && <span style={{ color: "#64748b" }}> · {a.lane_label}</span>}
+                      </div>
+                      <div style={{ color: "#64748b", fontSize: 10 }}>
+                        {new Date(a.assigned_at).toLocaleDateString()} · <span style={{ color: meta.color, fontWeight: 700 }}>{meta.label}</span>
+                        {isCoachMarked && <span style={{ color: "#a78bfa" }}> (by coach)</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 3 }}>
+                      {a.completion_state !== "complete" && <button onClick={() => markState(a.id, "complete")} title="Mark complete" style={{ padding: "2px 7px", background: "transparent", color: "#22c55e", border: "1px solid #22c55e", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>✓</button>}
+                      {a.completion_state !== "partial"  && <button onClick={() => markState(a.id, "partial")}  title="Mark partial"  style={{ padding: "2px 7px", background: "transparent", color: "#f59e0b", border: "1px solid #f59e0b", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>◐</button>}
+                      {a.completion_state !== "missed"   && <button onClick={() => markState(a.id, "missed")}   title="Mark missed"   style={{ padding: "2px 7px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>✕</button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // JoinTokensPanel — coach-side invite-code issuer + outstanding list.
     // Inside GroupRow expanded view (R-F). Primary coach can issue + revoke;
     // any group coach can read.
@@ -11631,6 +11869,9 @@
                   {!group.archived && (
                     <JoinTokensPanel groupId={group.id} isPrimary={isPrimary} isGroupCoach={!!detail.viewer_role} />
                   )}
+
+                  {/* Coach-mark-on-behalf (R-G, Flow N) — recent assignments */}
+                  <GroupAssignmentsPanel groupId={group.id} isGroupCoach={!!detail.viewer_role} />
                 </>
               )}
             </div>
@@ -13810,6 +14051,10 @@
       // Run Workout overlay: null when inactive, or the workout/entry object being stepped through
       const [runWorkout, setRunWorkout]           = useState(null);
       const [showRestPicker, setShowRestPicker]   = useState(false);
+      // R-G: when set, Run-mode finish writes to this assignment row instead
+      // of creating a new history entry. Cleared after the run completes or
+      // when the swimmer exits Run mode.
+      const [runAssignmentId, setRunAssignmentId] = useState(null);
       const [showProfile, setShowProfile]         = useState(false);
       const [showFeedback, setShowFeedback]       = useState(false);
       const [showIntentParser, setShowIntentParser] = useState(false);
@@ -14551,6 +14796,32 @@
         if (!sourceWorkout || !sourceWorkout.blocks || !sourceWorkout.type) {
           return { ok: false, error: "missing workout fields" };
         }
+        // R-G: if this run was launched from an assignment ("Run this workout"
+        // on AssignedToMeView), write completion back to the assignment row
+        // instead of creating a new workout in the swimmer's history. The
+        // canonical workout already exists in the coach's history; we just
+        // stamp completion + splits on the assignment.
+        if (runAssignmentId) {
+          try {
+            const res = await fetch(`/api/assignments/${runAssignmentId}`, {
+              method:  "PATCH",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body:    JSON.stringify({
+                completion_state: "complete",
+                splits_payload:   (opts.actualSplits && opts.actualSplits.length) ? opts.actualSplits : null,
+                difficulty:       opts.difficulty || null,
+                focus_note:       (opts.notes || "").trim() || null,
+              }),
+            });
+            const j = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+            // Clear the assignment tag so subsequent solo runs save normally.
+            setRunAssignmentId(null);
+            return { ok: true, assignment: true };
+          } catch (err) {
+            return { ok: false, error: err.message || String(err) };
+          }
+        }
         const meta = WORKOUT_TYPES.find(t => t.id === sourceWorkout.type);
         const today = new Date().toISOString().slice(0, 10);
         const cleanInitials = normalizeInitials(initialsDraft) || sourceWorkout.userInitials || "";
@@ -14618,7 +14889,7 @@
           });
           return { ok: false, error: err.message || String(err) };
         }
-      }, [initialsDraft]);
+      }, [initialsDraft, runAssignmentId]);
 
       const handleUpdateCompleted = useCallback(async (id, completed) => {
         setHistory(prev => {
@@ -14941,6 +15212,15 @@
                       Sign out
                     </a>
                   )}
+                  {/* R-G: 📥 Assigned to me — visible to all auth users (any
+                      account may be a swimmer in someone's group). */}
+                  {authenticated && (
+                    <button onClick={() => setView(v => v === "assigned" ? "generator" : "assigned")}
+                      title={view === "assigned" ? "Back to generator" : "Workouts assigned to you"}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #14b8a6", background: view === "assigned" ? "#14b8a6" : "#1e293b", color: view === "assigned" ? "#0f172a" : "#14b8a6", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      {view === "assigned" ? "⏎" : "📥"}
+                    </button>
+                  )}
                   {me?.is_coach && (
                     <button onClick={() => setView(v => v === "teams" ? "generator" : "teams")}
                       title={view === "teams" ? "Back to generator" : "Teams (coach)"}
@@ -15019,6 +15299,19 @@
             {view === "admin"    && <AdminView />}
             {view === "teams"    && <TeamsView />}
             {view === "swimmers" && <ManagedSwimmersView />}
+            {view === "assigned" && (
+              <AssignedToMeView
+                onRunAssignment={(a) => {
+                  // Load the coach-snapshot workout into Run mode and tag the
+                  // assignment so the finish-flow writes back to it instead
+                  // of creating a new history entry.
+                  setRunWorkout(a.workout);
+                  setRunAssignmentId(a.id);
+                  setShowRestPicker(true);
+                  setView("generator");
+                }}
+              />
+            )}
             {view === "catalog"  && (
               <CatalogView
                 favorites={favorites}
@@ -15723,7 +16016,7 @@
               restSecs={restSecs}
               onChange={setRestSecs}
               onStart={() => setShowRestPicker(false)}
-              onCancel={() => { setRunWorkout(null); setShowRestPicker(false); }}
+              onCancel={() => { setRunWorkout(null); setShowRestPicker(false); setRunAssignmentId(null); }}
               audioCues={audioCues}
               onAudioCuesChange={handleAudioCuesToggle}
             />
@@ -15732,7 +16025,7 @@
             <RunWorkoutOverlay
               workout={runWorkout}
               restSecs={restSecs}
-              onClose={() => setRunWorkout(null)}
+              onClose={() => { setRunWorkout(null); setRunAssignmentId(null); }}
               onLogAsToday={handleLogAsToday}
               personalFirstName={personalFirstName}
               audioCues={audioCues}
