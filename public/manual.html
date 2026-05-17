@@ -535,6 +535,26 @@
       </div>
     </section>
 
+    <!-- ══ SECTION-PROPORTION CONTROLS ══ -->
+    <section id="section-bias">
+      <h2>Section Proportions ("Mix")</h2>
+      <p>Just below the Recovery toggle is a <strong>Mix:</strong> pill row with four options: <strong>Balanced</strong> (default) / <strong>Warmup-heavy</strong> / <strong>Drill-heavy</strong> / <strong>Long main</strong>. The pills shift how the generator allocates your total yardage across warmup / drill / main / cooldown.</p>
+      <table>
+        <thead><tr><th>Mode</th><th>Warmup</th><th>Drill</th><th>Main</th><th>Cooldown</th><th>Use case</th></tr></thead>
+        <tbody>
+          <tr><td>Balanced</td><td>~13%</td><td>~17%</td><td>~65%</td><td>~5%</td><td>Default — matches the original allocator</td></tr>
+          <tr><td>Warmup-heavy</td><td><strong>~22%</strong></td><td>~12%</td><td>~62%</td><td>~4%</td><td>Cold pool, returning from injury, technique-focused warm-up day</td></tr>
+          <tr><td>Drill-heavy</td><td>~9%</td><td><strong>~26%</strong></td><td>~61%</td><td>~4%</td><td>Stroke technique session — more drill investment, modest main</td></tr>
+          <tr><td>Long main</td><td>~6%</td><td>~7%</td><td><strong>~83%</strong></td><td>~4%</td><td>Race-prep sets, time trials, big aerobic build days</td></tr>
+        </tbody>
+      </table>
+      <p>The generator uses inverse-distance weighting to pick options nearest the target yardage for each section, then enforces the new main-section floor. The percentages are guidance — actual proportions depend on what the bank has available for the workout type + pool mode you picked. If the bank doesn't carry options big or small enough to hit the target, the picker still goes for the closest available.</p>
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Per-generation only.</strong> The Mix pill resets to Balanced on page reload — same UX as the Recovery toggle. Bias modes compose with Recovery, Phase, equipment, favorites, and lane plans.</div>
+      </div>
+    </section>
+
     <!-- ══ EFFORT ZONES ══ -->
     <section id="zones">
       <h2>Effort Zones</h2>
