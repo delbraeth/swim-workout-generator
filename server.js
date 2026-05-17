@@ -823,39 +823,52 @@ app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter
           const currentMembers = await dbListGroupMembers(assignTo.group_id);
           const activeManaged  = new Set(currentMembers.map(m => m.member_managed_id).filter(Boolean));
 
+          // R-F follow-up: also build a set of active swimmer-sub members
+          // so we can include full-account swimmers referenced in the plan.
+          const activeSwimmers = new Set(currentMembers.map(m => m.member_swimmer_sub).filter(Boolean));
+
           assignmentPlan = { group_id: assignTo.group_id, lane_plan_id: assignTo.lane_plan_id, targets: [] };
           for (const lane of (plan.plan_data?.lanes || [])) {
             for (const m of (lane.members || [])) {
-              // Stage 3 is managed-only; skip full-account swimmer refs.
-              if (!m.managed_id) continue;
-              // Stale-member skip: not in the current group → omit.
-              if (!activeManaged.has(m.managed_id)) continue;
-              assignmentPlan.targets.push({
-                managed_id:  m.managed_id,
-                lane_idx:    lane.idx,
-                lane_label:  lane.label || null,
-                lane_pace:   lane.target_pace_100 || null,
-              });
+              if (m.managed_id) {
+                if (!activeManaged.has(m.managed_id)) continue;                 // stale-member skip
+                assignmentPlan.targets.push({
+                  managed_id:  m.managed_id,
+                  lane_idx:    lane.idx,
+                  lane_label:  lane.label || null,
+                  lane_pace:   lane.target_pace_100 || null,
+                });
+              } else if (m.swimmer_sub) {
+                if (!activeSwimmers.has(m.swimmer_sub)) continue;               // stale-member skip
+                assignmentPlan.targets.push({
+                  swimmer_sub: m.swimmer_sub,
+                  lane_idx:    lane.idx,
+                  lane_label:  lane.label || null,
+                  lane_pace:   lane.target_pace_100 || null,
+                });
+              }
             }
           }
           if (assignmentPlan.targets.length === 0) {
-            return res.status(400).json({ error: "lane plan has no Stage-3-assignable members (all stale, full-account, or empty)" });
+            return res.status(400).json({ error: "lane plan has no currently-active members (all stale or empty)" });
           }
         } else {
-          // R-D fallback: no plan → all-current-members at stored pace.
+          // No plan → all-current-members at stored pace. Both polymorphic
+          // member types are now supported (R-F).
           const members = await dbListGroupMembers(assignTo.group_id);
           if (members.length === 0) return res.status(400).json({ error: "group has no active members" });
           assignmentPlan = { group_id: assignTo.group_id, targets: [] };
           for (const m of members) {
-            if (!m.member_managed_id) continue;                                 // skip full-account in Stage 3
-            const pace = await resolveManagedPaceForRoute(m.member_managed_id, entry.poolMode);
-            assignmentPlan.targets.push({
-              managed_id: m.member_managed_id,
-              lane_pace:  pace,
-            });
+            if (m.member_managed_id) {
+              const pace = await resolveManagedPaceForRoute(m.member_managed_id, entry.poolMode);
+              assignmentPlan.targets.push({ managed_id: m.member_managed_id, lane_pace: pace });
+            } else if (m.member_swimmer_sub) {
+              const pace = await resolveSwimmerPaceForRoute(m.member_swimmer_sub);
+              assignmentPlan.targets.push({ swimmer_sub: m.member_swimmer_sub, lane_pace: pace });
+            }
           }
           if (assignmentPlan.targets.length === 0) {
-            return res.status(400).json({ error: "no Stage-3-assignable members in this group (managed-only in R-D)" });
+            return res.status(400).json({ error: "no assignable members in this group" });
           }
         }
       } else if (assignTo.managed_id) {
@@ -913,6 +926,17 @@ async function resolveManagedPaceForRoute(managedId, poolMode) {
   if (poolMode === "25m") return ms.pace_scm_100 || null;
   if (poolMode === "50m") return ms.pace_lcm_100 || null;
   return null;
+}
+// Full-account swimmers (R-F) have a single `settings.pace_input` instead of
+// per-pool paces. The pace concept-mismatch is a known piece of debt; for
+// now, return that value regardless of pool mode. Pace-model consolidation
+// is a future refactor.
+async function resolveSwimmerPaceForRoute(swimmerSub /* , poolMode */) {
+  if (!swimmerSub) return null;
+  try {
+    const s = await dbGetSettings(swimmerSub);
+    return s?.paceInput || null;
+  } catch (_) { return null; }
 }
 
 // Coach-targets list for the generate-for picker (R-D). Returns active
