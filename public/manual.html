@@ -1156,9 +1156,18 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. v1 captures just name + date.</p>
       <p>Upcoming events surface on the main app via the pool-mode selector row: a <strong>📅 amber pill</strong> showing the most-imminent event across all teams you're in (as either a coach or a group member). Renders alongside your personal <strong>🏁 next-event</strong> pill — both coexist; team events take the leading position.</p>
 
+      <h3>Generate for a group (Stage 3 / R-D)</h3>
+      <p>On the generator page, coaches see a <strong>Generate for</strong> picker above the big Generate button. Default is <strong>Myself</strong> (no assignment created, your normal solo flow). Two other choices:</p>
+      <ul>
+        <li><strong>Private students</strong> — groups with exactly one member. Listed by swimmer name. Generating saves the workout to your history AND creates a single assignment record pointing at that swimmer.</li>
+        <li><strong>Groups</strong> — multi-member groups. Generating saves the workout to your history AND fans out one assignment per current active member (managed-only in Stage 3; full-account swimmers join in R-F). Each assignment snapshots the member's stored pace for the workout's pool mode.</li>
+      </ul>
+      <p>When a group is selected, the group's <strong>current training phase</strong> overrides your personal phase for that generation (decision #39). The workout-display header shows an amber <strong>→ Group X (N)</strong> pill confirming the fanout target; this pill persists in your history so you can see which past workouts were group-assigned.</p>
+      <p>The workout itself lives in <em>your</em> history (you're the owner). Assignments are stored separately; in a later stage, each swimmer will see your workout in their own "Assigned to me" view (R-G) and log completion against their personal copy.</p>
+
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Stages 1–2 complete after this deploy.</strong> Coming next: <strong>R-D</strong> (generate workouts for groups, with phase + lane assignments), <strong>R-E</strong> (lane plans), <strong>R-F</strong> (full-account swimmers can join groups via shared code), <strong>R-G</strong> ("Assigned to me" view for swimmers), and onward. See <code>RELATIONSHIPS_SCOPE.md</code> for the 5-stage plan.</div>
+        <div class="callout-body"><strong>Through Stage 3 / R-D.</strong> Coming next: <strong>R-E</strong> (lane plans — per-pace fanout within a group), <strong>R-F</strong> (full-account swimmers can join groups via shared code), <strong>R-G</strong> ("Assigned to me" view for swimmers with completion logging), then claim flow + admin tier in Stage 5. See <code>RELATIONSHIPS_SCOPE.md</code> for the 5-stage plan.</div>
       </div>
     </section>
 
