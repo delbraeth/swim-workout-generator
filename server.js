@@ -56,7 +56,7 @@ import { fileURLToPath } from "url";
 // in public/index.html). Logged at boot so the Hyperlift application log
 // confirms which build the container is actually running — useful for
 // disambiguating "deploy hung" vs "deploy succeeded but stale cache".
-const BUILD_ID = "2026-05-17 23:31 UTC";
+const BUILD_ID = "2026-05-18 18:55 UTC";
 
 import {
   dbActive, pingDb,
@@ -2254,7 +2254,7 @@ async function boot() {
 
   // Build-version stamp. Logged immediately before the egress-ip diagnostic
   // so you can confirm in the Hyperlift app log which build is actually
-  // running. If the stamp still reads "2026-05-17 23:31 UTC" verbatim, the deploy
+  // running. If the stamp still reads "2026-05-18 18:55 UTC" verbatim, the deploy
   // didn't transform server.js (check _deploy.py FILES list).
   console.log(`[build-id] ${BUILD_ID}`);
 
