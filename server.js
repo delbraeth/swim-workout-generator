@@ -85,6 +85,8 @@ import {
   dbUpdateGroupLanePlan, dbArchiveGroupLanePlan, dbSetDefaultLanePlan,
   dbCreateGroupJoinToken, dbGetGroupJoinToken, dbListGroupJoinTokens,
   dbDeleteGroupJoinToken, dbRedeemGroupJoinToken,
+  dbCreateClaimToken, dbGetClaimToken, dbListClaimTokensForManaged,
+  dbDeleteClaimToken, dbRedeemClaimToken,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1670,6 +1672,103 @@ app.delete("/api/groups/:id/members/:memberId", checkOrigin, requireAuth, requir
       eventType: "group.remove_member",
       ...reqMeta(req),
       details:   { group_id: req.params.id, member_id: Number(req.params.memberId), reason },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Managed-swimmer claim tokens (Stage 5 / R-I) ──────────────────
+// Per scope §10 + Flow J. Coach issues a one-time token; swimmer (with own
+// SSO account) redeems to migrate the managed profile into their account.
+
+// Coach issues a claim token for a managed swimmer they own.
+app.post("/api/managed-swimmers/:id/claim-tokens", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const owns = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
+    if (!owns) return res.status(403).json({ error: "not owner of this managed profile" });
+    try {
+      const r = await dbCreateClaimToken({ managedId: req.params.id, issuedByCoach: req.userSub });
+      dbAuditEvent({
+        userSub:   req.userSub,
+        eventType: "managed.claim_token.issue",
+        ...reqMeta(req),
+        details:   { managed_id: req.params.id, token: r.token },
+      });
+      res.json(r);
+    } catch (e) {
+      // Surface the #28 gate errors as 400s with structured reason.
+      const msg = e.message || String(e);
+      if (msg === "claim_blocked_under_13" || msg === "claim_blocked_parent_managed") {
+        return res.status(400).json({ error: msg, reason: msg });
+      }
+      throw e;
+    }
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/managed-swimmers/:id/claim-tokens", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const owns = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
+    if (!owns) return res.status(403).json({ error: "not owner of this managed profile" });
+    const includeRedeemed = req.query.redeemed === "1";
+    const includeExpired  = req.query.expired === "1";
+    res.json(await dbListClaimTokensForManaged(req.params.id, { includeRedeemed, includeExpired }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/claim-tokens/:token", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const tok = await dbGetClaimToken(req.params.token);
+    if (!tok) return res.status(404).json({ error: "not found" });
+    if (tok.issued_by_coach !== req.userSub) return res.status(403).json({ error: "only issuer can revoke" });
+    const r = await dbDeleteClaimToken(req.params.token);
+    if (r.affected === 0) return res.status(409).json({ error: "token already redeemed or expired" });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "managed.claim_token.revoke",
+      ...reqMeta(req),
+      details:   { token: req.params.token, managed_id: tok.managed_id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Preview a claim token (lets the swimmer see who/what they're about to
+// claim BEFORE committing). Token itself is the secret; any authed user
+// can look it up.
+app.get("/api/claim-tokens/:token/preview", requireAuth, async (req, res) => {
+  try {
+    const tok = await dbGetClaimToken(req.params.token);
+    if (!tok) return res.status(404).json({ error: "invalid_token" });
+    res.json({
+      managed_id:   tok.managed_id,
+      managed_name: tok.managed_name,
+      coach_name:   tok.coach_name,
+      expires_at:   tok.expires_at,
+      is_expired:   tok.is_expired,
+      is_redeemed:  tok.is_redeemed,
+    });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Swimmer redeems the token. Server validates + runs the atomic migration
+// per Flow J. Returns the identity-diff payload for the post-claim review
+// screen (#30).
+app.post("/api/claim-tokens/:token/redeem", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbRedeemClaimToken(req.params.token, req.userSub);
+    if (!r.ok) return res.status(400).json({ error: r.reason, ...r });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "managed.claim_token.redeem",
+      ...reqMeta(req),
+      details:   {
+        token: req.params.token,
+        managed_id: r.managed_id,
+        coach_sub: r.coach_sub,
+        diff_field_count: (r.identity_diff || []).length,
+        repointed: r.repointed,
+      },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
