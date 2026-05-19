@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-19 16:31 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-19 16:37 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -406,6 +406,60 @@
           { id: "s_vyjznr", reps: 1, dist: 400, desc: "Freestyle — very easy, nose down, minimal head movement", interval: "No interval", focus: "Prime body position and breathing pattern" },
           { id: "s_djhj9x", reps: 4, dist:  50, desc: "Stroke drills — choice, one focus per 50", interval: "On 1:20", focus: "Technical warm-up" },
           { id: "s_r43d7e", reps: 1, dist: 200, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Ramp up the aerobic engine before main set" },
+        ]},
+      { label: "The Dirty Dozen", typeAffinity: ["sprint"], totalYards: 600, sets: [
+          { id: "s_sm1d0q", reps: 4, dist: 50, desc: "Easy freestyle — wake up the system", interval: "On 1:15", focus: "Loosen up" },
+          { id: "s_yf2a1a", reps: 4, dist: 50, desc: "Build — easy→90% by the wall, no all-out yet", interval: "On 1:15", focus: "Progressive activation of fast-twitch" },
+          { id: "s_bn0zg3", reps: 4, dist: 50, desc: "Sprint — 25 fast / 25 easy float", interval: "On 1:30", focus: "Prime top-end speed without burning out" },
+        ]},
+      { label: "Snake Pyramid 650", typeAffinity: ["endurance"], totalYards: 650, sets: [
+          { id: "s_vlz33w", reps: 1, dist: 50,  desc: "Freestyle — easy",                             interval: "On 1:15", focus: "Toe in the water" },
+          { id: "s_wiope6", reps: 1, dist: 100, desc: "Freestyle — easy build",                       interval: "On 2:15", focus: "Lengthen the stroke" },
+          { id: "s_hfrg76", reps: 1, dist: 150, desc: "Freestyle — moderate, smooth tempo",           interval: "On 3:15", focus: "Settle into aerobic rhythm" },
+          { id: "s_jkmsxd", reps: 1, dist: 200, desc: "Freestyle — moderate, peak of the pyramid",    interval: "On 4:15", focus: "Hold form across the longest piece" },
+          { id: "s_o53kq2", reps: 1, dist: 100, desc: "Freestyle — moderate, faster than the way up", interval: "On 2:10", focus: "Descend the pyramid" },
+          { id: "s_rdgayq", reps: 1, dist: 50,  desc: "Freestyle — strong close",                     interval: "On 1:10", focus: "Fast finish" },
+        ]},
+      { label: "Build to Boil 900", typeAffinity: ["sprint","endurance"], totalYards: 900, sets: [
+          { id: "s_lt2hhq", reps: 1, dist: 300, desc: "Freestyle — easy, find aerobic rhythm",         interval: "On 6:30", focus: "Act 1: settle in" },
+          { id: "s_vydoau", reps: 1, dist: 300, desc: "Freestyle — moderate, hold form throughout",    interval: "On 6:15", focus: "Act 2: warm the engine" },
+          { id: "s_4tt3bm", reps: 1, dist: 300, desc: "Freestyle — strong, near threshold by the end", interval: "On 6:00", focus: "Act 3: ignite for the main set" },
+        ]},
+      { label: "Wake & Warm Build 700", typeAffinity: ["technique","endurance"], totalYards: 700, sets: [
+          { id: "s_96igsh", reps: 1, dist: 200, desc: "Freestyle — very easy, nose down, minimum head movement", interval: "On 4:30", focus: "Open the body, slow the heart rate" },
+          { id: "s_nqaf9u", reps: 4, dist: 50,  desc: "25 drill choice / 25 swim — same stroke each rep",        interval: "On 1:20", focus: "Build a technique focus that carries into the swim" },
+          { id: "s_ijuhyu", reps: 1, dist: 300, desc: "Freestyle — build easy → moderate by the end",            interval: "On 6:30", focus: "Roll the warmth into the main set" },
+        ]},
+      { label: "Corkscrew Open 600", typeAffinity: ["technique"], totalYards: 600, sets: [
+          { id: "s_z7dwme", reps: 4, dist: 50,  desc: "Corkscrew — alternate 25 freestyle right-side / 25 backstroke left-side (or fluid roll between them)", interval: "On 1:25", focus: "Open shoulders, hips, and rotation in one move" },
+          { id: "s_thngeu", reps: 4, dist: 100, desc: "Freestyle — easy build, focus on body roll learned from the corkscrew", interval: "On 2:15", focus: "Apply rotation to flat freestyle" },
+        ]},
+      { label: "IM Ladder Wake-up", totalYards: 600, sets: [
+          { id: "s_qhfsqf", reps: 1, dist: 100, desc: "Freestyle — easy",                                interval: "On 2:15", focus: "Settle in" },
+          { id: "s_iz5gve", reps: 1, dist: 100, desc: "IM drill — 25 each stroke, easy",                 interval: "On 2:30", focus: "Sample all four strokes" },
+          { id: "s_k4pofe", reps: 1, dist: 100, desc: "Kick (board) — freestyle, moderate tempo",        interval: "On 2:30", focus: "Wake up the legs", eq: "kick" },
+          { id: "s_91yb7h", reps: 1, dist: 100, desc: "IM drill — 25 each stroke, focus on transitions", interval: "On 2:30", focus: "Stroke changeovers" },
+          { id: "s_c9qhfw", reps: 1, dist: 100, desc: "Freestyle — moderate, smooth tempo",              interval: "On 2:00", focus: "Re-engage main stroke" },
+          { id: "s_a4hhvy", reps: 1, dist: 100, desc: "100 IM — build each 25 to strong",                interval: "On 2:30", focus: "Bring it home with intensity ramp" },
+        ]},
+      { label: "Stroke Buffet 800", totalYards: 800, sets: [
+          { id: "s_5lj0na", reps: 1, dist: 200, desc: "Freestyle — easy, settle in",              interval: "On 4:00", focus: "Find aerobic rhythm" },
+          { id: "s_pjo9pg", reps: 1, dist: 200, desc: "Backstroke — easy, open the shoulders",    interval: "On 4:15", focus: "Switch on rotation" },
+          { id: "s_epj258", reps: 1, dist: 200, desc: "Breaststroke or choice (not fly) — easy",  interval: "On 4:30", focus: "Sample a non-free stroke" },
+          { id: "s_94eyxv", reps: 1, dist: 200, desc: "Freestyle — build to moderate by the end", interval: "On 3:45", focus: "Close at warm-up tempo" },
+        ]},
+      { label: "Tool Time 800", totalYards: 800, sets: [
+          { id: "s_cgro81", reps: 1, dist: 200, desc: "Freestyle — easy swim, no gear",                          interval: "On 4:00", focus: "Open without gear" },
+          { id: "s_3zs6ht", reps: 1, dist: 200, desc: "Pull (buoy) — easy, long stroke, high-elbow catch",       interval: "On 4:00", focus: "Isolate the pull", eq: "pull" },
+          { id: "s_al5gv6", reps: 1, dist: 200, desc: "Kick (board) — freestyle or choice, moderate tempo",      interval: "On 4:30", focus: "Engage the legs", eq: "kick" },
+          { id: "s_2ycazs", reps: 1, dist: 200, desc: "Freestyle — build the whole way, finish moderate-strong", interval: "On 3:45", focus: "Re-integrate everything" },
+        ]},
+      { label: "Rainbow Ladder 1000", typeAffinity: ["endurance","technique"], totalYards: 1000, sets: [
+          { id: "s_lsq0p6", reps: 1, dist: 200, desc: "Freestyle — very easy (white zone)",                  interval: "On 4:30", focus: "Color 1: barely working" },
+          { id: "s_dl6gq1", reps: 1, dist: 200, desc: "Freestyle — drill choice / swim by 25 (yellow zone)", interval: "On 4:15", focus: "Color 2: technique-overlay" },
+          { id: "s_5ohpob", reps: 1, dist: 200, desc: "Freestyle — moderate, smooth tempo (orange zone)",    interval: "On 4:00", focus: "Color 3: aerobic warmth" },
+          { id: "s_u36hfq", reps: 1, dist: 200, desc: "Freestyle — moderate-strong, controlled (red zone)",  interval: "On 3:45", focus: "Color 4: pre-main pressure" },
+          { id: "s_s9r3e0", reps: 1, dist: 200, desc: "Freestyle — easy spin-down to reset (white zone)",    interval: "On 4:30", focus: "Color 5: shake out before the main" },
         ]},
     ];
 
@@ -3429,6 +3483,60 @@
           { id: "s_qjwkl8", reps: 1, dist: 400, desc: "Freestyle — very easy, nose down, minimal head movement", interval: "No interval", focus: "Prime body position and breathing pattern" },
           { id: "s_4e8t8k", reps: 4, dist:  50, desc: "Stroke drills — choice, one focus per 50", interval: "On 1:25", focus: "Technical warm-up" },
           { id: "s_0br41r", reps: 1, dist: 200, desc: "Freestyle — build from easy to moderate", interval: "No interval", focus: "Ramp up the aerobic engine before main set" },
+        ]},
+      { label: "The Dirty Dozen", typeAffinity: ["sprint"], totalYards: 600, sets: [
+          { id: "s_389rli", reps: 4, dist: 50, desc: "Easy freestyle — wake up the system", interval: "On 1:20", focus: "Loosen up" },
+          { id: "s_rs6moi", reps: 4, dist: 50, desc: "Build — easy→90% by the wall, no all-out yet", interval: "On 1:20", focus: "Progressive activation of fast-twitch" },
+          { id: "s_i1aq4z", reps: 4, dist: 50, desc: "Sprint — 25 fast / 25 easy float", interval: "On 1:35", focus: "Prime top-end speed without burning out" },
+        ]},
+      { label: "Snake Pyramid 650", typeAffinity: ["endurance"], totalYards: 650, sets: [
+          { id: "s_jssmlm", reps: 1, dist: 50,  desc: "Freestyle — easy",                             interval: "On 1:20", focus: "Toe in the water" },
+          { id: "s_uod33p", reps: 1, dist: 100, desc: "Freestyle — easy build",                       interval: "On 2:25", focus: "Lengthen the stroke" },
+          { id: "s_j0trbn", reps: 1, dist: 150, desc: "Freestyle — moderate, smooth tempo",           interval: "On 3:30", focus: "Settle into aerobic rhythm" },
+          { id: "s_n49h1f", reps: 1, dist: 200, desc: "Freestyle — moderate, peak of the pyramid",    interval: "On 4:30", focus: "Hold form across the longest piece" },
+          { id: "s_4zgz45", reps: 1, dist: 100, desc: "Freestyle — moderate, faster than the way up", interval: "On 2:20", focus: "Descend the pyramid" },
+          { id: "s_xyb681", reps: 1, dist: 50,  desc: "Freestyle — strong close",                     interval: "On 1:15", focus: "Fast finish" },
+        ]},
+      { label: "Build to Boil 900", typeAffinity: ["sprint","endurance"], totalYards: 900, sets: [
+          { id: "s_ti0nby", reps: 1, dist: 300, desc: "Freestyle — easy, find aerobic rhythm",         interval: "On 6:50", focus: "Act 1: settle in" },
+          { id: "s_pe7az8", reps: 1, dist: 300, desc: "Freestyle — moderate, hold form throughout",    interval: "On 6:35", focus: "Act 2: warm the engine" },
+          { id: "s_0vsu3m", reps: 1, dist: 300, desc: "Freestyle — strong, near threshold by the end", interval: "On 6:20", focus: "Act 3: ignite for the main set" },
+        ]},
+      { label: "Wake & Warm Build 700", typeAffinity: ["technique","endurance"], totalYards: 700, sets: [
+          { id: "s_zx8g38", reps: 1, dist: 200, desc: "Freestyle — very easy, nose down, minimum head movement", interval: "On 4:45", focus: "Open the body, slow the heart rate" },
+          { id: "s_hkjxt5", reps: 4, dist: 50,  desc: "25 drill choice / 25 swim — same stroke each rep",        interval: "On 1:25", focus: "Build a technique focus that carries into the swim" },
+          { id: "s_epaz3r", reps: 1, dist: 300, desc: "Freestyle — build easy → moderate by the end",            interval: "On 6:50", focus: "Roll the warmth into the main set" },
+        ]},
+      { label: "Corkscrew Open 600", typeAffinity: ["technique"], totalYards: 600, sets: [
+          { id: "s_worllv", reps: 4, dist: 50,  desc: "Corkscrew — alternate 25 freestyle right-side / 25 backstroke left-side (or fluid roll between them)", interval: "On 1:30", focus: "Open shoulders, hips, and rotation in one move" },
+          { id: "s_pwqg7q", reps: 4, dist: 100, desc: "Freestyle — easy build, focus on body roll learned from the corkscrew", interval: "On 2:25", focus: "Apply rotation to flat freestyle" },
+        ]},
+      { label: "IM Ladder Wake-up", totalYards: 600, sets: [
+          { id: "s_t9zk5e", reps: 1, dist: 100, desc: "Freestyle — easy",                                interval: "On 2:25", focus: "Settle in" },
+          { id: "s_wjvl6t", reps: 1, dist: 100, desc: "IM drill — 25 each stroke, easy",                 interval: "On 2:40", focus: "Sample all four strokes" },
+          { id: "s_kukk49", reps: 1, dist: 100, desc: "Kick (board) — freestyle, moderate tempo",        interval: "On 2:40", focus: "Wake up the legs", eq: "kick" },
+          { id: "s_dhr403", reps: 1, dist: 100, desc: "IM drill — 25 each stroke, focus on transitions", interval: "On 2:40", focus: "Stroke changeovers" },
+          { id: "s_5bw6da", reps: 1, dist: 100, desc: "Freestyle — moderate, smooth tempo",              interval: "On 2:10", focus: "Re-engage main stroke" },
+          { id: "s_k1nkt0", reps: 1, dist: 100, desc: "100 IM — build each 25 to strong",                interval: "On 2:40", focus: "Bring it home with intensity ramp" },
+        ]},
+      { label: "Stroke Buffet 800", totalYards: 800, sets: [
+          { id: "s_s1568t", reps: 1, dist: 200, desc: "Freestyle — easy, settle in",              interval: "On 4:15", focus: "Find aerobic rhythm" },
+          { id: "s_0t64np", reps: 1, dist: 200, desc: "Backstroke — easy, open the shoulders",    interval: "On 4:30", focus: "Switch on rotation" },
+          { id: "s_e8ka41", reps: 1, dist: 200, desc: "Breaststroke or choice (not fly) — easy",  interval: "On 4:45", focus: "Sample a non-free stroke" },
+          { id: "s_9ghga6", reps: 1, dist: 200, desc: "Freestyle — build to moderate by the end", interval: "On 4:00", focus: "Close at warm-up tempo" },
+        ]},
+      { label: "Tool Time 800", totalYards: 800, sets: [
+          { id: "s_gc0wjy", reps: 1, dist: 200, desc: "Freestyle — easy swim, no gear",                          interval: "On 4:15", focus: "Open without gear" },
+          { id: "s_x5473y", reps: 1, dist: 200, desc: "Pull (buoy) — easy, long stroke, high-elbow catch",       interval: "On 4:15", focus: "Isolate the pull", eq: "pull" },
+          { id: "s_gz3ccy", reps: 1, dist: 200, desc: "Kick (board) — freestyle or choice, moderate tempo",      interval: "On 4:45", focus: "Engage the legs", eq: "kick" },
+          { id: "s_kl3zwc", reps: 1, dist: 200, desc: "Freestyle — build the whole way, finish moderate-strong", interval: "On 4:00", focus: "Re-integrate everything" },
+        ]},
+      { label: "Rainbow Ladder 1000", typeAffinity: ["endurance","technique"], totalYards: 1000, sets: [
+          { id: "s_rp8qme", reps: 1, dist: 200, desc: "Freestyle — very easy (white zone)",                  interval: "On 4:45", focus: "Color 1: barely working" },
+          { id: "s_9s5aav", reps: 1, dist: 200, desc: "Freestyle — drill choice / swim by 25 (yellow zone)", interval: "On 4:30", focus: "Color 2: technique-overlay" },
+          { id: "s_4blymz", reps: 1, dist: 200, desc: "Freestyle — moderate, smooth tempo (orange zone)",    interval: "On 4:15", focus: "Color 3: aerobic warmth" },
+          { id: "s_ox731h", reps: 1, dist: 200, desc: "Freestyle — moderate-strong, controlled (red zone)",  interval: "On 4:00", focus: "Color 4: pre-main pressure" },
+          { id: "s_k586re", reps: 1, dist: 200, desc: "Freestyle — easy spin-down to reset (white zone)",    interval: "On 4:45", focus: "Color 5: shake out before the main" },
         ]},
     ];
 
