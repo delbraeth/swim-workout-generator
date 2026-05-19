@@ -637,6 +637,15 @@ export async function dbAdminUpdateUser(sub, patch) {
   if (!sub) return { ok: false, reason: "no_sub" };
   const allowed = { email: "email", initials: "initials", display_name: "display_name" };
   const sets = [], vals = [];
+  // Mirror dbUpdateMe: if admin changes the email, clear the verified badge
+  // so it doesn't keep claiming the old address is verified.
+  let resetVerified = false;
+  if ("email" in patch) {
+    const current = await pool.query("SELECT `email` FROM `users` WHERE `sub` = ?", [sub]);
+    const oldEmail = current[0]?.email || null;
+    const newEmail = patch.email === "" ? null : patch.email;
+    if (oldEmail !== newEmail) resetVerified = true;
+  }
   for (const [k, col] of Object.entries(allowed)) {
     if (k in patch) {
       sets.push(`\`${col}\` = ?`);
@@ -652,6 +661,7 @@ export async function dbAdminUpdateUser(sub, patch) {
     sets.push("`gender` = ?");
     vals.push(g === "" ? null : g);
   }
+  if (resetVerified) sets.push("`email_verified` = 0");
   if (!sets.length) return { ok: true, affected: 0 };
   vals.push(sub);
   const r = await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
@@ -1769,44 +1779,68 @@ export async function dbAddGroupMember(groupId, { managedId = null, swimmerSub =
   if (!groupId) return { ok: false, reason: "no_group" };
   if (!GROUP_MEMBER_ROLES.includes(role)) return { ok: false, reason: "bad_role" };
   if ((managedId === null) === (swimmerSub === null)) return { ok: false, reason: "specify_exactly_one_target" };
-  // Resolve the target group's primary coach (needed for #33 check).
-  const grpRows = await pool.query(
-    "SELECT `primary_coach_sub` FROM `groups` WHERE `id` = ? AND `archived` = 0 LIMIT 1",
-    [groupId]
-  );
-  if (!grpRows[0]) return { ok: false, reason: "group_not_found_or_archived" };
-  const primaryCoach = grpRows[0].primary_coach_sub;
-  // For role='primary', check no other active primary membership for this
-  // swimmer exists under the same coach's other groups.
-  if (role === "primary") {
-    const targetField = managedId ? "gm.`member_managed_id`" : "gm.`member_swimmer_sub`";
-    const targetValue = managedId || swimmerSub;
-    const conflicts = await pool.query(
-      "SELECT gm.`group_id`, g.`name` AS group_name FROM `group_members` gm " +
-      "JOIN `groups` g ON g.`id` = gm.`group_id` " +
-      `WHERE gm.\`left_at\` IS NULL AND gm.\`role\` = 'primary' AND ${targetField} = ? ` +
-      "AND g.`primary_coach_sub` = ? AND gm.`group_id` != ?",
-      [targetValue, primaryCoach, groupId]
+  // Transaction + SELECT FOR UPDATE on the target group row so concurrent
+  // adds serialize against this group. Mirrors dbRedeemGroupJoinToken's
+  // pattern — without it, two parallel adds could both pass the #33 /
+  // duplicate-active checks and both INSERT.
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // Lock the group row to serialize concurrent adds to this group.
+    const grpRows = await conn.query(
+      "SELECT `primary_coach_sub`, `archived` FROM `groups` WHERE `id` = ? FOR UPDATE",
+      [groupId]
     );
-    if (conflicts.length > 0) {
-      return { ok: false, reason: "primary_in_other_group_same_coach", conflict_group_id: conflicts[0].group_id, conflict_group_name: conflicts[0].group_name };
+    if (!grpRows[0]) {
+      await conn.rollback();
+      return { ok: false, reason: "group_not_found_or_archived" };
     }
+    if (grpRows[0].archived) {
+      await conn.rollback();
+      return { ok: false, reason: "group_not_found_or_archived" };
+    }
+    const primaryCoach = grpRows[0].primary_coach_sub;
+    // For role='primary', check no other active primary membership for this
+    // swimmer exists under the same coach's other groups.
+    if (role === "primary") {
+      const targetField = managedId ? "gm.`member_managed_id`" : "gm.`member_swimmer_sub`";
+      const targetValue = managedId || swimmerSub;
+      const conflicts = await conn.query(
+        "SELECT gm.`group_id`, g.`name` AS group_name FROM `group_members` gm " +
+        "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+        `WHERE gm.\`left_at\` IS NULL AND gm.\`role\` = 'primary' AND ${targetField} = ? ` +
+        "AND g.`primary_coach_sub` = ? AND gm.`group_id` != ?",
+        [targetValue, primaryCoach, groupId]
+      );
+      if (conflicts.length > 0) {
+        await conn.rollback();
+        return { ok: false, reason: "primary_in_other_group_same_coach", conflict_group_id: conflicts[0].group_id, conflict_group_name: conflicts[0].group_name };
+      }
+    }
+    // Also block duplicate-active rows for the same (group, member).
+    const dupField = managedId ? "`member_managed_id`" : "`member_swimmer_sub`";
+    const dupVal = managedId || swimmerSub;
+    const dups = await conn.query(
+      `SELECT 1 FROM \`group_members\` WHERE \`group_id\` = ? AND ${dupField} = ? AND \`left_at\` IS NULL LIMIT 1`,
+      [groupId, dupVal]
+    );
+    if (dups.length > 0) {
+      await conn.rollback();
+      return { ok: false, reason: "already_active_member" };
+    }
+    const r = await conn.query(
+      "INSERT INTO `group_members` (`group_id`, `member_swimmer_sub`, `member_managed_id`, `role`) " +
+      "VALUES (?, ?, ?, ?)",
+      [groupId, swimmerSub || null, managedId || null, role]
+    );
+    await conn.commit();
+    return { ok: true, id: Number(r.insertId) };
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) {}
+    throw e;
+  } finally {
+    conn.release();
   }
-  // Also block duplicate-active rows for the same (group, member).
-  const dupField = managedId ? "`member_managed_id`" : "`member_swimmer_sub`";
-  const dupVal = managedId || swimmerSub;
-  const dups = await pool.query(
-    `SELECT 1 FROM \`group_members\` WHERE \`group_id\` = ? AND ${dupField} = ? AND \`left_at\` IS NULL LIMIT 1`,
-    [groupId, dupVal]
-  );
-  if (dups.length > 0) return { ok: false, reason: "already_active_member" };
-
-  const r = await pool.query(
-    "INSERT INTO `group_members` (`group_id`, `member_swimmer_sub`, `member_managed_id`, `role`) " +
-    "VALUES (?, ?, ?, ?)",
-    [groupId, swimmerSub || null, managedId || null, role]
-  );
-  return { ok: true, id: Number(r.insertId) };
 }
 
 export async function dbRemoveGroupMember(memberId, { reason = null } = {}) {
@@ -1919,6 +1953,21 @@ export async function dbListTeamEvents(teamId) {
     created_by_coach_sub: r.created_by_coach_sub,
     created_at: dtToIso(r.created_at),
   }));
+}
+
+// Swimmer-side visibility check for team resources (events today; potentially
+// more later). True if the swimmer is an active full-account member of any
+// group whose `team_id` matches. Note: managed swimmers don't authenticate, so
+// this only needs to check `member_swimmer_sub`.
+export async function dbIsSwimmerInTeam(swimmerSub, teamId) {
+  if (!swimmerSub || !teamId) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `group_members` gm " +
+    "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+    "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` = ? LIMIT 1",
+    [swimmerSub, teamId]
+  );
+  return rows.length > 0;
 }
 
 // ── Group join tokens (Stage 4 / R-F) ────────────────────────────────
@@ -2538,11 +2587,18 @@ export async function dbListAssignmentsForGroup(groupId, { state = null, limit =
   }));
 }
 
-// Single-assignment fetch for R-G (auth checks before update).
+// Single-assignment fetch for R-G (auth checks before update). JOINs the
+// source workout so the route can also authorize the workout owner — needed
+// for managed-id assignments where neither target swimmer (no login) nor
+// group coach (assigned_via_group_id is NULL for direct managed assigns) can
+// satisfy the check on their own.
 export async function dbGetAssignment(id) {
   if (!id) return null;
   const rows = await pool.query(
-    "SELECT * FROM `workout_assignments` WHERE `id` = ? LIMIT 1",
+    "SELECT a.*, w.`user_sub` AS workout_user_sub " +
+    "FROM `workout_assignments` a " +
+    "LEFT JOIN `workouts` w ON w.`id` = a.`workout_id` " +
+    "WHERE a.`id` = ? LIMIT 1",
     [Number(id)]
   );
   if (!rows[0]) return null;
@@ -2550,6 +2606,7 @@ export async function dbGetAssignment(id) {
   return {
     id:                       Number(r.id),
     workout_id:               r.workout_id,                                    // VARCHAR(32), keep as string
+    workout_user_sub:         r.workout_user_sub,
     assigned_via_group_id:    r.assigned_via_group_id,
     assigned_via_lane_plan_id: r.assigned_via_lane_plan_id,
     target_swimmer_sub:       r.target_swimmer_sub,
