@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-19 02:42 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-19 13:10 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9256,13 +9256,13 @@
         <div style={{ marginTop: 18, padding: 14, background: "#0f172a", border: "1px solid #334155", borderRadius: 8 }}>
           <h4 style={{ color: "#e2e8f0", margin: 0, marginBottom: 6, fontSize: 14 }}>Join a group</h4>
           <p style={{ color: "#94a3b8", fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
-            Got a join code from a coach? Paste it here. Once you join, workouts the coach generates for the group will show up in your "Assigned to me" view (coming in a later release).
+            Got a join code from a coach? Paste it here. Once you join, workouts the coach generates for the group will show up in your "📥 Assigned to me" view.
           </p>
 
           {result ? (
             <div style={{ padding: 10, background: "#22c55e22", border: "1px solid #22c55e", borderRadius: 6 }}>
               <div style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>✓ Joined {result.group_name}</div>
-              <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>Role: <strong>{result.role}</strong>. You can now leave the group anytime from the team/group views (coming soon).</div>
+              <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>Role: <strong>{result.role}</strong>.</div>
               <button onClick={() => setResult(null)}
                 style={{ marginTop: 8, padding: "4px 10px", background: "transparent", color: "#94a3b8", border: "1px solid #334155", borderRadius: 4, fontSize: 11, cursor: "pointer" }}>
                 Dismiss
@@ -10174,7 +10174,6 @@
                   <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
                     <EditableProfileField
                       label="Name"
-                      field="display_name"
                       value={me.display_name}
                       placeholder="Your name (used to personalize the app)"
                       maxLength={120}
@@ -10193,7 +10192,6 @@
                       }} />
                     <EditableProfileField
                       label="Initials"
-                      field="initials"
                       value={me.initials}
                       placeholder="Up to 8 characters"
                       maxLength={8}
@@ -10213,7 +10211,6 @@
                       }} />
                     <EditableProfileField
                       label="Email"
-                      field="email"
                       type="email"
                       value={me.email}
                       placeholder="you@example.com"
@@ -15171,8 +15168,6 @@
       const typeMin = selectedType ? minYardsForType(selectedType, poolMode) : 0;
       const canGenerate = selectedType && maxYards >= typeMin;
 
-      const is50mYardFallback = false; // all types now have native 50m option banks
-
       return (
         <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)" }}>
           {/* Header */}
@@ -15473,16 +15468,6 @@
             </div>
 
             <div className="screen-only">
-
-              {/* 50m yard-fallback notice for stroke-specialty types */}
-              {is50mYardFallback && (
-                <div style={{ background: "#1c1917", border: "1px solid #78716c", borderRadius: 10, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 15 }}>ℹ️</span>
-                  <span style={{ fontSize: 12, color: "#a8a29e" }}>
-                    IM and stroke-specialty sets use yard-based distances — no native 50m options for these types yet. All distances below are in yards, not meters.
-                  </span>
-                </div>
-              )}
 
               {/* Equipment checkboxes */}
               <EquipmentPicker equipment={equipment} onChange={handleEquipChange} />
