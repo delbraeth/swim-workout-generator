@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-19 17:00 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-19 19:02 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -286,6 +286,18 @@
                   multipliers: { easy: 2.0, aerobic: 1.5, threshold: 0.3, vo2: 0.2, anaerobic: 0.1 } },
     };
     const PHASE_ORDER = ["base", "build", "peak", "taper", "recovery"];
+
+    // J — Swimmer-level presets. Persisted in settings.extra.level; picking
+    // a level in Profile overwrites paceInput. No extra interval-scaling
+    // multiplier (decision 2026-05-19) — level is just a calibration shortcut
+    // so a new swimmer can pick "Masters" and get a sane default pace
+    // instead of staring at the M:SS field with no idea what to type.
+    const LEVEL_PRESETS = {
+      recreational: { id: "recreational", label: "Recreational", emoji: "🏖️", pace: "2:30", description: "Fitness swimmer — long, easy intervals" },
+      masters:      { id: "masters",      label: "Masters",      emoji: "🏊", pace: "2:00", description: "Adult masters / triathlete — moderate intervals" },
+      competitive:  { id: "competitive",  label: "Competitive",  emoji: "🏁", pace: "1:30", description: "Trained competitive swimmer — tight intervals" },
+    };
+    const LEVEL_ORDER = ["recreational", "masters", "competitive"];
 
     // Heuristic zone inference from a single set's text + interval + distance.
     // Returns one of ZONE_ORDER. Keyword cues in desc/focus dominate; interval
@@ -9926,6 +9938,55 @@
       );
     }
 
+    // J: LevelRow lives in the Profile modal Goals section. Three buttons,
+    // single-select; clicking the active one clears the level. Picking a
+    // level immediately overwrites paceInput with the level's preset pace
+    // (handled in the caller via onChange's second arg).
+    function LevelRow({ value, onChange }) {
+      const selected = value && LEVEL_PRESETS[value] ? LEVEL_PRESETS[value] : null;
+      return (
+        <div style={{
+          display: "flex", flexDirection: "column", gap: 8,
+          background: "#1e293b", border: "1px solid #334155",
+          borderRadius: 8, padding: "8px 12px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>🎯 Swimmer level</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                {selected
+                  ? <><span style={{ color: "#fbbf24", fontWeight: 700 }}>{selected.emoji} {selected.label}</span> · {selected.description} · presets pace to {selected.pace}/100</>
+                  : <span style={{ fontStyle: "italic" }}>No level set — pick one to auto-fill your pace.</span>}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {LEVEL_ORDER.map(lid => {
+              const l = LEVEL_PRESETS[lid];
+              const active = value === lid;
+              return (
+                <button key={lid}
+                  onClick={() => onChange(active ? null : lid, active ? null : l.pace)}
+                  title={`${l.label} — pace ${l.pace}/100 · ${l.description}`}
+                  style={{
+                    padding: "5px 11px", borderRadius: 999,
+                    border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
+                    background: active ? "rgba(245,158,11,0.18)" : "transparent",
+                    color: active ? "#fbbf24" : "#94a3b8",
+                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                  }}>
+                  <span>{l.emoji}</span>
+                  <span>{l.label}</span>
+                  <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontWeight: 500, marginLeft: 2 }}>· {l.pace}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     function NextEventRow({ value, onSave, onClear }) {
       const [editing, setEditing] = React.useState(false);
       const [draftName, setDraftName] = React.useState("");
@@ -10695,12 +10756,13 @@
       );
     }
 
-    function ProfileModal({ onClose, onProfileChange }) {
+    function ProfileModal({ onClose, onProfileChange, onPaceUpdate }) {
       const [me, setMe]             = React.useState(null);
       const [sessions, setSessions] = React.useState([]);
       const [goals, setGoals]       = React.useState([]);
       const [nextEvent, setNextEventLocal] = React.useState(null); // { name, date } | null
       const [phase, setPhaseLocal]  = React.useState(null);        // N5
+      const [level, setLevelLocal]  = React.useState(null);        // J — swimmer-level preset
       const [loading, setLoading]   = React.useState(true);
       const [revoking, setRevoking] = React.useState(false);
       const [revokeMsg, setRevokeMsg] = React.useState(null);
@@ -10719,6 +10781,7 @@
           setGoals(Array.isArray(goalsRes) ? goalsRes : []);
           setNextEventLocal(settingsRes?.next_event && settingsRes.next_event.name && settingsRes.next_event.date ? settingsRes.next_event : null);
           setPhaseLocal(settingsRes?.phase && PHASES[settingsRes.phase] ? settingsRes.phase : null);
+          setLevelLocal(settingsRes?.level && LEVEL_PRESETS[settingsRes.level] ? settingsRes.level : null);
         } finally {
           setLoading(false);
         }
@@ -10811,6 +10874,24 @@
         });
         if (res.ok) {
           setPhaseLocal(value);
+          if (onProfileChange) onProfileChange();
+        }
+      };
+
+      // J: set or clear the swimmer level. Picking a level also overwrites
+      // paceInput with that level's preset pace (handled via onPaceUpdate
+      // callback up to App). LevelRow's onChange passes (id, pace) — when
+      // clearing (id===null), pace is null too and we don't touch paceInput.
+      const handleSetLevel = async (levelId, presetPace) => {
+        const value = levelId && LEVEL_PRESETS[levelId] ? levelId : null;
+        const res = await fetch("/api/settings/extra", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify({ level: value }),
+        });
+        if (res.ok) {
+          setLevelLocal(value);
+          if (value && presetPace && onPaceUpdate) onPaceUpdate(presetPace);
           if (onProfileChange) onProfileChange();
         }
       };
@@ -10974,6 +11055,7 @@
                       onSave={handleSaveNextEvent}
                       onClear={handleClearNextEvent} />
                     <PhaseRow value={phase} onChange={handleSetPhase} />
+                    <LevelRow value={level} onChange={handleSetLevel} />
                   </div>
                 </div>
 
@@ -16780,6 +16862,12 @@
                 // even if the modal stays open.
                 fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
                 refreshSettings();
+              }}
+              onPaceUpdate={(newPace) => {
+                // J — LevelRow pushes a preset pace up to App when a level
+                // is picked. Use handlePaceChange so the debounced save
+                // path persists it to settings alongside the local update.
+                handlePaceChange(newPace);
               }} />
           )}
           {showFeedback && (
