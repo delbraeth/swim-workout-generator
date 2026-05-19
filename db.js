@@ -2158,6 +2158,266 @@ export async function dbRedeemGroupJoinToken(token, swimmerSub) {
   }
 }
 
+// ── Managed-swimmer claim tokens (Stage 5 / R-I) ─────────────────────
+// Per scope §10 + Flow J. Coach issues a token tied to a managed profile;
+// swimmer (with their own SSO account) redeems it. Redemption is atomic:
+// identity fields copied per #24 (coach prefers, captured as diff per #30),
+// dependent rows repointed (workout_assignments, coach_swimmer_notes,
+// group_members), managed row deleted. No historical stub. #28 gates apply
+// at issue time (under-13 block, parent_managed_flag block).
+
+function genClaimToken() {
+  const bytes = crypto.randomBytes(8);
+  const n     = BigInt("0x" + bytes.toString("hex"));
+  return n.toString(36).padStart(10, "0").slice(0, 10);
+}
+const CLAIM_TOKEN_DAYS = 30;
+
+export async function dbCreateClaimToken({ managedId, issuedByCoach }) {
+  if (!managedId || !issuedByCoach) throw new Error("managedId + issuedByCoach required");
+  // Verify the managed profile exists and that the coach owns it.
+  const ms = await dbGetManagedSwimmer(managedId);
+  if (!ms) throw new Error("managed swimmer not found");
+  if (ms.owner_coach_sub !== issuedByCoach) throw new Error("not owner of this managed profile");
+  // Decision #28 gates:
+  //   - Under-13 (COPPA-protected) — claim is blocked entirely.
+  //   - parent_managed_flag set (decision #25 club override) — claim blocked.
+  if (ms.is_coppa_protected) throw new Error("claim_blocked_under_13");
+  if (ms.parent_managed_flag) throw new Error("claim_blocked_parent_managed");
+  const token     = genClaimToken();
+  const expiresAt = new Date(Date.now() + CLAIM_TOKEN_DAYS * 86400 * 1000)
+    .toISOString().slice(0, 19).replace("T", " ");
+  await pool.query(
+    "INSERT INTO `managed_swimmer_claim_tokens` (`token`, `managed_id`, `issued_by_coach`, `expires_at`) " +
+    "VALUES (?, ?, ?, ?)",
+    [token, managedId, issuedByCoach, expiresAt]
+  );
+  return { ok: true, token, expires_at: dtToIso(new Date(expiresAt + "Z")) };
+}
+
+export async function dbGetClaimToken(token) {
+  if (!token) return null;
+  const rows = await pool.query(
+    "SELECT t.`token`, t.`managed_id`, t.`issued_by_coach`, t.`issued_at`, " +
+    "       t.`expires_at`, t.`redeemed_at`, t.`redeemed_by_swimmer_sub`, " +
+    "       m.`display_name` AS managed_name, m.`owner_coach_sub`, " +
+    "       cu.`display_name` AS coach_name " +
+    "FROM `managed_swimmer_claim_tokens` t " +
+    "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = t.`managed_id` " +
+    "LEFT JOIN `users` cu ON cu.`sub` = t.`issued_by_coach` " +
+    "WHERE t.`token` = ? LIMIT 1",
+    [token]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    token:                   r.token,
+    managed_id:              r.managed_id,
+    managed_name:            r.managed_name,
+    owner_coach_sub:         r.owner_coach_sub,
+    coach_name:              r.coach_name,
+    issued_by_coach:         r.issued_by_coach,
+    issued_at:               dtToIso(r.issued_at),
+    expires_at:              dtToIso(r.expires_at),
+    redeemed_at:             dtToIso(r.redeemed_at),
+    redeemed_by_swimmer_sub: r.redeemed_by_swimmer_sub,
+    is_expired:              r.expires_at ? new Date(r.expires_at) < new Date() : false,
+    is_redeemed:             !!r.redeemed_at,
+  };
+}
+
+export async function dbListClaimTokensForManaged(managedId, { includeRedeemed = false, includeExpired = false } = {}) {
+  if (!managedId) return [];
+  let where = "`managed_id` = ?";
+  if (!includeRedeemed) where += " AND `redeemed_at` IS NULL";
+  if (!includeExpired)  where += " AND `expires_at` > NOW()";
+  const rows = await pool.query(
+    "SELECT `token`, `managed_id`, `issued_by_coach`, `issued_at`, `expires_at`, `redeemed_at`, `redeemed_by_swimmer_sub` " +
+    "FROM `managed_swimmer_claim_tokens` " +
+    "WHERE " + where + " " +
+    "ORDER BY `issued_at` DESC LIMIT 50",
+    [managedId]
+  );
+  return rows.map(r => ({
+    token:                   r.token,
+    managed_id:              r.managed_id,
+    issued_by_coach:         r.issued_by_coach,
+    issued_at:               dtToIso(r.issued_at),
+    expires_at:              dtToIso(r.expires_at),
+    redeemed_at:             dtToIso(r.redeemed_at),
+    redeemed_by_swimmer_sub: r.redeemed_by_swimmer_sub,
+    is_expired:              r.expires_at ? new Date(r.expires_at) < new Date() : false,
+    is_redeemed:             !!r.redeemed_at,
+  }));
+}
+
+export async function dbDeleteClaimToken(token) {
+  if (!token) return { ok: false, reason: "no_token" };
+  const r = await pool.query(
+    "DELETE FROM `managed_swimmer_claim_tokens` WHERE `token` = ? AND `redeemed_at` IS NULL",
+    [token]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Atomic claim migration per Flow J. Big transaction:
+//   1. Validate token + lock
+//   2. Check #21/#33 group conflicts before any writes
+//   3. Capture identity diff per #24/#30
+//   4. Update users row from managed (coach prefers per #24)
+//   5. Repoint workout_assignments
+//   6. Repoint coach_swimmer_notes (try/catch — R-H may not have shipped)
+//   7. Repoint group_members
+//   8. Delete managed row
+//   9. Stamp token redeemed
+//   10. Return diff payload for the post-claim review screen
+export async function dbRedeemClaimToken(token, swimmerSub) {
+  if (!token || !swimmerSub) return { ok: false, reason: "missing_args" };
+  await dbEnsureUser(swimmerSub);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // ── Step 1: lock & validate token + managed row ────────────────────
+    const tokRows = await conn.query(
+      "SELECT t.`token`, t.`managed_id`, t.`issued_by_coach`, t.`expires_at`, t.`redeemed_at` " +
+      "FROM `managed_swimmer_claim_tokens` t " +
+      "WHERE t.`token` = ? FOR UPDATE",
+      [token]
+    );
+    if (!tokRows[0])                                  { await conn.rollback(); return { ok: false, reason: "invalid_token" }; }
+    const t = tokRows[0];
+    if (t.redeemed_at)                                { await conn.rollback(); return { ok: false, reason: "already_redeemed" }; }
+    if (t.expires_at && new Date(t.expires_at) < new Date()) { await conn.rollback(); return { ok: false, reason: "expired" }; }
+
+    const msRows = await conn.query(
+      "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, " +
+      "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100` " +
+      "FROM `coach_managed_swimmers` WHERE `id` = ? FOR UPDATE",
+      [t.managed_id]
+    );
+    if (!msRows[0])                                   { await conn.rollback(); return { ok: false, reason: "managed_missing" }; }
+    const ms = msRows[0];
+
+    // ── Step 2: lock target swimmer row + capture diff ─────────────────
+    const swRows = await conn.query(
+      "SELECT `sub`, `display_name`, `initials`, `dob`, `gender` FROM `users` WHERE `sub` = ? FOR UPDATE",
+      [swimmerSub]
+    );
+    if (!swRows[0])                                   { await conn.rollback(); return { ok: false, reason: "swimmer_missing" }; }
+    const sw = swRows[0];
+    // Diff: only fields where managed has a value AND it differs from current swimmer value
+    const diff = [];
+    const idChanges = {};
+    function maybeChange(field, msVal, swVal) {
+      if (msVal == null || msVal === "") return;
+      const a = msVal instanceof Date ? msVal.toISOString().slice(0,10) : String(msVal);
+      const b = swVal == null ? "" : (swVal instanceof Date ? swVal.toISOString().slice(0,10) : String(swVal));
+      if (a !== b) { diff.push({ field, from: b || null, to: a }); idChanges[field] = msVal; }
+    }
+    maybeChange("display_name", ms.display_name, sw.display_name);
+    maybeChange("initials",     ms.initials,     sw.initials);
+    maybeChange("dob",          ms.dob,          sw.dob);
+    maybeChange("gender",       ms.gender,       sw.gender);
+
+    // ── Step 3: check group conflicts (#21/#33) before repoint ─────────
+    const conflictRows = await conn.query(
+      "SELECT g.`id`, g.`name`, g.`primary_coach_sub` FROM `group_members` mgm " +
+      "JOIN `groups` g ON g.`id` = mgm.`group_id` " +
+      "WHERE mgm.`member_managed_id` = ? AND mgm.`left_at` IS NULL AND mgm.`role` = 'primary'",
+      [t.managed_id]
+    );
+    for (const cg of conflictRows) {
+      const dupes = await conn.query(
+        "SELECT g.`name` FROM `group_members` sgm " +
+        "JOIN `groups` g ON g.`id` = sgm.`group_id` " +
+        "WHERE sgm.`member_swimmer_sub` = ? AND sgm.`left_at` IS NULL AND sgm.`role` = 'primary' " +
+        "AND g.`primary_coach_sub` = ? AND g.`id` != ?",
+        [swimmerSub, cg.primary_coach_sub, cg.id]
+      );
+      if (dupes.length > 0) {
+        await conn.rollback();
+        return {
+          ok: false,
+          reason: "group_conflict",
+          conflict_managed_group_id:    cg.id,
+          conflict_managed_group_name:  cg.name,
+          conflict_swimmer_group_name:  dupes[0].name,
+        };
+      }
+    }
+
+    // ── Step 4: update user identity fields ────────────────────────────
+    if (Object.keys(idChanges).length > 0) {
+      const sets = Object.keys(idChanges).map(k => `\`${k}\` = ?`);
+      const vals = Object.values(idChanges);
+      vals.push(swimmerSub);
+      await conn.query(
+        `UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`,
+        vals
+      );
+    }
+
+    // ── Step 5: repoint workout_assignments ────────────────────────────
+    const r1 = await conn.query(
+      "UPDATE `workout_assignments` SET `target_swimmer_sub` = ?, `target_managed_id` = NULL " +
+      "WHERE `target_managed_id` = ?",
+      [swimmerSub, t.managed_id]
+    );
+
+    // ── Step 6: repoint coach_swimmer_notes (table may not exist yet) ──
+    let r2 = { affectedRows: 0 };
+    try {
+      r2 = await conn.query(
+        "UPDATE `coach_swimmer_notes` SET `target_swimmer_sub` = ?, `target_managed_id` = NULL " +
+        "WHERE `target_managed_id` = ?",
+        [swimmerSub, t.managed_id]
+      );
+    } catch (e) { /* R-H table not built yet — fine */ }
+
+    // ── Step 7: repoint group_members (pre-checked in step 3) ──────────
+    let r3 = { affectedRows: 0 };
+    try {
+      r3 = await conn.query(
+        "UPDATE `group_members` SET `member_swimmer_sub` = ?, `member_managed_id` = NULL " +
+        "WHERE `member_managed_id` = ? AND `left_at` IS NULL",
+        [swimmerSub, t.managed_id]
+      );
+    } catch (e) {
+      await conn.rollback();
+      return { ok: false, reason: "group_membership_repoint_failed", error: e.message };
+    }
+
+    // ── Step 8: delete the managed row ─────────────────────────────────
+    await conn.query("DELETE FROM `coach_managed_swimmers` WHERE `id` = ?", [t.managed_id]);
+
+    // ── Step 9: stamp the token redeemed ───────────────────────────────
+    await conn.query(
+      "UPDATE `managed_swimmer_claim_tokens` SET `redeemed_at` = CURRENT_TIMESTAMP(3), `redeemed_by_swimmer_sub` = ? WHERE `token` = ?",
+      [swimmerSub, token]
+    );
+
+    await conn.commit();
+
+    return {
+      ok:                  true,
+      managed_id:          t.managed_id,
+      coach_sub:           t.issued_by_coach,
+      identity_diff:       diff,
+      repointed: {
+        workout_assignments:  Number(r1.affectedRows || 0),
+        coach_swimmer_notes:  Number(r2.affectedRows || 0),
+        group_memberships:    Number(r3.affectedRows || 0),
+      },
+    };
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) {}
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
 // ── Lane plans (Stage 3 / R-E) ────────────────────────────────────────
 // Per scope §7 + decision #14. Persistent reusable per-group lane configs.
 // plan_data JSON shape:
