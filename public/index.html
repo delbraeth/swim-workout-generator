@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-19 13:10 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-19 15:41 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -6259,6 +6259,23 @@
     // make adding/removing optional knobs safe (no positional ordering pitfalls).
     // All previous positional args are now keys on the opts object — the
     // function body still references them by name via destructuring.
+    // Section-proportion controls (real-shift). Each bias mode declares
+    // target ratios of freeBudget per section. "balanced" is sentinel for
+    // no-change-to-current-allocator. Non-balanced modes:
+    //   - compute target_section = freeBudget * ratio
+    //   - bias warmup + drill pickers toward options nearest the target
+    //     (inverse-distance weighting on top of existing favBoost/equip)
+    //   - override main's hardcoded 65% floor with the bias-specific ratio
+    //   - cooldown left as-is (always small, near-floor)
+    // Targets are guidance, not hard floors — the existing attempts-loop +
+    // bank-availability fallbacks still apply.
+    const SECTION_BIAS_RATIOS = {
+      balanced:     null,                                                       // sentinel: keep current behavior
+      warmup_heavy: { warmup: 0.22, drill: 0.12, main: 0.62, cooldown: 0.04 },
+      drill_heavy:  { warmup: 0.09, drill: 0.26, main: 0.61, cooldown: 0.04 },
+      long_main:    { warmup: 0.06, drill: 0.07, main: 0.83, cooldown: 0.04 },
+    };
+
     function generateWorkout({
       typeId,
       maxYards,
@@ -6271,7 +6288,9 @@
       recoveryMode = false,
       phase = null,
       favoriteSetIds = null,
+      sectionBias = "balanced",
     } = {}) {
+      const biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
@@ -6342,6 +6361,20 @@
         return pickWeighted(source, favBoost);
       }
 
+      // Section-proportion helper. Picks from arr with weights that combine
+      // a base weight function (e.g. favBoost, equipment-match) and an
+      // inverse-quadratic distance penalty from a target yardage. Used by
+      // warmup + drill pickers when sectionBias != "balanced".
+      //   weight(opt) = base(opt) / (1 + |opt.totalYards - target| / target)^2
+      // distance=0 → 1.0× base; distance=target → 0.25× base; distance=2×target → ~0.11× base.
+      function pickWithTargetYards(arr, target, baseFn) {
+        return pickWeighted(arr, (o) => {
+          const distRatio = Math.abs((o.totalYards || 0) - target) / Math.max(1, target);
+          const penalty = 1 / Math.pow(1 + distRatio, 2);
+          return (baseFn ? baseFn(o) : 1) * penalty;
+        });
+      }
+
       for (let attempt = 0; attempt < attempts; attempt++) {
         let freeUsed = 0; // yards committed to unpinned sections this attempt
 
@@ -6364,7 +6397,13 @@
           // remaining share, so a 12%-of-freeBudget floor becomes essentially
           // zero. Tying to maxYards keeps the floor proportional to the
           // intended workout size regardless of pin state.
-          wu = pickBiased(affinityPool.length > 0 ? affinityPool : validWarmups, maxYards * 0.12);
+          const wuPool = affinityPool.length > 0 ? affinityPool : validWarmups;
+          if (biasRatios) {
+            // Real-shift: target yardage from bias ratios, distance-weighted.
+            wu = pickWithTargetYards(wuPool, freeBudget * biasRatios.warmup, favBoost);
+          } else {
+            wu = pickBiased(wuPool, maxYards * 0.12);
+          }
           freeUsed += wu.totalYards;
         }
 
@@ -6379,10 +6418,16 @@
             o.totalYards <= freeBudget - freeUsed - minMa - minCd
           );
           if (!validDrills.length) continue;
-          const drFloor = (freeBudget - freeUsed) * 0.10;
-          const aboveFloor = validDrills.filter(o => o.totalYards >= drFloor);
-          const drPool = aboveFloor.length > 0 ? aboveFloor : validDrills;
-          dr = pickWeighted(drPool, (o) => Math.pow(2, preferredEquipMatches(o, equipment)) * favBoost(o));
+          const drillBase = (o) => Math.pow(2, preferredEquipMatches(o, equipment)) * favBoost(o);
+          if (biasRatios) {
+            // Real-shift: target by bias; no 10% floor (target weighting handles spread).
+            dr = pickWithTargetYards(validDrills, freeBudget * biasRatios.drill, drillBase);
+          } else {
+            const drFloor = (freeBudget - freeUsed) * 0.10;
+            const aboveFloor = validDrills.filter(o => o.totalYards >= drFloor);
+            const drPool = aboveFloor.length > 0 ? aboveFloor : validDrills;
+            dr = pickWeighted(drPool, drillBase);
+          }
           freeUsed += dr.totalYards;
         }
 
@@ -6409,7 +6454,18 @@
           // workouts feel substantive. In recovery mode we want a SHORT day,
           // so the 65% rule is dropped: any main that fits the budget is fair
           // game, down to the absolute minimum (minMa).
-          const maFloor = recoveryMode ? minMa : Math.max(minMa, mainBudget * 0.65);
+          // Real-shift bias: override the 65% floor with the bias-specific
+          // main ratio applied to freeBudget (target absolute, not relative
+          // to whatever's left after warmup+drill grabbed). long_main pushes
+          // floor to ~83%; drill/warmup-heavy modes lower it so the other
+          // sections can absorb more.
+          let mainFloorRatio;
+          if (recoveryMode)       mainFloorRatio = null;
+          else if (biasRatios)    mainFloorRatio = biasRatios.main;
+          else                    mainFloorRatio = 0.65;
+          const maFloor = (mainFloorRatio == null)
+            ? minMa
+            : Math.max(minMa, Math.min(mainBudget, freeBudget * mainFloorRatio));
           // Weighting:
           //   base    = 1
           //   favorite× 3
@@ -14034,6 +14090,7 @@
       // Pinned blocks are held fixed on "Generate New Workout"; unpinned sections get fresh picks.
       const [pinnedSections, setPinnedSections]   = useState({});
       const [recoveryMode, setRecoveryMode]       = useState(false); // C: per-generation toggle, not persisted
+      const [sectionBias, setSectionBias]         = useState("balanced"); // Section-proportion bias: balanced / warmup_heavy / drill_heavy / long_main. Per-generation, session-only.
 
       // Per-section regeneration error: { section: "warmup"|"drill"|"main"|"cooldown", message } | null
       const [regenError, setRegenError]           = useState(null);
@@ -14598,6 +14655,7 @@
           recoveryMode,
           phase: effectivePhase,                                               // R-D: group-context override (#39)
           favoriteSetIds: favoriteSets,
+          sectionBias,                                                          // Real-shift section-proportion controls (Mix pills)
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -14659,7 +14717,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -15434,6 +15492,34 @@
                   Easy/aerobic mains · intervals +10% · no repeat sets · floor 1,200 {(poolMode === "50m" || poolMode === "25m") ? "m" : "yds"}
                 </span>
               )}
+            </div>
+
+            {/* Section-proportion bias (real-shift). Per-generation, session-
+                only. Shifts yardage allocations between warmup / drill / main /
+                cooldown beyond the baseline ~13/17/65/5 split. */}
+            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, color: "#475569", marginRight: 4 }}>Mix:</span>
+              {[
+                { id: "balanced",     label: "Balanced",     desc: "Current allocator (warmup ~13% / drill ~17% / main ~65% / cooldown ~5%)" },
+                { id: "warmup_heavy", label: "Warmup-heavy", desc: "Bigger warmup (~22%); main reduced (~62%)" },
+                { id: "drill_heavy",  label: "Drill-heavy",  desc: "Bigger drill section (~26%); main reduced (~61%)" },
+                { id: "long_main",    label: "Long main",    desc: "Most yardage on the main set (~83%); warmup + drill suppressed" },
+              ].map(m => {
+                const active = sectionBias === m.id;
+                return (
+                  <button key={m.id} onClick={() => setSectionBias(m.id)} title={m.desc}
+                    style={{
+                      padding: "5px 11px", borderRadius: 999,
+                      border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
+                      background: active ? "rgba(245,158,11,0.15)" : "transparent",
+                      color: active ? "#fbbf24" : "#64748b",
+                      fontSize: 11, fontWeight: 700, cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}>
+                    {m.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Workout type selector */}
