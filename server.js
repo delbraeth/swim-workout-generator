@@ -1034,6 +1034,13 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         return res.status(400).json({ error: "phase must be one of: " + allowed.join(", ") });
       }
     }
+    // Validate level enum if present (J — swimmer-level presets).
+    if ("level" in patch && patch.level !== null) {
+      const allowed = ["recreational", "masters", "competitive"];
+      if (typeof patch.level !== "string" || !allowed.includes(patch.level)) {
+        return res.status(400).json({ error: "level must be one of: " + allowed.join(", ") });
+      }
+    }
     await dbPatchSettingsExtra(req.userSub, patch);
     res.json({ ok: true });
   } catch (err) {
