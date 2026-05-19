@@ -153,7 +153,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-18 19:18 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-19 02:42 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -14500,6 +14500,81 @@
         }
       }, [poolMode, paceInput]);
 
+      // ── Late-declared deps moved up so the useCallback dep arrays below see
+      // real values (not the var-hoisted undefined). These previously sat near
+      // line 15017+ which caused stale-closure risk in handleGenerate /
+      // handleRegenerateSection / handleSave. ────────────────────────────
+
+      // R-D: generate-for picker. State = group_id string OR "myself".
+      // coachTargets is the loaded list of groups the user coaches (with
+      // member counts + current_phase). Loaded once when authenticated and
+      // is_coach. Defaults to "myself" — solo training is the default flow.
+      const [generateForId, setGenerateForId] = useState("myself");
+      const [coachTargets,   setCoachTargets]  = useState([]);
+      // R-E: lane plans for the currently-selected group (loaded on demand).
+      // generateForPlanId is "" = no plan (stored paces) or plan id.
+      const [lanePlansForTarget, setLanePlansForTarget] = useState([]);
+      const [generateForPlanId,  setGenerateForPlanId]  = useState("");
+      useEffect(() => {
+        if (!authenticated || !me?.is_coach) { setCoachTargets([]); return; }
+        fetch("/api/picker/coach-targets", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => setCoachTargets(Array.isArray(data) ? data : []))
+          .catch(() => setCoachTargets([]));
+      }, [authenticated, me?.is_coach, view]);
+      // R-E: when a multi-member group is picked, load its lane plans. Reset
+      // selection to default plan if one exists (so "Generate" with the
+      // default plan is a one-click flow on each visit).
+      useEffect(() => {
+        if (generateForId === "myself" || !generateForId) { setLanePlansForTarget([]); setGenerateForPlanId(""); return; }
+        const target = coachTargets.find(t => t.id === generateForId);
+        if (!target || target.member_count < 2) { setLanePlansForTarget([]); setGenerateForPlanId(""); return; }
+        fetch(`/api/groups/${generateForId}/lane-plans`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(plans => {
+            const arr = Array.isArray(plans) ? plans : [];
+            setLanePlansForTarget(arr);
+            const def = arr.find(p => p.is_default);
+            setGenerateForPlanId(def ? def.id : "");
+          })
+          .catch(() => { setLanePlansForTarget([]); setGenerateForPlanId(""); });
+      }, [generateForId, coachTargets]);
+      // Resolve the currently-selected target (or null for "myself").
+      const generateForTarget = useMemo(() => {
+        if (generateForId === "myself" || !generateForId) return null;
+        return coachTargets.find(t => t.id === generateForId) || null;
+      }, [generateForId, coachTargets]);
+      // Effective phase: group's current_phase overrides the user's personal
+      // phase when generating for a group (decision #39).
+      const effectivePhase = generateForTarget?.current_phase || phase;
+
+      // N1: recently-used main-set labels for the signed-in user (last 7 days).
+      // Returns Map<label, daysAgo> — used for (a) generator weight down-bias and
+      // (b) "last seen Nd ago" badges in the favorites panel + main-set blocks.
+      const recentMainLabels = useMemo(() => {
+        const mySub = me?.sub;
+        const map = new Map();
+        if (!mySub || !history.length) return map;
+        const today = new Date().toISOString().slice(0, 10);
+        const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        for (const e of history) {
+          if (e.sub !== mySub) continue;
+          if (e.completed === false) continue;
+          if (!e.dateCompleted) continue;
+          const ts = new Date(`${e.dateCompleted}T00:00:00Z`).getTime();
+          if (ts < cutoffMs) continue;
+          if (!Array.isArray(e.blocks)) continue;
+          const daysAgo = Math.max(0, Math.round((new Date(today) - new Date(e.dateCompleted)) / 86400000));
+          for (const b of e.blocks) {
+            const label = extractMainLabel(b);
+            if (!label) continue;
+            const prev = map.get(label);
+            if (prev === undefined || daysAgo < prev) map.set(label, daysAgo);
+          }
+        }
+        return map;
+      }, [history, me]);
+
       const handleGenerate = useCallback(() => {
         if (!selectedType) return;
         // Build pinned block map from current workout state
@@ -14587,7 +14662,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -14787,7 +14862,7 @@
           setSaveStatus("error");
           setSaveError(err.message || String(err));
         }
-      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft, poolMode, focusNoteDraft, difficultyDraft]);
+      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft, poolMode, focusNoteDraft, difficultyDraft, generateForTarget, generateForPlanId]);
 
       // Log a completed Run-mode workout as today's session.
       // Used by RunWorkoutOverlay's finish screen — POSTs a NEW entry dated today,
@@ -15014,49 +15089,6 @@
         return { name: nextEvent.name || "Your event", days };
       }, [nextEvent]);
 
-      // R-D: generate-for picker. State = group_id string OR "myself".
-      // coachTargets is the loaded list of groups the user coaches (with
-      // member counts + current_phase). Loaded once when authenticated and
-      // is_coach. Defaults to "myself" — solo training is the default flow.
-      const [generateForId, setGenerateForId] = useState("myself");
-      const [coachTargets,   setCoachTargets]  = useState([]);
-      // R-E: lane plans for the currently-selected group (loaded on demand).
-      // generateForPlanId is "" = no plan (stored paces) or plan id.
-      const [lanePlansForTarget, setLanePlansForTarget] = useState([]);
-      const [generateForPlanId,  setGenerateForPlanId]  = useState("");
-      useEffect(() => {
-        if (!authenticated || !me?.is_coach) { setCoachTargets([]); return; }
-        fetch("/api/picker/coach-targets", { cache: "no-store" })
-          .then(r => r.ok ? r.json() : [])
-          .then(data => setCoachTargets(Array.isArray(data) ? data : []))
-          .catch(() => setCoachTargets([]));
-      }, [authenticated, me?.is_coach, view]);
-      // R-E: when a multi-member group is picked, load its lane plans. Reset
-      // selection to default plan if one exists (so "Generate" with the
-      // default plan is a one-click flow on each visit).
-      useEffect(() => {
-        if (generateForId === "myself" || !generateForId) { setLanePlansForTarget([]); setGenerateForPlanId(""); return; }
-        const target = coachTargets.find(t => t.id === generateForId);
-        if (!target || target.member_count < 2) { setLanePlansForTarget([]); setGenerateForPlanId(""); return; }
-        fetch(`/api/groups/${generateForId}/lane-plans`, { cache: "no-store" })
-          .then(r => r.ok ? r.json() : [])
-          .then(plans => {
-            const arr = Array.isArray(plans) ? plans : [];
-            setLanePlansForTarget(arr);
-            const def = arr.find(p => p.is_default);
-            setGenerateForPlanId(def ? def.id : "");
-          })
-          .catch(() => { setLanePlansForTarget([]); setGenerateForPlanId(""); });
-      }, [generateForId, coachTargets]);
-      // Resolve the currently-selected target (or null for "myself").
-      const generateForTarget = useMemo(() => {
-        if (generateForId === "myself" || !generateForId) return null;
-        return coachTargets.find(t => t.id === generateForId) || null;
-      }, [generateForId, coachTargets]);
-      // Effective phase: group's current_phase overrides the user's personal
-      // phase when generating for a group (decision #39).
-      const effectivePhase = generateForTarget?.current_phase || phase;
-
       // R-C / decision #38: upcoming team events (across all the user's teams
       // they're a coach on or have a group membership in). Refreshed when the
       // user navigates between views to absorb event creates/deletes promptly.
@@ -15094,33 +15126,6 @@
         const ini = (me?.initials || "").trim();
         return ini || null;
       }, [me]);
-
-      // N1: recently-used main-set labels for the signed-in user (last 7 days).
-      // Returns Map<label, daysAgo> — used for (a) generator weight down-bias and
-      // (b) "last seen Nd ago" badges in the favorites panel + main-set blocks.
-      const recentMainLabels = useMemo(() => {
-        const mySub = me?.sub;
-        const map = new Map();
-        if (!mySub || !history.length) return map;
-        const today = new Date().toISOString().slice(0, 10);
-        const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        for (const e of history) {
-          if (e.sub !== mySub) continue;
-          if (e.completed === false) continue;
-          if (!e.dateCompleted) continue;
-          const ts = new Date(`${e.dateCompleted}T00:00:00Z`).getTime();
-          if (ts < cutoffMs) continue;
-          if (!Array.isArray(e.blocks)) continue;
-          const daysAgo = Math.max(0, Math.round((new Date(today) - new Date(e.dateCompleted)) / 86400000));
-          for (const b of e.blocks) {
-            const label = extractMainLabel(b);
-            if (!label) continue;
-            const prev = map.get(label);
-            if (prev === undefined || daysAgo < prev) map.set(label, daysAgo);
-          }
-        }
-        return map;
-      }, [history, me]);
 
       // Quick-launch — last 3 completed workouts belonging to the signed-in user.
       // Powers the pre-pool "do yesterday's again" cards above the Generate button.
@@ -16067,7 +16072,19 @@
           {authenticated && me && me.dob === null && !dobPromptDismissed && (
             <DobPromptModal
               onSaved={(newDob) => {
-                setMe(prev => prev ? { ...prev, dob: newDob, is_minor: (new Date().getFullYear() - new Date(newDob).getFullYear()) < 18 } : prev);
+                // Compute age correctly: year diff minus 1 if birthday hasn't passed this year.
+                // (Server is authoritative via /api/me; this just keeps the local `me` consistent
+                // until the next refresh.) Year-only subtraction misclassified anyone whose
+                // birthday hadn't occurred yet — e.g. Nov-2008 evaluated in May 2026.
+                setMe(prev => {
+                  if (!prev) return prev;
+                  const today = new Date();
+                  const dob   = new Date(newDob);
+                  let age = today.getFullYear() - dob.getFullYear();
+                  const monthDiff = today.getMonth() - dob.getMonth();
+                  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age--;
+                  return { ...prev, dob: newDob, is_minor: age < 18 };
+                });
                 setDobPromptDismissed(true);
               }}
               onDismiss={() => {
