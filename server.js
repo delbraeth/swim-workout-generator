@@ -77,7 +77,7 @@ import {
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
-  dbListUpcomingEventsForUser,
+  dbIsSwimmerInTeam, dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
   dbListAssignmentsForSwimmer, dbListAssignmentsForGroup,
   dbListCoachTargets,
@@ -1701,16 +1701,23 @@ app.patch("/api/assignments/:id", checkOrigin, requireAuth, requireCsrf, writeLi
     const a = await dbGetAssignment(req.params.id);
     if (!a) return res.status(404).json({ error: "not found" });
 
-    // Authorization: caller is either the target swimmer, OR a coach on the
-    // assignment's source group. Managed-targets can only be coach-marked
-    // (no login = no self-write path).
+    // Authorization: caller is target swimmer (self-log), coach on the
+    // assignment's source group (Flow N coach-mark-on-behalf), OR the
+    // workout owner (covers direct-to-managed assigns where group_id is
+    // NULL and the target managed swimmer has no login). Managed targets
+    // can only be coach-marked.
     const isTargetSwimmer = a.target_swimmer_sub === req.userSub;
     const isGroupCoach    = a.assigned_via_group_id
                           ? !!(await dbGetGroupRole(a.assigned_via_group_id, req.userSub))
                           : false;
-    if (!isTargetSwimmer && !isGroupCoach) {
-      return res.status(403).json({ error: "not target or group coach" });
+    const isWorkoutOwner  = a.workout_user_sub === req.userSub;
+    if (!isTargetSwimmer && !isGroupCoach && !isWorkoutOwner) {
+      return res.status(403).json({ error: "not target, group coach, or workout owner" });
     }
+    // For audit + coach-mark-stamp purposes, both the group-coach and the
+    // workout-owner paths are "coach-marked on behalf" — neither is the
+    // target swimmer logging themselves in.
+    const isCoachMarkPath = (isGroupCoach || isWorkoutOwner) && !isTargetSwimmer;
 
     // Allowed fields. completion_state required for state transitions; the
     // rest optional. completed_by_coach_sub set automatically by server for
@@ -1721,9 +1728,8 @@ app.patch("/api/assignments/:id", checkOrigin, requireAuth, requireCsrf, writeLi
     if ("splits_payload"   in b) patch.splits_payload   = b.splits_payload;
     if ("difficulty"       in b) patch.difficulty       = b.difficulty;
     if ("focus_note"       in b) patch.focus_note       = b.focus_note;
-    // Server determines coach-marked vs self-marked. If the caller is the
-    // group coach AND NOT the target swimmer, this is a coach-mark-on-behalf.
-    if (isGroupCoach && !isTargetSwimmer) {
+    // Server determines coach-marked vs self-marked.
+    if (isCoachMarkPath) {
       patch.completed_by_coach_sub = req.userSub;
     } else {
       // Self-log path explicitly clears any prior coach-mark stamp (swimmer
@@ -1736,7 +1742,7 @@ app.patch("/api/assignments/:id", checkOrigin, requireAuth, requireCsrf, writeLi
 
     dbAuditEvent({
       userSub:   req.userSub,
-      eventType: isGroupCoach && !isTargetSwimmer ? "assignment.coach_marked" : "assignment.self_logged",
+      eventType: isCoachMarkPath ? "assignment.coach_marked" : "assignment.self_logged",
       ...reqMeta(req),
       details:   { assignment_id: Number(req.params.id), workout_id: a.workout_id, completion_state: patch.completion_state },
     });
@@ -1957,14 +1963,9 @@ app.get("/api/teams/:teamId/events", requireAuth, async (req, res) => {
     // in any of the team's groups. Cheap to check coach side first.
     const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
     if (!callerRole) {
-      // Fall back to swimmer-side check. Cheap-ish query.
-      const rows = await pool.query(
-        "SELECT 1 FROM `group_members` gm " +
-        "JOIN `groups` g ON g.`id` = gm.`group_id` " +
-        "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` = ? LIMIT 1",
-        [req.userSub, req.params.teamId]
-      );
-      if (rows.length === 0) return res.status(403).json({ error: "no access to this team's events" });
+      // Fall back to swimmer-side check — caller may be a group member.
+      const isMember = await dbIsSwimmerInTeam(req.userSub, req.params.teamId);
+      if (!isMember) return res.status(403).json({ error: "no access to this team's events" });
     }
     res.json(await dbListTeamEvents(req.params.teamId));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
