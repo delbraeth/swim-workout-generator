@@ -209,7 +209,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 12:10 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 14:19 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -11258,7 +11258,7 @@
                       <span style={{ color: "#e2e8f0" }}>{fmtTime(me.last_login_at)}</span>
                       {me.is_admin && (<>
                         <span style={{ color: "#64748b" }}>Role:</span>
-                        <span style={{ color: "#a78bfa", fontWeight: 700 }}>Admin</span>
+                        <span style={{ color: "#3b82f6", fontWeight: 700 }}>Admin</span>
                       </>)}
                     </div>
                     {/* R-F: join-group code redemption (visible to all
@@ -11841,7 +11841,7 @@
                     {(() => {
                       // R-J: role pill colored by tier. Owner = purple,
                       // Admin = blue, Coach = slate.
-                      const colors = c.role === "owner" ? { bg: "#a78bfa22", border: "#a78bfa", color: "#a78bfa" }
+                      const colors = c.role === "owner" ? { bg: "#3b82f622", border: "#3b82f6", color: "#3b82f6" }
                                   : c.role === "admin"  ? { bg: "#3b82f622", border: "#3b82f6", color: "#3b82f6" }
                                   :                        { bg: "#33415522", border: "#475569", color: "#94a3b8" };
                       return (
@@ -12180,7 +12180,7 @@
                     </span>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid #3b82f6", color: "#3b82f6", fontWeight: 700 }}>{TEAM_TYPE_LABELS[t.team_type] || t.team_type}</span>
-                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: t.role === "owner" ? "#a78bfa22" : "#33415522", border: `1px solid ${t.role === "owner" ? "#a78bfa" : "#475569"}`, color: t.role === "owner" ? "#a78bfa" : "#94a3b8", fontWeight: 700 }}>{t.role}</span>
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: t.role === "owner" ? "#3b82f622" : "#33415522", border: `1px solid ${t.role === "owner" ? "#3b82f6" : "#475569"}`, color: t.role === "owner" ? "#3b82f6" : "#94a3b8", fontWeight: 700 }}>{t.role}</span>
                     </div>
                   </div>
                 </button>
@@ -12277,7 +12277,7 @@
             <h4 style={{ color: "#e2e8f0", margin: 0, fontSize: 14 }}>Claim link (managed → full-account)</h4>
             {!latestIssued && !blocked && (
               <button onClick={issue}
-                style={{ padding: "5px 11px", background: "#a78bfa", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                style={{ padding: "5px 11px", background: "#f59e0b", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                 Send claim link
               </button>
             )}
@@ -12459,15 +12459,15 @@
                   style={{ flex: 1, padding: "6px 10px", fontSize: 13, fontFamily: "monospace", letterSpacing: "0.08em", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5, textTransform: "lowercase" }} />
                 {!preview && (
                   <button onClick={doPreview} disabled={!normalized || busy}
-                    style={{ padding: "6px 14px", background: normalized ? "#a78bfa" : "#475569", color: normalized ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: normalized ? "pointer" : "not-allowed" }}>
+                    style={{ padding: "6px 14px", background: normalized ? "#f59e0b" : "#475569", color: normalized ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: normalized ? "pointer" : "not-allowed" }}>
                     Look up
                   </button>
                 )}
               </div>
               {preview && (
-                <div style={{ padding: 10, background: "#1e293b", border: "1px solid #a78bfa", borderRadius: 6, marginBottom: 6 }}>
+                <div style={{ padding: 10, background: "#1e293b", border: "1px solid #f59e0b", borderRadius: 6, marginBottom: 6 }}>
                   <div style={{ fontSize: 12, color: "#cbd5e1", marginBottom: 6 }}>
-                    Claiming <strong style={{ color: "#e2e8f0" }}>{preview.managed_name}</strong> from coach <strong style={{ color: "#a78bfa" }}>{preview.coach_name || "(coach)"}</strong>.
+                    Claiming <strong style={{ color: "#e2e8f0" }}>{preview.managed_name}</strong> from coach <strong style={{ color: "#f59e0b" }}>{preview.coach_name || "(coach)"}</strong>.
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4, lineHeight: 1.5 }}>
                       Your account's name / DOB / gender / paces will be silently updated from the managed profile (per scope #24). All assignments + coach notes + group memberships will be repointed to your account. The managed profile will be deleted.
                     </div>
@@ -12836,7 +12836,7 @@
             background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
             padding: 22, maxWidth: 520, width: "100%", maxHeight: "90vh", overflowY: "auto",
           }}>
-            <div style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>
+            <div style={{ color: "#f59e0b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>
               {editingId ? "Edit intent" : "Plan intent"}
             </div>
             <div style={{ color: "#e2e8f0", fontSize: 18, fontWeight: 700, marginBottom: 14 }}>
@@ -12926,7 +12926,7 @@
               <button onClick={onClose}
                 style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Cancel</button>
               <button onClick={submit} disabled={busy}
-                style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: busy ? "#334155" : "#a78bfa", color: busy ? "#64748b" : "#0f172a", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
+                style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: busy ? "#334155" : "#f59e0b", color: busy ? "#64748b" : "#0f172a", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
                 {busy ? "…" : (editingId ? "Save intent" : "Plan intent ▸")}
               </button>
             </div>
@@ -13040,7 +13040,7 @@
             background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
             padding: 22, maxWidth: 720, width: "100%", maxHeight: "90vh", overflowY: "auto",
           }}>
-            <div style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Preview generated workout</div>
+            <div style={{ color: "#f59e0b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Preview generated workout</div>
             <div style={{ color: "#e2e8f0", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{w?.typeLabel || w?.type || "Workout"} · {w?.totalYards || 0}y</div>
             <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 14 }}>
               Generated from intent for {scheduledRow.scheduled_date}. Regenerate for a different shuffle, or run as-is.
@@ -13072,7 +13072,7 @@
                 style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #3b82f6", background: "transparent", color: "#3b82f6", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>↻ Regenerate</button>
               <button onClick={handleSave} disabled={busy}
                 title={scheduledRow.intent_params?.group_id ? "Commit this workout and assign to the group, without entering Run mode" : "Commit this workout to the schedule, without entering Run mode"}
-                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #a78bfa", background: "transparent", color: "#a78bfa", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
+                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #f59e0b", background: "transparent", color: "#f59e0b", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
                 {busy ? "…" : "💾 Save"}
               </button>
               <button onClick={handleRun} disabled={busy}
@@ -13298,7 +13298,7 @@
                 style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>‹ Prev</button>
               <button onClick={goThis} disabled={showingThisWeek}
                 title="Jump to current ISO week"
-                style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${showingThisWeek ? "#334155" : "#a78bfa"}`, background: showingThisWeek ? "transparent" : "rgba(167,139,250,0.15)", color: showingThisWeek ? "#475569" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: showingThisWeek ? "default" : "pointer" }}>This week</button>
+                style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${showingThisWeek ? "#334155" : "#3b82f6"}`, background: showingThisWeek ? "transparent" : "rgba(59,130,246,0.15)", color: showingThisWeek ? "#475569" : "#3b82f6", fontSize: 13, fontWeight: 700, cursor: showingThisWeek ? "default" : "pointer" }}>This week</button>
               <button onClick={goNext} title="Next week"
                 style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Next ›</button>
             </div>
@@ -13314,14 +13314,14 @@
               const isPast  = dk < today;
               return (
                 <div key={dk} style={{
-                  border: `1px solid ${isToday ? "#a78bfa" : "#334155"}`,
+                  border: `1px solid ${isToday ? "#3b82f6" : "#334155"}`,
                   background: isToday ? "rgba(167,139,250,0.06)" : "#1e293b",
                   borderRadius: 8, padding: "10px 14px",
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                    <div style={{ color: isToday ? "#a78bfa" : "#e2e8f0", fontSize: 13, fontWeight: 700 }}>
+                    <div style={{ color: isToday ? "#3b82f6" : "#e2e8f0", fontSize: 13, fontWeight: 700 }}>
                       {fmtMonDay(d)}
-                      {isToday && <span style={{ marginLeft: 8, fontSize: 10, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</span>}
+                      {isToday && <span style={{ marginLeft: 8, fontSize: 10, color: "#3b82f6", textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</span>}
                       {isPast && rows.length === 0 && <span style={{ marginLeft: 8, fontSize: 10, color: "#475569", fontStyle: "italic" }}>(rest day)</span>}
                     </div>
                     <span style={{ fontSize: 10, color: "#475569" }}>{rows.length} {rows.length === 1 ? "workout" : "workouts"}</span>
@@ -13422,7 +13422,7 @@
                   background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
                   padding: 22, maxWidth: 420, width: "100%",
                 }}>
-                  <div style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Copy workout</div>
+                  <div style={{ color: "#3b82f6", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Copy workout</div>
                   <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>
                     Copy "{copyTarget.sw.payload?.typeLabel || copyTarget.sw.payload?.type || "workout"}" to:
                   </div>
@@ -13435,7 +13435,7 @@
                         const v = document.getElementById("copy-target-date")?.value;
                         if (v) handleCopy(copyTarget.sw, v);
                       }}
-                      style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: "#a78bfa", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Copy ▸</button>
+                      style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: "#3b82f6", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Copy ▸</button>
                   </div>
                 </div>
               </div>
@@ -13557,7 +13557,7 @@
           <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
             {[{ id: "", label: "All", n: list?.length || 0 }, ...Object.keys(COMPLETION_LABELS).map(k => ({ id: k, label: COMPLETION_LABELS[k].label, n: counts[k] || 0 }))].map(f => {
               const active = stateFilter === f.id;
-              const color  = COMPLETION_LABELS[f.id]?.color || "#a78bfa";
+              const color  = COMPLETION_LABELS[f.id]?.color || "#3b82f6";
               return (
                 <button key={f.id || "all"} onClick={() => setStateFilter(f.id)}
                   style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${active ? color : "#334155"}`, background: active ? `${color}22` : "transparent", color: active ? color : "#94a3b8", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -13708,7 +13708,7 @@
                       </div>
                       <div style={{ color: "#64748b", fontSize: 10 }}>
                         {new Date(a.assigned_at).toLocaleDateString()} · <span style={{ color: meta.color, fontWeight: 700 }}>{meta.label}</span>
-                        {isCoachMarked && <span style={{ color: "#a78bfa" }}> (by coach)</span>}
+                        {isCoachMarked && <span style={{ color: "#f59e0b" }}> (by coach)</span>}
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 3 }}>
@@ -14080,7 +14080,7 @@
       { v: "",         label: "—", color: "#64748b" },
       { v: "base",     label: "Base 🌱",     color: "#22c55e" },
       { v: "build",    label: "Build 🔨",    color: "#3b82f6" },
-      { v: "peak",     label: "Peak ⛰️",     color: "#a78bfa" },
+      { v: "peak",     label: "Peak ⛰️",     color: "#f59e0b" },
       { v: "taper",    label: "Taper 📉",    color: "#f59e0b" },
       { v: "recovery", label: "Recovery 🌿", color: "#3b82f6" },
     ];
@@ -14330,7 +14330,7 @@
                       <div key={c.coach_sub} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 12 }}>
                         <span style={{ color: "#cbd5e1" }}>
                           {c.display_name || "(no name)"}
-                          <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: c.role === "primary" ? "#a78bfa22" : "#33415522", border: `1px solid ${c.role === "primary" ? "#a78bfa" : "#475569"}`, color: c.role === "primary" ? "#a78bfa" : "#94a3b8", fontWeight: 700 }}>{c.role}</span>
+                          <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: c.role === "primary" ? "#3b82f622" : "#33415522", border: `1px solid ${c.role === "primary" ? "#3b82f6" : "#475569"}`, color: c.role === "primary" ? "#3b82f6" : "#94a3b8", fontWeight: 700 }}>{c.role}</span>
                         </span>
                         {isPrimary && c.role !== "primary" && (
                           <button onClick={() => removeCoach(c.coach_sub)}
@@ -15385,7 +15385,7 @@
             <div className="screen-only" style={{ marginBottom: 12 }}>
               <span style={{ color: "#64748b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 10 }}>Type</span>
               {CATALOG_TYPES.map(t => (
-                <button key={t} onClick={() => { setTypeId(t); setExpandedKey(null); }} style={tabStyle(typeId === t, "#a78bfa")}>{t}</button>
+                <button key={t} onClick={() => { setTypeId(t); setExpandedKey(null); }} style={tabStyle(typeId === t, "#3b82f6")}>{t}</button>
               ))}
             </div>
           )}
@@ -15479,7 +15479,7 @@
                       <span className="screen-only" style={{ color: "#64748b", fontSize: 12, width: 12 }}>{expanded ? "▾" : "▸"}</span>
                       <strong style={{ color: "#e2e8f0", fontSize: 14 }}>{labelText}</strong>
                       {opt._typeId && (
-                        <span style={{ background: "#334155", color: "#a78bfa", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
+                        <span style={{ background: "#334155", color: "#3b82f6", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
                           {opt._typeId}
                         </span>
                       )}
@@ -15597,7 +15597,7 @@
 
       const tabStyle = (active) => ({
         padding: "8px 16px", border: "none", borderRadius: 8,
-        background: active ? "#a78bfa" : "#1e293b",
+        background: active ? "#3b82f6" : "#1e293b",
         color: active ? "#0f172a" : "#94a3b8",
         fontSize: 13, fontWeight: 700, cursor: "pointer",
         marginRight: 8,
@@ -15680,9 +15680,9 @@
                 <button key={s.id || "all"} onClick={() => setStatusFilter(s.id)}
                   style={{
                     padding: "5px 11px", borderRadius: 999,
-                    border: `1px solid ${active ? (s.color || "#a78bfa") : "#334155"}`,
-                    background: active ? `${s.color || "#a78bfa"}22` : "transparent",
-                    color: active ? (s.color || "#a78bfa") : "#94a3b8",
+                    border: `1px solid ${active ? (s.color || "#3b82f6") : "#334155"}`,
+                    background: active ? `${s.color || "#3b82f6"}22` : "transparent",
+                    color: active ? (s.color || "#3b82f6") : "#94a3b8",
                     fontSize: 12, fontWeight: 700, cursor: "pointer",
                   }}>
                   {s.label}
@@ -15837,7 +15837,7 @@
                   <td style={{ padding: "8px 6px", textAlign: "right" }}>{u.workout_count}</td>
                   <td style={{ padding: "8px 6px", color: "#94a3b8" }}>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : "—"}</td>
                   <td style={{ padding: "8px 6px" }}>
-                    {u.is_admin    && <span style={{ background: "#a78bfa", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>admin</span>}
+                    {u.is_admin    && <span style={{ background: "#3b82f6", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>admin</span>}
                     {u.is_coach    && <span style={{ background: "#3b82f6", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>coach</span>}
                     {u.is_disabled && <span style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>disabled</span>}
                   </td>
@@ -15924,7 +15924,7 @@
                 <button onClick={onClose} style={{ background: "#334155", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12, color: "#e2e8f0", cursor: "pointer", fontWeight: 600 }}>
                   Cancel
                 </button>
-                <button onClick={save} disabled={saving} style={{ background: "#a78bfa", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12, color: "#0f172a", cursor: saving ? "wait" : "pointer", fontWeight: 700 }}>
+                <button onClick={save} disabled={saving} style={{ background: "#3b82f6", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12, color: "#0f172a", cursor: saving ? "wait" : "pointer", fontWeight: 700 }}>
                   {saving ? "Saving…" : "Save"}
                 </button>
               </div>
@@ -15990,7 +15990,7 @@
                 style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, color: "#e2e8f0", padding: "6px 8px", fontSize: 12 }} />
               <input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
                 style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, color: "#e2e8f0", padding: "6px 8px", fontSize: 12 }} />
-              <button onClick={create} style={{ background: "#a78bfa", color: "#0f172a", border: "none", borderRadius: 4, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Create</button>
+              <button onClick={create} style={{ background: "#3b82f6", color: "#0f172a", border: "none", borderRadius: 4, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Create</button>
             </div>
           </div>
           {msg && <div style={{ fontSize: 12, color: "#10b981", marginBottom: 10 }}>{msg}</div>}
@@ -17825,7 +17825,7 @@
                   {authenticated && (
                     <button onClick={() => setView(v => v === "week" ? "generator" : "week")}
                       title={view === "week" ? "Back to generator" : "Plan your week"}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #a78bfa", background: view === "week" ? "#a78bfa" : "#1e293b", color: view === "week" ? "#0f172a" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #3b82f6", background: view === "week" ? "#3b82f6" : "#1e293b", color: view === "week" ? "#0f172a" : "#3b82f6", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
                       {view === "week" ? "⏎" : "📅"}
                     </button>
                   )}
@@ -17890,7 +17890,7 @@
                           : pendingFb > 0
                             ? `Admin — ${pendingFb} new feedback item${pendingFb === 1 ? "" : "s"}`
                             : "Admin"}
-                        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #a78bfa", background: view === "admin" ? "#a78bfa" : "#1e293b", color: view === "admin" ? "#0f172a" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1, position: "relative" }}>
+                        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #3b82f6", background: view === "admin" ? "#3b82f6" : "#1e293b", color: view === "admin" ? "#0f172a" : "#3b82f6", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1, position: "relative" }}>
                         {view === "admin" ? "⏎" : "🛡"}
                         {/* Feedback-count badge — only when not on admin view AND
                             count > 0. Hidden when viewing admin to avoid stale
@@ -18556,7 +18556,7 @@
                         }}
                         style={{
                           padding: "10px 16px", borderRadius: 8,
-                          border: "1px solid #a78bfa", background: "rgba(167,139,250,0.15)", color: "#a78bfa",
+                          border: "1px solid #3b82f6", background: "rgba(59,130,246,0.15)", color: "#3b82f6",
                           fontSize: 13, fontWeight: 700, cursor: "pointer",
                           display: "inline-flex", alignItems: "center", gap: 6,
                         }}
@@ -18867,7 +18867,7 @@
                 background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
                 padding: 22, maxWidth: 420, width: "100%",
               }}>
-                <div style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Schedule workout</div>
+                <div style={{ color: "#3b82f6", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Schedule workout</div>
                 <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Pick a date</div>
                 <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
                   style={{ width: "100%", padding: "8px 10px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 14 }} />
@@ -18906,7 +18906,7 @@
                         setScheduleDate(null);
                       }
                     }}
-                    style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: "#a78bfa", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Schedule ▸</button>
+                    style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: "#3b82f6", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Schedule ▸</button>
                 </div>
               </div>
             </div>
