@@ -904,6 +904,9 @@ app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter
       try {
         const linkResult = await dbLinkCompletedToSchedule({
           scheduledId, callerSub: req.userSub, workoutId: entry.id,
+          // I Phase 2b: pass payload so an intent-mode row can flip to payload
+          // atomically with the link. Self-only payload-mode rows ignore this.
+          workoutPayload: entry,
         });
         if (linkResult.ok) {
           scheduleLink = { ok: true, scheduled_id: Number(scheduledId), already_linked: !!linkResult.already_linked };
@@ -2083,9 +2086,39 @@ app.delete("/api/benchmarks/:id", checkOrigin, requireAuth, requireCsrf, writeLi
 // On completion, /api/log-workout (above) stamps completed_workout_id via
 // dbLinkCompletedToSchedule when called with scheduled_id.
 
+// I Phase 2b — semantic validation for intent_params.group_id +
+// intent_params.lane_plan_id. Returns { ok: true } or { ok: false, status, error }.
+// Caller must have coach role on the group; lane plan must belong to the
+// group and not be archived. Self-only intents (no group_id) bypass entirely.
+async function validateIntentParams(ip, callerSub) {
+  if (!ip || typeof ip !== "object") return { ok: true };
+  if (!ip.group_id) return { ok: true };
+  if (typeof ip.group_id !== "string" || !/^gr_/.test(ip.group_id)) {
+    return { ok: false, status: 400, error: "intent_params.group_id must be a group id (gr_...)" };
+  }
+  const role = await dbGetGroupRole(ip.group_id, callerSub);
+  if (!role) return { ok: false, status: 403, error: "not a coach on this group" };
+  if (ip.lane_plan_id) {
+    if (typeof ip.lane_plan_id !== "string" || !/^lp_/.test(ip.lane_plan_id)) {
+      return { ok: false, status: 400, error: "intent_params.lane_plan_id must be a lane plan id (lp_...)" };
+    }
+    const plan = await dbGetGroupLanePlan(ip.lane_plan_id);
+    if (!plan) return { ok: false, status: 404, error: "lane plan not found" };
+    if (plan.group_id !== ip.group_id) return { ok: false, status: 400, error: "lane plan does not belong to this group" };
+    if (plan.archived) return { ok: false, status: 400, error: "lane plan is archived" };
+  }
+  return { ok: true };
+}
+
 app.post("/api/scheduled-workouts", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const b = req.body || {};
+    // I Phase 2b — validate intent_params.group_id + lane_plan_id semantics
+    // (coach role, plan ownership) before the row is created.
+    if (b.intent_params) {
+      const v = await validateIntentParams(b.intent_params, req.userSub);
+      if (!v.ok) return res.status(v.status).json({ error: v.error });
+    }
     // Phase 2a — accept either payload (pre-generated) or intent_params
     // (generator inputs only). Helper enforces exactly-one-of invariant.
     const r = await dbCreateScheduledWorkout({
@@ -2147,6 +2180,12 @@ app.get("/api/scheduled-workouts/:id", requireAuth, async (req, res) => {
 
 app.patch("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
+    // I Phase 2b — same semantic validation as POST when intent_params being
+    // patched in.
+    if (req.body && req.body.intent_params) {
+      const v = await validateIntentParams(req.body.intent_params, req.userSub);
+      if (!v.ok) return res.status(v.status).json({ error: v.error });
+    }
     const r = await dbUpdateScheduledWorkout(req.params.id, req.userSub, req.body || {});
     if (!r.ok) {
       const status = r.reason === "not_found" ? 404 : r.reason === "not_owner" ? 403 : 400;
