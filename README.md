@@ -1,14 +1,17 @@
-# Swim Workout Generator
+# Setforge
 
 A single-page React app (served from `public/index.html`) backed by a small
 Express + MariaDB server. Generates parameterized swim workouts across SCY /
 SCM / LCM pool modes, runs them with a pace-clock UI, logs history with
-goals / intensity zones / training-phase awareness, and supports invite-only
-multi-user via Sign in with Apple.
+goals / intensity zones / training-phase awareness, supports week-view
+planning + coach-group fanout, and is invite-only multi-user via Sign in
+with Apple.
 
-Live at <https://veronicacassidy.com>. Runs on a Spaceship Hyperlift
-container; MariaDB lives on a separate Spaceship Starlight VM managed by
-CyberPanel.
+Live at <https://setforge.io>. Runs on a Spaceship Hyperlift container;
+MariaDB lives on a separate Spaceship Starlight VM managed by CyberPanel.
+
+Repo working title is `swim-workout-generator` (predates the Setforge
+rebrand; not renamed to avoid breaking deploy paths).
 
 ## Layout
 
@@ -42,7 +45,7 @@ Server reads these at startup:
 
 - `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` — MariaDB connection.
 - `APPLE_TEAM_ID`, `APPLE_CLIENT_ID`, `APPLE_NATIVE_BUNDLE_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` — Sign in with Apple.
-- `APP_URL` — public HTTPS URL (default `https://veronicacassidy.com`).
+- `APP_URL` — public HTTPS URL (default `https://setforge.io`).
 - `PORT` — listen port (default 8080; Hyperlift sets this).
 - `ALLOW_NO_ORIGIN` — `"true"` to permit Origin-less requests (local curl).
 
