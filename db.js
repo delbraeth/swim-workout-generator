@@ -2418,6 +2418,169 @@ export async function dbRedeemClaimToken(token, swimmerSub) {
   }
 }
 
+// ── Coach private notes journal (Stage 5 / R-H) ──────────────────────
+// Per scope §15 (#15: journal model). Multiple timestamped notes per
+// (coach, swimmer) pair. Visibility enum scopes who else can read.
+// team_id / group_id snapshot the scope at create-time so retroactive
+// group changes don't leak old notes.
+
+const COACH_NOTE_VISIBILITIES = ["private", "group_coaches", "team_coaches"];
+const COACH_NOTE_BODY_MAX = 5000;
+
+function rowToCoachNote(r) {
+  return {
+    id:                 Number(r.id),
+    target_swimmer_sub: r.target_swimmer_sub,
+    target_managed_id:  r.target_managed_id,
+    author_coach_sub:   r.author_coach_sub,
+    author_name:        r.author_name || null,
+    team_id:            r.team_id,
+    group_id:           r.group_id,
+    workout_id:         r.workout_id,
+    visibility:         r.visibility,
+    body:               r.body,
+    created_at:         dtToIso(r.created_at),
+    updated_at:         dtToIso(r.updated_at),
+  };
+}
+
+export async function dbCreateCoachNote({
+  authorCoachSub, swimmerSub = null, managedId = null,
+  teamId = null, groupId = null, workoutId = null,
+  visibility = "private", body = ""
+}) {
+  if (!authorCoachSub) throw new Error("author required");
+  if ((swimmerSub == null) === (managedId == null)) {
+    throw new Error("specify exactly one of swimmerSub / managedId");
+  }
+  if (!COACH_NOTE_VISIBILITIES.includes(visibility)) throw new Error("bad_visibility");
+  const trimmed = String(body || "").trim();
+  if (!trimmed)                          throw new Error("body_required");
+  if (trimmed.length > COACH_NOTE_BODY_MAX) throw new Error("body_too_long");
+  // Visibility scope sanity: group_coaches needs group_id; team_coaches
+  // needs team_id. private allows either to be null.
+  if (visibility === "group_coaches" && !groupId) throw new Error("group_coaches_requires_group");
+  if (visibility === "team_coaches"  && !teamId)  throw new Error("team_coaches_requires_team");
+  const r = await pool.query(
+    "INSERT INTO `coach_swimmer_notes` " +
+    "(`target_swimmer_sub`, `target_managed_id`, `author_coach_sub`, `team_id`, `group_id`, `workout_id`, `visibility`, `body`) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [swimmerSub, managedId, authorCoachSub, teamId, groupId, workoutId, visibility, trimmed]
+  );
+  return { ok: true, id: Number(r.insertId) };
+}
+
+export async function dbGetCoachNote(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT n.*, u.`display_name` AS author_name " +
+    "FROM `coach_swimmer_notes` n " +
+    "LEFT JOIN `users` u ON u.`sub` = n.`author_coach_sub` " +
+    "WHERE n.`id` = ? AND n.`deleted_at` IS NULL LIMIT 1",
+    [Number(id)]
+  );
+  return rows[0] ? rowToCoachNote(rows[0]) : null;
+}
+
+// List visible notes for a target. Visibility rules:
+//   - caller is the author → always visible
+//   - visibility=group_coaches → caller must be an active coach on the
+//     note's group_id (group_coaches.removed_at IS NULL)
+//   - visibility=team_coaches → caller must be an active coach on the
+//     note's team_id (team_coaches.removed_at IS NULL)
+// We build the visible-scope sets up front (cheap two-query lookup) and
+// inline them into a single SELECT.
+export async function dbListCoachNotesForTarget({
+  swimmerSub = null, managedId = null, callerSub, limit = 100
+}) {
+  if (!callerSub) return [];
+  if ((swimmerSub == null) === (managedId == null)) {
+    throw new Error("specify exactly one of swimmerSub / managedId");
+  }
+  // Resolve caller's coaching scopes.
+  const teamRows = await pool.query(
+    "SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL",
+    [callerSub]
+  );
+  const groupRows = await pool.query(
+    "SELECT `group_id` FROM `group_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL",
+    [callerSub]
+  );
+  const callerTeamIds  = teamRows.map(r => r.team_id);
+  const callerGroupIds = groupRows.map(r => r.group_id);
+  // Build WHERE for visibility.
+  const visClauses = ["n.`author_coach_sub` = ?"];
+  const visVals    = [callerSub];
+  if (callerGroupIds.length) {
+    visClauses.push(`(n.\`visibility\` = 'group_coaches' AND n.\`group_id\` IN (${callerGroupIds.map(() => "?").join(", ")}))`);
+    visVals.push(...callerGroupIds);
+  }
+  if (callerTeamIds.length) {
+    visClauses.push(`(n.\`visibility\` = 'team_coaches' AND n.\`team_id\` IN (${callerTeamIds.map(() => "?").join(", ")}))`);
+    visVals.push(...callerTeamIds);
+  }
+  const targetClause = swimmerSub != null ? "n.`target_swimmer_sub` = ?" : "n.`target_managed_id` = ?";
+  const targetVal    = swimmerSub != null ? swimmerSub : managedId;
+  const cap = Math.min(500, Math.max(1, Number(limit) || 100));
+  const rows = await pool.query(
+    "SELECT n.*, u.`display_name` AS author_name " +
+    "FROM `coach_swimmer_notes` n " +
+    "LEFT JOIN `users` u ON u.`sub` = n.`author_coach_sub` " +
+    `WHERE ${targetClause} AND n.\`deleted_at\` IS NULL AND (${visClauses.join(" OR ")}) ` +
+    `ORDER BY n.\`created_at\` DESC LIMIT ${cap}`,
+    [targetVal, ...visVals]
+  );
+  return rows.map(rowToCoachNote);
+}
+
+// Edit own note. Only author can call this — server enforces.
+export async function dbUpdateCoachNote(id, callerSub, patch = {}) {
+  if (!id || !callerSub) return { ok: false, reason: "missing_args" };
+  const cur = await pool.query(
+    "SELECT `author_coach_sub`, `team_id`, `group_id` FROM `coach_swimmer_notes` " +
+    "WHERE `id` = ? AND `deleted_at` IS NULL LIMIT 1",
+    [Number(id)]
+  );
+  if (!cur[0]) return { ok: false, reason: "not_found" };
+  if (cur[0].author_coach_sub !== callerSub) return { ok: false, reason: "not_author" };
+  const sets = [], vals = [];
+  if ("body" in patch) {
+    const trimmed = String(patch.body || "").trim();
+    if (!trimmed)                            return { ok: false, reason: "body_required" };
+    if (trimmed.length > COACH_NOTE_BODY_MAX) return { ok: false, reason: "body_too_long" };
+    sets.push("`body` = ?"); vals.push(trimmed);
+  }
+  if ("visibility" in patch) {
+    if (!COACH_NOTE_VISIBILITIES.includes(patch.visibility)) return { ok: false, reason: "bad_visibility" };
+    // Re-check scope requirements against the note's stored scope fields.
+    if (patch.visibility === "group_coaches" && !cur[0].group_id) return { ok: false, reason: "group_coaches_requires_group" };
+    if (patch.visibility === "team_coaches"  && !cur[0].team_id)  return { ok: false, reason: "team_coaches_requires_team" };
+    sets.push("`visibility` = ?"); vals.push(patch.visibility);
+  }
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(Number(id));
+  const r = await pool.query(
+    `UPDATE \`coach_swimmer_notes\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
+    vals
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbSoftDeleteCoachNote(id, callerSub) {
+  if (!id || !callerSub) return { ok: false, reason: "missing_args" };
+  const cur = await pool.query(
+    "SELECT `author_coach_sub` FROM `coach_swimmer_notes` WHERE `id` = ? AND `deleted_at` IS NULL LIMIT 1",
+    [Number(id)]
+  );
+  if (!cur[0]) return { ok: false, reason: "not_found" };
+  if (cur[0].author_coach_sub !== callerSub) return { ok: false, reason: "not_author" };
+  const r = await pool.query(
+    "UPDATE `coach_swimmer_notes` SET `deleted_at` = CURRENT_TIMESTAMP(3) WHERE `id` = ?",
+    [Number(id)]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 // ── Lane plans (Stage 3 / R-E) ────────────────────────────────────────
 // Per scope §7 + decision #14. Persistent reusable per-group lane configs.
 // plan_data JSON shape:
