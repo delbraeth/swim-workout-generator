@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 09:30 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 09:44 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -17625,8 +17625,23 @@
                   // Load the scheduled workout back into the generator workout
                   // slot so the user can regenerate / tweak / re-save. Tag
                   // so handleSave can offer "Update schedule" instead of "Save as new."
+                  //
+                  // Must also restore the form state (selectedType, maxYards,
+                  // poolMode, equipment) — the workout-display block reads
+                  // meta = WORKOUT_TYPES.find(t => t.id === selectedType) and
+                  // crashes on meta.badge if selectedType is null (bug surfaced
+                  // 2026-05-20: clicking Edit on a fresh page load without a
+                  // type selected first → "undefined is not an object").
+                  const p = sw.payload || {};
+                  if (p.type)     setSelectedType(p.type);
+                  if (p.maxYardsCap) setMaxYards(p.maxYardsCap);
+                  if (p.poolMode) setPoolMode(p.poolMode);
+                  if (p.equipment) setEquipment(p.equipment);
+                  setFocusNoteDraft(p.focusNote || "");
                   setWorkout(sw.payload);
                   setEditingScheduledId(sw.id);
+                  setLoadedFromHistoryId(null);
+                  setRunScheduledId(null);
                   setView("generator");
                 }}
               />
