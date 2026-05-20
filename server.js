@@ -53,7 +53,7 @@ import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 
 import {
-  dbActive, pingDb,
+  pool, dbActive, pingDb,
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbGetWorkout, dbPatchWorkout, dbDeleteWorkout,
   dbGetSettings, dbUpsertSettings, dbPatchSettingsExtra,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
@@ -87,6 +87,8 @@ import {
   dbDeleteGroupJoinToken, dbRedeemGroupJoinToken,
   dbCreateClaimToken, dbGetClaimToken, dbListClaimTokensForManaged,
   dbDeleteClaimToken, dbRedeemClaimToken,
+  dbCreateCoachNote, dbGetCoachNote, dbListCoachNotesForTarget,
+  dbUpdateCoachNote, dbSoftDeleteCoachNote,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1769,6 +1771,161 @@ app.post("/api/claim-tokens/:token/redeem", checkOrigin, requireAuth, requireCsr
         diff_field_count: (r.identity_diff || []).length,
         repointed: r.repointed,
       },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Coach private notes journal (Stage 5 / R-H) ───────────────────
+// Per scope §15 + decision #15. Multiple timestamped notes per
+// (coach, swimmer) pair. Visibility scopes who else can read; per-team-
+// type defaults applied client-side at create-form time.
+
+// Resolve the scope context for a note: looks up the target's team_id +
+// primary group with the author. Used at create-time so the row captures
+// where visibility will resolve later, without later lookups.
+async function resolveNoteScope({ authorCoachSub, swimmerSub, managedId }) {
+  let teamId = null, groupId = null;
+  if (managedId) {
+    const ms = await dbGetManagedSwimmer(managedId);
+    if (ms) teamId = ms.team_id || null;
+    // Find the first active group the managed is in that the author coaches.
+    const grpRows = await pool.query(
+      "SELECT g.`id`, g.`team_id` FROM `group_members` gm " +
+      "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+      "WHERE gm.`member_managed_id` = ? AND gm.`left_at` IS NULL " +
+      "  AND g.`primary_coach_sub` = ? " +
+      "LIMIT 1",
+      [managedId, authorCoachSub]
+    );
+    if (grpRows[0]) { groupId = grpRows[0].id; if (!teamId) teamId = grpRows[0].team_id || null; }
+  } else if (swimmerSub) {
+    const grpRows = await pool.query(
+      "SELECT g.`id`, g.`team_id` FROM `group_members` gm " +
+      "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+      "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL " +
+      "  AND g.`primary_coach_sub` = ? " +
+      "LIMIT 1",
+      [swimmerSub, authorCoachSub]
+    );
+    if (grpRows[0]) { groupId = grpRows[0].id; teamId = grpRows[0].team_id || null; }
+  }
+  return { teamId, groupId };
+}
+
+// Create a coach note. Visibility default is applied client-side from
+// the swimmer's team_type; server just validates the enum + scope.
+app.post("/api/coach-notes", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const swimmerSub = b.swimmer_sub || null;
+    const managedId  = b.managed_id  || null;
+    const visibility = b.visibility  || "private";
+    const body       = b.body || "";
+    const workoutId  = b.workout_id || null;
+    if ((swimmerSub == null) === (managedId == null)) {
+      return res.status(400).json({ error: "specify exactly one of swimmer_sub or managed_id" });
+    }
+    // Ownership / scope authorization. For managed targets the author must
+    // own the managed row. For full-account swimmers the author must share
+    // an active group with them (otherwise they have no business writing
+    // private notes about that swimmer).
+    if (managedId) {
+      const owns = await dbIsManagedSwimmerOwnedBy(managedId, req.userSub);
+      if (!owns) return res.status(403).json({ error: "not owner of this managed profile" });
+    } else {
+      // Verify caller coaches a group that contains the swimmer.
+      const rows = await pool.query(
+        "SELECT 1 FROM `group_members` gm " +
+        "JOIN `group_coaches` gc ON gc.`group_id` = gm.`group_id` " +
+        "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL " +
+        "  AND gc.`coach_sub` = ? AND gc.`removed_at` IS NULL LIMIT 1",
+        [swimmerSub, req.userSub]
+      );
+      if (!rows.length) return res.status(403).json({ error: "no coaching relationship with this swimmer" });
+    }
+    // Resolve scope (team_id + primary group) from the target's relationship
+    // to the author. Stored on the row so visibility is a stable snapshot.
+    const { teamId, groupId } = await resolveNoteScope({ authorCoachSub: req.userSub, swimmerSub, managedId });
+    try {
+      const r = await dbCreateCoachNote({
+        authorCoachSub: req.userSub,
+        swimmerSub, managedId,
+        teamId, groupId, workoutId,
+        visibility, body,
+      });
+      dbAuditEvent({
+        userSub:   req.userSub,
+        eventType: "coach_note.create",
+        ...reqMeta(req),
+        details:   { note_id: r.id, swimmer_sub: swimmerSub, managed_id: managedId, visibility, workout_id: workoutId },
+      });
+      res.json(r);
+    } catch (e) {
+      const msg = e.message || String(e);
+      if (["bad_visibility","body_required","body_too_long","group_coaches_requires_group","team_coaches_requires_team"].includes(msg)) {
+        return res.status(400).json({ error: msg });
+      }
+      throw e;
+    }
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// List visible notes for a target. Caller must be a coach connected to
+// the target via team/group OR be the author of any of the returned notes.
+// `dbListCoachNotesForTarget` already filters on the caller's coaching
+// scope, so we only need a light auth gate here.
+app.get("/api/coach-notes", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const swimmerSub = req.query.swimmer_sub || null;
+    const managedId  = req.query.managed_id  || null;
+    if ((swimmerSub == null) === (managedId == null)) {
+      return res.status(400).json({ error: "specify exactly one of swimmer_sub or managed_id" });
+    }
+    if (managedId) {
+      const owns = await dbIsManagedSwimmerOwnedBy(managedId, req.userSub);
+      if (!owns) return res.status(403).json({ error: "not owner of this managed profile" });
+    }
+    const notes = await dbListCoachNotesForTarget({
+      swimmerSub, managedId, callerSub: req.userSub,
+      limit: Math.min(500, Number(req.query.limit) || 100),
+    });
+    res.json(notes);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Edit own note. Body / visibility only.
+app.patch("/api/coach-notes/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const patch = req.body || {};
+    const r = await dbUpdateCoachNote(req.params.id, req.userSub, patch);
+    if (!r.ok) {
+      const status = r.reason === "not_found" ? 404 : r.reason === "not_author" ? 403 : 400;
+      return res.status(status).json({ error: r.reason });
+    }
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "coach_note.update",
+      ...reqMeta(req),
+      details:   { note_id: Number(req.params.id), fields: Object.keys(patch || {}) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Soft-delete own note.
+app.delete("/api/coach-notes/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbSoftDeleteCoachNote(req.params.id, req.userSub);
+    if (!r.ok) {
+      const status = r.reason === "not_found" ? 404 : r.reason === "not_author" ? 403 : 400;
+      return res.status(status).json({ error: r.reason });
+    }
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "coach_note.delete",
+      ...reqMeta(req),
+      details:   { note_id: Number(req.params.id) },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
