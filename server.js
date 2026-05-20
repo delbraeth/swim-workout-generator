@@ -90,6 +90,7 @@ import {
   dbDeleteClaimToken, dbRedeemClaimToken,
   dbCreateCoachNote, dbGetCoachNote, dbListCoachNotesForTarget,
   dbUpdateCoachNote, dbSoftDeleteCoachNote,
+  dbCreateBenchmark, dbListBenchmarks, dbGetLatestAerobicBenchmark, dbDeleteBenchmark,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -1984,6 +1985,68 @@ app.delete("/api/coach-notes/:id", checkOrigin, requireAuth, requireCsrf, writeL
       eventType: "coach_note.delete",
       ...reqMeta(req),
       details:   { note_id: Number(req.params.id) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Benchmarks (N7) ────────────────────────────────────────────────
+// Per-user test-set log. v1 kinds: t30 / tt500 / broken500. Pace auto-fills
+// the generator paceInput on save for t30/tt500 (client reads pace_100_secs
+// off the response).
+
+app.post("/api/benchmarks", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await dbCreateBenchmark({
+      userSub:    req.userSub,
+      kind:       b.kind,
+      poolMode:   b.pool_mode || "25y",
+      totalYards: b.total_yards != null ? Number(b.total_yards) : null,
+      totalSecs:  b.total_secs  != null ? Number(b.total_secs)  : null,
+      splits:     b.splits || null,
+      notes:      b.notes  || null,
+    });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "benchmark.create",
+      ...reqMeta(req),
+      details:   { benchmark_id: r.id, kind: b.kind, pool_mode: b.pool_mode, pace_100_secs: r.pace_100_secs },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/benchmarks", requireAuth, async (req, res) => {
+  try {
+    const kind  = req.query.kind || null;
+    const limit = Math.min(200, Number(req.query.limit) || 50);
+    res.json(await dbListBenchmarks(req.userSub, { kind, limit }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Convenience: latest aerobic-pace benchmark for the caller. Used by the
+// generator's "pace auto-fill" hint when paceInput is empty on first load.
+app.get("/api/benchmarks/latest-aerobic", requireAuth, async (req, res) => {
+  try {
+    const r = await dbGetLatestAerobicBenchmark(req.userSub);
+    res.json(r || null);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/benchmarks/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbDeleteBenchmark(req.params.id, req.userSub);
+    if (!r.ok) {
+      const status = r.reason === "not_found" ? 404 : r.reason === "not_owner" ? 403 : 400;
+      return res.status(status).json({ error: r.reason });
+    }
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "benchmark.delete",
+      ...reqMeta(req),
+      details:   { benchmark_id: Number(req.params.id) },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
