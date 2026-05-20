@@ -91,6 +91,8 @@ import {
   dbCreateCoachNote, dbGetCoachNote, dbListCoachNotesForTarget,
   dbUpdateCoachNote, dbSoftDeleteCoachNote,
   dbCreateBenchmark, dbListBenchmarks, dbGetLatestAerobicBenchmark, dbDeleteBenchmark,
+  dbCreateScheduledWorkout, dbGetScheduledWorkout, dbListScheduledWorkouts,
+  dbUpdateScheduledWorkout, dbDeleteScheduledWorkout, dbLinkCompletedToSchedule,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -889,6 +891,29 @@ app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter
     }
 
     await dbInsertWorkout(entry);
+
+    // I — Phase 1: scheduled_id link. If the client passed a scheduled_id
+    // (i.e., this workout is being logged as the completion of a scheduled
+    // row), stamp the schedule row's completed_workout_id to point at this
+    // new workout. Best-effort: surface the link result in the response but
+    // don't fail the workout insert if linking fails.
+    const scheduledId = entry.scheduled_id || (req.body && req.body.scheduled_id) || null;
+    let scheduleLink = null;
+    if (scheduledId) {
+      try {
+        const linkResult = await dbLinkCompletedToSchedule({
+          scheduledId, callerSub: req.userSub, workoutId: entry.id,
+        });
+        if (linkResult.ok) {
+          scheduleLink = { ok: true, scheduled_id: Number(scheduledId), already_linked: !!linkResult.already_linked };
+        } else {
+          scheduleLink = { ok: false, scheduled_id: Number(scheduledId), reason: linkResult.reason };
+        }
+      } catch (e) {
+        scheduleLink = { ok: false, scheduled_id: Number(scheduledId), reason: e.message || String(e) };
+      }
+    }
+
     let assignmentSummary = null;
     if (assignmentPlan) {
       try {
@@ -917,7 +942,7 @@ app.post("/api/log-workout", checkOrigin, requireAuth, requireCsrf, writeLimiter
     // This ensures the client's optimistic state replacement reflects any
     // server-side coercion (defaults, JSON round-tripping, type narrowing).
     const stored = await dbGetWorkout(entry.id);
-    res.json({ ok: true, id: entry.id, entry: stored || entry, assignment: assignmentSummary });
+    res.json({ ok: true, id: entry.id, entry: stored || entry, assignment: assignmentSummary, schedule_link: scheduleLink });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -2047,6 +2072,85 @@ app.delete("/api/benchmarks/:id", checkOrigin, requireAuth, requireCsrf, writeLi
       eventType: "benchmark.delete",
       ...reqMeta(req),
       details:   { benchmark_id: Number(req.params.id) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Scheduled workouts (I — Week-view planning, Phase 1) ──────────
+// Per-user week planner. Payload-mode rows hold a full workout snapshot.
+// On completion, /api/log-workout (above) stamps completed_workout_id via
+// dbLinkCompletedToSchedule when called with scheduled_id.
+
+app.post("/api/scheduled-workouts", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await dbCreateScheduledWorkout({
+      userSub:       req.userSub,
+      scheduledDate: b.scheduled_date,
+      payload:       b.payload,
+      notes:         b.notes || null,
+    });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "scheduled_workout.create",
+      ...reqMeta(req),
+      details:   { scheduled_id: r.id, date: b.scheduled_date },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// List schedule rows for the caller within a date range. start required,
+// end optional (defaults to start + 7d server-side).
+app.get("/api/scheduled-workouts", requireAuth, async (req, res) => {
+  try {
+    const startDate = req.query.start || null;
+    const endDate   = req.query.end   || null;
+    if (!startDate) return res.status(400).json({ error: "start (YYYY-MM-DD) required" });
+    res.json(await dbListScheduledWorkouts(req.userSub, { startDate, endDate }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/scheduled-workouts/:id", requireAuth, async (req, res) => {
+  try {
+    const r = await dbGetScheduledWorkout(req.params.id);
+    if (!r) return res.status(404).json({ error: "not found" });
+    if (r.user_sub !== req.userSub) return res.status(403).json({ error: "not owner" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.patch("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbUpdateScheduledWorkout(req.params.id, req.userSub, req.body || {});
+    if (!r.ok) {
+      const status = r.reason === "not_found" ? 404 : r.reason === "not_owner" ? 403 : 400;
+      return res.status(status).json({ error: r.reason });
+    }
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "scheduled_workout.update",
+      ...reqMeta(req),
+      details:   { scheduled_id: Number(req.params.id), fields: Object.keys(req.body || {}) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbDeleteScheduledWorkout(req.params.id, req.userSub);
+    if (!r.ok) {
+      const status = r.reason === "not_found" ? 404 : r.reason === "not_owner" ? 403 : 400;
+      return res.status(status).json({ error: r.reason });
+    }
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "scheduled_workout.delete",
+      ...reqMeta(req),
+      details:   { scheduled_id: Number(req.params.id) },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
