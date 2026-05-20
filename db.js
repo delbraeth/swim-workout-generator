@@ -2810,11 +2810,17 @@ function rowToScheduledWorkout(r) {
   if (typeof payload === "string") {
     try { payload = JSON.parse(payload); } catch (_) { payload = null; }
   }
+  let intent_params = r.intent_params;
+  if (typeof intent_params === "string") {
+    try { intent_params = JSON.parse(intent_params); } catch (_) { intent_params = null; }
+  }
   return {
     id:                    Number(r.id),
     user_sub:              r.user_sub,
     scheduled_date:        dateToYmd(r.scheduled_date),
     payload,
+    intent_params,
+    mode:                  (intent_params && !payload) ? "intent" : "payload",  // derived
     completed_workout_id:  r.completed_workout_id,
     notes:                 r.notes || null,
     created_at:            dtToIso(r.created_at),
@@ -2824,17 +2830,29 @@ function rowToScheduledWorkout(r) {
 
 function isYmd(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s); }
 
-export async function dbCreateScheduledWorkout({ userSub, scheduledDate, payload, notes = null }) {
+// Create a scheduled row in either payload mode (full pre-generated workout
+// snapshot) OR intent mode (generator params only). Exactly one of payload /
+// intentParams must be non-null — app-layer invariant per migration 025.
+export async function dbCreateScheduledWorkout({ userSub, scheduledDate, payload = null, intentParams = null, notes = null }) {
   if (!userSub) return { ok: false, reason: "no_user" };
   if (!isYmd(scheduledDate)) return { ok: false, reason: "bad_date" };
-  if (!payload || typeof payload !== "object") return { ok: false, reason: "bad_payload" };
+  if ((payload == null) === (intentParams == null)) {
+    return { ok: false, reason: "specify_exactly_one_of_payload_or_intent" };
+  }
+  if (payload != null && typeof payload !== "object") return { ok: false, reason: "bad_payload" };
+  if (intentParams != null && typeof intentParams !== "object") return { ok: false, reason: "bad_intent_params" };
   if (notes && String(notes).length > 500) return { ok: false, reason: "notes_too_long" };
   const r = await pool.query(
-    "INSERT INTO `scheduled_workouts` (`user_sub`, `scheduled_date`, `payload`, `notes`) " +
-    "VALUES (?, ?, ?, ?)",
-    [userSub, scheduledDate, JSON.stringify(payload), notes || null]
+    "INSERT INTO `scheduled_workouts` (`user_sub`, `scheduled_date`, `payload`, `intent_params`, `notes`) " +
+    "VALUES (?, ?, ?, ?, ?)",
+    [
+      userSub, scheduledDate,
+      payload != null ? JSON.stringify(payload) : null,
+      intentParams != null ? JSON.stringify(intentParams) : null,
+      notes || null,
+    ]
   );
-  return { ok: true, id: Number(r.insertId) };
+  return { ok: true, id: Number(r.insertId), mode: payload ? "payload" : "intent" };
 }
 
 export async function dbGetScheduledWorkout(id) {
@@ -2866,6 +2884,13 @@ export async function dbListScheduledWorkouts(userSub, { startDate, endDate = nu
   return rows.map(rowToScheduledWorkout);
 }
 
+// Update fields on a schedule row. Supports converting between modes:
+//   * Setting payload (non-null) clears intent_params.
+//   * Setting intent_params (non-null) clears payload.
+//   * Setting payload AND intent_params in one patch is rejected.
+// This is how an intent row becomes a payload row when the user clicks
+// "▶ Generate" and confirms — server can stamp payload + clear intent_params
+// atomically. The hydration path may also be used by Phase 2b group fanout.
 export async function dbUpdateScheduledWorkout(id, callerSub, patch = {}) {
   if (!id || !callerSub) return { ok: false, reason: "missing_args" };
   const cur = await pool.query(
@@ -2874,14 +2899,30 @@ export async function dbUpdateScheduledWorkout(id, callerSub, patch = {}) {
   );
   if (!cur[0]) return { ok: false, reason: "not_found" };
   if (cur[0].user_sub !== callerSub) return { ok: false, reason: "not_owner" };
+  // Can't set both modes in one patch.
+  if ("payload" in patch && "intent_params" in patch && patch.payload != null && patch.intent_params != null) {
+    return { ok: false, reason: "cannot_set_both_modes" };
+  }
   const sets = [], vals = [];
   if ("scheduled_date" in patch) {
     if (!isYmd(patch.scheduled_date)) return { ok: false, reason: "bad_date" };
     sets.push("`scheduled_date` = ?"); vals.push(patch.scheduled_date);
   }
   if ("payload" in patch) {
-    if (!patch.payload || typeof patch.payload !== "object") return { ok: false, reason: "bad_payload" };
-    sets.push("`payload` = ?"); vals.push(JSON.stringify(patch.payload));
+    if (patch.payload != null && typeof patch.payload !== "object") return { ok: false, reason: "bad_payload" };
+    sets.push("`payload` = ?"); vals.push(patch.payload != null ? JSON.stringify(patch.payload) : null);
+    // Setting payload clears intent_params (mode transition).
+    if (patch.payload != null && !("intent_params" in patch)) {
+      sets.push("`intent_params` = NULL");
+    }
+  }
+  if ("intent_params" in patch) {
+    if (patch.intent_params != null && typeof patch.intent_params !== "object") return { ok: false, reason: "bad_intent_params" };
+    sets.push("`intent_params` = ?"); vals.push(patch.intent_params != null ? JSON.stringify(patch.intent_params) : null);
+    // Setting intent_params clears payload (mode transition).
+    if (patch.intent_params != null && !("payload" in patch)) {
+      sets.push("`payload` = NULL");
+    }
   }
   if ("notes" in patch) {
     const n = patch.notes;
@@ -2895,6 +2936,65 @@ export async function dbUpdateScheduledWorkout(id, callerSub, patch = {}) {
     vals
   );
   return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Phase 2a — bulk-copy a week's worth of scheduled rows forward by 7 days.
+// Preserves mode (payload-mode rows copy their payload; intent-mode rows
+// copy their intent_params). Skips target dates that already have at least
+// one row (no duplicates by default). Both startDate and the +7d target are
+// inclusive of the 7 days starting at startDate.
+export async function dbRepeatWeek(userSub, startDate) {
+  if (!userSub) return { ok: false, reason: "no_user" };
+  if (!isYmd(startDate)) return { ok: false, reason: "bad_date" };
+  // Compute the source-week range [startDate, startDate+6] and the target
+  // week range [startDate+7, startDate+13].
+  function addDays(ymd, n) {
+    const d = new Date(ymd + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  const srcStart = startDate;
+  const srcEnd   = addDays(startDate, 6);
+  const tgtStart = addDays(startDate, 7);
+  const tgtEnd   = addDays(startDate, 13);
+  // Pull source rows.
+  const srcRows = await pool.query(
+    "SELECT `scheduled_date`, `payload`, `intent_params`, `notes` " +
+    "FROM `scheduled_workouts` " +
+    "WHERE `user_sub` = ? AND `scheduled_date` BETWEEN ? AND ?",
+    [userSub, srcStart, srcEnd]
+  );
+  if (srcRows.length === 0) return { ok: true, copied: 0, skipped: 0, reason: "source_empty" };
+  // Build the set of target dates that already have rows.
+  const tgtRows = await pool.query(
+    "SELECT DISTINCT `scheduled_date` " +
+    "FROM `scheduled_workouts` " +
+    "WHERE `user_sub` = ? AND `scheduled_date` BETWEEN ? AND ?",
+    [userSub, tgtStart, tgtEnd]
+  );
+  const tgtDates = new Set(tgtRows.map(r => dateToYmd(r.scheduled_date)));
+  // For each source row, compute its target date (+7d). Skip if target
+  // date already has rows (per-day skip, not per-row — if Mon target has
+  // an existing row, all source Mon rows are skipped).
+  let copied = 0, skipped = 0;
+  for (const r of srcRows) {
+    const srcDate = dateToYmd(r.scheduled_date);
+    const tgtDate = addDays(srcDate, 7);
+    if (tgtDates.has(tgtDate)) { skipped++; continue; }
+    await pool.query(
+      "INSERT INTO `scheduled_workouts` " +
+      "(`user_sub`, `scheduled_date`, `payload`, `intent_params`, `notes`) " +
+      "VALUES (?, ?, ?, ?, ?)",
+      [
+        userSub, tgtDate,
+        r.payload,           // already serialized in DB
+        r.intent_params,
+        r.notes || null,
+      ]
+    );
+    copied++;
+  }
+  return { ok: true, copied, skipped, source_week_start: srcStart, target_week_start: tgtStart };
 }
 
 export async function dbDeleteScheduledWorkout(id, callerSub) {
