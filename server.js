@@ -93,6 +93,7 @@ import {
   dbCreateBenchmark, dbListBenchmarks, dbGetLatestAerobicBenchmark, dbDeleteBenchmark,
   dbCreateScheduledWorkout, dbGetScheduledWorkout, dbListScheduledWorkouts,
   dbUpdateScheduledWorkout, dbDeleteScheduledWorkout, dbLinkCompletedToSchedule,
+  dbRepeatWeek,
 } from "./db.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
@@ -2085,10 +2086,13 @@ app.delete("/api/benchmarks/:id", checkOrigin, requireAuth, requireCsrf, writeLi
 app.post("/api/scheduled-workouts", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const b = req.body || {};
+    // Phase 2a — accept either payload (pre-generated) or intent_params
+    // (generator inputs only). Helper enforces exactly-one-of invariant.
     const r = await dbCreateScheduledWorkout({
       userSub:       req.userSub,
       scheduledDate: b.scheduled_date,
-      payload:       b.payload,
+      payload:       b.payload || null,
+      intentParams:  b.intent_params || null,
       notes:         b.notes || null,
     });
     if (!r.ok) return res.status(400).json({ error: r.reason });
@@ -2096,7 +2100,26 @@ app.post("/api/scheduled-workouts", checkOrigin, requireAuth, requireCsrf, write
       userSub:   req.userSub,
       eventType: "scheduled_workout.create",
       ...reqMeta(req),
-      details:   { scheduled_id: r.id, date: b.scheduled_date },
+      details:   { scheduled_id: r.id, date: b.scheduled_date, mode: r.mode },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Phase 2a — bulk-copy the current week's scheduled rows forward by 7 days.
+// Body: { start_date: "YYYY-MM-DD" } where start_date is the Monday of the
+// source week. Server returns counts (copied + skipped).
+app.post("/api/scheduled-workouts/repeat-week", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const startDate = (req.body && req.body.start_date) || null;
+    if (!startDate) return res.status(400).json({ error: "start_date (YYYY-MM-DD) required" });
+    const r = await dbRepeatWeek(req.userSub, startDate);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "scheduled_workout.repeat_week",
+      ...reqMeta(req),
+      details:   { source_week_start: r.source_week_start, target_week_start: r.target_week_start, copied: r.copied, skipped: r.skipped },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
