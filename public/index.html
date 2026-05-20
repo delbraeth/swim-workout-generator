@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 00:31 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 00:46 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -11151,7 +11151,12 @@
       const [editingName, setEditingName] = React.useState(false);
       const [renameVal,   setRenameVal]   = React.useState("");
       const [addCoachSub, setAddCoachSub] = React.useState("");
+      const [addCoachRole, setAddCoachRole] = React.useState("coach");           // R-J: role on add (coach / admin)
       const [coachPool,   setCoachPool]   = React.useState(null);                // null = unloaded
+      // R-J: when remove fails with primary_on_groups, hold the conflict
+      // info so the UI can prompt for per-group primary transfer.
+      const [removeConflict, setRemoveConflict] = React.useState(null);          // { coachSub, groups: [...] }
+      const [transferPlan,   setTransferPlan]   = React.useState({});            // { group_id: new_primary_sub }
       // R-C additions: groups in this team, team events, and managed-roster
       // (filtered to team) for the member-add picker inside each group.
       const [groups,        setGroups]        = React.useState(null);             // null = unloaded
@@ -11303,15 +11308,34 @@
           const res = await fetch(`/api/teams/${detail.id}/coaches`, {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ coach_sub: addCoachSub.trim() }),
+            body:    JSON.stringify({ coach_sub: addCoachSub.trim(), role: addCoachRole }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
           setAddCoachSub("");
+          setAddCoachRole("coach");
           setMsg(null);
           await loadDetail(detail.id);
         } catch (err) {
           setMsg(`Error adding coach: ${err.message}`);
+        }
+      };
+
+      // R-J: promote/demote between admin and coach.
+      const handleRoleChange = async (sub, newRole) => {
+        try {
+          const res = await fetch(`/api/teams/${detail.id}/coaches/${encodeURIComponent(sub)}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ role: newRole }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await loadDetail(detail.id);
+        } catch (err) {
+          setMsg(`Error changing role: ${err.message}`);
         }
       };
 
@@ -11324,8 +11348,54 @@
           });
           if (!res.ok) {
             const j = await res.json().catch(() => ({}));
+            // R-J: surface primary_on_groups as a transfer-modal prompt.
+            if (j.reason === "primary_on_groups") {
+              setRemoveConflict({ coachSub: sub, groups: j.groups || [] });
+              setTransferPlan({});
+              return;
+            }
             throw new Error(j.error || `HTTP ${res.status}`);
           }
+          await loadDetail(detail.id);
+        } catch (err) {
+          setMsg(`Error: ${err.message}`);
+        }
+      };
+
+      // R-J: execute the per-group primary transfers then retry the remove.
+      const executeRemoveWithTransfers = async () => {
+        const conflict = removeConflict;
+        if (!conflict) return;
+        // Validate every conflicting group has a transfer destination set.
+        const missing = conflict.groups.filter(g => !transferPlan[g.id]);
+        if (missing.length > 0) {
+          setMsg(`Pick a new primary for: ${missing.map(g => g.name).join(", ")}`);
+          return;
+        }
+        try {
+          for (const g of conflict.groups) {
+            const res = await fetch(`/api/groups/${g.id}/primary-coach`, {
+              method:  "POST",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body:    JSON.stringify({ new_primary_sub: transferPlan[g.id] }),
+            });
+            if (!res.ok) {
+              const j = await res.json().catch(() => ({}));
+              throw new Error(`Transfer for "${g.name}" failed: ${j.error || `HTTP ${res.status}`}`);
+            }
+          }
+          // Retry the original removal.
+          const res = await fetch(`/api/teams/${detail.id}/coaches/${encodeURIComponent(conflict.coachSub)}`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          setRemoveConflict(null);
+          setTransferPlan({});
+          setMsg(null);
           await loadDetail(detail.id);
         } catch (err) {
           setMsg(`Error: ${err.message}`);
@@ -11470,14 +11540,40 @@
                     <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>
                       {c.display_name || c.initials || "(no name)"}
                     </span>
-                    <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: c.role === "owner" ? "#a78bfa22" : "#33415522", border: `1px solid ${c.role === "owner" ? "#a78bfa" : "#475569"}`, color: c.role === "owner" ? "#a78bfa" : "#94a3b8", fontWeight: 700 }}>{c.role}</span>
+                    {(() => {
+                      // R-J: role pill colored by tier. Owner = purple,
+                      // Admin = blue, Coach = slate.
+                      const colors = c.role === "owner" ? { bg: "#a78bfa22", border: "#a78bfa", color: "#a78bfa" }
+                                  : c.role === "admin"  ? { bg: "#3b82f622", border: "#3b82f6", color: "#93c5fd" }
+                                  :                        { bg: "#33415522", border: "#475569", color: "#94a3b8" };
+                      return (
+                        <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: colors.bg, border: `1px solid ${colors.border}`, color: colors.color, fontWeight: 700 }}>{c.role}</span>
+                      );
+                    })()}
                     <div style={{ fontSize: 10, color: "#64748b", fontFamily: "monospace", marginTop: 2 }}>{c.coach_sub}</div>
                   </div>
                   {isOwner && c.role !== "owner" && (
-                    <button onClick={() => handleRemoveCoach(c.coach_sub)}
-                      style={{ padding: "3px 8px", background: "transparent", border: "1px solid #ef4444", borderRadius: 6, color: "#ef4444", fontSize: 11, cursor: "pointer" }}>
-                      Remove
-                    </button>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {/* R-J: promote/demote between admin and coach */}
+                      {c.role === "coach" && (
+                        <button onClick={() => handleRoleChange(c.coach_sub, "admin")}
+                          title="Promote to admin (manage team coaches + archives)"
+                          style={{ padding: "3px 8px", background: "transparent", border: "1px solid #3b82f6", borderRadius: 6, color: "#93c5fd", fontSize: 11, cursor: "pointer" }}>
+                          ↑ Admin
+                        </button>
+                      )}
+                      {c.role === "admin" && (
+                        <button onClick={() => handleRoleChange(c.coach_sub, "coach")}
+                          title="Demote to coach (no team-management rights)"
+                          style={{ padding: "3px 8px", background: "transparent", border: "1px solid #64748b", borderRadius: 6, color: "#94a3b8", fontSize: 11, cursor: "pointer" }}>
+                          ↓ Coach
+                        </button>
+                      )}
+                      <button onClick={() => handleRemoveCoach(c.coach_sub)}
+                        style={{ padding: "3px 8px", background: "transparent", border: "1px solid #ef4444", borderRadius: 6, color: "#ef4444", fontSize: 11, cursor: "pointer" }}>
+                        Remove
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -11496,9 +11592,9 @@
                         No other coaches available to add. {(coachPool.length === 0) ? "Grant the is_coach flag to a user via Admin → Users first." : "All eligible coaches are already on this team."}
                       </div>
                     ) : (
-                      <div style={{ display: "flex", gap: 6 }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         <select value={addCoachSub} onChange={e => setAddCoachSub(e.target.value)}
-                          style={{ flex: 1, padding: "6px 10px", fontSize: 13, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, cursor: "pointer" }}>
+                          style={{ flex: 2, minWidth: 180, padding: "6px 10px", fontSize: 13, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, cursor: "pointer" }}>
                           <option value="">— pick a coach —</option>
                           {candidates.map(c => (
                             <option key={c.sub} value={c.sub}>
@@ -11508,6 +11604,12 @@
                             </option>
                           ))}
                         </select>
+                        {/* R-J: role on add — coach (default) or admin */}
+                        <select value={addCoachRole} onChange={e => setAddCoachRole(e.target.value)}
+                          style={{ padding: "6px 10px", fontSize: 13, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, cursor: "pointer" }}>
+                          <option value="coach">Coach</option>
+                          <option value="admin">Admin</option>
+                        </select>
                         <button onClick={handleAddCoach} disabled={!addCoachSub}
                           style={{ padding: "6px 14px", background: addCoachSub ? "#60a5fa" : "#475569", color: addCoachSub ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: addCoachSub ? "pointer" : "not-allowed" }}>
                           Add
@@ -11515,7 +11617,7 @@
                       </div>
                     )}
                     <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
-                      Only users with the <code>is_coach</code> flag (or admin) appear. v1 adds them as role "coach"; admin tier comes later.
+                      Only users with the <code>is_coach</code> flag (or admin) appear. <b>Admin</b> can manage team coaches + archives; <b>Coach</b> can coach groups but not manage the team.
                     </div>
                   </div>
                 );
@@ -11702,6 +11804,62 @@
           )}
 
           {msg && <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10 }}>{msg}</div>}
+
+          {/* R-J: per-group primary-transfer modal. Shows when removing a
+              coach who's still primary on at least one group. Each group
+              needs a destination; once all are picked, the modal runs the
+              transfers in sequence then retries the remove. */}
+          {removeConflict && detail && (() => {
+            // Eligible new primaries: active team coaches excluding the
+            // coach being removed.
+            const eligible = (detail.coaches || []).filter(c =>
+              c.coach_sub !== removeConflict.coachSub
+            );
+            return (
+              <div onClick={() => { setRemoveConflict(null); setTransferPlan({}); }}
+                style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+                <div onClick={(e) => e.stopPropagation()}
+                  style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 12, padding: 22, maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+                  <div style={{ color: "#fbbf24", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Coach removal blocked</div>
+                  <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Transfer primary first</div>
+                  <p style={{ color: "#cbd5e1", fontSize: 12, marginTop: 0, marginBottom: 12, lineHeight: 1.5 }}>
+                    This coach is still primary on {removeConflict.groups.length} {removeConflict.groups.length === 1 ? "group" : "groups"}. Pick a new primary for each before removing them from the team.
+                  </p>
+                  {removeConflict.groups.map(g => (
+                    <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: 8, background: "#1e293b", border: "1px solid #334155", borderRadius: 6 }}>
+                      <span style={{ flex: 1, color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{g.name}</span>
+                      <select value={transferPlan[g.id] || ""}
+                        onChange={(e) => setTransferPlan(prev => ({ ...prev, [g.id]: e.target.value }))}
+                        style={{ flex: 1, padding: "5px 8px", fontSize: 12, background: "#0f172a", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5, cursor: "pointer" }}>
+                        <option value="">— new primary —</option>
+                        {eligible.map(c => (
+                          <option key={c.coach_sub} value={c.coach_sub}>
+                            {c.display_name || c.initials || c.coach_sub.slice(-6)} ({c.role})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                  {eligible.length === 0 && (
+                    <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10, padding: 8, background: "rgba(239,68,68,0.12)", border: "1px solid #ef4444", borderRadius: 5 }}>
+                      No other team coaches available to take over. Add another coach to this team first, then retry.
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
+                    <button onClick={() => { setRemoveConflict(null); setTransferPlan({}); }}
+                      style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                      Cancel
+                    </button>
+                    <button onClick={executeRemoveWithTransfers}
+                      disabled={eligible.length === 0}
+                      style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: eligible.length === 0 ? "#334155" : "#ef4444", color: eligible.length === 0 ? "#64748b" : "#fff", fontSize: 13, fontWeight: 700, cursor: eligible.length === 0 ? "not-allowed" : "pointer" }}>
+                      Transfer & remove ▸
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {teams === null ? (
             <div style={{ color: "#64748b", fontSize: 13 }}>Loading…</div>
