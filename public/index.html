@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 09:44 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 09:51 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -13080,15 +13080,19 @@
                   {rows.map(sw => {
                     const done       = !!sw.completed_workout_id;
                     const isIntent   = sw.mode === "intent";
-                    const yards      = sw.payload?.totalYards || sw.payload?.maxYardsCap || sw.intent_params?.maxYards || 0;
-                    const typeLabel  = sw.payload?.typeLabel || sw.payload?.type || sw.intent_params?.type || "workout";
+                    // Payload field shape: raw workout object from generateWorkout →
+                    // has typeId + totalYards (no type/typeLabel/maxYardsCap/poolMode).
+                    // Intent_params shape: { type, maxYards, mix, recovery }.
+                    const typeId     = sw.payload?.typeId || sw.intent_params?.type || null;
+                    const typeMeta   = typeId ? WORKOUT_TYPES.find(t => t.id === typeId) : null;
+                    const typeLabel  = typeMeta ? `${typeMeta.emoji} ${typeMeta.label}` : "workout";
+                    const yards      = sw.payload?.totalYards || sw.intent_params?.maxYards || 0;
                     const borderClr  = done ? "#22c55e" : (isIntent ? "#f59e0b" : "#334155");
                     return (
                       <div key={sw.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 8px", background: "#0f172a", border: `1px solid ${borderClr}`, borderRadius: 5, marginBottom: 4, flexWrap: "wrap" }}>
                         <span style={{ color: done ? "#22c55e" : (isIntent ? "#fbbf24" : "#cbd5e1"), fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
                           {done ? "✓ " : ""}{isIntent && !done && <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: "0.1em", marginRight: 6, textTransform: "uppercase" }}>Intent</span>}{typeLabel}
-                          <span style={{ color: "#64748b", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} {(sw.payload?.poolMode === "25m" || sw.payload?.poolMode === "50m") ? "m" : "yds"}{isIntent && " (target)"}</span>
-                          {sw.payload?.focusNote && <span style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>· {sw.payload.focusNote}</span>}
+                          <span style={{ color: "#64748b", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} yds{isIntent && " (target)"}</span>
                           {isIntent && sw.notes && <span style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>· {sw.notes}</span>}
                         </span>
                         {!done && isIntent && (
@@ -17626,17 +17630,21 @@
                   // slot so the user can regenerate / tweak / re-save. Tag
                   // so handleSave can offer "Update schedule" instead of "Save as new."
                   //
-                  // Must also restore the form state (selectedType, maxYards,
-                  // poolMode, equipment) — the workout-display block reads
-                  // meta = WORKOUT_TYPES.find(t => t.id === selectedType) and
-                  // crashes on meta.badge if selectedType is null (bug surfaced
-                  // 2026-05-20: clicking Edit on a fresh page load without a
-                  // type selected first → "undefined is not an object").
+                  // CRITICAL: must restore selectedType from the payload. The
+                  // workout-display block reads
+                  //   meta = WORKOUT_TYPES.find(t => t.id === selectedType)
+                  // and crashes on meta.badge if selectedType is null (bug
+                  // surfaced 2026-05-20 when Edit was clicked on a fresh page
+                  // load without first selecting a type → "undefined is not
+                  // an object 'meta.badge'").
+                  //
+                  // The payload IS the raw generateWorkout output (Phase 1's
+                  // schedule POST sends `{ payload: workout }`), so the field
+                  // is `typeId`, NOT `type` (which is the history-entry shape).
+                  // maxYards/poolMode/equipment aren't carried in the payload
+                  // — leave them at current state.
                   const p = sw.payload || {};
-                  if (p.type)     setSelectedType(p.type);
-                  if (p.maxYardsCap) setMaxYards(p.maxYardsCap);
-                  if (p.poolMode) setPoolMode(p.poolMode);
-                  if (p.equipment) setEquipment(p.equipment);
+                  if (p.typeId) setSelectedType(p.typeId);
                   setFocusNoteDraft(p.focusNote || "");
                   setWorkout(sw.payload);
                   setEditingScheduledId(sw.id);
