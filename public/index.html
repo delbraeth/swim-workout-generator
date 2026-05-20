@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 01:03 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 01:37 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -12641,6 +12641,231 @@
       );
     }
 
+    // WeekView (I — Week-view planning, Phase 1) — 7-day ISO-week grid
+    // (Monday → Sunday). Lists each user's own scheduled-workout rows per
+    // day. Actions: ▶ Run (loads into Run mode, link via runScheduledId),
+    // ✎ Edit (loads back into generator), 🗐 Copy to (date picker), 🗑 Delete.
+    // Completed rows show a green ✓ + workout link.
+    function WeekView({ onRunScheduled, onEditScheduled }) {
+      // Compute the Monday of the current ISO week (Mon=1, Sun=7).
+      function isoMondayOf(d) {
+        const x = new Date(d);
+        x.setHours(0, 0, 0, 0);
+        const day = x.getDay(); // 0=Sun
+        const diff = day === 0 ? -6 : 1 - day;
+        x.setDate(x.getDate() + diff);
+        return x;
+      }
+      function ymd(d) {
+        const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), dd = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${dd}`;
+      }
+      function fmtMonDay(d) {
+        return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      }
+      function isoWeekNumber(d) {
+        // ISO week number for the given date.
+        const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        const dayNum = (x.getUTCDay() + 6) % 7; // 0=Mon
+        x.setUTCDate(x.getUTCDate() - dayNum + 3);
+        const firstThursday = x.valueOf();
+        x.setUTCMonth(0, 1);
+        if (x.getUTCDay() !== 4) {
+          x.setUTCMonth(0, 1 + ((4 - x.getUTCDay()) + 7) % 7);
+        }
+        return 1 + Math.ceil((firstThursday - x) / 604800000);
+      }
+
+      const [weekStart, setWeekStart] = React.useState(() => isoMondayOf(new Date()));
+      const [list,      setList]      = React.useState(null);
+      const [err,       setErr]       = React.useState(null);
+      const [copyTarget, setCopyTarget] = React.useState(null); // { sw, date }
+
+      const days = React.useMemo(() => {
+        const arr = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(weekStart);
+          d.setDate(d.getDate() + i);
+          arr.push(d);
+        }
+        return arr;
+      }, [weekStart]);
+
+      const startStr = ymd(weekStart);
+      const endStr   = ymd(days[6]);
+
+      const load = React.useCallback(async () => {
+        try {
+          const res = await fetch(`/api/scheduled-workouts?start=${startStr}&end=${endStr}`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setList(await res.json());
+        } catch (e) { setList([]); setErr(e.message); }
+      }, [startStr, endStr]);
+      React.useEffect(() => { load(); }, [load]);
+
+      const byDate = React.useMemo(() => {
+        const m = {};
+        for (const sw of (list || [])) {
+          const k = sw.scheduled_date;
+          (m[k] = m[k] || []).push(sw);
+        }
+        return m;
+      }, [list]);
+
+      const goPrev = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d; });
+      const goNext = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d; });
+      const goThis = () => setWeekStart(isoMondayOf(new Date()));
+
+      const handleDelete = async (sw) => {
+        if (!window.confirm(`Delete this scheduled workout? (${sw.payload?.typeLabel || sw.payload?.type || "workout"})`)) return;
+        try {
+          const res = await fetch(`/api/scheduled-workouts/${sw.id}`, { method: "DELETE", headers: { ...csrfHeaders() } });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      const handleCopy = async (sw, targetDate) => {
+        try {
+          const res = await fetch("/api/scheduled-workouts", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ scheduled_date: targetDate, payload: sw.payload, notes: sw.notes }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setCopyTarget(null);
+          await load();
+        } catch (e) { setErr(e.message); }
+      };
+
+      const today = ymd(new Date());
+      const showingThisWeek = startStr === ymd(isoMondayOf(new Date()));
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div>
+              <h2 style={{ margin: 0, color: "#e2e8f0", fontSize: 22 }}>📅 Plan your week</h2>
+              <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>
+                Week {isoWeekNumber(weekStart)} · {weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {days[6].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={goPrev} title="Previous week"
+                style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>‹ Prev</button>
+              <button onClick={goThis} disabled={showingThisWeek}
+                title="Jump to current ISO week"
+                style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${showingThisWeek ? "#334155" : "#a78bfa"}`, background: showingThisWeek ? "transparent" : "rgba(167,139,250,0.15)", color: showingThisWeek ? "#475569" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: showingThisWeek ? "default" : "pointer" }}>This week</button>
+              <button onClick={goNext} title="Next week"
+                style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Next ›</button>
+            </div>
+          </div>
+
+          {err && <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10 }}>{err}</div>}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+            {days.map((d) => {
+              const dk = ymd(d);
+              const rows = byDate[dk] || [];
+              const isToday = dk === today;
+              const isPast  = dk < today;
+              return (
+                <div key={dk} style={{
+                  border: `1px solid ${isToday ? "#a78bfa" : "#334155"}`,
+                  background: isToday ? "rgba(167,139,250,0.06)" : "#1e293b",
+                  borderRadius: 8, padding: "10px 14px",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                    <div style={{ color: isToday ? "#a78bfa" : "#e2e8f0", fontSize: 13, fontWeight: 700 }}>
+                      {fmtMonDay(d)}
+                      {isToday && <span style={{ marginLeft: 8, fontSize: 10, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</span>}
+                      {isPast && rows.length === 0 && <span style={{ marginLeft: 8, fontSize: 10, color: "#475569", fontStyle: "italic" }}>(rest day)</span>}
+                    </div>
+                    <span style={{ fontSize: 10, color: "#475569" }}>{rows.length} {rows.length === 1 ? "workout" : "workouts"}</span>
+                  </div>
+                  {rows.length === 0 && !isPast && (
+                    <div style={{ color: "#475569", fontSize: 11, fontStyle: "italic", padding: "4px 0" }}>Nothing scheduled.</div>
+                  )}
+                  {rows.map(sw => {
+                    const done = !!sw.completed_workout_id;
+                    const yards = sw.payload?.totalYards || sw.payload?.maxYardsCap || 0;
+                    const typeLabel = sw.payload?.typeLabel || sw.payload?.type || "workout";
+                    return (
+                      <div key={sw.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 8px", background: "#0f172a", border: `1px solid ${done ? "#22c55e" : "#334155"}`, borderRadius: 5, marginBottom: 4, flexWrap: "wrap" }}>
+                        <span style={{ color: done ? "#22c55e" : "#cbd5e1", fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
+                          {done ? "✓ " : ""}{typeLabel}
+                          <span style={{ color: "#64748b", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} {(sw.payload?.poolMode === "25m" || sw.payload?.poolMode === "50m") ? "m" : "yds"}</span>
+                          {sw.payload?.focusNote && <span style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>· {sw.payload.focusNote}</span>}
+                        </span>
+                        {!done && (
+                          <>
+                            <button onClick={() => onRunScheduled && onRunScheduled(sw)}
+                              title="Run this workout now (loads into Run mode)"
+                              style={{ padding: "3px 10px", border: "1px solid #22c55e", borderRadius: 5, background: "transparent", color: "#22c55e", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>▶ Run</button>
+                            <button onClick={() => onEditScheduled && onEditScheduled(sw)}
+                              title="Open in the generator to edit / regenerate"
+                              style={{ padding: "3px 10px", border: "1px solid #3b82f6", borderRadius: 5, background: "transparent", color: "#3b82f6", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit</button>
+                          </>
+                        )}
+                        <button onClick={() => setCopyTarget({ sw, date: dk })}
+                          title="Copy this workout to another day"
+                          style={{ padding: "3px 10px", border: "1px solid #475569", borderRadius: 5, background: "transparent", color: "#94a3b8", fontSize: 11, cursor: "pointer" }}>🗐 Copy</button>
+                        {!done && (
+                          <button onClick={() => handleDelete(sw)}
+                            title="Delete this scheduled workout"
+                            style={{ padding: "3px 10px", border: "1px solid #ef4444", borderRadius: 5, background: "transparent", color: "#ef4444", fontSize: 11, cursor: "pointer" }}>🗑</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Copy-to-day modal */}
+          {copyTarget && (() => {
+            const defaultDate = (() => {
+              const d = new Date(copyTarget.date + "T00:00:00");
+              d.setDate(d.getDate() + 1);
+              return ymd(d);
+            })();
+            return (
+              <div onClick={() => setCopyTarget(null)} style={{
+                position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+              }}>
+                <div onClick={(e) => e.stopPropagation()} style={{
+                  background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
+                  padding: 22, maxWidth: 420, width: "100%",
+                }}>
+                  <div style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Copy workout</div>
+                  <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>
+                    Copy "{copyTarget.sw.payload?.typeLabel || copyTarget.sw.payload?.type || "workout"}" to:
+                  </div>
+                  <input type="date" defaultValue={defaultDate} id="copy-target-date"
+                    style={{ width: "100%", padding: "8px 10px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 14 }} />
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
+                    <button onClick={() => setCopyTarget(null)}
+                      style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                    <button onClick={() => {
+                        const v = document.getElementById("copy-target-date")?.value;
+                        if (v) handleCopy(copyTarget.sw, v);
+                      }}
+                      style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: "#a78bfa", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Copy ▸</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      );
+    }
+
     function AssignedToMeView({ onRunAssignment }) {
       const [list,       setList]       = React.useState(null);
       const [stateFilter, setStateFilter] = React.useState("");                  // "" = all
@@ -15745,6 +15970,18 @@
       // of creating a new history entry. Cleared after the run completes or
       // when the swimmer exits Run mode.
       const [runAssignmentId, setRunAssignmentId] = useState(null);
+      // I — week-view planning. runScheduledId is set when a scheduled
+      // workout is launched into Run mode so the log-workout call links
+      // the completion back via dbLinkCompletedToSchedule. editingScheduledId
+      // is set when a scheduled row is loaded into the workout slot for
+      // edit/regen — handleSave PATCHes the schedule row instead of
+      // creating a new history entry.
+      const [runScheduledId,     setRunScheduledId]     = useState(null);
+      const [editingScheduledId, setEditingScheduledId] = useState(null);
+      // I — date picker shown when user clicks "📅 Schedule for…" on the
+      // workout display. holds the target date string (YYYY-MM-DD) and is
+      // null when the picker is closed.
+      const [scheduleDate, setScheduleDate] = useState(null);
       const [showProfile, setShowProfile]         = useState(false);
       const [showFeedback, setShowFeedback]       = useState(false);
       const [showIntentParser, setShowIntentParser] = useState(false);
@@ -16470,6 +16707,29 @@
       const handleSave = useCallback(async () => {
         if (!workout || !selectedType) return;
         setSaveStatus("saving"); setSaveError(null);
+        // I — if we're editing a scheduled-workout row (loaded via the
+        // ✎ Edit action in WeekView), PATCH the schedule row's payload
+        // instead of creating a new history entry. Schedule row keeps
+        // its date; only payload changes.
+        if (editingScheduledId) {
+          try {
+            const res = await fetch(`/api/scheduled-workouts/${editingScheduledId}`, {
+              method:  "PATCH",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body:    JSON.stringify({ payload: workout }),
+            });
+            const j = await res.json();
+            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+            setSaveStatus("scheduled");
+            setEditingScheduledId(null);
+            setTimeout(() => setSaveStatus(null), 2500);
+            return;
+          } catch (err) {
+            setSaveStatus("error");
+            setSaveError(`Schedule update failed: ${err.message || String(err)}`);
+            return;
+          }
+        }
         const meta = WORKOUT_TYPES.find(t => t.id === selectedType);
         const cleanInitials = normalizeInitials(initialsDraft);
         // Remember the last-used initials for next time (best-effort).
@@ -16557,7 +16817,7 @@
           setSaveStatus("error");
           setSaveError(err.message || String(err));
         }
-      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft, poolMode, focusNoteDraft, difficultyDraft, generateForTarget, generateForPlanId]);
+      }, [workout, selectedType, maxYards, equipment, dateDraft, noteDraft, initialsDraft, poolMode, focusNoteDraft, difficultyDraft, generateForTarget, generateForPlanId, editingScheduledId]);
 
       // Log a completed Run-mode workout as today's session.
       // Used by RunWorkoutOverlay's finish screen — POSTs a NEW entry dated today,
@@ -16621,6 +16881,10 @@
           actual_splits: opts.actualSplits && opts.actualSplits.length > 0 ? opts.actualSplits : undefined,
           completed: true,
         };
+        // I — if this run was launched from a scheduled-workout row, tag the
+        // log call so the server stamps completed_workout_id on the schedule
+        // row. Cleared after the request returns (success or failure).
+        if (runScheduledId) entry.scheduled_id = runScheduledId;
         setHistory(prev => {
           const next = mergeById(prev, [entry]);
           saveLocalHistory(next);
@@ -16649,6 +16913,8 @@
               return next;
             });
           }
+          // I — clear the scheduled-id tag once the log succeeds.
+          if (runScheduledId) setRunScheduledId(null);
           return { ok: true };
         } catch (err) {
           // Roll back optimistic add
@@ -16659,7 +16925,7 @@
           });
           return { ok: false, error: err.message || String(err) };
         }
-      }, [initialsDraft, runAssignmentId]);
+      }, [initialsDraft, runAssignmentId, runScheduledId]);
 
       const handleUpdateCompleted = useCallback(async (id, completed) => {
         setHistory(prev => {
@@ -16919,6 +17185,14 @@
                       {view === "assigned" ? "⏎" : "📥"}
                     </button>
                   )}
+                  {/* I — 📅 Week view (planning grid). Visible to all auth users. */}
+                  {authenticated && (
+                    <button onClick={() => setView(v => v === "week" ? "generator" : "week")}
+                      title={view === "week" ? "Back to generator" : "Plan your week"}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #a78bfa", background: view === "week" ? "#a78bfa" : "#1e293b", color: view === "week" ? "#0f172a" : "#a78bfa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      {view === "week" ? "⏎" : "📅"}
+                    </button>
+                  )}
                   {me?.is_coach && (
                     <button onClick={() => setView(v => v === "teams" ? "generator" : "teams")}
                       title={view === "teams" ? "Back to generator" : "Teams (coach)"}
@@ -16997,6 +17271,28 @@
             {view === "admin"    && <AdminView />}
             {view === "teams"    && <TeamsView />}
             {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} />}
+            {view === "week"     && (
+              <WeekView
+                onRunScheduled={(sw) => {
+                  // Same pattern as AssignedToMeView's onRunAssignment: load
+                  // the workout into Run mode and tag the schedule id so the
+                  // finish-flow writes the completion back via /api/log-workout
+                  // with scheduled_id set, which stamps completed_workout_id.
+                  setRunWorkout(sw.payload);
+                  setRunScheduledId(sw.id);
+                  setShowRestPicker(true);
+                  setView("generator");
+                }}
+                onEditScheduled={(sw) => {
+                  // Load the scheduled workout back into the generator workout
+                  // slot so the user can regenerate / tweak / re-save. Tag
+                  // so handleSave can offer "Update schedule" instead of "Save as new."
+                  setWorkout(sw.payload);
+                  setEditingScheduledId(sw.id);
+                  setView("generator");
+                }}
+              />
+            )}
             {view === "assigned" && (
               <AssignedToMeView
                 onRunAssignment={(a) => {
@@ -17528,6 +17824,27 @@
                         🏊 Multi-pace print…
                       </button>
                     )}
+                    {/* I — Schedule this workout for a future day. Available
+                        whenever there's a workout on screen and the user is
+                        authenticated. */}
+                    {workout && authenticated && (
+                      <button
+                        onClick={() => {
+                          // Default: tomorrow.
+                          const t = new Date(); t.setDate(t.getDate() + 1);
+                          const y = t.getFullYear(), m = String(t.getMonth() + 1).padStart(2, "0"), d = String(t.getDate()).padStart(2, "0");
+                          setScheduleDate(`${y}-${m}-${d}`);
+                        }}
+                        style={{
+                          padding: "10px 16px", borderRadius: 8,
+                          border: "1px solid #a78bfa", background: "rgba(167,139,250,0.15)", color: "#a78bfa",
+                          fontSize: 13, fontWeight: 700, cursor: "pointer",
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                        }}
+                        title="Schedule this workout for a future date (planning, not logging)">
+                        📅 Schedule for…
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -17816,6 +18133,51 @@
               mode={multiPaceLanes.mode}
               onClose={() => setMultiPaceLanes(null)}
             />
+          )}
+          {/* I — schedule-for-day picker. Opens when scheduleDate state is
+              non-null (set by the 📅 Schedule for… button). Picks a date,
+              POSTs to /api/scheduled-workouts with the current workout. */}
+          {scheduleDate !== null && workout && (
+            <div onClick={() => setScheduleDate(null)} style={{
+              position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+            }}>
+              <div onClick={(e) => e.stopPropagation()} style={{
+                background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
+                padding: 22, maxWidth: 420, width: "100%",
+              }}>
+                <div style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Schedule workout</div>
+                <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Pick a date</div>
+                <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 14 }} />
+                <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 6 }}>
+                  Saves the current workout to your week-view planner. Run it later from the 📅 Week tab — your completion logs back to history and links to the schedule row.
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
+                  <button onClick={() => setScheduleDate(null)}
+                    style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                  <button onClick={async () => {
+                      if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) { setSaveError("Pick a valid date"); return; }
+                      try {
+                        const res = await fetch("/api/scheduled-workouts", {
+                          method:  "POST",
+                          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                          body:    JSON.stringify({ scheduled_date: scheduleDate, payload: workout }),
+                        });
+                        const j = await res.json();
+                        if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+                        setScheduleDate(null);
+                        setSaveStatus("scheduled");
+                        setTimeout(() => setSaveStatus(null), 2500);
+                      } catch (e) {
+                        setSaveError(`Schedule failed: ${e.message}`);
+                        setScheduleDate(null);
+                      }
+                    }}
+                    style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: "#a78bfa", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Schedule ▸</button>
+                </div>
+              </div>
+            </div>
           )}
           {/* DOB soft-prompt (decision #37). Surfaces once per session when
               authenticated and me.dob is null. The check is gated by
