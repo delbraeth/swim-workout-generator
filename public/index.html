@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 10:05 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 11:27 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -12660,8 +12660,37 @@
       const [mix,        setMix]        = React.useState(safeInitial.mix || "balanced");
       const [recovery,   setRecovery]   = React.useState(!!safeInitial.recovery);
       const [notes,      setNotes]      = React.useState(safeInitial.notes || "");
+      // I Phase 2b — coach group fanout. groupId="" means "Yourself" (self-only,
+      // no fanout). Selecting a group reveals an optional lane-plan picker.
+      const [groupId,    setGroupId]    = React.useState(safeInitial.group_id || "");
+      const [lanePlanId, setLanePlanId] = React.useState(safeInitial.lane_plan_id || "");
+      const [coachTargets, setCoachTargets] = React.useState([]); // [] = none / not-coach
+      const [lanePlans, setLanePlans]   = React.useState([]);     // [] when no group or no plans
       const [busy,       setBusy]       = React.useState(false);
       const [err,        setErr]        = React.useState(null);
+
+      // Fetch coach targets once. 403 means user isn't a coach — leave list empty.
+      React.useEffect(() => {
+        fetch("/api/picker/coach-targets", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(list => setCoachTargets(Array.isArray(list) ? list : []))
+          .catch(() => setCoachTargets([]));
+      }, []);
+
+      // Fetch lane plans whenever the selected group changes.
+      React.useEffect(() => {
+        if (!groupId) { setLanePlans([]); return; }
+        fetch(`/api/groups/${groupId}/lane-plans`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(list => setLanePlans(Array.isArray(list) ? list.filter(p => !p.archived) : []))
+          .catch(() => setLanePlans([]));
+      }, [groupId]);
+
+      // Clear lane_plan_id if the user switches groups (stale plan id).
+      React.useEffect(() => {
+        if (!groupId) setLanePlanId("");
+        else if (lanePlanId && !lanePlans.some(p => p.id === lanePlanId)) setLanePlanId("");
+      }, [groupId, lanePlans]);
 
       const submit = async () => {
         setErr(null);
@@ -12675,6 +12704,12 @@
           // Equipment + phase come from the user's current state at
           // generation time — intent only captures the high-level shape.
         };
+        // I Phase 2b — group fanout context. Only include when set so old
+        // self-only flows produce identical JSON.
+        if (groupId) {
+          intent_params.group_id = groupId;
+          if (lanePlanId) intent_params.lane_plan_id = lanePlanId;
+        }
         setBusy(true);
         try {
           if (editingId) {
@@ -12725,6 +12760,40 @@
               style={{ width: "100%", padding: "7px 9px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, marginBottom: 12 }}>
               {WORKOUT_TYPES.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}
             </select>
+
+            {/* I Phase 2b — For whom (self vs coach group). Hidden when user
+                isn't a coach on any group. */}
+            {coachTargets.length > 0 && (
+              <>
+                <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>For whom</label>
+                <select value={groupId} onChange={(e) => setGroupId(e.target.value)}
+                  style={{ width: "100%", padding: "7px 9px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, marginBottom: lanePlans.length > 0 ? 8 : 12 }}>
+                  <option value="">👤 Yourself only</option>
+                  {coachTargets.map(g => (
+                    <option key={g.id} value={g.id}>
+                      👥 {g.name} ({g.member_count} swimmer{g.member_count === 1 ? "" : "s"})
+                    </option>
+                  ))}
+                </select>
+                {groupId && lanePlans.length > 0 && (
+                  <>
+                    <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Lane plan (optional)</label>
+                    <select value={lanePlanId} onChange={(e) => setLanePlanId(e.target.value)}
+                      style={{ width: "100%", padding: "7px 9px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, marginBottom: 12 }}>
+                      <option value="">No plan — all members at their stored pace</option>
+                      {lanePlans.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+                {groupId && lanePlans.length === 0 && (
+                  <div style={{ color: "#64748b", fontSize: 11, fontStyle: "italic", marginBottom: 12 }}>
+                    No lane plans for this group — fanout uses each member's stored pace.
+                  </div>
+                )}
+              </>
+            )}
 
             <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Max yardage</label>
             <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
@@ -12787,10 +12856,9 @@
       const handleRun = async () => {
         setBusy(true); setErr(null);
         try {
-          // Convert intent → payload server-side so the schedule row is in
-          // a stable state regardless of what the swimmer does next.
-          // Enrich payload with form context (intent_params + defaults) so
-          // future ✎ Edit on the row restores generator state correctly.
+          // Enrich payload with form context so ✎ Edit on the row later can
+          // restore generator state (intent_params + defaults fill in fields
+          // not carried in the raw workout output).
           const ip = scheduledRow.intent_params || {};
           const enrichedPayload = {
             ...w,
@@ -12798,14 +12866,58 @@
             poolMode:    w.poolMode    || "25y",
             equipment:   w.equipment   || ip.equipment || { kickboard: "off", fins: "off", paddles: "off", pullBuoy: "off", snorkel: "off" },
           };
-          const res = await fetch(`/api/scheduled-workouts/${scheduledRow.id}`, {
-            method:  "PATCH",
-            headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ payload: enrichedPayload }),
-          });
-          if (!res.ok) {
+
+          // I Phase 2b — branch by intent mode:
+          //   * Group intent (has group_id): route through /api/log-workout
+          //     which creates the coach's history entry, fans out assignments,
+          //     and (via the Phase 2b dbLinkCompletedToSchedule enhancement)
+          //     flips the schedule row intent→payload atomically.
+          //   * Self intent: simple PATCH — no history entry until coach
+          //     actually swims it.
+          if (ip.group_id) {
+            const entry = {
+              ...enrichedPayload,
+              id:            makeEntryId(),
+              savedAt:       new Date().toISOString(),
+              dateCompleted: scheduledRow.scheduled_date,
+              type:          enrichedPayload.typeId,
+              typeLabel:     w.assignment_target?.group_name ? `${w.assignment_target.group_name} workout` : (enrichedPayload.typeId || "workout"),
+              totalYards:    w.totalYards,
+              estimatedMin:  w.estimatedMin,
+              maxYardsCap:   enrichedPayload.maxYardsCap,
+              poolMode:      enrichedPayload.poolMode,
+              equipment:     enrichedPayload.equipment,
+              blocks:        w.blocks,
+              notes:         (scheduledRow.notes || "").slice(0, 1000),
+              focusNote:     enrichedPayload.focusNote || undefined,
+              completed:     scheduledRow.scheduled_date <= new Date().toISOString().slice(0, 10),
+              scheduled_id:  scheduledRow.id,
+              assign_to: {
+                group_id: ip.group_id,
+                ...(ip.lane_plan_id ? { lane_plan_id: ip.lane_plan_id } : {}),
+              },
+              assignment_target: w.assignment_target || undefined,
+            };
+            const res = await fetch("/api/log-workout", {
+              method:  "POST",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body:    JSON.stringify(entry),
+            });
             const j = await res.json().catch(() => ({}));
-            throw new Error(j.error || `HTTP ${res.status}`);
+            if (!res.ok || !j.ok) {
+              throw new Error(j.error || `HTTP ${res.status}`);
+            }
+          } else {
+            // Self-only — Phase 2a flow.
+            const res = await fetch(`/api/scheduled-workouts/${scheduledRow.id}`, {
+              method:  "PATCH",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body:    JSON.stringify({ payload: enrichedPayload }),
+            });
+            if (!res.ok) {
+              const j = await res.json().catch(() => ({}));
+              throw new Error(j.error || `HTTP ${res.status}`);
+            }
           }
           onRun(w);  // parent loads into Run mode + tags runScheduledId
         } catch (e) {
@@ -12906,6 +13018,15 @@
       const [intentForm, setIntentForm] = React.useState(null);  // { date, intent, editingId } | null
       const [intentPreview, setIntentPreview] = React.useState(null); // { sw, workout } | null
       const [repeatBusy, setRepeatBusy] = React.useState(false);
+      // I Phase 2b — coach targets cache (for group badge + Generate-from-intent
+      // assignment_target stamping). Empty array when user isn't a coach.
+      const [coachTargets, setCoachTargets] = React.useState([]);
+      React.useEffect(() => {
+        fetch("/api/picker/coach-targets", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(list => setCoachTargets(Array.isArray(list) ? list : []))
+          .catch(() => setCoachTargets([]));
+      }, []);
 
       const days = React.useMemo(() => {
         const arr = [];
@@ -13000,6 +13121,22 @@
           if (generated && generated.__generateFailure) {
             setErr(generated.error || "Couldn't generate from intent — try regenerating or editing the intent.");
             return;
+          }
+          // I Phase 2b — stamp assignment_target so the preview overlay's Run
+          // handler can route through /api/log-workout's fanout path. Mirrors
+          // R-D's handleGenerate stamping.
+          if (ip.group_id) {
+            const g = coachTargets.find(t => t.id === ip.group_id);
+            if (g) {
+              generated.assignment_target = {
+                kind:         "group",
+                group_id:     g.id,
+                group_name:   g.name,
+                member_count: g.member_count,
+                phase:        g.current_phase || null,
+              };
+              if (ip.lane_plan_id) generated.assignment_target.lane_plan_id = ip.lane_plan_id;
+            }
           }
           setIntentPreview({ sw, workout: generated });
         } catch (e) {
@@ -13099,10 +13236,26 @@
                     const isMeters   = sw.payload?.poolMode === "25m" || sw.payload?.poolMode === "50m";
                     const unit       = isMeters ? "m" : "yds";
                     const borderClr  = done ? "#22c55e" : (isIntent ? "#f59e0b" : "#334155");
+                    // I Phase 2b — group fanout context. Look up group name
+                    // from cached coach-targets (empty for non-coaches; old
+                    // self-only rows have no group_id and skip rendering).
+                    const groupId    = sw.intent_params?.group_id || sw.payload?.assignment_target?.group_id || null;
+                    const groupName  = (() => {
+                      if (!groupId) return null;
+                      const g = coachTargets.find(t => t.id === groupId);
+                      if (g) return g.name;
+                      return sw.payload?.assignment_target?.group_name || "group";
+                    })();
                     return (
                       <div key={sw.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 8px", background: "#0f172a", border: `1px solid ${borderClr}`, borderRadius: 5, marginBottom: 4, flexWrap: "wrap" }}>
                         <span style={{ color: done ? "#22c55e" : (isIntent ? "#fbbf24" : "#cbd5e1"), fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
                           {done ? "✓ " : ""}{isIntent && !done && <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: "0.1em", marginRight: 6, textTransform: "uppercase" }}>Intent</span>}{typeLabel}
+                          {groupName && (
+                            <span title={`Coach-planned for group "${groupName}"`}
+                              style={{ marginLeft: 6, fontSize: 10, color: "#86efac", background: "rgba(34,197,94,0.12)", border: "1px solid #16a34a", borderRadius: 4, padding: "1px 6px", fontWeight: 700, letterSpacing: "0.04em" }}>
+                              → {groupName}
+                            </span>
+                          )}
                           <span style={{ color: "#64748b", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} {unit}{isIntent && " (target)"}</span>
                           {isIntent && sw.notes && <span style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>· {sw.notes}</span>}
                         </span>
@@ -13197,11 +13350,24 @@
               onRegenerate={() => handleGenerateFromIntent(intentPreview.sw)}
               onRun={(w) => {
                 // Hand off to the parent's run-scheduled handler. The preview
-                // overlay has already PATCHed the row's payload, so the row
-                // is now in payload-mode — onRunScheduled will load it via
-                // runScheduledId. Pass a synthesized sw with the freshly
-                // PATCHed payload so onRunScheduled doesn't need to refetch.
-                const swForRun = { ...intentPreview.sw, payload: w, intent_params: null, mode: "payload" };
+                // overlay has already PATCHed the row's payload (self intent)
+                // OR called /api/log-workout to create the snapshot + fanout +
+                // link (group intent — I Phase 2b). Pass a synthesized sw so
+                // onRunScheduled doesn't need to refetch.
+                //
+                // For group intents the schedule row is already linked to the
+                // snapshot workout — null out completed_workout_id link
+                // marker by tagging mode "payload_already_linked" so the
+                // parent skips runScheduledId (avoids a second link attempt +
+                // duplicate workout entry at finish-Run-mode time).
+                const wasGroupIntent = !!(intentPreview.sw.intent_params && intentPreview.sw.intent_params.group_id);
+                const swForRun = {
+                  ...intentPreview.sw,
+                  payload: w,
+                  intent_params: null,
+                  mode: "payload",
+                  _alreadyLinked: wasGroupIntent,
+                };
                 setIntentPreview(null);
                 load();
                 if (onRunScheduled) onRunScheduled(swForRun);
@@ -17640,8 +17806,14 @@
                   // the workout into Run mode and tag the schedule id so the
                   // finish-flow writes the completion back via /api/log-workout
                   // with scheduled_id set, which stamps completed_workout_id.
+                  //
+                  // I Phase 2b — group intents reach Run mode already linked
+                  // (the Run handler created the snapshot + ran fanout + linked
+                  // the schedule row in one log-workout call). Skip
+                  // runScheduledId so the coach's actual-swim completion
+                  // doesn't attempt a second link / duplicate workout entry.
                   setRunWorkout(sw.payload);
-                  setRunScheduledId(sw.id);
+                  if (!sw._alreadyLinked) setRunScheduledId(sw.id);
                   setShowRestPicker(true);
                   setView("generator");
                 }}
