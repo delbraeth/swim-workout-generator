@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 11:27 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 11:40 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -12848,12 +12848,15 @@
     // workout + Run / Regenerate / Cancel actions. On Run: PATCHes the
     // schedule row's payload (intent → payload conversion) and hands off
     // to the parent to load into Run mode.
-    function IntentPreviewOverlay({ scheduledRow, generatedWorkout, onRegenerate, onRun, onClose }) {
+    function IntentPreviewOverlay({ scheduledRow, generatedWorkout, onRegenerate, onRun, onSave, onClose }) {
       const [busy, setBusy] = React.useState(false);
       const [err,  setErr]  = React.useState(null);
       const w = generatedWorkout;
 
-      const handleRun = async () => {
+      // Commit the generated workout to the schedule row. Returns true if
+      // committed successfully. Shared between Save (no Run mode handoff)
+      // and Run (commit + enter Run mode).
+      const commit = async () => {
         setBusy(true); setErr(null);
         try {
           // Enrich payload with form context so ✎ Edit on the row later can
@@ -12919,11 +12922,21 @@
               throw new Error(j.error || `HTTP ${res.status}`);
             }
           }
-          onRun(w);  // parent loads into Run mode + tags runScheduledId
+          return true;
         } catch (e) {
           setErr(e.message);
           setBusy(false);
+          return false;
         }
+      };
+
+      const handleRun = async () => {
+        const ok = await commit();
+        if (ok) onRun(w);  // parent loads into Run mode + tags runScheduledId
+      };
+      const handleSave = async () => {
+        const ok = await commit();
+        if (ok && onSave) onSave(w);  // parent refreshes week view + closes
       };
 
       return (
@@ -12965,7 +12978,13 @@
                 style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Cancel</button>
               <button onClick={() => onRegenerate(w)} disabled={busy}
                 style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #3b82f6", background: "transparent", color: "#3b82f6", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>↻ Regenerate</button>
+              <button onClick={handleSave} disabled={busy}
+                title={scheduledRow.intent_params?.group_id ? "Commit this workout and assign to the group, without entering Run mode" : "Commit this workout to the schedule, without entering Run mode"}
+                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #a78bfa", background: "transparent", color: "#a78bfa", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
+                {busy ? "…" : "💾 Save"}
+              </button>
               <button onClick={handleRun} disabled={busy}
+                title="Commit this workout AND open Run mode for the swim"
                 style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: busy ? "#334155" : "#22c55e", color: busy ? "#64748b" : "#0f172a", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
                 {busy ? "…" : "▶ Run this"}
               </button>
@@ -13348,6 +13367,14 @@
               scheduledRow={intentPreview.sw}
               generatedWorkout={intentPreview.workout}
               onRegenerate={() => handleGenerateFromIntent(intentPreview.sw)}
+              onSave={() => {
+                // I Phase 2b — commit without entering Run mode. Refresh
+                // week view so the row updates from intent → payload (and
+                // shows ✓ done for group intents, which the log-workout
+                // path linked + completed).
+                setIntentPreview(null);
+                load();
+              }}
               onRun={(w) => {
                 // Hand off to the parent's run-scheduled handler. The preview
                 // overlay has already PATCHed the row's payload (self intent)
