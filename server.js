@@ -1,4 +1,4 @@
-// Swim Workout Generator — Node/Express server
+// Setforge — Node/Express server
 //
 // Reads/writes from MariaDB (vero_swimgen on the CyberPanel VM). All workout
 // history, favorites, settings, sessions, audit events, and invite codes
@@ -42,7 +42,7 @@
 //
 // Other env vars:
 //   PORT             — listen port (default: 8080, Hyperlift sets this)
-//   APP_URL          — Public HTTPS URL (default: https://veronicacassidy.com)
+//   APP_URL          — Public HTTPS URL (default: https://setforge.io)
 //   ALLOW_NO_ORIGIN  — "true" to allow curl/local testing without Origin header
 
 import express   from "express";
@@ -108,7 +108,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const PORT     = process.env.PORT     || 8080;
-const APP_URL  = process.env.APP_URL  || "https://veronicacassidy.com";
+const APP_URL  = process.env.APP_URL  || "https://setforge.io";
 // S5 S1 — when this is true the boot code refuses to start without Apple auth.
 // Hyperlift's container build sets NODE_ENV=production; local dev usually leaves
 // it unset / set to "development".
