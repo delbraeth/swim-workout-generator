@@ -2679,6 +2679,126 @@ export async function dbSoftDeleteCoachNote(id, callerSub) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// ── Benchmarks (N7) ──────────────────────────────────────────────────
+// Per-user test-set log. v1 kinds: t30 (30-min swim), tt500 (500 time
+// trial), broken500 (10×50 broken). pace_100_secs derived server-side at
+// insert. Latest t30 or tt500 auto-fills generator paceInput on save
+// (UI calls onPaceUpdate after server returns).
+
+const BENCHMARK_KINDS = ["t30", "tt500", "broken500"];
+const BENCHMARK_POOLS = ["25y", "25m", "50m"];
+const T30_DURATION_SECS = 1800;  // 30 minutes
+const TT500_DISTANCE_YDS = 500;
+
+function rowToBenchmark(r) {
+  let splits = r.splits;
+  if (typeof splits === "string") {
+    try { splits = JSON.parse(splits); } catch (_) { splits = null; }
+  }
+  return {
+    id:             Number(r.id),
+    user_sub:       r.user_sub,
+    kind:           r.kind,
+    pool_mode:      r.pool_mode,
+    recorded_at:    dtToIso(r.recorded_at),
+    total_yards:    Number(r.total_yards),
+    total_secs:     Number(r.total_secs),
+    pace_100_secs:  Number(r.pace_100_secs),
+    splits:         splits || null,
+    notes:          r.notes || null,
+  };
+}
+
+export async function dbCreateBenchmark({
+  userSub, kind, poolMode = "25y",
+  totalYards = null, totalSecs = null, splits = null, notes = null,
+}) {
+  if (!userSub) return { ok: false, reason: "no_user" };
+  if (!BENCHMARK_KINDS.includes(kind)) return { ok: false, reason: "bad_kind" };
+  if (!BENCHMARK_POOLS.includes(poolMode)) return { ok: false, reason: "bad_pool_mode" };
+
+  // Kind-specific normalization + derived pace.
+  let yards, secs, pace100;
+  if (kind === "t30") {
+    if (!Number.isFinite(totalYards) || totalYards < 100 || totalYards > 5000) {
+      return { ok: false, reason: "t30_distance_out_of_range" };
+    }
+    yards   = Math.round(totalYards);
+    secs    = T30_DURATION_SECS;
+    pace100 = Math.round(secs * 100 / yards);
+  } else if (kind === "tt500") {
+    if (!Number.isFinite(totalSecs) || totalSecs < 180 || totalSecs > 1800) {
+      return { ok: false, reason: "tt500_time_out_of_range" };
+    }
+    yards   = TT500_DISTANCE_YDS;
+    secs    = Math.round(totalSecs);
+    pace100 = Math.round(secs * 100 / yards);
+  } else { // broken500
+    if (!Number.isFinite(totalSecs) || totalSecs < 180 || totalSecs > 1800) {
+      return { ok: false, reason: "broken500_time_out_of_range" };
+    }
+    yards   = TT500_DISTANCE_YDS;
+    secs    = Math.round(totalSecs);
+    pace100 = Math.round(secs * 100 / yards);
+    // Light-touch splits validation — array of {dist, secs} OR raw numbers.
+    if (splits != null) {
+      if (!Array.isArray(splits)) return { ok: false, reason: "splits_must_be_array" };
+      if (splits.length > 20)     return { ok: false, reason: "too_many_splits" };
+    }
+  }
+  if (notes && String(notes).length > 500) return { ok: false, reason: "notes_too_long" };
+
+  const r = await pool.query(
+    "INSERT INTO `benchmarks` " +
+    "(`user_sub`, `kind`, `pool_mode`, `total_yards`, `total_secs`, `pace_100_secs`, `splits`, `notes`) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [userSub, kind, poolMode, yards, secs, pace100, splits ? JSON.stringify(splits) : null, notes || null]
+  );
+  return { ok: true, id: Number(r.insertId), pace_100_secs: pace100 };
+}
+
+export async function dbListBenchmarks(userSub, { kind = null, limit = 50 } = {}) {
+  if (!userSub) return [];
+  const cap = Math.min(200, Math.max(1, Number(limit) || 50));
+  let sql, vals;
+  if (kind) {
+    if (!BENCHMARK_KINDS.includes(kind)) return [];
+    sql  = "SELECT * FROM `benchmarks` WHERE `user_sub` = ? AND `kind` = ? ORDER BY `recorded_at` DESC LIMIT " + cap;
+    vals = [userSub, kind];
+  } else {
+    sql  = "SELECT * FROM `benchmarks` WHERE `user_sub` = ? ORDER BY `recorded_at` DESC LIMIT " + cap;
+    vals = [userSub];
+  }
+  const rows = await pool.query(sql, vals);
+  return rows.map(rowToBenchmark);
+}
+
+// Used by the auto-fill path: latest aerobic-pace-relevant benchmark
+// (t30 or tt500 — broken500 is sprint, not aerobic). Returns the row
+// or null if none exists.
+export async function dbGetLatestAerobicBenchmark(userSub) {
+  if (!userSub) return null;
+  const rows = await pool.query(
+    "SELECT * FROM `benchmarks` " +
+    "WHERE `user_sub` = ? AND `kind` IN ('t30','tt500') " +
+    "ORDER BY `recorded_at` DESC LIMIT 1",
+    [userSub]
+  );
+  return rows[0] ? rowToBenchmark(rows[0]) : null;
+}
+
+export async function dbDeleteBenchmark(id, callerSub) {
+  if (!id || !callerSub) return { ok: false, reason: "missing_args" };
+  const cur = await pool.query(
+    "SELECT `user_sub` FROM `benchmarks` WHERE `id` = ? LIMIT 1",
+    [Number(id)]
+  );
+  if (!cur[0]) return { ok: false, reason: "not_found" };
+  if (cur[0].user_sub !== callerSub) return { ok: false, reason: "not_owner" };
+  const r = await pool.query("DELETE FROM `benchmarks` WHERE `id` = ?", [Number(id)]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 // ── Lane plans (Stage 3 / R-E) ────────────────────────────────────────
 // Per scope §7 + decision #14. Persistent reusable per-group lane configs.
 // plan_data JSON shape:
