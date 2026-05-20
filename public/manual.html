@@ -250,6 +250,7 @@
     <a href="#focus-note">Focus Note</a>
     <a href="#zones">Effort Zones</a>
     <a href="#training-phase">Training Phase</a>
+    <a href="#swimmer-level">Swimmer Level</a>
 
     <div class="nav-section">Workout View</div>
     <a href="#sections">Workout Sections</a>
@@ -572,6 +573,22 @@
         <div class="callout-icon">💡</div>
         <div class="callout-body"><strong>Phase vs. Recovery mode.</strong> The <strong>Recovery <em>phase</em></strong> is a longer-term setting that nudges every generate toward easier work. <strong>Recovery <em>mode</em></strong> is a per-generation switch that hard-filters mains and stretches intervals for one workout. They compose: a swimmer in Recovery phase can still flip on Recovery mode for an extra-easy day.</div>
       </div>
+    </section>
+
+    <!-- ══ SWIMMER LEVEL ══ -->
+    <section id="swimmer-level">
+      <h2>Swimmer Level</h2>
+      <p>A one-click calibration shortcut for a new swimmer who doesn't yet know what pace to enter. Set it in <strong>👤 Profile → 🎯 Swimmer level</strong>. Three options, each presets your default 100-pace:</p>
+      <table>
+        <thead><tr><th>Level</th><th>Pace</th><th>For…</th></tr></thead>
+        <tbody>
+          <tr><td>🏖️ Recreational</td><td>2:30 / 100</td><td>Fitness swimmer — long, easy intervals</td></tr>
+          <tr><td>🏊 Masters</td><td>2:00 / 100</td><td>Adult masters / triathlete — moderate intervals</td></tr>
+          <tr><td>🏁 Competitive</td><td>1:30 / 100</td><td>Trained competitive swimmer — tight intervals</td></tr>
+        </tbody>
+      </table>
+      <p>Picking a level immediately overwrites the pace field in the generator. You can still hand-edit the pace afterward (or pick a different level to overwrite again). Click the currently-active level pill to clear it — your pace is left as-is. Level persists in your settings and reloads on next visit.</p>
+      <p>Level only sets the pace baseline. The generator uses your pace input the same way regardless of how it got there (slider math from the 2:00/100 baseline).</p>
     </section>
 
     <!-- ══ SECTIONS ══ -->
@@ -1111,7 +1128,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
     <!-- ══ TEAMS (COACH) ══ -->
     <section id="teams">
       <h2>Teams (coach access)</h2>
-      <p>Teams are the institutional layer of the coaching relationship model. A team is a club / school / program / group of coaches that operates as one unit. Coaches own and join teams; groups (the actual training cohorts) live <em>inside</em> teams. <strong>Stage 1 of the relationships build ships the team layer; groups, members, and assignments come in later stages.</strong></p>
+      <p>Teams are the institutional layer of the coaching relationship model. A team is a club / school / program / group of coaches that operates as one unit. Coaches own and join teams; groups (the actual training cohorts) live <em>inside</em> teams. Teams, groups, members, lane plans, assignments, claim flow, and coach notes are all live — the relationships scope is fully implemented end-to-end.</p>
 
       <h3>Access</h3>
       <p>A blue <strong>👥 Teams</strong> button appears in the header for users with the <code>is_coach</code> flag (or <code>is_admin</code>, since admins implicitly have coach access). Granted via <strong>Admin → Users → Coach</strong>.</p>
@@ -1126,28 +1143,29 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       </ul>
 
       <h3>Roles within a team</h3>
-      <p>Each coach in a team has one of three roles. <strong>v1 only exposes the Owner role in the UI;</strong> the Admin tier is in the data model and will be surfaced in a later session.</p>
+      <p>Each coach in a team has one of three roles. Pills in the coach list are color-coded: <span style="color:#a78bfa">purple owner</span>, <span style="color:#93c5fd">blue admin</span>, <span style="color:#94a3b8">slate coach</span>.</p>
       <ul>
-        <li><strong>Owner</strong> — created the team. Can rename / archive the team, add and remove coaches. The owner cannot be removed via the UI (would orphan the team); ownership transfer is a planned future flow.</li>
-        <li><strong>Admin</strong> — promoted by the owner. Can add/remove coaches (not the owner) and create groups within the team. <em>UI for this comes later.</em></li>
+        <li><strong>Owner</strong> — created the team. Can rename / archive the team, add and remove coaches, and promote/demote between Admin and Coach. The owner cannot be removed via the UI (would orphan the team); ownership transfer is a planned future flow.</li>
+        <li><strong>Admin</strong> — promoted by the owner. Can manage team coaches and archives. Promote/demote from the Coach pill using the <strong>↑ Admin</strong> arrow that appears for the owner on each row.</li>
         <li><strong>Coach</strong> — can operate within groups they're assigned to. Read-only at the team level.</li>
       </ul>
 
       <h3>Creating and managing</h3>
       <p>The Teams page shows all teams you're a member of with your role on each. To <strong>create</strong> a team, click <strong>+ New team</strong>, enter a name, pick a type, and save — you become the owner. To <strong>open</strong> a team, click its row; the detail view shows the type, coach list, and (if you're the owner) controls to rename, archive, and add/remove coaches.</p>
-      <p>To <strong>add a coach</strong>, paste their user <code>sub</code> identifier (you can copy this from <strong>Admin → Users</strong>) and click Add. The target user must already exist in the system and have the <code>is_coach</code> flag set. v1 only supports adding as role "Coach" via the UI — Admin promotions come later.</p>
+      <p>To <strong>add a coach</strong>, pick them from the dropdown (only users with the <code>is_coach</code> flag appear) and choose a role (<em>Coach</em> default, or <em>Admin</em> for team-management privileges). After adding, an owner can promote or demote any coach with the ↑ Admin / ↓ Coach arrow on each row.</p>
+      <p><strong>Removing a coach who's primary on groups:</strong> if you try to remove a coach who's still the primary on any active group in this team, you'll see a <strong>Transfer primary first</strong> modal listing each affected group. Pick a new primary for each from the team's other coaches, then click <em>Transfer &amp; remove ▸</em> — the transfers run in sequence and the removal completes atomically.</p>
 
       <h3>Archive behavior</h3>
-      <p>Archiving a team is soft and reversible — click the button again to unarchive. Per the relationships scope, <strong>team archive does NOT cascade to groups</strong> (when groups exist in a later stage, archiving a team will detach them as independent groups rather than archiving them too). Groups have their own archive flow.</p>
+      <p>Archiving a team is soft and reversible — click the button again to unarchive. Per the relationships scope, <strong>team archive does NOT cascade to groups</strong> — archiving a team detaches its groups as independent (still-active) groups rather than archiving them too. Groups have their own archive flow.</p>
 
       <h3>Groups (Stage 2)</h3>
       <p>Inside a team's detail view, the <strong>🏊‍♀️ Groups</strong> section (amber-accented) lists training cohorts in this team. Team owners and admins can create new groups; group primary coaches manage members, sub-coaches, the training phase, and roster visibility.</p>
       <ul>
         <li><strong>Create</strong> — name + optional default pool mode (SCY/SCM/LCM). You become the group's primary coach automatically.</li>
         <li><strong>Expand</strong> any group row to see members + coaches + phase setter + settings.</li>
-        <li><strong>Members</strong> — pick from your team-affiliated managed swimmers (set their team in 🏊 Managed swimmers first). Each swimmer joins as <em>primary</em> or <em>secondary</em>. A swimmer can be a <strong>primary</strong> in only one of your groups at a time (e.g., their main training group); they can be <em>secondary</em> in any number (dryland, test-set crew, etc.). Full-account swimmers can't be added as members in Stage 2 — they land in Stage 4 (R-F) once the code-based join flow ships.</li>
+        <li><strong>Members</strong> — pick from your team-affiliated managed swimmers (set their team in 🏊 Managed swimmers first). Each swimmer joins as <em>primary</em> or <em>secondary</em>. A swimmer can be a <strong>primary</strong> in only one of your groups at a time (e.g., their main training group); they can be <em>secondary</em> in any number (dryland, test-set crew, etc.). Full-account swimmers (with their own login) join via the code-based <em>Invite full-account swimmers</em> flow below.</li>
         <li><strong>Group coaches</strong> — you (primary) can add assistant coaches via the dropdown. Assistants can see the group + manage members but can't archive or change settings.</li>
-        <li><strong>Training phase</strong> — 5-pill toggle (Base / Build / Peak / Taper / Recovery). Lands on every member, drives generator bias when generate-for-group ships in R-D. Last-changed timestamp recorded.</li>
+        <li><strong>Training phase</strong> — 5-pill toggle (Base / Build / Peak / Taper / Recovery). Lands on every member; when you generate for this group, the group's phase overrides each coach's personal phase. Last-changed timestamp recorded.</li>
         <li><strong>Roster visible to members</strong> — toggle that lets group members see each other's names. <strong>Forced off (and the server rejects enabling) when any active member is under 18.</strong> Privacy gate, no override.</li>
         <li><strong>Archive group</strong> — soft-archive; auto-stamps left-at on all active members at archive time. Team archive does NOT cascade to groups (per scope decision #13).</li>
       </ul>
@@ -1156,7 +1174,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. v1 captures just name + date.</p>
       <p>Upcoming events surface on the main app via the pool-mode selector row: a <strong>📅 amber pill</strong> showing the most-imminent event across all teams you're in (as either a coach or a group member). Renders alongside your personal <strong>🏁 next-event</strong> pill — both coexist; team events take the leading position.</p>
 
-      <h3>Assigned to me (Stage 4 / R-G)</h3>
+      <h3>Assigned to me</h3>
       <p>When a coach generates a workout for a group you're in, it lands in your <strong>📥 Assigned to me</strong> view (teal button in the top nav, visible to all authenticated users — you don't need to be a coach to use it). Filter the list by completion state (Not started / Partial / Complete / Missed / All).</p>
       <p><strong>Each row</strong> shows the workout type + total yardage, the coach who assigned it, the group + lane info if applicable, and your current completion state. Click a row to expand it inline — you'll see the full workout blocks plus action buttons.</p>
       <p><strong>To do the workout:</strong> click <em>▶ Run this workout</em>. The standard Run mode opens with the coach's snapshot. When you finish, the completion lands on the assignment row (not as a new workout in your history) — splits, difficulty, and any focus note are captured.</p>
@@ -1165,7 +1183,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h4>Coach-mark-on-behalf (Flow N)</h4>
       <p>Inside any group's expanded view, coaches see a <strong>Recent assignments</strong> subsection listing every assignment that's been fanned out to group members. From the deck, the coach can mark any swimmer's completion state (✓ complete / ◐ partial / ✕ missed) without waiting for the swimmer to log it themselves. The swimmer-side display shows a <em>"(by coach)"</em> tag on coach-marked completions so they know it wasn't them.</p>
 
-      <h3>Inviting full-account swimmers (Stage 4 / R-F)</h3>
+      <h3>Inviting full-account swimmers</h3>
       <p>To bring a swimmer with their own login account into a group (vs the managed-profile path), use the <strong>code-based join flow</strong>. Per the scope's code-only decision (#6), the app generates a short opaque code; the coach hands it to the swimmer out-of-band (text message, in person, email — whatever's convenient); the swimmer redeems it inside the app.</p>
 
       <h4>Coach side</h4>
@@ -1188,25 +1206,39 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p><strong>DOB gate:</strong> the first time a swimmer joins any group, they're prompted to enter their date of birth (inline, on the redeem screen). This is required for minor-protection compliance. Once entered, future joins skip this step.</p>
       <p><strong>One-primary-per-coach rule (decision #33):</strong> a swimmer can be a <em>primary</em> in only one of a given coach's groups at a time. If a coach issues a primary-role code and the swimmer is already a primary in another of that coach's groups, the redemption errors with the conflicting group's name and guidance: leave the other group first, or ask the coach for a secondary-role code instead.</p>
 
-      <h3>Lane plans (Stage 3 / R-E)</h3>
+      <h3>Lane plans</h3>
       <p>Inside an expanded group with 2+ members, primary coaches see a <strong>Lane plans</strong> section. Lane plans are reusable per-group configurations of swimmers into named lanes with target paces (e.g. "Tuesday config: Sprint @ 1:50, Aerobic @ 2:05, Recovery @ 2:20"). Each plan stores: name, default flag, and an ordered list of lanes (label + target pace + member chips).</p>
       <p><strong>Build a plan:</strong> click <em>+ New plan</em>, name it, then for each lane: set label + target pace, then add swimmers from the group via the per-lane dropdown. A swimmer can be in at most one lane per plan. Click <em>+ Add lane</em> to append more lanes. Save when done. A plan can be marked default — only one plan per group can be default at a time.</p>
       <p><strong>Use a plan at generation:</strong> on the generator's "Generate for" picker, when you pick a multi-member group that has lane plans, a second dropdown appears: <em>Lane plan: [default plan / any other plan / No plan]</em>. Default plan is preselected when you pick the group. Generating with a plan fans out assignments per-lane — each swimmer gets an assignment row tagged with their lane index, label, and target pace (the lane's pace, not their stored pace). Generating with "No plan" falls back to all current members at their stored pace (R-D behavior).</p>
       <p><strong>Stale members:</strong> swimmers in a plan but no longer in the group are skipped at generation time. Members currently in the group but not placed in any lane of the selected plan are also skipped — the plan is the authoritative member list for that generation.</p>
 
-      <h3>Generate for a group (Stage 3 / R-D)</h3>
+      <h3>Generate for a group</h3>
       <p>On the generator page, coaches see a <strong>Generate for</strong> picker above the big Generate button. Default is <strong>Myself</strong> (no assignment created, your normal solo flow). Two other choices:</p>
       <ul>
         <li><strong>Private students</strong> — groups with exactly one member. Listed by swimmer name. Generating saves the workout to your history AND creates a single assignment record pointing at that swimmer.</li>
-        <li><strong>Groups</strong> — multi-member groups. Generating saves the workout to your history AND fans out one assignment per current active member (managed-only in Stage 3; full-account swimmers join in R-F). Each assignment snapshots the member's stored pace for the workout's pool mode.</li>
+        <li><strong>Groups</strong> — multi-member groups. Generating saves the workout to your history AND fans out one assignment per current active member (managed swimmers and full-account swimmers alike — the polymorphic membership model handles both). Each assignment snapshots the member's stored pace for the workout's pool mode (or, with a lane plan, the lane's pace).</li>
       </ul>
       <p>When a group is selected, the group's <strong>current training phase</strong> overrides your personal phase for that generation (decision #39). The workout-display header shows an amber <strong>→ Group X (N)</strong> pill confirming the fanout target; this pill persists in your history so you can see which past workouts were group-assigned.</p>
-      <p>The workout itself lives in <em>your</em> history (you're the owner). Assignments are stored separately; in a later stage, each swimmer will see your workout in their own "Assigned to me" view (R-G) and log completion against their personal copy.</p>
+      <p>The workout itself lives in <em>your</em> history (you're the owner). Assignments are stored separately; each swimmer sees the workout in their own <strong>📥 Assigned to me</strong> view and logs completion against the assignment row (splits, difficulty, focus note all captured back to the assignment, not as a separate workout in their history).</p>
 
-      <div class="callout note">
-        <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Through Stage 3 / R-D.</strong> Coming next: <strong>R-E</strong> (lane plans — per-pace fanout within a group), <strong>R-F</strong> (full-account swimmers can join groups via shared code), <strong>R-G</strong> ("Assigned to me" view for swimmers with completion logging), then claim flow + admin tier in Stage 5. See <code>RELATIONSHIPS_SCOPE.md</code> for the 5-stage plan.</div>
-      </div>
+      <h3>Multi-pace print (coach + group only)</h3>
+      <p>When generating for a group with ≥2 members, an amber <strong>🏊 Multi-pace print…</strong> button appears next to the Print Workout button. Click it to open the multi-pace modal:</p>
+      <ul>
+        <li><strong>Source</strong> — pick a saved lane plan (default selected if one exists) or switch to <em>Manual entry</em> and type per-lane paces by hand.</li>
+        <li><strong>Render</strong> — choose between <em>Per-lane pages</em> (one print page per lane, each rendering the full workout at that lane's pace, intervals rescaled from the 2:00/100 baseline) or <em>Matrix view</em> (single page with N pace columns alongside the workout structure).</li>
+        <li><strong>Preview &amp; Print</strong> — closes the modal, mounts a full-screen print overlay, auto-fires the browser print dialog. Use the close button to dismiss.</li>
+      </ul>
+      <p><strong>Per-lane pages</strong> is the intended workflow: print once, hand one page to each lane on the deck. Matrix mode is more compact but harder to read on deck.</p>
+
+      <h3>Mix pills (section bias)</h3>
+      <p>Above the workout type selector, a <strong>Mix:</strong> pill row lets you bias yardage allocation between sections per-generation (session-only — not persisted to settings). Four modes:</p>
+      <ul>
+        <li><strong>Balanced</strong> — default. Roughly 13% warmup / 17% drill / 65% main / 5% cooldown.</li>
+        <li><strong>Warmup-heavy</strong> — bigger warmup (~22%), main reduced (~62%).</li>
+        <li><strong>Drill-heavy</strong> — bigger drill (~26%), main reduced (~61%).</li>
+        <li><strong>Long main</strong> — most yardage on the main set (~83%), warmup + drill suppressed.</li>
+      </ul>
+      <p>Effectiveness varies by workout type and total yardage — the allocator can only bias toward target yards within what the bank offers. At very large workout sizes (3K+), the bank's biggest single-piece warmups and drills may cap below the target; the generator falls back to the closest available option.</p>
     </section>
 
     <!-- ══ MANAGED SWIMMERS (COACH) ══ -->
@@ -1228,8 +1260,8 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>Initials</strong> (optional, max 4 chars) — used in compact UIs.</li>
         <li><strong>DOB</strong> (required) — date of birth. Bounded between 1900-01-01 and today.</li>
         <li><strong>Paces</strong> (optional) — per pool mode (SCY / SCM / LCM), in M:SS format. Coach enters their best knowledge of the swimmer's 100-yard/100-meter cruise pace.</li>
-        <li><strong>Parental contact</strong> (optional in v1) — email or phone for the swimmer's parent or guardian. Required at app layer for under-18 swimmers in high-school teams; will be required for the claim flow when a 13–17-year-old gets a claim link.</li>
-        <li><strong>Parent-managed flag</strong> — for club-type teams, lets the coach mark a 13+ profile as parent-controlled, blocking the claim flow even though the age threshold has passed.</li>
+        <li><strong>Parental contact</strong> (optional) — email or phone for the swimmer's parent or guardian. Recommended for under-18 swimmers in high-school teams.</li>
+        <li><strong>Parent-managed flag</strong> — for club-type teams, lets the coach mark a 13+ profile as parent-controlled. <strong>Setting this flag blocks the claim flow</strong> even though the age threshold has passed.</li>
       </ul>
 
       <h3>Browsing</h3>
@@ -1238,13 +1270,45 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>Editing &amp; archive</h3>
       <p>From the detail view, click <strong>✎ Edit</strong> to update any field including DOB (validation is re-applied; out-of-bounds dates are rejected). The <strong>Archive</strong> button soft-hides the swimmer without deleting any data — toggle back to restore. Per the scope, no managed-swimmer record is ever hard-deleted by the coach (claim migration is the only path that removes the row, and only after repointing all dependent data to the new full-account swimmer).</p>
 
-      <h3>What managed swimmers can't do (yet)</h3>
+      <h3>What managed swimmers can't do</h3>
       <ul>
-        <li><strong>Log in</strong> — managed profiles have no auth identity. The coach is the operator for all their data.</li>
-        <li><strong>Be claimed</strong> — claim-into-full-account flow lands in Stage 5 (R-I). The data model is ready (per-data-class destinations defined in the scope doc) but no UI yet.</li>
-        <li><strong>Join groups</strong> — groups + members come in Stage 2 (R-C).</li>
-        <li><strong>Receive assignments</strong> — workout assignments + the "Assigned to me" surface come in Stages 3 and 4.</li>
+        <li><strong>Log in</strong> — managed profiles have no auth identity. The coach is the operator for all their data. The claim flow (below) is the only path to give a managed profile its own login.</li>
       </ul>
+
+      <h3>Claim link — managed → full-account migration</h3>
+      <p>When a swimmer creates their own account (Apple Sign-In) and wants to take over the managed profile you've been maintaining for them, issue a <strong>claim link</strong>. The redeemed claim atomically migrates the managed profile's data into their account and deletes the managed row.</p>
+      <h4>Coach side</h4>
+      <p>In the swimmer's detail view, scroll to the <strong>Claim link (managed → full-account)</strong> panel:</p>
+      <ol>
+        <li>Click <strong>Send claim link</strong> → confirmation dialog explains what happens on redeem (identity fields silently overwrite, all dependent rows repoint, managed profile deleted).</li>
+        <li>10-character lowercase code displayed prominently. Use <strong>Copy</strong> and share it out-of-band (text, email, etc.).</li>
+        <li>Code is valid for 30 days. Outstanding codes show below with a <strong>Revoke</strong> button per code.</li>
+      </ol>
+      <p><strong>Blocked when:</strong> the swimmer is under 13 (COPPA-protected — claim is hard-blocked, panel shows a red notice) or the <em>parent-managed</em> flag is set (uncheck the flag on the swimmer detail first, then retry).</p>
+      <h4>Swimmer side</h4>
+      <p>In their 👤 Profile modal, scroll to <strong>Claim a managed profile</strong>:</p>
+      <ol>
+        <li>Paste the 10-character code → click <strong>Look up</strong> → preview shows the managed swimmer's name and the issuing coach's name.</li>
+        <li>Click <strong>Confirm claim</strong>. The atomic migration runs server-side: name / DOB / gender are copied from the managed profile onto the swimmer's account (silently overwriting per scope decision #24); all workout assignments, coach notes, and group memberships repoint to the swimmer's <code>sub</code>; the managed profile is deleted.</li>
+        <li>A post-claim diff screen confirms exactly which identity fields changed.</li>
+      </ol>
+      <p><strong>Group conflict (#21/#33):</strong> if the managed profile is primary in a group whose coach also has the swimmer as primary in another group, the redemption errors with both group names. The swimmer must resolve the conflict manually (leave one of the groups) before the claim can proceed.</p>
+
+      <h3>Coach notes (private journal)</h3>
+      <p>Each managed swimmer's detail view has a <strong>Coach notes</strong> panel — a timestamped journal of observations, attribution, edits, and reminders. Multiple notes per swimmer, newest-first.</p>
+      <ul>
+        <li><strong>Visibility</strong> — each note carries one of three scopes:
+          <ul>
+            <li><span style="color:#94a3b8"><strong>Private</strong></span> — only you (the author) see it.</li>
+            <li><span style="color:#fbbf24"><strong>Group coaches</strong></span> — visible to other coaches on the swimmer's primary group with you.</li>
+            <li><span style="color:#93c5fd"><strong>Team coaches</strong></span> — visible to all active coaches on the swimmer's team.</li>
+          </ul>
+        </li>
+        <li><strong>Default visibility</strong> — derived from team type. High-school teams default to <em>Team coaches</em> (the team-shared default is signaled with a banner above the create form); all other types default to <em>Private</em>. You can change visibility per note.</li>
+        <li><strong>Edit / delete</strong> — only your own notes show edit/delete buttons. Other coaches' notes are read-only with the author name + visibility pill displayed.</li>
+        <li><strong>Soft-delete</strong> — deleted notes are hidden from lists but the row is preserved (deleted_at timestamp stamped). No hard-delete from the UI.</li>
+      </ul>
+      <p>Notes survive a claim — when the swimmer redeems a claim link, all notes pinned to the managed profile repoint to the new full-account swimmer.</p>
 
       <h3>DOB soft-prompt for your own account</h3>
       <p>If you signed up before DOB was required (most existing accounts), you'll see a <strong>Quick question — your date of birth</strong> modal on next app load. Enter it and Save, or tap <strong>Remind me later</strong>. The prompt is dismissable for the current browser tab; it reappears on the next session. Once you've entered your DOB, the modal stops appearing entirely. Hard gates that require DOB (joining a group, accepting a coach invite) will re-prompt unconditionally when those features ship in later stages.</p>
@@ -1266,7 +1330,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Stage 1 ships managed swimmers + DOB + bulk import.</strong> Groups (cohorts), lane plans, workout assignments, and the swimmer-side "Assigned to me" view come in Stages 2–5. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the full plan.</div>
+        <div class="callout-body"><strong>Relationships scope v1.1 is fully shipped:</strong> managed swimmers, DOB, bulk import, teams, groups, lane plans, workout assignments, "Assigned to me" view, claim flow, coach notes, admin tier — all live. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the design history.</div>
       </div>
     </section>
 
