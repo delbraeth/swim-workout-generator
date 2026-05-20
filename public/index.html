@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 09:51 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 10:05 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -12789,10 +12789,19 @@
         try {
           // Convert intent → payload server-side so the schedule row is in
           // a stable state regardless of what the swimmer does next.
+          // Enrich payload with form context (intent_params + defaults) so
+          // future ✎ Edit on the row restores generator state correctly.
+          const ip = scheduledRow.intent_params || {};
+          const enrichedPayload = {
+            ...w,
+            maxYardsCap: w.maxYardsCap || Number(ip.maxYards) || 2400,
+            poolMode:    w.poolMode    || "25y",
+            equipment:   w.equipment   || ip.equipment || { kickboard: "off", fins: "off", paddles: "off", pullBuoy: "off", snorkel: "off" },
+          };
           const res = await fetch(`/api/scheduled-workouts/${scheduledRow.id}`, {
             method:  "PATCH",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ payload: w }),
+            body:    JSON.stringify({ payload: enrichedPayload }),
           });
           if (!res.ok) {
             const j = await res.json().catch(() => ({}));
@@ -13087,12 +13096,14 @@
                     const typeMeta   = typeId ? WORKOUT_TYPES.find(t => t.id === typeId) : null;
                     const typeLabel  = typeMeta ? `${typeMeta.emoji} ${typeMeta.label}` : "workout";
                     const yards      = sw.payload?.totalYards || sw.intent_params?.maxYards || 0;
+                    const isMeters   = sw.payload?.poolMode === "25m" || sw.payload?.poolMode === "50m";
+                    const unit       = isMeters ? "m" : "yds";
                     const borderClr  = done ? "#22c55e" : (isIntent ? "#f59e0b" : "#334155");
                     return (
                       <div key={sw.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 8px", background: "#0f172a", border: `1px solid ${borderClr}`, borderRadius: 5, marginBottom: 4, flexWrap: "wrap" }}>
                         <span style={{ color: done ? "#22c55e" : (isIntent ? "#fbbf24" : "#cbd5e1"), fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
                           {done ? "✓ " : ""}{isIntent && !done && <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: "0.1em", marginRight: 6, textTransform: "uppercase" }}>Intent</span>}{typeLabel}
-                          <span style={{ color: "#64748b", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} yds{isIntent && " (target)"}</span>
+                          <span style={{ color: "#64748b", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} {unit}{isIntent && " (target)"}</span>
                           {isIntent && sw.notes && <span style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>· {sw.notes}</span>}
                         </span>
                         {!done && isIntent && (
@@ -17055,10 +17066,19 @@
         // its date; only payload changes.
         if (editingScheduledId) {
           try {
+            // Enrich payload with form context (matches Phase 1 schedule POST
+            // — see comment there).
+            const enrichedPayload = {
+              ...workout,
+              maxYardsCap: workout.maxYardsCap || maxYards,
+              poolMode:    workout.poolMode    || poolMode,
+              equipment:   workout.equipment   || { ...equipment },
+              focusNote:   workout.focusNote   || focusNoteDraft || undefined,
+            };
             const res = await fetch(`/api/scheduled-workouts/${editingScheduledId}`, {
               method:  "PATCH",
               headers: { "Content-Type": "application/json", ...csrfHeaders() },
-              body:    JSON.stringify({ payload: workout }),
+              body:    JSON.stringify({ payload: enrichedPayload }),
             });
             const j = await res.json();
             if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
@@ -17638,13 +17658,18 @@
                   // load without first selecting a type → "undefined is not
                   // an object 'meta.badge'").
                   //
-                  // The payload IS the raw generateWorkout output (Phase 1's
-                  // schedule POST sends `{ payload: workout }`), so the field
-                  // is `typeId`, NOT `type` (which is the history-entry shape).
-                  // maxYards/poolMode/equipment aren't carried in the payload
-                  // — leave them at current state.
+                  // Restore full form context from the enriched payload. The
+                  // schedule POST/PATCH sites enrich `payload` with
+                  // maxYardsCap/poolMode/equipment/focusNote alongside the
+                  // raw workout fields. Pre-enrichment rows (created before
+                  // 2026-05-20 hotfix) just have the raw workout — those
+                  // conditionals fall through and leave current form state
+                  // untouched.
                   const p = sw.payload || {};
-                  if (p.typeId) setSelectedType(p.typeId);
+                  if (p.typeId)      setSelectedType(p.typeId);
+                  if (p.maxYardsCap) setMaxYards(p.maxYardsCap);
+                  if (p.poolMode)    setPoolMode(p.poolMode);
+                  if (p.equipment)   setEquipment(p.equipment);
                   setFocusNoteDraft(p.focusNote || "");
                   setWorkout(sw.payload);
                   setEditingScheduledId(sw.id);
@@ -18542,10 +18567,21 @@
                   <button onClick={async () => {
                       if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) { setSaveError("Pick a valid date"); return; }
                       try {
+                        // Enrich payload with form context so ✎ Edit on the
+                        // scheduled row can fully restore the generator
+                        // (otherwise the raw workout object doesn't carry
+                        // maxYards/poolMode/equipment).
+                        const enrichedPayload = {
+                          ...workout,
+                          maxYardsCap: workout.maxYardsCap || maxYards,
+                          poolMode:    workout.poolMode    || poolMode,
+                          equipment:   workout.equipment   || { ...equipment },
+                          focusNote:   workout.focusNote   || focusNoteDraft || undefined,
+                        };
                         const res = await fetch("/api/scheduled-workouts", {
                           method:  "POST",
                           headers: { "Content-Type": "application/json", ...csrfHeaders() },
-                          body:    JSON.stringify({ scheduled_date: scheduleDate, payload: workout }),
+                          body:    JSON.stringify({ scheduled_date: scheduleDate, payload: enrichedPayload }),
                         });
                         const j = await res.json();
                         if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
