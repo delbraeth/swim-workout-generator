@@ -276,6 +276,13 @@
     <a href="#goals">Goals</a>
     <a href="#copy-print">Copy &amp; Print</a>
 
+    <div class="nav-section">Planning &amp; the Week</div>
+    <a href="#week-view">Plan Your Week</a>
+    <a href="#schedule-for">Schedule a Workout</a>
+    <a href="#plan-intent">Plan an Intent</a>
+    <a href="#generate-from-intent">Generate from an Intent</a>
+    <a href="#repeat-week">Repeat the Week</a>
+
     <div class="nav-section">Settings</div>
     <a href="#user-settings">Your Settings</a>
     <a href="#account">Account &amp; Sessions</a>
@@ -283,7 +290,8 @@
     <a href="#teams">Teams (coaches)</a>
     <a href="#swimmers">Managed Swimmers (coaches)</a>
     <a href="#catalog">Workout Catalog (coaches)</a>
-    <a href="#parse-intent">Parse Intent (coach shorthand)</a>
+    <a href="#coach-fanout">Coach: Planning for a Group</a>
+    <a href="#parse-intent">Quick Input (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
     <a href="#tips">Tips &amp; Tricks</a>
 
@@ -858,7 +866,103 @@
 
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
-        <div class="callout-body"><strong>Planned workouts.</strong> Saving with a future date marks the entry as "Planned" rather than "Completed." You can toggle this status from the History view.</div>
+        <div class="callout-body"><strong>Planned workouts.</strong> Saving with a future date marks the entry as "Planned" rather than "Completed." You can toggle this status from the History view. For weekly planning ahead of time, see <a href="#week-view">Plan Your Week</a>.</div>
+      </div>
+    </section>
+
+    <!-- ══ WEEK VIEW ══ -->
+    <section id="week-view">
+      <h2>Plan Your Week</h2>
+      <p>Tap the <strong>📅</strong> button in the header to open the week view — a Monday-to-Sunday grid of every workout you've scheduled (or completed) this week. From here you can browse past and future weeks with <strong>‹ Prev</strong> / <strong>This week</strong> / <strong>Next ›</strong>, and act on any row in place.</p>
+
+      <p>A scheduled row is one of two things:</p>
+      <ul>
+        <li><strong>A full workout</strong> (slate-bordered) — the workout was generated and locked in. Tap <strong>▶ Run</strong> to swim it, <strong>✎ Edit</strong> to load it back into the generator for tweaks, <strong>🗐 Copy</strong> to duplicate to another day, <strong>🗑</strong> to delete.</li>
+        <li><strong>An intent</strong> (amber-bordered, with an <em>INTENT</em> tag) — you've said what kind of workout you want for that day but haven't generated the actual sets yet. The workout will be generated from your current bank state when you click <strong>▶ Generate</strong>. See <a href="#plan-intent">Plan an Intent</a> for why this matters.</li>
+      </ul>
+
+      <p>Days with no rows show a <strong>+ Plan intent</strong> link (for future days) or stay quiet (for past days marked as rest days). Today's day cell has a blue border and a <strong>Today</strong> badge.</p>
+
+      <div class="callout tip">
+        <div class="callout-icon">📅</div>
+        <div class="callout-body"><strong>Completion linking.</strong> When you run a scheduled workout and log the completion, the schedule row gets stamped with a ✓ and links to the history entry. The original schedule row stays in place as the planning record; the history entry is the actual swim.</div>
+      </div>
+    </section>
+
+    <!-- ══ SCHEDULE FOR DAY ══ -->
+    <section id="schedule-for">
+      <h2>Schedule a Workout for a Future Day</h2>
+      <p>You can lock in a specific generated workout for a future date in two ways:</p>
+
+      <h3>From the workout display</h3>
+      <p>After generating a workout, tap the <strong>📅 Schedule for…</strong> button (next to Save). Pick a date in the modal and tap <strong>Schedule ▸</strong>. The workout — exactly as shown — is locked to that day and appears in the week view as a slate-bordered row.</p>
+
+      <h3>By copying from another scheduled row</h3>
+      <p>Tap <strong>🗐 Copy</strong> on any week-view row, pick a destination date, tap <strong>Copy ▸</strong>. The same workout (intent or generated) is duplicated to the chosen day.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>Schedule vs intent.</strong> Schedule when you've already decided on the exact workout and want it ready to run. Plan an intent when you want to commit to <em>a kind of workout</em> on a day but want the actual sets to be generated fresh from the latest bank when you get to the day.</div>
+      </div>
+    </section>
+
+    <!-- ══ PLAN INTENT ══ -->
+    <section id="plan-intent">
+      <h2>Plan an Intent for a Future Day</h2>
+      <p>An <strong>intent</strong> is a placeholder for a workout you'll generate on the day. You capture the shape — workout type, target yardage, mix, recovery — without nailing down the specific sets. When you open the week view on the planned day, you generate the actual workout from your current bank state, preview it, and either save it as-is or regenerate for a different shuffle.</p>
+
+      <p>Two ways to plan one:</p>
+      <ul>
+        <li><strong>From the week view.</strong> On any empty future day, tap <strong>+ Plan intent</strong>. Fill in the date, type, max yardage, mix (balanced / warmup-heavy / drill-heavy / long-main), recovery toggle, and an optional note. Tap <strong>Plan intent ▸</strong>.</li>
+        <li><strong>From the generator.</strong> Configure the form for the kind of workout you want, then below the <strong>Generate Workout</strong> button tap <strong>💾 Save as intent for later…</strong>. Pick a date and save. The current form state — type, yardage, mix, recovery — becomes the intent.</li>
+      </ul>
+
+      <p>Intent rows appear in the week view with an amber border and an <em>INTENT</em> tag, with the target yardage labeled <code>(target)</code> to distinguish it from a finalized workout's actual total.</p>
+
+      <h3>Why use an intent instead of generating now?</h3>
+      <ul>
+        <li><strong>Bank freshness.</strong> The set bank is updated over time — generating on the day uses the latest options.</li>
+        <li><strong>Variety.</strong> Avoids locking in the same shuffle twice when you're planning across a long horizon.</li>
+        <li><strong>Less commitment.</strong> You're committing to "a long-main aerobic day" rather than to a specific workout you might want to change.</li>
+      </ul>
+
+      <h3>Editing or deleting an intent</h3>
+      <p>On any intent row: <strong>✎ Edit intent</strong> reopens the planner with the existing values. <strong>🗑</strong> deletes the row. <strong>🗐 Copy</strong> duplicates the intent to another day (the copy stays as an intent — not a generated workout).</p>
+    </section>
+
+    <!-- ══ GENERATE FROM INTENT ══ -->
+    <section id="generate-from-intent">
+      <h2>Generate from an Intent</h2>
+      <p>On the day of a planned intent, open the week view and tap <strong>▶ Generate</strong> on the intent row. SetForge generates a workout from the intent's parameters against the current bank state, then opens a preview overlay showing the full workout — blocks, sets, intervals.</p>
+
+      <p>From the preview, four choices:</p>
+      <table>
+        <thead><tr><th>Action</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Cancel</strong></td><td>Close without committing. The intent stays as an intent — generate again later.</td></tr>
+          <tr><td><strong>↻ Regenerate</strong></td><td>Re-roll the workout using the same intent parameters. Useful when the first generation isn't a good fit.</td></tr>
+          <tr><td><strong>💾 Save</strong></td><td>Commit the workout to the schedule row, but stay out of Run mode. The row flips from intent to a finalized workout. Use this when planning ahead or when generating for someone else.</td></tr>
+          <tr><td><strong>▶ Run this</strong></td><td>Commit AND open the workout in Run mode immediately. Use this when you're poolside ready to swim.</td></tr>
+        </tbody>
+      </table>
+
+      <p>Once an intent is committed (via Save or Run), it's no longer an intent — the row is now a finalized workout, slate-bordered, with the standard Run / Edit / Copy / Delete actions.</p>
+    </section>
+
+    <!-- ══ REPEAT WEEK ══ -->
+    <section id="repeat-week">
+      <h2>Repeat This Week to Next</h2>
+      <p>The week view header has a <strong>🗓 Repeat next week</strong> button. Tap it to bulk-copy every scheduled row from the current week to the same day-of-week in the following week. Mode is preserved — intents stay intents; finalized workouts stay finalized.</p>
+
+      <ul>
+        <li><strong>Conflict handling:</strong> if a target day already has any rows, that day is <em>skipped</em>. You'll see a summary like "Copied 4. Skipped 1 (target day already had rows)."</li>
+        <li><strong>Confirmation:</strong> if the source week has more than 5 rows, you'll be asked to confirm before the copy fires.</li>
+        <li><strong>Disabled:</strong> the button is faded out when the current week has zero scheduled rows.</li>
+      </ul>
+
+      <div class="callout tip">
+        <div class="callout-icon">🗓</div>
+        <div class="callout-body"><strong>Routine-building.</strong> If you've built out a representative week — say Mon distance / Tue technique / Wed sprint / etc — copying it forward saves you from re-planning each week from scratch. Tweak individual days as needed after the copy.</div>
       </div>
     </section>
 
@@ -1368,9 +1472,54 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       </div>
     </section>
 
+    <!-- ══ COACH GROUP FANOUT ══ -->
+    <section id="coach-fanout">
+      <h2>Coach: Planning for a Group</h2>
+      <p>The intent flow (see <a href="#plan-intent">Plan an Intent</a>) doubles as a group planning tool for coaches. When you plan an intent and pick a group instead of "Yourself," the intent is scheduled for the group on that day. When you generate from it later, the resulting workout is automatically assigned to every member of the group — they'll see it in their <strong>📥 Assigned to me</strong> view.</p>
+
+      <h3>Planning a group intent</h3>
+      <p>In the week view, tap <strong>+ Plan intent</strong> on a future day. The intent planner shows two extra fields above the standard form (coaches only):</p>
+      <ul>
+        <li><strong>For whom</strong> — defaults to "👤 Yourself only." Picking a group from the dropdown turns this into a group intent.</li>
+        <li><strong>Lane plan (optional)</strong> — appears once a group is selected, and only if the group has any lane plans. Pick a plan to fan out per-lane (each lane gets the workout at its target pace); leave blank to fan out to every group member at their stored pace.</li>
+      </ul>
+      <p>Fill in the rest of the form normally (type, max yardage, mix, recovery, notes), then save. The intent appears on your week view with a green <strong>→ <em>Group Name</em></strong> badge so you can tell it apart from your personal intents.</p>
+
+      <h3>Generating on the day</h3>
+      <p>Tap <strong>▶ Generate</strong> on the intent row to preview the workout. The preview shows the full workout exactly as it'll look to swimmers, plus the group's name and member count.</p>
+
+      <p>Two ways to commit:</p>
+      <table>
+        <thead><tr><th>Action</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td><strong>💾 Save</strong></td><td>Locks the workout to the schedule row AND fans it out to every active group member as an assignment in their <strong>📥 Assigned to me</strong> view. You don't enter Run mode. Use this when planning ahead — for example, Monday evening committing to Tuesday's group workout so swimmers see the assignment overnight.</td></tr>
+          <tr><td><strong>▶ Run this</strong></td><td>Same as Save (commits + fanout), but additionally opens the workout in your Run mode. Use this when you're at the pool ready to swim it yourself.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Lane plan vs no lane plan</h3>
+      <table>
+        <thead><tr><th>Choice</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td><strong>No lane plan</strong></td><td>Every active member of the group gets the workout assigned, paced from their stored 100-yard pace. Good for fitness lanes where ability is roughly uniform.</td></tr>
+          <tr><td><strong>With lane plan</strong></td><td>The lane plan is authoritative for the member list and the pace per lane. Each member gets the workout at their lane's target pace. Members in the group but not in the plan are skipped. Lane indices, labels, and per-lane paces stamp onto each assignment so swimmers see "Lane 2 — 2:00."</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <div class="callout-icon">🖨</div>
+        <div class="callout-body"><strong>Pool-deck print.</strong> Combine a lane-plan intent with the <a href="#copy-print">multi-pace print</a> on the day of, and you get a printed lane sheet showing the same workout at every lane's pace — useful for coaches who hand swimmers a sheet rather than expecting them to look at their phone.</div>
+      </div>
+
+      <div class="callout note">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body"><strong>v1 quirk if you swim the workout too.</strong> When you ▶ Run a group intent you've planned and then complete it in Run mode yourself, your history will show two entries: the snapshot (created when you committed) and the actual swim (with splits, created when you finish). The schedule row stays linked to the snapshot. This is acknowledged and on the backlog to refactor; for now you can delete one of the entries manually if it bothers you.</div>
+      </div>
+    </section>
+
     <!-- ══ PARSE INTENT ══ -->
     <section id="parse-intent">
-      <h2>Parse Intent (coach shorthand)</h2>
+      <h2>Quick Input (coach shorthand)</h2>
       <p>Above the <strong>Generate Workout</strong> button there's a <strong>✏️ Quick input…</strong> button that opens a modal where you can type a coach-style one-liner. The parser extracts what it recognizes, shows you the parsed pieces as chips, and applies them to the form when you click <strong>Apply</strong>. Designed for coaches who think in shorthand — no need to navigate the workout-type chips, slider, and pace input separately.</p>
 
       <h3>What it understands</h3>
@@ -1416,7 +1565,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
     <!-- ══ FEEDBACK ══ -->
     <section id="feedback">
       <h2>Sending Feedback</h2>
-      <p>Tap the 💬 button in the header (between 👤 and ?) to open the feedback modal. Pick a category, type a subject and a few sentences of detail, and tap <strong>Send</strong>.</p>
+      <p>Open 👤 Profile in the header. At the bottom of the Identity section, tap <strong>💬 Send feedback</strong> to open the feedback modal. Pick a category, type a subject and a few sentences of detail, and tap <strong>Send</strong>.</p>
       <table>
         <thead><tr><th>Category</th><th>When to use it</th></tr></thead>
         <tbody>
