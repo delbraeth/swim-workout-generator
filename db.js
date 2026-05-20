@@ -1175,12 +1175,110 @@ export async function dbRemoveTeamCoach(teamId, coachSub) {
   const role = await dbGetTeamRole(teamId, coachSub);
   if (role === null) return { ok: false, reason: "not_active" };
   if (role === "owner") return { ok: false, reason: "cannot_remove_owner" };
+  // R-J: refuse to remove if this coach is still primary on any active
+  // (non-archived) group in this team. Caller must transition primary first.
+  // Returns the conflicting groups so the UI can prompt the user.
+  const primaryGroups = await pool.query(
+    "SELECT `id`, `name` FROM `groups` " +
+    "WHERE `team_id` = ? AND `primary_coach_sub` = ? AND `archived` = 0",
+    [teamId, coachSub]
+  );
+  if (primaryGroups.length > 0) {
+    return {
+      ok: false,
+      reason: "primary_on_groups",
+      groups: primaryGroups.map(g => ({ id: g.id, name: g.name })),
+    };
+  }
   const r = await pool.query(
     "UPDATE `team_coaches` SET `removed_at` = CURRENT_TIMESTAMP(3) " +
     "WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
     [teamId, coachSub]
   );
   return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// R-J: promote/demote between admin and coach. Owner unchanged here
+// (ownership transfer is its own flow). Caller-side auth check: only team
+// owner can call this.
+export async function dbUpdateTeamCoachRole(teamId, coachSub, role) {
+  if (!teamId || !coachSub) return { ok: false, reason: "missing_args" };
+  if (role !== "admin" && role !== "coach") return { ok: false, reason: "bad_role" };
+  const currentRole = await dbGetTeamRole(teamId, coachSub);
+  if (currentRole === null) return { ok: false, reason: "not_active" };
+  if (currentRole === "owner") return { ok: false, reason: "cannot_change_owner_role" };
+  if (currentRole === role) return { ok: true, affected: 0, unchanged: true };
+  const r = await pool.query(
+    "UPDATE `team_coaches` SET `role` = ? WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
+    [role, teamId, coachSub]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// R-J: transfer a group's primary coach to a new sub. Used when removing a
+// coach who's primary on groups (caller must specify the destination).
+// Validates the new primary is an active coach on the team.
+export async function dbTransferGroupPrimary(groupId, newPrimarySub) {
+  if (!groupId || !newPrimarySub) return { ok: false, reason: "missing_args" };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const grpRows = await conn.query(
+      "SELECT `team_id`, `primary_coach_sub` FROM `groups` WHERE `id` = ? FOR UPDATE",
+      [groupId]
+    );
+    if (!grpRows[0])               { await conn.rollback(); return { ok: false, reason: "group_not_found" }; }
+    const grp = grpRows[0];
+    if (grp.primary_coach_sub === newPrimarySub) {
+      await conn.rollback();
+      return { ok: true, affected: 0, unchanged: true };
+    }
+    // If the target group belongs to a team, the new primary must be an
+    // active team coach. (Independent groups have no team validation.)
+    if (grp.team_id) {
+      const ok = await conn.query(
+        "SELECT 1 FROM `team_coaches` WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
+        [grp.team_id, newPrimarySub]
+      );
+      if (ok.length === 0) {
+        await conn.rollback();
+        return { ok: false, reason: "new_primary_not_on_team" };
+      }
+    }
+    // Demote old primary's group_coaches row to assistant (or insert if not present)
+    await conn.query(
+      "UPDATE `group_coaches` SET `role` = 'assistant' WHERE `group_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
+      [groupId, grp.primary_coach_sub]
+    );
+    // Promote new primary: insert if missing, or update existing row
+    const existing = await conn.query(
+      "SELECT `role`, `removed_at` FROM `group_coaches` WHERE `group_id` = ? AND `coach_sub` = ?",
+      [groupId, newPrimarySub]
+    );
+    if (existing[0]) {
+      await conn.query(
+        "UPDATE `group_coaches` SET `role` = 'primary', `removed_at` = NULL WHERE `group_id` = ? AND `coach_sub` = ?",
+        [groupId, newPrimarySub]
+      );
+    } else {
+      await conn.query(
+        "INSERT INTO `group_coaches` (`group_id`, `coach_sub`, `role`) VALUES (?, ?, 'primary')",
+        [groupId, newPrimarySub]
+      );
+    }
+    // Update the denormalized pointer on groups
+    await conn.query(
+      "UPDATE `groups` SET `primary_coach_sub` = ? WHERE `id` = ?",
+      [newPrimarySub, groupId]
+    );
+    await conn.commit();
+    return { ok: true, prior_primary: grp.primary_coach_sub };
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) {}
+    throw e;
+  } finally {
+    conn.release();
+  }
 }
 
 // ── Managed swimmers + DOB / minor framework (R-B) ────────────────────
