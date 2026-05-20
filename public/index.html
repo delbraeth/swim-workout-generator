@@ -3,13 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Swim Workout Generator</title>
+  <title>Setforge</title>
+  <meta name="description" content="Setforge — workout generator and week planner for swimmers and coaches." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Inter+Tight:wght@600;700;800&display=swap" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <style>
+    /* Setforge rebrand 2026-05-20 — Locked palette (REBRAND_SCOPE §3.1).
+       Use var(--color-*) refs going forward; legacy literal hex stays in
+       inline styles until the Phase 4 CSS refactor lands. */
+    :root {
+      --color-primary:     #3b82f6;   /* blue   — generator + generic primary action */
+      --color-warn:        #f59e0b;   /* amber  — coach actions, Mix pills, multi-pace */
+      --color-positive:    #22c55e;   /* green  — completion, success, health states */
+      --color-destructive: #ef4444;   /* red    — delete, error, blocked */
+      --color-bg:          #0f172a;   /* slate-900 — page background */
+      --color-card:        #1e293b;   /* slate-800 — card surfaces */
+      --color-border:      #334155;   /* slate-700 — card/input borders */
+      --color-border-strong:#475569;  /* slate-600 — dividers */
+      --color-text:        #e2e8f0;   /* slate-200 — main body text on dark bg */
+      --color-text-muted:  #94a3b8;   /* slate-400 — secondary text */
+      --color-text-dim:    #64748b;   /* slate-500 — muted/disabled */
+    }
     *, *::before, *::after { box-sizing: border-box; }
-    body { background: #0f172a; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body {
+      background: var(--color-bg);
+      margin: 0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--color-text);
+    }
+    /* Tabular figures for numeric-dense contexts (pace clock, intervals,
+       yardage totals). Components opt in via className="tnum" or by
+       applying the rule via inline style where granularity is needed. */
+    .tnum { font-variant-numeric: tabular-nums; }
+    /* Display face for headings + wordmark + modal titles. */
+    .display { font-family: "Inter Tight", "Inter", -apple-system, sans-serif; }
 
     /* Slider styling */
     input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 3px; outline: none; cursor: pointer; }
@@ -21,6 +53,14 @@
 
     /* Equipment picker — responsive grid (auto-fits 4 cols on desktop, 2 on mobile) */
     .equipment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+
+    /* Setforge rebrand 2026-05-20 — mobile pool-row wrap (REBRAND_SCOPE §8.3).
+       On narrow viewports, the pool-mode buttons take the full row so the
+       modifier pills (Recovery, phase, mix) wrap cleanly to row 2 instead of
+       getting squeezed alongside. */
+    @media (max-width: 640px) {
+      .pool-mode-buttons { flex-basis: calc(100% - 70px); }
+    }
 
     /* ────────────────────────────────────────────────────────────
        PRINT STYLES — clean, high-contrast, 8.5×11 B&W
@@ -169,7 +209,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 11:40 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 12:10 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -219,7 +259,7 @@
       { id: "im",        label: "IM Focus",         emoji: "🔄", description: "All four strokes — fly, back, breast, free",
         selBg: "#7c3aed", border: "#c4b5fd", badge: "#ede9fe", badgeText: "#5b21b6" },
       { id: "distance",  label: "Distance",         emoji: "🏊", description: "Longer swims, building aerobic base",
-        selBg: "#2563eb", border: "#93c5fd", badge: "#dbeafe", badgeText: "#1e40af" },
+        selBg: "#2563eb", border: "#3b82f6", badge: "#dbeafe", badgeText: "#1e40af" },
       { id: "sprint",    label: "Sprint",           emoji: "⚡", description: "Short, fast swims with full recovery",
         selBg: "#dc2626", border: "#fca5a5", badge: "#fee2e2", badgeText: "#991b1b" },
       { id: "endurance", label: "Endurance",        emoji: "💪", description: "Steady-state, long continuous swims",
@@ -238,7 +278,7 @@
 
     const SECTION_STYLES = {
       warmup:   { bg: "#f0f9ff", border: "#bae6fd", headerBg: "#e0f2fe", headerText: "#075985", dot: "#0ea5e9" },
-      drill:    { bg: "#f0fdfa", border: "#99f6e4", headerBg: "#ccfbf1", headerText: "#134e4a", dot: "#14b8a6" },
+      drill:    { bg: "#f0fdfa", border: "#99f6e4", headerBg: "#ccfbf1", headerText: "#134e4a", dot: "#3b82f6" },
       main:     { bg: "#f8fafc", border: "#e2e8f0", headerBg: "#334155", headerText: "#ffffff", dot: "#64748b" },
       cooldown: { bg: "#f9fafb", border: "#e5e7eb", headerBg: "#f3f4f6", headerText: "#374151", dot: "#9ca3af" },
     };
@@ -7706,7 +7746,7 @@
         "off";
       return (
         <div style={{ marginBottom: 20 }}>
-          <p style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 8, marginTop: 0 }}>
+          <p style={{ color: "#3b82f6", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 8, marginTop: 0 }}>
             Equipment Available
             <span style={{ color: "#64748b", textTransform: "none", letterSpacing: 0, fontWeight: 400, marginLeft: 8 }}>
               (tap to cycle: off → preferred → required)
@@ -7764,7 +7804,7 @@
                       </span>
                       {isRequired && (
                         <span title="Required — every workout must include this"
-                          style={{ fontSize: 9, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.05em", flexShrink: 0 }}>★ REQ</span>
+                          style={{ fontSize: 9, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.05em", flexShrink: 0 }}>★ REQ</span>
                       )}
                       {isPreferred && (
                         <span title="Preferred — generator boosts options containing this, but won't reject if absent"
@@ -7801,7 +7841,7 @@
                 onBlur={commit}
                 onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
                 style={{ width: 52, fontSize: 12, fontFamily: "monospace", padding: "2px 6px", borderRadius: 4,
-                         border: "1px solid #3b82f6", background: "#0f172a", color: "#60a5fa", outline: "none" }} />
+                         border: "1px solid #3b82f6", background: "#0f172a", color: "#3b82f6", outline: "none" }} />
               <span style={{ fontSize: 11, color: "#64748b", marginLeft: 6 }}>sec</span>
             </td>
           </tr>
@@ -7958,7 +7998,7 @@
                       rows.push(
                         <tr key={`round-${r}`}>
                           <td colSpan={5} style={{ padding: "6px 16px", background: "#1e293b", borderTop: r > 0 ? "1px solid #334155" : undefined }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "#60a5fa", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                               Round {r + 1}
                             </span>
                           </td>
@@ -8122,7 +8162,7 @@
           <div style={{ position: "relative", marginBottom: 4 }}>
             <div style={{ height: 6, borderRadius: 3, background: "#334155", position: "relative" }}>
               <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${pct}%`,
-                            background: tooLow ? "linear-gradient(90deg,#ef4444,#f87171)" : "linear-gradient(90deg,#3b82f6,#60a5fa)",
+                            background: tooLow ? "linear-gradient(90deg,#ef4444,#f87171)" : "linear-gradient(90deg,#3b82f6,#3b82f6)",
                             borderRadius: 3 }} />
             </div>
             <input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={SLIDER_STEP} value={value}
@@ -8142,7 +8182,7 @@
                     onBlur={() => commitBound(boundKey, boundDraft)}
                     onKeyDown={e => { if (e.key === "Enter") commitBound(boundKey, boundDraft); if (e.key === "Escape") { setEditingBound(null); setBoundDraft(""); } }}
                     style={{ width: 52, fontSize: 10, fontFamily: "monospace", padding: "1px 4px", borderRadius: 4,
-                             border: "1px solid #3b82f6", background: "#0f172a", color: "#60a5fa", outline: "none" }} />
+                             border: "1px solid #3b82f6", background: "#0f172a", color: "#3b82f6", outline: "none" }} />
                 );
               }
               return (
@@ -8150,7 +8190,7 @@
                   onClick={() => boundKey ? (setEditingBound(boundKey), setBoundDraft(String(v))) : onChange(v)}
                   title={boundKey ? `Click to set ${boundKey} yardage` : undefined}
                   style={{ fontSize: 10, cursor: "pointer",
-                            color: v === value ? "#60a5fa" : v < (typeMin||0) ? "#7f1d1d" : "#475569",
+                            color: v === value ? "#3b82f6" : v < (typeMin||0) ? "#7f1d1d" : "#475569",
                             fontWeight: v === value ? 700 : 400,
                             textDecoration: boundKey ? "underline dotted" : undefined }}>
                   {tickLabel(v)}{boundKey ? " ✎" : ""}
@@ -8204,7 +8244,7 @@
                 title={readOnly ? `${value || 0}/5` : `${n} star${n>1?'s':''}`}
                 style={{
                   fontSize: size, lineHeight: 1, cursor: readOnly ? "default" : "pointer",
-                  color: filled ? "#fbbf24" : "#475569",
+                  color: filled ? "#f59e0b" : "#475569",
                   transition: "color 0.1s",
                   userSelect: "none",
                 }}>★</span>
@@ -8916,7 +8956,7 @@
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-                      style={{ padding: "4px 10px", background: "transparent", color: "#93c5fd", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                      style={{ padding: "4px 10px", background: "transparent", color: "#3b82f6", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                       {isExpanded ? "Hide" : "View"}
                     </button>
                     <button onClick={() => { setEditingId(entry.id); setEditingNotes(entry.notes || ""); }}
@@ -8931,7 +8971,7 @@
                     {entry.blocks && (
                       <button onClick={() => onRun(entry)}
                         title="Step through this workout section by section"
-                        style={{ padding: "4px 10px", background: "transparent", color: "#93c5fd", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                        style={{ padding: "4px 10px", background: "transparent", color: "#3b82f6", border: "1px solid #334155", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                         ▶ Run
                       </button>
                     )}
@@ -8955,7 +8995,7 @@
                 )}
 
                 {entry.focusNote && (
-                  <div style={{ marginTop: 8, fontSize: 12, color: "#93c5fd", fontWeight: 600 }}>
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#3b82f6", fontWeight: 600 }}>
                     🎯 {entry.focusNote}
                   </div>
                 )}
@@ -9295,7 +9335,7 @@
                   {sectionName || "Pace Clock"}
                 </div>
                 {focusNote && (
-                  <div style={{ fontSize: 12, color: "#93c5fd", fontStyle: "italic", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div style={{ fontSize: 12, color: "#3b82f6", fontStyle: "italic", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     🎯 {focusNote}
                   </div>
                 )}
@@ -9412,7 +9452,7 @@
                 {sectionName || "Pace Clock"}
               </div>
               {focusNote && (
-                <div style={{ fontSize: 13, color: "#93c5fd", fontStyle: "italic", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 13, color: "#3b82f6", fontStyle: "italic", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   🎯 {focusNote}
                 </div>
               )}
@@ -9802,7 +9842,7 @@
               <button onClick={startEdit}
                 style={{ padding: "4px 10px", borderRadius: 5,
                   border: "1px solid #334155", background: "transparent",
-                  color: "#93c5fd", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                  color: "#3b82f6", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                 Edit
               </button>
             </>
@@ -9837,7 +9877,7 @@
             <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{metric.label}</div>
             {!editing && isSet && (
               <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-                Target: <span style={{ color: "#93c5fd", fontWeight: 700 }}>{value.toLocaleString()}</span> {metric.unit}
+                Target: <span style={{ color: "#3b82f6", fontWeight: 700 }}>{value.toLocaleString()}</span> {metric.unit}
               </div>
             )}
           </div>
@@ -9883,7 +9923,7 @@
           ) : (
             <button onClick={startEdit}
               style={{ padding: "4px 12px", borderRadius: 6, border: "1px dashed #475569",
-                background: "transparent", color: "#93c5fd",
+                background: "transparent", color: "#3b82f6",
                 fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
               + Set a goal
             </button>
@@ -10059,7 +10099,7 @@
                     padding: "4px 9px", borderRadius: 999,
                     border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
                     background: active ? "rgba(245,158,11,0.18)" : "transparent",
-                    color: active ? "#fbbf24" : "#94a3b8",
+                    color: active ? "#f59e0b" : "#94a3b8",
                     fontSize: 11, fontWeight: 700, cursor: "pointer",
                   }}>
                   {m.emoji} {m.label}
@@ -10124,7 +10164,7 @@
                       <span style={{ color: "#94a3b8" }}>{m ? m.emoji : "•"}</span>
                       <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{m ? m.label : b.kind}</span>
                       <span style={{ color: "#64748b" }}>·</span>
-                      <span style={{ color: "#fbbf24", fontFamily: "ui-monospace, monospace" }}>{fmtPace100(b.pace_100_secs)}</span>
+                      <span style={{ color: "#f59e0b", fontFamily: "ui-monospace, monospace" }}>{fmtPace100(b.pace_100_secs)}</span>
                       <span style={{ color: "#64748b" }}>·</span>
                       <span style={{ color: "#94a3b8", fontSize: 10 }}>{b.recorded_at ? new Date(b.recorded_at).toLocaleDateString() : ""}</span>
                       <span style={{ color: "#475569", fontSize: 10 }}>({b.pool_mode})</span>
@@ -10163,7 +10203,7 @@
               <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>🎯 Swimmer level</div>
               <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
                 {selected
-                  ? <><span style={{ color: "#fbbf24", fontWeight: 700 }}>{selected.emoji} {selected.label}</span> · {selected.description} · presets pace to {selected.pace}/100</>
+                  ? <><span style={{ color: "#f59e0b", fontWeight: 700 }}>{selected.emoji} {selected.label}</span> · {selected.description} · presets pace to {selected.pace}/100</>
                   : <span style={{ fontStyle: "italic" }}>No level set — pick one to auto-fill your pace.</span>}
               </div>
             </div>
@@ -10180,7 +10220,7 @@
                     padding: "5px 11px", borderRadius: 999,
                     border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
                     background: active ? "rgba(245,158,11,0.18)" : "transparent",
-                    color: active ? "#fbbf24" : "#94a3b8",
+                    color: active ? "#f59e0b" : "#94a3b8",
                     fontSize: 12, fontWeight: 700, cursor: "pointer",
                     display: "inline-flex", alignItems: "center", gap: 4,
                   }}>
@@ -10231,7 +10271,7 @@
             <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>🏁 Next event</div>
             {!editing && isSet && (
               <div style={{ fontSize: 11, color: "#64748b", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                <span style={{ color: "#93c5fd", fontWeight: 700 }}>{value.name}</span>
+                <span style={{ color: "#3b82f6", fontWeight: 700 }}>{value.name}</span>
                 <span> · {value.date}</span>
                 {daysLabel && <span style={{ color: "#475569" }}> · {daysLabel}</span>}
               </div>
@@ -10289,7 +10329,7 @@
           ) : (
             <button onClick={startEdit}
               style={{ padding: "4px 12px", borderRadius: 6, border: "1px dashed #475569",
-                background: "transparent", color: "#93c5fd",
+                background: "transparent", color: "#3b82f6",
                 fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
               + Set an event
             </button>
@@ -10376,7 +10416,7 @@
                           padding: "5px 11px", borderRadius: 999,
                           border: `1px solid ${active ? "#3b82f6" : "#334155"}`,
                           background: active ? "#1e3a5f" : "transparent",
-                          color: active ? "#93c5fd" : "#94a3b8",
+                          color: active ? "#3b82f6" : "#94a3b8",
                           fontSize: 12, fontWeight: 700, cursor: "pointer",
                         }}>
                         {c.label}
@@ -10703,7 +10743,7 @@
           }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <div>
-                <div style={{ color: "#fbbf24", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em" }}>Multi-pace print</div>
+                <div style={{ color: "#f59e0b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em" }}>Multi-pace print</div>
                 <div style={{ color: "#e2e8f0", fontSize: 18, fontWeight: 700, marginTop: 2 }}>{headerLabel}</div>
               </div>
               <button onClick={onClose} style={{
@@ -10727,7 +10767,7 @@
                       flex: 1, padding: "9px 12px", borderRadius: 8,
                       border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
                       background: active ? "rgba(245,158,11,0.18)" : "transparent",
-                      color: opt.disabled ? "#475569" : (active ? "#fbbf24" : "#94a3b8"),
+                      color: opt.disabled ? "#475569" : (active ? "#f59e0b" : "#94a3b8"),
                       fontSize: 13, fontWeight: 700,
                       cursor: opt.disabled ? "not-allowed" : "pointer",
                     }}>
@@ -10766,7 +10806,7 @@
                     previewLanes.map((l, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 10px", borderTop: i === 0 ? "none" : "1px solid #334155", fontSize: 13, color: "#e2e8f0" }}>
                         <span>{l.lane_label}</span>
-                        <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: "#fbbf24" }}>{l.pace || "—"}</span>
+                        <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: "#f59e0b" }}>{l.pace || "—"}</span>
                       </div>
                     ))
                   )}
@@ -10810,7 +10850,7 @@
                         flex: 1, padding: "9px 12px", borderRadius: 8,
                         border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
                         background: active ? "rgba(245,158,11,0.18)" : "transparent",
-                        color: active ? "#fbbf24" : "#94a3b8",
+                        color: active ? "#f59e0b" : "#94a3b8",
                         fontSize: 13, fontWeight: 700, cursor: "pointer",
                       }}>{m.label}</button>
                   );
@@ -10830,7 +10870,7 @@
                 Cancel
               </button>
               <button onClick={submit}
-                style={{ padding: "9px 14px", borderRadius: 7, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.18)", color: "#fbbf24", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                style={{ padding: "9px 14px", borderRadius: 7, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.18)", color: "#f59e0b", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                 Preview & Print ▸
               </button>
             </div>
@@ -10964,7 +11004,7 @@
       );
     }
 
-    function ProfileModal({ onClose, onProfileChange, onPaceUpdate }) {
+    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback }) {
       const [me, setMe]             = React.useState(null);
       const [sessions, setSessions] = React.useState([]);
       const [goals, setGoals]       = React.useState([]);
@@ -11227,6 +11267,23 @@
                     {/* R-I: claim a managed profile a coach created for you */}
                     <ClaimManagedSection me={me} setMe={setMe} onClaimed={() => { if (onProfileChange) onProfileChange(); }} />
                   </div>
+                  {/* Setforge rebrand 2026-05-20 — Send feedback + Sign out
+                      folded down from the top nav (REBRAND_SCOPE §8.1, §8.4). */}
+                  <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 16, borderTop: "1px solid #1e293b" }}>
+                    {onSendFeedback && (
+                      <button onClick={() => { onSendFeedback(); onClose(); }}
+                        title="Send feedback or report a bug"
+                        style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                        💬 Send feedback
+                      </button>
+                    )}
+                    {authMode === "apple" && (
+                      <a href="/api/auth/signout" title="Sign out"
+                        style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, textDecoration: "none" }}>
+                        🚪 Sign out
+                      </a>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
@@ -11366,6 +11423,9 @@
       // info so the UI can prompt for per-group primary transfer.
       const [removeConflict, setRemoveConflict] = React.useState(null);          // { coachSub, groups: [...] }
       const [transferPlan,   setTransferPlan]   = React.useState({});            // { group_id: new_primary_sub }
+      // Setforge rebrand 2026-05-20 — team detail tabs (REBRAND_SCOPE §8.2).
+      // Members & Coaches / Groups / Events. Default = members.
+      const [activeTab, setActiveTab] = React.useState("members");
       // R-C additions: groups in this team, team events, and managed-roster
       // (filtered to team) for the member-add picker inside each group.
       const [groups,        setGroups]        = React.useState(null);             // null = unloaded
@@ -11741,6 +11801,35 @@
               )}
             </div>
 
+            {/* Setforge rebrand 2026-05-20 — team detail tab nav.
+                3 tabs: Members & Coaches / Groups / Events. */}
+            <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #334155", marginBottom: 16 }}>
+              {[
+                { id: "members", label: "Members & Coaches", count: (detail.coaches || []).length },
+                { id: "groups",  label: "Groups",            count: (groups || []).length },
+                { id: "events",  label: "Events",            count: (events || []).length },
+              ].map(t => {
+                const active = activeTab === t.id;
+                return (
+                  <button key={t.id} onClick={() => setActiveTab(t.id)}
+                    style={{
+                      padding: "9px 14px", border: "none", borderBottom: active ? "2px solid #3b82f6" : "2px solid transparent",
+                      background: "transparent", color: active ? "#e2e8f0" : "#94a3b8",
+                      fontSize: 13, fontWeight: active ? 700 : 600, cursor: "pointer",
+                      marginBottom: -1,
+                    }}>
+                    {t.label}
+                    {t.count > 0 && (
+                      <span style={{ marginLeft: 6, fontSize: 11, color: active ? "#94a3b8" : "#64748b", fontWeight: 500 }}>
+                        ({t.count})
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeTab === "members" && (
             <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <h3 style={{ color: "#e2e8f0", marginTop: 0, fontSize: 15 }}>Coaches ({detail.coaches?.length || 0})</h3>
               {(detail.coaches || []).map(c => (
@@ -11753,7 +11842,7 @@
                       // R-J: role pill colored by tier. Owner = purple,
                       // Admin = blue, Coach = slate.
                       const colors = c.role === "owner" ? { bg: "#a78bfa22", border: "#a78bfa", color: "#a78bfa" }
-                                  : c.role === "admin"  ? { bg: "#3b82f622", border: "#3b82f6", color: "#93c5fd" }
+                                  : c.role === "admin"  ? { bg: "#3b82f622", border: "#3b82f6", color: "#3b82f6" }
                                   :                        { bg: "#33415522", border: "#475569", color: "#94a3b8" };
                       return (
                         <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: colors.bg, border: `1px solid ${colors.border}`, color: colors.color, fontWeight: 700 }}>{c.role}</span>
@@ -11767,7 +11856,7 @@
                       {c.role === "coach" && (
                         <button onClick={() => handleRoleChange(c.coach_sub, "admin")}
                           title="Promote to admin (manage team coaches + archives)"
-                          style={{ padding: "3px 8px", background: "transparent", border: "1px solid #3b82f6", borderRadius: 6, color: "#93c5fd", fontSize: 11, cursor: "pointer" }}>
+                          style={{ padding: "3px 8px", background: "transparent", border: "1px solid #3b82f6", borderRadius: 6, color: "#3b82f6", fontSize: 11, cursor: "pointer" }}>
                           ↑ Admin
                         </button>
                       )}
@@ -11820,7 +11909,7 @@
                           <option value="admin">Admin</option>
                         </select>
                         <button onClick={handleAddCoach} disabled={!addCoachSub}
-                          style={{ padding: "6px 14px", background: addCoachSub ? "#60a5fa" : "#475569", color: addCoachSub ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: addCoachSub ? "pointer" : "not-allowed" }}>
+                          style={{ padding: "6px 14px", background: addCoachSub ? "#3b82f6" : "#475569", color: addCoachSub ? "#0f172a" : "#94a3b8", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: addCoachSub ? "pointer" : "not-allowed" }}>
                           Add
                         </button>
                       </div>
@@ -11832,8 +11921,9 @@
                 );
               })()}
             </div>
+            )}
 
-            {/* ── Groups in this team (R-C, amber accents) ───────────── */}
+            {activeTab === "groups" && (
             <div style={{ background: "#1e293b", border: "1px solid #f59e0b", borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <h3 style={{ color: "#f59e0b", marginTop: 0, marginBottom: 0, fontSize: 15 }}>🏊‍♀️ Groups ({(groups || []).length})</h3>
@@ -11879,8 +11969,9 @@
                 </div>
               )}
             </div>
+            )}
 
-            {/* ── Team events (decision #38, amber accents) ─────────── */}
+            {activeTab === "events" && (
             <div style={{ background: "#1e293b", border: "1px solid #f59e0b", borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <h3 style={{ color: "#f59e0b", marginTop: 0, marginBottom: 0, fontSize: 15 }}>📅 Events ({(events || []).length})</h3>
@@ -11966,6 +12057,7 @@
                 </div>
               )}
             </div>
+            )}
 
             {msg && <div style={{ color: "#fca5a5", fontSize: 12, padding: "8px 0" }}>{msg}</div>}
           </div>
@@ -12029,7 +12121,7 @@
                 style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
                 <div onClick={(e) => e.stopPropagation()}
                   style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 12, padding: 22, maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
-                  <div style={{ color: "#fbbf24", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Coach removal blocked</div>
+                  <div style={{ color: "#f59e0b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Coach removal blocked</div>
                   <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Transfer primary first</div>
                   <p style={{ color: "#cbd5e1", fontSize: 12, marginTop: 0, marginBottom: 12, lineHeight: 1.5 }}>
                     This coach is still primary on {removeConflict.groups.length} {removeConflict.groups.length === 1 ? "group" : "groups"}. Pick a new primary for each before removing them from the team.
@@ -12203,7 +12295,7 @@
                 ✓ Claim code created. Send to the swimmer out-of-band:
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-                <code style={{ flex: 1, fontFamily: "monospace", fontSize: 16, fontWeight: 700, padding: "6px 10px", background: "#1e293b", color: "#fbbf24", border: "1px solid #475569", borderRadius: 4, letterSpacing: "0.1em", textAlign: "center" }}>
+                <code style={{ flex: 1, fontFamily: "monospace", fontSize: 16, fontWeight: 700, padding: "6px 10px", background: "#1e293b", color: "#f59e0b", border: "1px solid #475569", borderRadius: 4, letterSpacing: "0.1em", textAlign: "center" }}>
                   {latestIssued.token}
                 </code>
                 <button onClick={() => copyToClipboard(latestIssued.token)}
@@ -12227,7 +12319,7 @@
               {tokens.map(t => (
                 <div key={t.token} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", background: "#0f172a", border: "1px solid #334155", borderRadius: 4, marginBottom: 3, fontSize: 11 }}>
                   <span>
-                    <code style={{ fontFamily: "monospace", color: "#fbbf24", fontSize: 11 }}>{t.token}</code>
+                    <code style={{ fontFamily: "monospace", color: "#f59e0b", fontSize: 11 }}>{t.token}</code>
                     <span style={{ marginLeft: 8, color: "#64748b", fontSize: 10 }}>expires {new Date(t.expires_at).toLocaleDateString()}</span>
                   </span>
                   <button onClick={() => revoke(t.token)}
@@ -12525,8 +12617,8 @@
       const visPillStyle = (vis) => {
         const map = {
           private:       { bg: "rgba(100,116,139,0.18)", border: "#64748b", color: "#94a3b8" },
-          group_coaches: { bg: "rgba(245,158,11,0.18)",  border: "#f59e0b", color: "#fbbf24" },
-          team_coaches:  { bg: "rgba(59,130,246,0.18)",  border: "#3b82f6", color: "#93c5fd" },
+          group_coaches: { bg: "rgba(245,158,11,0.18)",  border: "#f59e0b", color: "#f59e0b" },
+          team_coaches:  { bg: "rgba(59,130,246,0.18)",  border: "#3b82f6", color: "#3b82f6" },
         };
         const s = map[vis] || map.private;
         return { padding: "2px 8px", borderRadius: 999, border: `1px solid ${s.border}`, background: s.bg, color: s.color, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" };
@@ -12538,7 +12630,7 @@
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <h4 style={{ color: "#e2e8f0", margin: 0, fontSize: 14 }}>Coach notes ({notes ? notes.length : "…"})</h4>
             {team && team.team_type === "high_school" && (
-              <span style={{ fontSize: 10, color: "#93c5fd", fontStyle: "italic" }}>High-school team — notes default to team-shared</span>
+              <span style={{ fontSize: 10, color: "#3b82f6", fontStyle: "italic" }}>High-school team — notes default to team-shared</span>
             )}
           </div>
 
@@ -12560,7 +12652,7 @@
                         padding: "3px 9px", borderRadius: 999,
                         border: `1px solid ${active ? "#3b82f6" : "#334155"}`,
                         background: active ? "rgba(59,130,246,0.18)" : "transparent",
-                        color: o.disabled ? "#475569" : (active ? "#93c5fd" : "#94a3b8"),
+                        color: o.disabled ? "#475569" : (active ? "#3b82f6" : "#94a3b8"),
                         fontSize: 11, fontWeight: 700,
                         cursor: o.disabled ? "not-allowed" : "pointer",
                       }}>{o.label}</button>
@@ -12585,7 +12677,7 @@
               <div key={n.id} style={{ padding: 10, background: "#0f172a", border: "1px solid #334155", borderRadius: 6, marginBottom: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, gap: 6, flexWrap: "wrap" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
-                    <span style={{ color: mine ? "#fbbf24" : "#cbd5e1", fontWeight: 700 }}>{n.author_name || (mine ? "You" : "(coach)")}{mine ? " (you)" : ""}</span>
+                    <span style={{ color: mine ? "#f59e0b" : "#cbd5e1", fontWeight: 700 }}>{n.author_name || (mine ? "You" : "(coach)")}{mine ? " (you)" : ""}</span>
                     <span>·</span>
                     <span>{n.created_at ? new Date(n.created_at).toLocaleString() : ""}</span>
                     {n.updated_at && n.updated_at !== n.created_at && <span style={{ fontStyle: "italic" }}>(edited)</span>}
@@ -12607,7 +12699,7 @@
                               padding: "3px 9px", borderRadius: 999,
                               border: `1px solid ${active ? "#3b82f6" : "#334155"}`,
                               background: active ? "rgba(59,130,246,0.18)" : "transparent",
-                              color: o.disabled ? "#475569" : (active ? "#93c5fd" : "#94a3b8"),
+                              color: o.disabled ? "#475569" : (active ? "#3b82f6" : "#94a3b8"),
                               fontSize: 11, fontWeight: 700,
                               cursor: o.disabled ? "not-allowed" : "pointer",
                             }}>{o.label}</button>
@@ -12809,7 +12901,7 @@
                 const active = mix === m.id;
                 return (
                   <button key={m.id} onClick={() => setMix(m.id)}
-                    style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${active ? "#f59e0b" : "#334155"}`, background: active ? "rgba(245,158,11,0.18)" : "transparent", color: active ? "#fbbf24" : "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${active ? "#f59e0b" : "#334155"}`, background: active ? "rgba(245,158,11,0.18)" : "transparent", color: active ? "#f59e0b" : "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                     {m.label}
                   </button>
                 );
@@ -13201,7 +13293,7 @@
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <button onClick={handleRepeatWeek} disabled={repeatBusy || (list || []).length === 0}
                 title="Copy this week's scheduled workouts to next week (skips days that already have rows)"
-                style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${repeatBusy ? "#334155" : "#f59e0b"}`, background: repeatBusy ? "transparent" : "rgba(245,158,11,0.12)", color: repeatBusy ? "#64748b" : "#fbbf24", fontSize: 13, fontWeight: 700, cursor: repeatBusy || (list || []).length === 0 ? "not-allowed" : "pointer", opacity: (list || []).length === 0 ? 0.4 : 1 }}>{repeatBusy ? "…" : "🗓 Repeat next week"}</button>
+                style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${repeatBusy ? "#334155" : "#f59e0b"}`, background: repeatBusy ? "transparent" : "rgba(245,158,11,0.12)", color: repeatBusy ? "#64748b" : "#f59e0b", fontSize: 13, fontWeight: 700, cursor: repeatBusy || (list || []).length === 0 ? "not-allowed" : "pointer", opacity: (list || []).length === 0 ? 0.4 : 1 }}>{repeatBusy ? "…" : "🗓 Repeat next week"}</button>
               <button onClick={goPrev} title="Previous week"
                 style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>‹ Prev</button>
               <button onClick={goThis} disabled={showingThisWeek}
@@ -13267,7 +13359,7 @@
                     })();
                     return (
                       <div key={sw.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 8px", background: "#0f172a", border: `1px solid ${borderClr}`, borderRadius: 5, marginBottom: 4, flexWrap: "wrap" }}>
-                        <span style={{ color: done ? "#22c55e" : (isIntent ? "#fbbf24" : "#cbd5e1"), fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
+                        <span style={{ color: done ? "#22c55e" : (isIntent ? "#f59e0b" : "#cbd5e1"), fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
                           {done ? "✓ " : ""}{isIntent && !done && <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: "0.1em", marginRight: 6, textTransform: "uppercase" }}>Intent</span>}{typeLabel}
                           {groupName && (
                             <span title={`Coach-planned for group "${groupName}"`}
@@ -13282,7 +13374,7 @@
                           <>
                             <button onClick={() => handleGenerateFromIntent(sw)}
                               title="Generate a workout from this intent + preview it"
-                              style={{ padding: "3px 10px", border: "1px solid #f59e0b", borderRadius: 5, background: "transparent", color: "#fbbf24", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>▶ Generate</button>
+                              style={{ padding: "3px 10px", border: "1px solid #f59e0b", borderRadius: 5, background: "transparent", color: "#f59e0b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>▶ Generate</button>
                             <button onClick={() => setIntentForm({ date: sw.scheduled_date, intent: sw.intent_params, editingId: sw.id })}
                               title="Edit this intent"
                               style={{ padding: "3px 10px", border: "1px solid #3b82f6", borderRadius: 5, background: "transparent", color: "#3b82f6", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit intent</button>
@@ -13736,7 +13828,7 @@
                 ✓ Code created. Send this to the swimmer out-of-band (text, email, in person):
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-                <code style={{ flex: 1, fontFamily: "monospace", fontSize: 16, fontWeight: 700, padding: "6px 10px", background: "#1e293b", color: "#fbbf24", border: "1px solid #475569", borderRadius: 4, letterSpacing: "0.1em", textAlign: "center" }}>
+                <code style={{ flex: 1, fontFamily: "monospace", fontSize: 16, fontWeight: 700, padding: "6px 10px", background: "#1e293b", color: "#f59e0b", border: "1px solid #475569", borderRadius: 4, letterSpacing: "0.1em", textAlign: "center" }}>
                   {latestIssued.token}
                 </code>
                 <button onClick={() => copyToClipboard(latestIssued.token)}
@@ -13761,7 +13853,7 @@
               {tokens.map(t => (
                 <div key={t.token} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", background: "#0f172a", border: "1px solid #334155", borderRadius: 4, marginBottom: 3, fontSize: 11 }}>
                   <span>
-                    <code style={{ fontFamily: "monospace", color: "#fbbf24", fontSize: 11 }}>{t.token}</code>
+                    <code style={{ fontFamily: "monospace", color: "#f59e0b", fontSize: 11 }}>{t.token}</code>
                     <span style={{ marginLeft: 8, color: "#94a3b8" }}>· {t.intended_role}</span>
                     <span style={{ marginLeft: 8, color: "#64748b", fontSize: 10 }}>expires {new Date(t.expires_at).toLocaleDateString()}</span>
                   </span>
@@ -13990,7 +14082,7 @@
       { v: "build",    label: "Build 🔨",    color: "#3b82f6" },
       { v: "peak",     label: "Peak ⛰️",     color: "#a78bfa" },
       { v: "taper",    label: "Taper 📉",    color: "#f59e0b" },
-      { v: "recovery", label: "Recovery 🌿", color: "#14b8a6" },
+      { v: "recovery", label: "Recovery 🌿", color: "#3b82f6" },
     ];
     function phaseOption(v) {
       return PHASE_OPTIONS.find(p => p.v === (v || "")) || PHASE_OPTIONS[0];
@@ -14522,7 +14614,7 @@
                 </div>
                 {!editing && (
                   <button onClick={() => setEditing(true)}
-                    style={{ padding: "5px 11px", background: "#60a5fa", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ padding: "5px 11px", background: "#3b82f6", color: "#0f172a", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                     ✎ Edit
                   </button>
                 )}
@@ -15259,7 +15351,7 @@
             <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 8, marginBottom: 8 }}>
               Read-only browse of the workout-set bank as authored. No cross-unit conversion or fallback — see what's actually in each bucket per pool mode.
             </p>
-            <p style={{ color: "#fbbf24", fontSize: 12, marginTop: 0, marginBottom: 16, padding: "8px 12px",
+            <p style={{ color: "#f59e0b", fontSize: 12, marginTop: 0, marginBottom: 16, padding: "8px 12px",
                         background: "#1e293b", border: "1px solid #334155", borderRadius: 6 }}>
               ⚠️ All intervals are calibrated for a <strong>masters baseline of 2:00/100yd</strong> (≈2:11/100m for SCM).
               On the workout page, set your actual pace and click <em>Rescale</em> to scale every interval proportionally.
@@ -15274,7 +15366,7 @@
           <div className="screen-only" style={{ marginBottom: 12 }}>
             <span style={{ color: "#64748b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 10 }}>Mode</span>
             {["25y", "25m", "50m"].map(m => (
-              <button key={m} onClick={() => { setPoolMode(m); setExpandedKey(null); }} style={tabStyle(poolMode === m, "#60a5fa")}>{m}</button>
+              <button key={m} onClick={() => { setPoolMode(m); setExpandedKey(null); }} style={tabStyle(poolMode === m, "#3b82f6")}>{m}</button>
             ))}
           </div>
 
@@ -15305,13 +15397,13 @@
               <button key={eq.id}
                 onClick={() => toggleSetMember(equipFilter, eq.id, setEquipFilter)}
                 title={eq.description}
-                style={tabStyle(equipFilter.has(eq.id), "#fbbf24")}>
+                style={tabStyle(equipFilter.has(eq.id), "#f59e0b")}>
                 {eq.icon} {eq.label}
               </button>
             ))}
             {equipFilter.size > 0 && (
               <button onClick={() => setEquipFilter(new Set())}
-                style={{ ...tabStyle(false), color: "#fbbf24", fontStyle: "italic" }}>
+                style={{ ...tabStyle(false), color: "#f59e0b", fontStyle: "italic" }}>
                 clear
               </button>
             )}
@@ -15571,7 +15663,7 @@
       const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) : "—";
 
       const STATUSES = [
-        { id: "new",       label: "New",       color: "#fbbf24" },
+        { id: "new",       label: "New",       color: "#f59e0b" },
         { id: "reviewed",  label: "Reviewed",  color: "#3b82f6" },
         { id: "resolved",  label: "Resolved",  color: "#22c55e" },
         { id: "dismissed", label: "Dismissed", color: "#64748b" },
@@ -15746,7 +15838,7 @@
                   <td style={{ padding: "8px 6px", color: "#94a3b8" }}>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : "—"}</td>
                   <td style={{ padding: "8px 6px" }}>
                     {u.is_admin    && <span style={{ background: "#a78bfa", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>admin</span>}
-                    {u.is_coach    && <span style={{ background: "#60a5fa", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>coach</span>}
+                    {u.is_coach    && <span style={{ background: "#3b82f6", color: "#0f172a", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>coach</span>}
                     {u.is_disabled && <span style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>disabled</span>}
                   </td>
                   <td style={{ padding: "8px 6px" }}>
@@ -16024,7 +16116,7 @@
                     flex: 1, padding: "10px 0", borderRadius: 10,
                     border: `2px solid ${active ? "#3b82f6" : "#334155"}`,
                     background: active ? "#1e3a5f" : "#0f172a",
-                    color: active ? "#93c5fd" : "#64748b",
+                    color: active ? "#3b82f6" : "#64748b",
                     fontSize: 13, fontWeight: 700, cursor: "pointer",
                   }}>
                     {o.label}
@@ -16047,11 +16139,11 @@
                   padding: "10px 14px", borderRadius: 10,
                   border: `1px solid ${audioCues ? "#3b82f6" : "#334155"}`,
                   background: audioCues ? "#1e3a5f" : "#0f172a",
-                  color: audioCues ? "#93c5fd" : "#64748b",
+                  color: audioCues ? "#3b82f6" : "#64748b",
                   fontSize: 13, fontWeight: 700, cursor: "pointer",
                 }}>
                 <span>🔔 Audio cues</span>
-                <span style={{ fontSize: 11, color: audioCues ? "#93c5fd" : "#475569" }}>
+                <span style={{ fontSize: 11, color: audioCues ? "#3b82f6" : "#475569" }}>
                   {audioCues ? "ON · preview ▶" : "OFF"}
                 </span>
               </button>
@@ -16405,9 +16497,8 @@
           padding: "24px",
         }}>
           <div style={{ width: "100%", maxWidth: 360, textAlign: "center" }}>
-            <div style={{ fontSize: 56, marginBottom: 12 }}>🏊‍♂️</div>
-            <h1 style={{ fontSize: 24, fontWeight: 900, color: "#fff", margin: "0 0 8px", letterSpacing: "-0.02em" }}>
-              Swim Workout Generator
+            <h1 style={{ fontFamily: '"Inter Tight", Inter, sans-serif', fontSize: 56, fontWeight: 800, color: "#fff", margin: "0 0 8px", letterSpacing: "-0.03em" }}>
+              Setforge
             </h1>
             <p style={{ color: "#64748b", fontSize: 14, margin: "0 0 36px" }}>
               Sign in to continue
@@ -16529,6 +16620,9 @@
       const [intentDate, setIntentDate] = useState(null);
       const [intentSaveBusy, setIntentSaveBusy] = useState(false);
       const [showProfile, setShowProfile]         = useState(false);
+      // Setforge rebrand 2026-05-20 — Coach dropdown (REBRAND_SCOPE §8.1).
+      // Collapses Teams / Swimmers / Catalog into a single nav entry.
+      const [coachMenuOpen, setCoachMenuOpen] = useState(false);
       const [showFeedback, setShowFeedback]       = useState(false);
       const [showIntentParser, setShowIntentParser] = useState(false);
       // DOB soft-prompt dismissal (sessionStorage-backed, per decision #37).
@@ -17692,15 +17786,14 @@
           {/* Header */}
           <div className="screen-only" style={{ background: "#0f172a", borderBottom: "1px solid #1e40af", boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
             <div style={{ maxWidth: 940, margin: "0 auto", padding: "20px 24px", display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 36 }}>🏊‍♂️</span>
               <div style={{ flex: 1 }}>
-                <h1 style={{ fontSize: 26, fontWeight: 900, color: "#fff", margin: 0, letterSpacing: "-0.02em" }}>Swim Workout Generator</h1>
-                <p style={{ color: "#93c5fd", fontSize: 13, margin: "2px 0 0" }}>
+                <h1 style={{ fontFamily: '"Inter Tight", Inter, sans-serif', fontSize: 28, fontWeight: 800, color: "var(--color-text)", margin: 0, letterSpacing: "-0.02em" }}>Setforge</h1>
+                <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "2px 0 0" }}>
                   {personalFirstName
                     ? (view === "history" ? `${personalFirstName}'s history` :
                        view === "admin"   ? "Admin console" :
                        `${personalFirstName}'s workouts`)
-                    : "Personalized swim workouts for masters swimmers"}
+                    : "Personalized workouts + week planning for swimmers and coaches"}
                 </p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
@@ -17719,24 +17812,12 @@
                       </span>
                     )}
                   </button>
-                  {authMode === "apple" && (
-                    <a href="/api/auth/signout" title="Sign out"
-                      style={{
-                        padding: "8px 12px", borderRadius: 8,
-                        border: "1px solid #334155", background: "#1e293b",
-                        color: "#64748b", fontSize: 12, fontWeight: 600,
-                        cursor: "pointer", textDecoration: "none",
-                        display: "inline-flex", alignItems: "center",
-                      }}>
-                      Sign out
-                    </a>
-                  )}
                   {/* R-G: 📥 Assigned to me — visible to all auth users (any
                       account may be a swimmer in someone's group). */}
                   {authenticated && (
                     <button onClick={() => setView(v => v === "assigned" ? "generator" : "assigned")}
                       title={view === "assigned" ? "Back to generator" : "Workouts assigned to you"}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #14b8a6", background: view === "assigned" ? "#14b8a6" : "#1e293b", color: view === "assigned" ? "#0f172a" : "#14b8a6", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #3b82f6", background: view === "assigned" ? "#3b82f6" : "#1e293b", color: view === "assigned" ? "#0f172a" : "#3b82f6", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
                       {view === "assigned" ? "⏎" : "📥"}
                     </button>
                   )}
@@ -17748,26 +17829,57 @@
                       {view === "week" ? "⏎" : "📅"}
                     </button>
                   )}
+                  {/* Setforge rebrand 2026-05-20 — Coach dropdown collapses
+                      Teams / Swimmers / Catalog (REBRAND_SCOPE §8.1). Visible
+                      only to coaches. Clicking the trigger toggles a small
+                      menu; clicking an item navigates + closes. */}
                   {me?.is_coach && (
-                    <button onClick={() => setView(v => v === "teams" ? "generator" : "teams")}
-                      title={view === "teams" ? "Back to generator" : "Teams (coach)"}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #3b82f6", background: view === "teams" ? "#3b82f6" : "#1e293b", color: view === "teams" ? "#0f172a" : "#3b82f6", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
-                      {view === "teams" ? "⏎" : "👥"}
-                    </button>
-                  )}
-                  {me?.is_coach && (
-                    <button onClick={() => setView(v => v === "swimmers" ? "generator" : "swimmers")}
-                      title={view === "swimmers" ? "Back to generator" : "Managed swimmers (coach)"}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #06b6d4", background: view === "swimmers" ? "#06b6d4" : "#1e293b", color: view === "swimmers" ? "#0f172a" : "#06b6d4", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
-                      {view === "swimmers" ? "⏎" : "🏊"}
-                    </button>
-                  )}
-                  {me?.is_coach && (
-                    <button onClick={() => setView(v => v === "catalog" ? "generator" : "catalog")}
-                      title={view === "catalog" ? "Back to generator" : "Workout-bank catalog (coach)"}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #60a5fa", background: view === "catalog" ? "#60a5fa" : "#1e293b", color: view === "catalog" ? "#0f172a" : "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
-                      {view === "catalog" ? "⏎" : "📚"}
-                    </button>
+                    <div style={{ position: "relative", display: "inline-flex" }}>
+                      <button onClick={() => setCoachMenuOpen(v => !v)}
+                        title="Coach tools (Teams, Swimmers, Catalog)"
+                        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #3b82f6",
+                          background: ["teams","swimmers","catalog"].includes(view) ? "#3b82f6" : "#1e293b",
+                          color: ["teams","swimmers","catalog"].includes(view) ? "#0f172a" : "#3b82f6",
+                          fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1,
+                          display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        🔧 <span style={{ fontSize: 10 }}>▾</span>
+                      </button>
+                      {coachMenuOpen && (
+                        <>
+                          {/* Click-outside catcher */}
+                          <div onClick={() => setCoachMenuOpen(false)}
+                            style={{ position: "fixed", inset: 0, zIndex: 50 }} />
+                          <div style={{
+                            position: "absolute", top: "calc(100% + 4px)", right: 0,
+                            background: "#1e293b", border: "1px solid #334155", borderRadius: 8,
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 180, zIndex: 51,
+                            padding: 4,
+                          }}>
+                            {[
+                              { id: "teams",    emoji: "👥", label: "Teams" },
+                              { id: "swimmers", emoji: "🏊", label: "Managed swimmers" },
+                              { id: "catalog",  emoji: "📚", label: "Catalog" },
+                            ].map(item => {
+                              const active = view === item.id;
+                              return (
+                                <button key={item.id}
+                                  onClick={() => { setView(item.id); setCoachMenuOpen(false); }}
+                                  style={{
+                                    display: "flex", width: "100%", alignItems: "center", gap: 8,
+                                    padding: "8px 12px", borderRadius: 5, border: "none",
+                                    background: active ? "rgba(59,130,246,0.12)" : "transparent",
+                                    color: active ? "#3b82f6" : "#cbd5e1",
+                                    fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer",
+                                    textAlign: "left",
+                                  }}>
+                                  <span>{item.emoji}</span><span>{item.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   )}
                   {me?.is_admin && (() => {
                     const pendingFb = view === "admin" ? 0 : (me?.pending_feedback_count || 0);
@@ -17803,13 +17915,9 @@
                       </button>
                     );
                   })()}
-                  <button onClick={() => setShowProfile(true)} title="Account"
+                  <button onClick={() => setShowProfile(true)} title="Account (also: Send feedback, Sign out)"
                     style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
                     👤
-                  </button>
-                  <button onClick={() => setShowFeedback(true)} title="Send feedback"
-                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
-                    💬
                   </button>
                   <a href="/manual.html" target="_blank" rel="noopener" title="User manual"
                     style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "none", lineHeight: 1 }}>
@@ -17920,9 +18028,13 @@
             {view === "generator" && <>
 
             {/* Pool mode toggle + next-event countdown (Q, right-justified) */}
-            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+            {/* Setforge rebrand 2026-05-20 — pool-row-wrap class lets the mobile
+                breakpoint force pool buttons + label onto row 1 alone, with
+                modifiers (Recovery, Phase, Mix pills) wrapping to row 2 cleanly
+                (REBRAND_SCOPE §8.3). */}
+            <div className="screen-only pool-mode-row" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Pool</span>
-              <div style={{ display: "flex", background: "#0f172a", borderRadius: 8, border: "1px solid #334155", overflow: "hidden" }}>
+              <div className="pool-mode-buttons" style={{ display: "flex", background: "#0f172a", borderRadius: 8, border: "1px solid #334155", overflow: "hidden" }}>
                 {[["25y","SCY"],["25m","SCM"],["50m","LCM"]].map(([mode, label]) => (
                   <button key={mode} onClick={() => handlePoolModeChange(mode)}
                     style={{
@@ -17947,7 +18059,7 @@
                     padding: "5px 11px", borderRadius: 999,
                     background: teamEventPill.days === 0 ? "#f59e0b22" : "#1e3a5f",
                     border: `1px solid ${teamEventPill.days === 0 ? "#f59e0b" : "#f59e0b"}`,
-                    color: teamEventPill.days === 0 ? "#fde68a" : "#fbbf24",
+                    color: teamEventPill.days === 0 ? "#fde68a" : "#f59e0b",
                     fontSize: 12, fontWeight: 700,
                   }}>
                   📅
@@ -17966,9 +18078,9 @@
                     marginLeft: teamEventPill ? 6 : "auto",
                     display: "inline-flex", alignItems: "center", gap: 6,
                     padding: "5px 11px", borderRadius: 999,
-                    background: nextEventCountdown.days === 0 ? "#fbbf2422" : "#1e3a5f",
-                    border: `1px solid ${nextEventCountdown.days === 0 ? "#fbbf24" : "#3b82f6"}`,
-                    color: nextEventCountdown.days === 0 ? "#fde68a" : "#93c5fd",
+                    background: nextEventCountdown.days === 0 ? "#f59e0b22" : "#1e3a5f",
+                    border: `1px solid ${nextEventCountdown.days === 0 ? "#f59e0b" : "#3b82f6"}`,
+                    color: nextEventCountdown.days === 0 ? "#fde68a" : "#3b82f6",
                     fontSize: 12, fontWeight: 700,
                   }}>
                   🏁
@@ -18033,7 +18145,7 @@
                       padding: "5px 11px", borderRadius: 999,
                       border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
                       background: active ? "rgba(245,158,11,0.15)" : "transparent",
-                      color: active ? "#fbbf24" : "#64748b",
+                      color: active ? "#f59e0b" : "#64748b",
                       fontSize: 11, fontWeight: 700, cursor: "pointer",
                       transition: "all 0.15s",
                     }}>
@@ -18044,7 +18156,7 @@
             </div>
 
             {/* Workout type selector */}
-            <p className="screen-only" style={{ color: "#93c5fd", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
+            <p className="screen-only" style={{ color: "#3b82f6", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
               Select Workout Type
             </p>
             <div className="screen-only" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
@@ -18136,7 +18248,7 @@
                           </button>
                           <div style={{
                             flex: 1, padding: "6px 10px", borderRadius: 6,
-                            background: "#1e3a5f", color: "#93c5fd",
+                            background: "#1e3a5f", color: "#3b82f6",
                             fontSize: 12, fontWeight: 700,
                             display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4,
                           }}>
@@ -18258,7 +18370,7 @@
                     }}
                     title="Save these settings as an intent for a future day — generate the actual workout on the day of"
                     style={{
-                      background: "transparent", border: "none", color: "#fbbf24",
+                      background: "transparent", border: "none", color: "#f59e0b",
                       fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 4,
                       textDecoration: "underline", textDecorationStyle: "dotted",
                     }}>
@@ -18369,7 +18481,7 @@
                       }}
                       style={{
                         padding: "10px 16px", borderRadius: 8,
-                        border: "1px solid #3b82f6", background: "#1e3a5f", color: "#93c5fd",
+                        border: "1px solid #3b82f6", background: "#1e3a5f", color: "#3b82f6",
                         fontSize: 13, fontWeight: 700, cursor: "pointer",
                         display: "inline-flex", alignItems: "center", gap: 6,
                       }}
@@ -18423,7 +18535,7 @@
                         onClick={() => setShowMultiPace(true)}
                         style={{
                           padding: "10px 16px", borderRadius: 8,
-                          border: "1px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#fbbf24",
+                          border: "1px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#f59e0b",
                           fontSize: 13, fontWeight: 700, cursor: "pointer",
                           display: "inline-flex", alignItems: "center", gap: 6,
                         }}
@@ -18461,7 +18573,7 @@
                     <div className="screen-only" style={{
                       marginBottom: 12, padding: "8px 12px",
                       background: "#1e293b", border: "1px solid #334155",
-                      borderRadius: 8, fontSize: 13, color: "#93c5fd", fontStyle: "italic",
+                      borderRadius: 8, fontSize: 13, color: "#3b82f6", fontStyle: "italic",
                     }}>
                       🎯 Focus: {focusNoteDraft}
                     </div>
@@ -18711,7 +18823,9 @@
                 // is picked. Use handlePaceChange so the debounced save
                 // path persists it to settings alongside the local update.
                 handlePaceChange(newPace);
-              }} />
+              }}
+              authMode={authMode}
+              onSendFeedback={() => setShowFeedback(true)} />
           )}
           {showFeedback && (
             <FeedbackModal onClose={() => setShowFeedback(false)} />
@@ -18809,7 +18923,7 @@
                 background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
                 padding: 22, maxWidth: 460, width: "100%",
               }}>
-                <div style={{ color: "#fbbf24", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Save as intent</div>
+                <div style={{ color: "#f59e0b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Save as intent</div>
                 <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Plan these settings for…</div>
                 <input type="date" value={intentDate} onChange={(e) => setIntentDate(e.target.value)}
                   style={{ width: "100%", padding: "8px 10px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 14 }} />
@@ -18845,7 +18959,7 @@
                       } finally { setIntentSaveBusy(false); }
                     }}
                     disabled={intentSaveBusy}
-                    style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: intentSaveBusy ? "#334155" : "#fbbf24", color: intentSaveBusy ? "#64748b" : "#0f172a", fontSize: 13, fontWeight: 700, cursor: intentSaveBusy ? "not-allowed" : "pointer" }}>{intentSaveBusy ? "…" : "Save intent ▸"}</button>
+                    style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: intentSaveBusy ? "#334155" : "#f59e0b", color: intentSaveBusy ? "#64748b" : "#0f172a", fontSize: 13, fontWeight: 700, cursor: intentSaveBusy ? "not-allowed" : "pointer" }}>{intentSaveBusy ? "…" : "Save intent ▸"}</button>
                 </div>
               </div>
             </div>
