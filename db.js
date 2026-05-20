@@ -3014,16 +3014,32 @@ export async function dbDeleteScheduledWorkout(id, callerSub) {
 // that completed_workout_id wasn't already set (preventing accidental
 // re-stamps from retried POSTs). Called from server.js inside the
 // log-workout handler; not exposed as its own route.
-export async function dbLinkCompletedToSchedule({ scheduledId, callerSub, workoutId }) {
+//
+// I Phase 2b: when the linked row is intent-mode (payload IS NULL, intent_params
+// IS NOT NULL), the link also flips the row to payload-mode using the
+// new workout's payload snapshot. Required for coach-group-fanout Run flow,
+// where /api/log-workout is the single round-trip that creates the workout +
+// fanout AND finalizes the schedule row in one shot. workoutPayload is the
+// JSON-serialized payload of the new workout (server passes entry).
+export async function dbLinkCompletedToSchedule({ scheduledId, callerSub, workoutId, workoutPayload = null }) {
   if (!scheduledId || !callerSub || !workoutId) return { ok: false, reason: "missing_args" };
   const cur = await pool.query(
-    "SELECT `user_sub`, `completed_workout_id` FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
+    "SELECT `user_sub`, `completed_workout_id`, `payload`, `intent_params` FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
     [Number(scheduledId)]
   );
   if (!cur[0]) return { ok: false, reason: "schedule_not_found" };
   if (cur[0].user_sub !== callerSub) return { ok: false, reason: "not_owner" };
   if (cur[0].completed_workout_id) {
     return { ok: true, already_linked: true, completed_workout_id: cur[0].completed_workout_id };
+  }
+  const isIntentMode = cur[0].payload == null && cur[0].intent_params != null;
+  if (isIntentMode && workoutPayload != null) {
+    // Atomic: link + flip intent→payload.
+    await pool.query(
+      "UPDATE `scheduled_workouts` SET `completed_workout_id` = ?, `payload` = ?, `intent_params` = NULL WHERE `id` = ?",
+      [workoutId, JSON.stringify(workoutPayload), Number(scheduledId)]
+    );
+    return { ok: true, linked: true, mode_flipped: true };
   }
   await pool.query(
     "UPDATE `scheduled_workouts` SET `completed_workout_id` = ? WHERE `id` = ?",
