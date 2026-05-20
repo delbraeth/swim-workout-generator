@@ -1,4 +1,4 @@
-# Setforge
+# SetForge
 
 A single-page React app (served from `public/index.html`) backed by a small
 Express + MariaDB server. Generates parameterized swim workouts across SCY /
@@ -10,7 +10,7 @@ with Apple.
 Live at <https://setforge.io>. Runs on a Spaceship Hyperlift container;
 MariaDB lives on a separate Spaceship Starlight VM managed by CyberPanel.
 
-Repo working title is `swim-workout-generator` (predates the Setforge
+Repo working title is `swim-workout-generator` (predates the SetForge
 rebrand; not renamed to avoid breaking deploy paths).
 
 ## Layout
