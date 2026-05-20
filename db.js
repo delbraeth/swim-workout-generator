@@ -2799,6 +2799,139 @@ export async function dbDeleteBenchmark(id, callerSub) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// ── Scheduled workouts (I — Week-view planning, Phase 1) ─────────────
+// Per-user. payload is the full workout snapshot (same shape as a history
+// entry); completed_workout_id is stamped when /api/log-workout fires with
+// scheduled_id, linking the schedule row to the canonical workout record.
+// Self-only in v1 — coach-for-group fanout deferred to Phase 2.
+
+function rowToScheduledWorkout(r) {
+  let payload = r.payload;
+  if (typeof payload === "string") {
+    try { payload = JSON.parse(payload); } catch (_) { payload = null; }
+  }
+  return {
+    id:                    Number(r.id),
+    user_sub:              r.user_sub,
+    scheduled_date:        dateToYmd(r.scheduled_date),
+    payload,
+    completed_workout_id:  r.completed_workout_id,
+    notes:                 r.notes || null,
+    created_at:            dtToIso(r.created_at),
+    updated_at:            dtToIso(r.updated_at),
+  };
+}
+
+function isYmd(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+
+export async function dbCreateScheduledWorkout({ userSub, scheduledDate, payload, notes = null }) {
+  if (!userSub) return { ok: false, reason: "no_user" };
+  if (!isYmd(scheduledDate)) return { ok: false, reason: "bad_date" };
+  if (!payload || typeof payload !== "object") return { ok: false, reason: "bad_payload" };
+  if (notes && String(notes).length > 500) return { ok: false, reason: "notes_too_long" };
+  const r = await pool.query(
+    "INSERT INTO `scheduled_workouts` (`user_sub`, `scheduled_date`, `payload`, `notes`) " +
+    "VALUES (?, ?, ?, ?)",
+    [userSub, scheduledDate, JSON.stringify(payload), notes || null]
+  );
+  return { ok: true, id: Number(r.insertId) };
+}
+
+export async function dbGetScheduledWorkout(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT * FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
+    [Number(id)]
+  );
+  return rows[0] ? rowToScheduledWorkout(rows[0]) : null;
+}
+
+// List schedule rows for a user in a date range (inclusive). startDate +
+// endDate must be YYYY-MM-DD. If endDate omitted, defaults to startDate + 7d.
+export async function dbListScheduledWorkouts(userSub, { startDate, endDate = null } = {}) {
+  if (!userSub) return [];
+  if (!isYmd(startDate)) return [];
+  if (!endDate) {
+    const d = new Date(startDate + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 7);
+    endDate = d.toISOString().slice(0, 10);
+  }
+  if (!isYmd(endDate)) return [];
+  const rows = await pool.query(
+    "SELECT * FROM `scheduled_workouts` " +
+    "WHERE `user_sub` = ? AND `scheduled_date` BETWEEN ? AND ? " +
+    "ORDER BY `scheduled_date` ASC, `id` ASC",
+    [userSub, startDate, endDate]
+  );
+  return rows.map(rowToScheduledWorkout);
+}
+
+export async function dbUpdateScheduledWorkout(id, callerSub, patch = {}) {
+  if (!id || !callerSub) return { ok: false, reason: "missing_args" };
+  const cur = await pool.query(
+    "SELECT `user_sub` FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
+    [Number(id)]
+  );
+  if (!cur[0]) return { ok: false, reason: "not_found" };
+  if (cur[0].user_sub !== callerSub) return { ok: false, reason: "not_owner" };
+  const sets = [], vals = [];
+  if ("scheduled_date" in patch) {
+    if (!isYmd(patch.scheduled_date)) return { ok: false, reason: "bad_date" };
+    sets.push("`scheduled_date` = ?"); vals.push(patch.scheduled_date);
+  }
+  if ("payload" in patch) {
+    if (!patch.payload || typeof patch.payload !== "object") return { ok: false, reason: "bad_payload" };
+    sets.push("`payload` = ?"); vals.push(JSON.stringify(patch.payload));
+  }
+  if ("notes" in patch) {
+    const n = patch.notes;
+    if (n != null && String(n).length > 500) return { ok: false, reason: "notes_too_long" };
+    sets.push("`notes` = ?"); vals.push(n || null);
+  }
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(Number(id));
+  const r = await pool.query(
+    `UPDATE \`scheduled_workouts\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
+    vals
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbDeleteScheduledWorkout(id, callerSub) {
+  if (!id || !callerSub) return { ok: false, reason: "missing_args" };
+  const cur = await pool.query(
+    "SELECT `user_sub` FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
+    [Number(id)]
+  );
+  if (!cur[0]) return { ok: false, reason: "not_found" };
+  if (cur[0].user_sub !== callerSub) return { ok: false, reason: "not_owner" };
+  const r = await pool.query("DELETE FROM `scheduled_workouts` WHERE `id` = ?", [Number(id)]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Stamp the completed_workout_id link when /api/log-workout fires with a
+// scheduled_id. Validates the schedule row is owned by the caller and
+// that completed_workout_id wasn't already set (preventing accidental
+// re-stamps from retried POSTs). Called from server.js inside the
+// log-workout handler; not exposed as its own route.
+export async function dbLinkCompletedToSchedule({ scheduledId, callerSub, workoutId }) {
+  if (!scheduledId || !callerSub || !workoutId) return { ok: false, reason: "missing_args" };
+  const cur = await pool.query(
+    "SELECT `user_sub`, `completed_workout_id` FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
+    [Number(scheduledId)]
+  );
+  if (!cur[0]) return { ok: false, reason: "schedule_not_found" };
+  if (cur[0].user_sub !== callerSub) return { ok: false, reason: "not_owner" };
+  if (cur[0].completed_workout_id) {
+    return { ok: true, already_linked: true, completed_workout_id: cur[0].completed_workout_id };
+  }
+  await pool.query(
+    "UPDATE `scheduled_workouts` SET `completed_workout_id` = ? WHERE `id` = ?",
+    [workoutId, Number(scheduledId)]
+  );
+  return { ok: true, linked: true };
+}
+
 // ── Lane plans (Stage 3 / R-E) ────────────────────────────────────────
 // Per scope §7 + decision #14. Persistent reusable per-group lane configs.
 // plan_data JSON shape:
