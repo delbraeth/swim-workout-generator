@@ -169,7 +169,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-20 01:37 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-20 09:30 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -12641,6 +12641,219 @@
       );
     }
 
+    // IntentForm (I Phase 2a) — capture generator params for a scheduled
+    // intent-mode row. Opens with optional pre-fill from an existing intent
+    // row (edit mode). On submit POSTs to /api/scheduled-workouts with
+    // intent_params, or PATCHes if editingId is set.
+    const MIX_OPTIONS_INTENT = [
+      { id: "balanced",     label: "Balanced" },
+      { id: "warmup_heavy", label: "Warmup-heavy" },
+      { id: "drill_heavy",  label: "Drill-heavy" },
+      { id: "long_main",    label: "Long main" },
+    ];
+
+    function IntentForm({ initialDate, initialIntent, editingId, onClose, onSaved }) {
+      const safeInitial = initialIntent || {};
+      const [date,       setDate]       = React.useState(initialDate || "");
+      const [type,       setType]       = React.useState(safeInitial.type || (WORKOUT_TYPES[0] && WORKOUT_TYPES[0].id) || "");
+      const [maxYards,   setMaxYards]   = React.useState(safeInitial.maxYards || 2400);
+      const [mix,        setMix]        = React.useState(safeInitial.mix || "balanced");
+      const [recovery,   setRecovery]   = React.useState(!!safeInitial.recovery);
+      const [notes,      setNotes]      = React.useState(safeInitial.notes || "");
+      const [busy,       setBusy]       = React.useState(false);
+      const [err,        setErr]        = React.useState(null);
+
+      const submit = async () => {
+        setErr(null);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { setErr("Pick a valid date"); return; }
+        if (!type) { setErr("Pick a workout type"); return; }
+        const intent_params = {
+          type,
+          maxYards: Number(maxYards),
+          mix,
+          recovery,
+          // Equipment + phase come from the user's current state at
+          // generation time — intent only captures the high-level shape.
+        };
+        setBusy(true);
+        try {
+          if (editingId) {
+            const res = await fetch(`/api/scheduled-workouts/${editingId}`, {
+              method:  "PATCH",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body:    JSON.stringify({ scheduled_date: date, intent_params, notes: notes.trim() || null }),
+            });
+            const j = await res.json();
+            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          } else {
+            const res = await fetch("/api/scheduled-workouts", {
+              method:  "POST",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body:    JSON.stringify({ scheduled_date: date, intent_params, notes: notes.trim() || null }),
+            });
+            const j = await res.json();
+            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          if (onSaved) onSaved();
+          if (onClose) onClose();
+        } catch (e) { setErr(e.message); }
+        finally { setBusy(false); }
+      };
+
+      return (
+        <div onClick={onClose} style={{
+          position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
+            padding: 22, maxWidth: 520, width: "100%", maxHeight: "90vh", overflowY: "auto",
+          }}>
+            <div style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>
+              {editingId ? "Edit intent" : "Plan intent"}
+            </div>
+            <div style={{ color: "#e2e8f0", fontSize: 18, fontWeight: 700, marginBottom: 14 }}>
+              Schedule a workout intent for later
+            </div>
+
+            <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              style={{ width: "100%", padding: "7px 9px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, marginBottom: 12 }} />
+
+            <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Workout type</label>
+            <select value={type} onChange={(e) => setType(e.target.value)}
+              style={{ width: "100%", padding: "7px 9px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 13, marginBottom: 12 }}>
+              {WORKOUT_TYPES.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}
+            </select>
+
+            <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Max yardage</label>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
+              <input type="range" min="1200" max="5000" step="100" value={maxYards}
+                onChange={(e) => setMaxYards(Number(e.target.value))}
+                style={{ flex: 1 }} />
+              <span style={{ minWidth: 60, fontFamily: "ui-monospace, monospace", color: "#e2e8f0", fontSize: 13, textAlign: "right" }}>{maxYards}</span>
+            </div>
+
+            <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Mix</label>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
+              {MIX_OPTIONS_INTENT.map(m => {
+                const active = mix === m.id;
+                return (
+                  <button key={m.id} onClick={() => setMix(m.id)}
+                    style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${active ? "#f59e0b" : "#334155"}`, background: active ? "rgba(245,158,11,0.18)" : "transparent", color: active ? "#fbbf24" : "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+              <input type="checkbox" id="intent-recovery" checked={recovery} onChange={(e) => setRecovery(e.target.checked)} />
+              <label htmlFor="intent-recovery" style={{ color: "#cbd5e1", fontSize: 13, cursor: "pointer" }}>
+                Recovery day (easy mains, intervals +10%)
+              </label>
+            </div>
+
+            <label style={{ display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>Notes (optional)</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={500}
+              placeholder="e.g. focus on stroke count, or post-race recovery"
+              style={{ width: "100%", padding: "7px 9px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 12, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", marginBottom: 4 }} />
+
+            {err && <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 6 }}>{err}</div>}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
+              <button onClick={onClose}
+                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={submit} disabled={busy}
+                style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: busy ? "#334155" : "#a78bfa", color: busy ? "#64748b" : "#0f172a", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
+                {busy ? "…" : (editingId ? "Save intent" : "Plan intent ▸")}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // IntentPreviewOverlay (I Phase 2a) — fullscreen preview when the user
+    // clicks ▶ Generate on an intent row. Shows the freshly-generated
+    // workout + Run / Regenerate / Cancel actions. On Run: PATCHes the
+    // schedule row's payload (intent → payload conversion) and hands off
+    // to the parent to load into Run mode.
+    function IntentPreviewOverlay({ scheduledRow, generatedWorkout, onRegenerate, onRun, onClose }) {
+      const [busy, setBusy] = React.useState(false);
+      const [err,  setErr]  = React.useState(null);
+      const w = generatedWorkout;
+
+      const handleRun = async () => {
+        setBusy(true); setErr(null);
+        try {
+          // Convert intent → payload server-side so the schedule row is in
+          // a stable state regardless of what the swimmer does next.
+          const res = await fetch(`/api/scheduled-workouts/${scheduledRow.id}`, {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ payload: w }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          onRun(w);  // parent loads into Run mode + tags runScheduledId
+        } catch (e) {
+          setErr(e.message);
+          setBusy(false);
+        }
+      };
+
+      return (
+        <div onClick={onClose} style={{
+          position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.90)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
+            padding: 22, maxWidth: 720, width: "100%", maxHeight: "90vh", overflowY: "auto",
+          }}>
+            <div style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Preview generated workout</div>
+            <div style={{ color: "#e2e8f0", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{w?.typeLabel || w?.type || "Workout"} · {w?.totalYards || 0}y</div>
+            <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 14 }}>
+              Generated from intent for {scheduledRow.scheduled_date}. Regenerate for a different shuffle, or run as-is.
+            </div>
+
+            {w && w.blocks && w.blocks.map((b, i) => (
+              <div key={i} style={{ padding: 10, background: "#1e293b", border: "1px solid #334155", borderRadius: 6, marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+                  <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    {b.name || b.section}{b.label && ` — ${b.label}`}
+                  </span>
+                  <span style={{ color: "#64748b", fontSize: 11 }}>{b.totalYards}y</span>
+                </div>
+                {b.sets && b.sets.map((s, si) => (
+                  <div key={si} style={{ fontSize: 12, color: "#cbd5e1", display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                    <span><strong>{s.reps}×{s.dist}</strong>{s.eq ? <em style={{ marginLeft: 4 }}>[{s.eq}]</em> : null} {s.desc || ""}</span>
+                    <span style={{ fontFamily: "ui-monospace, monospace", marginLeft: 8, color: "#94a3b8" }}>{s.interval || ""}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            {err && <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 6 }}>{err}</div>}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
+              <button onClick={onClose} disabled={busy}
+                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => onRegenerate(w)} disabled={busy}
+                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #3b82f6", background: "transparent", color: "#3b82f6", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>↻ Regenerate</button>
+              <button onClick={handleRun} disabled={busy}
+                style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: busy ? "#334155" : "#22c55e", color: busy ? "#64748b" : "#0f172a", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
+                {busy ? "…" : "▶ Run this"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // WeekView (I — Week-view planning, Phase 1) — 7-day ISO-week grid
     // (Monday → Sunday). Lists each user's own scheduled-workout rows per
     // day. Actions: ▶ Run (loads into Run mode, link via runScheduledId),
@@ -12680,6 +12893,10 @@
       const [list,      setList]      = React.useState(null);
       const [err,       setErr]       = React.useState(null);
       const [copyTarget, setCopyTarget] = React.useState(null); // { sw, date }
+      // Phase 2a — intent form + preview state.
+      const [intentForm, setIntentForm] = React.useState(null);  // { date, intent, editingId } | null
+      const [intentPreview, setIntentPreview] = React.useState(null); // { sw, workout } | null
+      const [repeatBusy, setRepeatBusy] = React.useState(false);
 
       const days = React.useMemo(() => {
         const arr = [];
@@ -12730,16 +12947,78 @@
 
       const handleCopy = async (sw, targetDate) => {
         try {
+          // Copy preserves mode: intent-mode rows copy as intent; payload
+          // copies as payload. (Phase 1 only knew payload; Phase 2a adds
+          // intent.)
+          const body = {
+            scheduled_date: targetDate,
+            notes: sw.notes,
+          };
+          if (sw.payload)       body.payload = sw.payload;
+          if (sw.intent_params) body.intent_params = sw.intent_params;
           const res = await fetch("/api/scheduled-workouts", {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ scheduled_date: targetDate, payload: sw.payload, notes: sw.notes }),
+            body:    JSON.stringify(body),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
           setCopyTarget(null);
           await load();
         } catch (e) { setErr(e.message); }
+      };
+
+      // Phase 2a — generate-from-intent. Invokes the in-app generateWorkout
+      // with the intent params, opens IntentPreviewOverlay with the result.
+      // User can Run / Regenerate / Cancel from the preview.
+      const handleGenerateFromIntent = (sw) => {
+        const ip = sw.intent_params || {};
+        try {
+          const generated = generateWorkout({
+            typeId:       ip.type,
+            maxYards:     Number(ip.maxYards) || 2400,
+            equipment:    ip.equipment || {},
+            favorites:    [],
+            poolMode:     "25y",
+            userMin:      1200,
+            pinnedBlocks: {},
+            recentLabels: [],
+            recoveryMode: !!ip.recovery,
+            phase:        ip.phase || null,
+            favoriteSetIds: null,
+            sectionBias:  ip.mix || "balanced",
+          });
+          if (generated && generated.__generateFailure) {
+            setErr(generated.error || "Couldn't generate from intent — try regenerating or editing the intent.");
+            return;
+          }
+          setIntentPreview({ sw, workout: generated });
+        } catch (e) {
+          setErr(`Generate failed: ${e.message}`);
+        }
+      };
+
+      // Phase 2a — bulk-copy this week to next.
+      const handleRepeatWeek = async () => {
+        const rowCount = (list || []).length;
+        if (rowCount > 5 && !window.confirm(`Copy all ${rowCount} workouts to next week? Target days that already have rows will be skipped.`)) return;
+        if (rowCount === 0) { setErr("Nothing to repeat — this week has no scheduled workouts."); return; }
+        setRepeatBusy(true); setErr(null);
+        try {
+          const res = await fetch("/api/scheduled-workouts/repeat-week", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ start_date: startStr }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          // Jump to the new week and reload.
+          const nextStart = new Date(weekStart); nextStart.setDate(nextStart.getDate() + 7);
+          setWeekStart(nextStart);
+          // load() will fire automatically via the useEffect dependency change.
+          window.alert(`Copied ${j.copied} workout${j.copied === 1 ? "" : "s"} to next week.${j.skipped > 0 ? ` Skipped ${j.skipped} (target day already had rows).` : ""}`);
+        } catch (e) { setErr(e.message); }
+        finally { setRepeatBusy(false); }
       };
 
       const today = ymd(new Date());
@@ -12754,7 +13033,10 @@
                 Week {isoWeekNumber(weekStart)} · {weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {days[6].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <button onClick={handleRepeatWeek} disabled={repeatBusy || (list || []).length === 0}
+                title="Copy this week's scheduled workouts to next week (skips days that already have rows)"
+                style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${repeatBusy ? "#334155" : "#f59e0b"}`, background: repeatBusy ? "transparent" : "rgba(245,158,11,0.12)", color: repeatBusy ? "#64748b" : "#fbbf24", fontSize: 13, fontWeight: 700, cursor: repeatBusy || (list || []).length === 0 ? "not-allowed" : "pointer", opacity: (list || []).length === 0 ? 0.4 : 1 }}>{repeatBusy ? "…" : "🗓 Repeat next week"}</button>
               <button onClick={goPrev} title="Previous week"
                 style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>‹ Prev</button>
               <button onClick={goThis} disabled={showingThisWeek}
@@ -12788,20 +13070,38 @@
                     <span style={{ fontSize: 10, color: "#475569" }}>{rows.length} {rows.length === 1 ? "workout" : "workouts"}</span>
                   </div>
                   {rows.length === 0 && !isPast && (
-                    <div style={{ color: "#475569", fontSize: 11, fontStyle: "italic", padding: "4px 0" }}>Nothing scheduled.</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", flexWrap: "wrap" }}>
+                      <span style={{ color: "#475569", fontSize: 11, fontStyle: "italic" }}>Nothing scheduled.</span>
+                      <button onClick={() => setIntentForm({ date: dk, intent: null, editingId: null })}
+                        title="Plan a workout intent for this day — generate-from-intent on the day of"
+                        style={{ padding: "3px 10px", border: "1px dashed #475569", borderRadius: 5, background: "transparent", color: "#94a3b8", fontSize: 11, cursor: "pointer" }}>+ Plan intent</button>
+                    </div>
                   )}
                   {rows.map(sw => {
-                    const done = !!sw.completed_workout_id;
-                    const yards = sw.payload?.totalYards || sw.payload?.maxYardsCap || 0;
-                    const typeLabel = sw.payload?.typeLabel || sw.payload?.type || "workout";
+                    const done       = !!sw.completed_workout_id;
+                    const isIntent   = sw.mode === "intent";
+                    const yards      = sw.payload?.totalYards || sw.payload?.maxYardsCap || sw.intent_params?.maxYards || 0;
+                    const typeLabel  = sw.payload?.typeLabel || sw.payload?.type || sw.intent_params?.type || "workout";
+                    const borderClr  = done ? "#22c55e" : (isIntent ? "#f59e0b" : "#334155");
                     return (
-                      <div key={sw.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 8px", background: "#0f172a", border: `1px solid ${done ? "#22c55e" : "#334155"}`, borderRadius: 5, marginBottom: 4, flexWrap: "wrap" }}>
-                        <span style={{ color: done ? "#22c55e" : "#cbd5e1", fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
-                          {done ? "✓ " : ""}{typeLabel}
-                          <span style={{ color: "#64748b", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} {(sw.payload?.poolMode === "25m" || sw.payload?.poolMode === "50m") ? "m" : "yds"}</span>
+                      <div key={sw.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 8px", background: "#0f172a", border: `1px solid ${borderClr}`, borderRadius: 5, marginBottom: 4, flexWrap: "wrap" }}>
+                        <span style={{ color: done ? "#22c55e" : (isIntent ? "#fbbf24" : "#cbd5e1"), fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
+                          {done ? "✓ " : ""}{isIntent && !done && <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: "0.1em", marginRight: 6, textTransform: "uppercase" }}>Intent</span>}{typeLabel}
+                          <span style={{ color: "#64748b", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} {(sw.payload?.poolMode === "25m" || sw.payload?.poolMode === "50m") ? "m" : "yds"}{isIntent && " (target)"}</span>
                           {sw.payload?.focusNote && <span style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>· {sw.payload.focusNote}</span>}
+                          {isIntent && sw.notes && <span style={{ marginLeft: 8, fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>· {sw.notes}</span>}
                         </span>
-                        {!done && (
+                        {!done && isIntent && (
+                          <>
+                            <button onClick={() => handleGenerateFromIntent(sw)}
+                              title="Generate a workout from this intent + preview it"
+                              style={{ padding: "3px 10px", border: "1px solid #f59e0b", borderRadius: 5, background: "transparent", color: "#fbbf24", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>▶ Generate</button>
+                            <button onClick={() => setIntentForm({ date: sw.scheduled_date, intent: sw.intent_params, editingId: sw.id })}
+                              title="Edit this intent"
+                              style={{ padding: "3px 10px", border: "1px solid #3b82f6", borderRadius: 5, background: "transparent", color: "#3b82f6", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit intent</button>
+                          </>
+                        )}
+                        {!done && !isIntent && (
                           <>
                             <button onClick={() => onRunScheduled && onRunScheduled(sw)}
                               title="Run this workout now (loads into Run mode)"
@@ -12862,6 +13162,38 @@
               </div>
             );
           })()}
+
+          {/* Phase 2a — IntentForm modal */}
+          {intentForm && (
+            <IntentForm
+              initialDate={intentForm.date}
+              initialIntent={intentForm.intent}
+              editingId={intentForm.editingId}
+              onClose={() => setIntentForm(null)}
+              onSaved={() => { load(); }}
+            />
+          )}
+
+          {/* Phase 2a — IntentPreviewOverlay (Generate-from-intent flow) */}
+          {intentPreview && (
+            <IntentPreviewOverlay
+              scheduledRow={intentPreview.sw}
+              generatedWorkout={intentPreview.workout}
+              onRegenerate={() => handleGenerateFromIntent(intentPreview.sw)}
+              onRun={(w) => {
+                // Hand off to the parent's run-scheduled handler. The preview
+                // overlay has already PATCHed the row's payload, so the row
+                // is now in payload-mode — onRunScheduled will load it via
+                // runScheduledId. Pass a synthesized sw with the freshly
+                // PATCHed payload so onRunScheduled doesn't need to refetch.
+                const swForRun = { ...intentPreview.sw, payload: w, intent_params: null, mode: "payload" };
+                setIntentPreview(null);
+                load();
+                if (onRunScheduled) onRunScheduled(swForRun);
+              }}
+              onClose={() => setIntentPreview(null)}
+            />
+          )}
         </div>
       );
     }
@@ -15982,6 +16314,12 @@
       // workout display. holds the target date string (YYYY-MM-DD) and is
       // null when the picker is closed.
       const [scheduleDate, setScheduleDate] = useState(null);
+      // I Phase 2a — save-as-intent date picker. Opens when "Save as intent
+      // for later…" is clicked under the Generate button. POSTs intent_params
+      // built from the *current* form state (type/maxYards/mix/recovery) —
+      // generation deferred to the scheduled day.
+      const [intentDate, setIntentDate] = useState(null);
+      const [intentSaveBusy, setIntentSaveBusy] = useState(false);
       const [showProfile, setShowProfile]         = useState(false);
       const [showFeedback, setShowFeedback]       = useState(false);
       const [showIntentParser, setShowIntentParser] = useState(false);
@@ -17660,6 +17998,28 @@
                 {workout ? "🔄 Generate New Workout" : "🏊 Generate Workout"}
               </button>
 
+              {/* I Phase 2a — save current form state as a deferred intent.
+                  Visible whenever the form is ready to generate AND the user
+                  is authenticated. Useful when planning ahead without
+                  committing to a specific shuffle. */}
+              {canGenerate && authenticated && (
+                <div style={{ marginTop: -22, marginBottom: 28, textAlign: "center" }}>
+                  <button onClick={() => {
+                      const t = new Date(); t.setDate(t.getDate() + 1);
+                      const y = t.getFullYear(), m = String(t.getMonth() + 1).padStart(2, "0"), d = String(t.getDate()).padStart(2, "0");
+                      setIntentDate(`${y}-${m}-${d}`);
+                    }}
+                    title="Save these settings as an intent for a future day — generate the actual workout on the day of"
+                    style={{
+                      background: "transparent", border: "none", color: "#fbbf24",
+                      fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 4,
+                      textDecoration: "underline", textDecorationStyle: "dotted",
+                    }}>
+                    💾 Save as intent for later…
+                  </button>
+                </div>
+              )}
+
               {/* S3 #3 — generate-level error (e.g. required equipment unsatisfiable) */}
               {generateError && (
                 <div role="alert" style={{
@@ -18175,6 +18535,59 @@
                       }
                     }}
                     style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: "#a78bfa", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Schedule ▸</button>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* I Phase 2a — save-as-intent date picker. Captures the current
+              generator form state as an intent_params row; generation runs
+              on the scheduled day via WeekView's ▶ Generate button. */}
+          {intentDate !== null && (
+            <div onClick={() => setIntentDate(null)} style={{
+              position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+            }}>
+              <div onClick={(e) => e.stopPropagation()} style={{
+                background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
+                padding: 22, maxWidth: 460, width: "100%",
+              }}>
+                <div style={{ color: "#fbbf24", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Save as intent</div>
+                <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Plan these settings for…</div>
+                <input type="date" value={intentDate} onChange={(e) => setIntentDate(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 6, fontSize: 14 }} />
+                <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
+                  Saves these settings (type, yardage, mix, recovery) as an <strong>intent</strong> for the chosen day. On the day, generate the actual workout from the latest bank state via 📅 Week.
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
+                  <button onClick={() => setIntentDate(null)} disabled={intentSaveBusy}
+                    style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 13, cursor: intentSaveBusy ? "not-allowed" : "pointer" }}>Cancel</button>
+                  <button onClick={async () => {
+                      if (!/^\d{4}-\d{2}-\d{2}$/.test(intentDate)) { setSaveError("Pick a valid date"); return; }
+                      setIntentSaveBusy(true);
+                      try {
+                        const intent_params = {
+                          type:     selectedType,
+                          maxYards: Number(maxYards),
+                          mix:      sectionBias,
+                          recovery: !!recoveryMode,
+                        };
+                        const res = await fetch("/api/scheduled-workouts", {
+                          method:  "POST",
+                          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                          body:    JSON.stringify({ scheduled_date: intentDate, intent_params }),
+                        });
+                        const j = await res.json();
+                        if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+                        setIntentDate(null);
+                        setSaveStatus("intent_saved");
+                        setTimeout(() => setSaveStatus(null), 2500);
+                      } catch (e) {
+                        setSaveError(`Save intent failed: ${e.message}`);
+                        setIntentDate(null);
+                      } finally { setIntentSaveBusy(false); }
+                    }}
+                    disabled={intentSaveBusy}
+                    style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: intentSaveBusy ? "#334155" : "#fbbf24", color: intentSaveBusy ? "#64748b" : "#0f172a", fontSize: 13, fontWeight: 700, cursor: intentSaveBusy ? "not-allowed" : "pointer" }}>{intentSaveBusy ? "…" : "Save intent ▸"}</button>
                 </div>
               </div>
             </div>
