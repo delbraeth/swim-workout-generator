@@ -7084,6 +7084,7 @@
       sectionBias = "balanced",
       sectionSources = null,            // S3 — { warmup, drill, main, cooldown } ∈ { bank, engine, mix }
       recentEngineTemplates = [],       // S3 — anti-repeat memory (last 10 { template_id, stroke, ts })
+      disfavorites = [],                // v1.2 — labels with 0.25× pick weight (mutex with favorites)
     } = {}) {
       const biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
       const is25m    = poolMode === "25m";
@@ -7147,7 +7148,16 @@
       // mainWeight × 3 bias), 1 otherwise. Cross-mode parallels share labels,
       // so favoriting "IM Warmup" in SCY also boosts the SCM/LCM versions.
       const favSet = new Set(favorites || []);
-      const favBoost = (o) => (o.label && favSet.has(o.label)) ? 3 : 1;
+      // v1.2 — disfavor: 0.25× weight, mutually exclusive with favorite
+      // (enforced at the DB layer; defensive check here in case a label is
+      // somehow in both sets — favorite wins).
+      const disfavorSet = new Set(disfavorites || []);
+      const favBoost = (o) => {
+        if (!o.label) return 1;
+        if (favSet.has(o.label))      return 3;     // favorite × 3
+        if (disfavorSet.has(o.label)) return 0.25;  // disfavor × 0.25
+        return 1;
+      };
 
       function pickBiased(arr, floor) {
         const preferred = arr.filter(o => o.totalYards >= floor);
@@ -7284,6 +7294,8 @@
           const mainWeight = (o) => {
             let w = 1;
             if (favorites.length && o.label && favorites.includes(o.label)) w *= 3;
+            // v1.2 — disfavor: 0.25× pick weight, mutex with favorite at DB layer
+            if (disfavorites.length && o.label && disfavorites.includes(o.label)) w *= 0.25;
             // Per-user set-favorites: count favorited sets present in this
             // option, multiply weight by 3^N. Mirrors the equipment-match
             // pattern below. Multiplicative — an option with 2 favorited
@@ -7475,6 +7487,7 @@
       favorites = [],
       sectionSource = "bank",        // S3 — bank | engine | mix
       recentEngineTemplates = [],    // S3 — anti-repeat memory
+      disfavorites = [],             // v1.2 — labels with 0.25× pick weight
     } = {}) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
@@ -7556,7 +7569,14 @@
       // FAV: favorite-label × 3 across all section regens (matches generateWorkout).
       const recentSet = new Set(recentLabels);
       const favSet    = new Set(favorites || []);
-      const favBoost  = (o) => (o.label && favSet.has(o.label)) ? 3 : 1;
+      // v1.2 — disfavor: 0.25× pick weight, mutex with favorite at DB layer.
+      const disfavorSet = new Set(disfavorites || []);
+      const favBoost  = (o) => {
+        if (!o.label) return 1;
+        if (favSet.has(o.label))      return 3;
+        if (disfavorSet.has(o.label)) return 0.25;
+        return 1;
+      };
       const phaseSpec = phase && PHASES[phase] ? PHASES[phase] : null;
       const picked = sectionKey === "main"
         ? pickWeighted(novel, (o) => {
@@ -9460,7 +9480,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -9570,6 +9590,24 @@
                     transition: "opacity 0.15s, color 0.15s",
                   }}>
                   {isFavorited ? "★" : "☆"}
+                </button>
+              )}
+              {/* v1.2 — Disfavor button: inverse of favorite. 0.25× pick weight.
+                  Mutex enforced server-side (dbAddDisfavorite clears favorite). */}
+              {block.section === "main" && block.label && onToggleDisfavorite && (
+                <button
+                  type="button"
+                  className="screen-only"
+                  onClick={() => onToggleDisfavorite(block.label)}
+                  title={isDisfavorited ? "Remove from disfavorites" : "Disfavor — pick this less often (0.25× weight)"}
+                  style={{
+                    background: "transparent", border: "none",
+                    color: isDisfavorited ? "#ef4444" : s.headerText,
+                    fontSize: 18, lineHeight: 1, cursor: "pointer",
+                    padding: "2px 4px", opacity: isDisfavorited ? 1 : 0.5,
+                    transition: "opacity 0.15s, color 0.15s",
+                  }}>
+                  👎
                 </button>
               )}
               {onTogglePin && (
@@ -18211,6 +18249,11 @@
       const [history, setHistory]                 = useState(() => loadLocalHistory());
       const [historyLoaded, setHistoryLoaded]     = useState(false);
       const [favorites, setFavorites]             = useState([]);
+      // v1.2 — Disfavorites: labels with 0.25× pick weight (inverse of fav).
+      // Loaded on mount alongside favorites; toggled via /api/disfavorites.
+      // Mutex with favorites enforced at the DB layer (dbAdd* helpers clear
+      // the opposite table on insert).
+      const [disfavorites, setDisfavorites]       = useState([]);
       // Set-level per-user favorites — Set<set_id> for O(1) lookup. Loaded
       // alongside label-favorites; toggled via /api/favorite-sets endpoints.
       const [favoriteSets, setFavoriteSets]       = useState(() => new Set());
@@ -18358,6 +18401,14 @@
           .catch(() => {});
       }, []);
 
+      // v1.2 — On mount: fetch disfavorites (inverse of favorites)
+      useEffect(() => {
+        fetch(`${API_BASE}/disfavorites`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => { if (Array.isArray(data)) setDisfavorites(data); })
+          .catch(() => {});
+      }, []);
+
       // On mount: fetch per-user set-favorites
       useEffect(() => {
         fetch(`${API_BASE}/favorite-sets`, { cache: "no-store" })
@@ -18466,6 +18517,9 @@
         const isFav = favorites.includes(label);
         // Optimistic update
         setFavorites(prev => isFav ? prev.filter(x => x !== label) : [...prev, label]);
+        // v1.2 — adding favorite implicitly removes disfavor (server-side mutex
+        // in dbAddFavorite). Reflect locally so the UI doesn't briefly show both.
+        if (!isFav) setDisfavorites(prev => prev.filter(x => x !== label));
         try {
           if (isFav) {
             await fetch(`${API_BASE}/favorites/${encodeURIComponent(label)}`, {
@@ -18484,6 +18538,32 @@
           setFavorites(prev => isFav ? [...prev, label] : prev.filter(x => x !== label));
         }
       }, [favorites]);
+
+      // v1.2 — Toggle a main-set label in/out of disfavorites. Mirror of
+      // handleToggleFavorite with 0.25× pick weight in the picker. Server-
+      // side dbAddDisfavorite removes any matching favorite on insert; we
+      // reflect that locally for instant UI consistency.
+      const handleToggleDisfavorite = useCallback(async (label) => {
+        const isDis = disfavorites.includes(label);
+        setDisfavorites(prev => isDis ? prev.filter(x => x !== label) : [...prev, label]);
+        if (!isDis) setFavorites(prev => prev.filter(x => x !== label));
+        try {
+          if (isDis) {
+            await fetch(`${API_BASE}/disfavorites/${encodeURIComponent(label)}`, {
+              method: "DELETE",
+              headers: { ...csrfHeaders() },
+            });
+          } else {
+            await fetch(`${API_BASE}/disfavorites`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body: JSON.stringify({ label }),
+            });
+          }
+        } catch (_) {
+          setDisfavorites(prev => isDis ? [...prev, label] : prev.filter(x => x !== label));
+        }
+      }, [disfavorites]);
 
       // Toggle a single set in/out of per-user favorites. Optimistic update
       // mirrors the label-favorite handler. Caller must pass a valid set_id
@@ -18841,6 +18921,7 @@
           sectionBias,                                                          // Real-shift section-proportion controls (Mix pills)
           sectionSources,                                                       // S3 — Bank/Engine/Mix per section
           recentEngineTemplates,                                                // S3 — anti-repeat memory for engine
+          disfavorites,                                                         // v1.2 — 0.25× pick weight for disfavored labels
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -18928,7 +19009,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -18956,6 +19037,7 @@
           favorites,
           sectionSource: sectionSources[sectionKey] || "bank",
           recentEngineTemplates,
+          disfavorites,
         });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -19022,7 +19104,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -20394,6 +20476,8 @@
                     onCancelDesc={handleCancelDesc}
                     isFavorited={!!(block.label && favorites.includes(block.label))}
                     onToggleFavorite={handleToggleFavorite}
+                    isDisfavorited={!!(block.label && disfavorites.includes(block.label))}
+                    onToggleDisfavorite={handleToggleDisfavorite}
                     onRoundRestChange={handleRoundRestChange}
                     unit={unit}
                     isPinned={!!pinnedSections[block.section]}

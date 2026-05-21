@@ -783,6 +783,14 @@ export async function dbListFavorites(userSub) {
 export async function dbAddFavorite(userSub, label) {
   if (!userSub || !label) return;
   await dbEnsureUser(userSub);
+  // v1.2 — mutex with disfavorites. Adding a favorite removes any matching
+  // disfavor for the same label (and vice versa via dbAddDisfavorite below).
+  // Keeps the two states truly opposite: a label is either neutral, favorited,
+  // or disfavored — never both.
+  await pool.query(
+    "DELETE FROM `disfavorites` WHERE `user_sub` = ? AND `label` = ?",
+    [userSub, label]
+  );
   await pool.query(
     "INSERT IGNORE INTO `favorites` (`user_sub`, `label`) VALUES (?, ?)",
     [userSub, label]
@@ -793,6 +801,41 @@ export async function dbRemoveFavorite(userSub, label) {
   if (!userSub) return;
   await pool.query(
     "DELETE FROM `favorites` WHERE `user_sub` = ? AND `label` = ?",
+    [userSub, label]
+  );
+}
+
+// ─── disfavorites (v1.2) ────────────────────────────────────────────────────
+// Mirror of `favorites` with opposite weight in the picker. Per migration
+// 026_disfavorites.sql. Mutex with favorites — adding to one removes from
+// the other.
+export async function dbListDisfavorites(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    "SELECT `label` FROM `disfavorites` WHERE `user_sub` = ? ORDER BY `created_at`",
+    [userSub]
+  );
+  return rows.map(r => r.label);
+}
+
+export async function dbAddDisfavorite(userSub, label) {
+  if (!userSub || !label) return;
+  await dbEnsureUser(userSub);
+  // Mutex: clear any favorite for the same label
+  await pool.query(
+    "DELETE FROM `favorites` WHERE `user_sub` = ? AND `label` = ?",
+    [userSub, label]
+  );
+  await pool.query(
+    "INSERT IGNORE INTO `disfavorites` (`user_sub`, `label`) VALUES (?, ?)",
+    [userSub, label]
+  );
+}
+
+export async function dbRemoveDisfavorite(userSub, label) {
+  if (!userSub) return;
+  await pool.query(
+    "DELETE FROM `disfavorites` WHERE `user_sub` = ? AND `label` = ?",
     [userSub, label]
   );
 }

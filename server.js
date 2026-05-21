@@ -58,6 +58,7 @@ import {
   dbGetSettings, dbUpsertSettings, dbPatchSettingsExtra,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbListFavoriteSets, dbAddFavoriteSet, dbRemoveFavoriteSet,
+  dbListDisfavorites, dbAddDisfavorite, dbRemoveDisfavorite,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   dbIsUser, dbIsAdmin, dbIsCoach, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
@@ -1155,6 +1156,39 @@ app.delete("/api/favorites/:label", checkOrigin, requireAuth, requireCsrf, write
   try {
     const label = decodeURIComponent(req.params.label);
     await dbRemoveFavorite(req.userSub, label);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ───── Disfavorites routes (v1.2 — per-user) ──────────────────────────
+// Inverse of favorites — disfavored labels get 0.25× weight in the bank
+// picker. Mutex with favorites enforced in dbAdd* helpers.
+app.get("/api/disfavorites", requireAuth, async (req, res) => {
+  try {
+    res.json(await dbListDisfavorites(req.userSub));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post("/api/disfavorites", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { label } = req.body || {};
+    if (!label || typeof label !== "string") return res.status(400).json({ error: "label required" });
+    if (label.length > 255) return res.status(400).json({ error: "label too long (max 255)" });
+    await dbAddDisfavorite(req.userSub, label);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.delete("/api/disfavorites/:label", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const label = decodeURIComponent(req.params.label);
+    await dbRemoveDisfavorite(req.userSub, label);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
