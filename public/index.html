@@ -68,6 +68,64 @@
       .pool-mode-buttons { flex-basis: calc(100% - 70px); }
     }
 
+    /* Phase 4 CSS refactor — button design system (slice 5).
+       Spec: BUTTONS_SCOPE.md. Composition = .btn + size + variant + color.
+       Defaults absorbed by .btn so most call sites need only 2-3 modifiers. */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: inherit;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+      border: 1px solid transparent;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:focus-visible { outline: 2px solid var(--btn-color); outline-offset: 2px; }
+
+    /* Size classes — pick one */
+    .btn-sm { padding: 3px 10px; font-size: 11px; }
+    .btn-md { padding: 6px 12px; font-size: 13px; }
+    .btn-lg { padding: 8px 14px; font-size: 13px; }
+
+    /* Shape variants — pick one. Each references --btn-color set by the color class. */
+    .btn-outlined {
+      background: transparent;
+      border-color: var(--btn-color);
+      color: var(--btn-color);
+    }
+    .btn-outlined:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--btn-color) 12%, transparent);
+    }
+    .btn-filled {
+      background: var(--btn-color);
+      border-color: var(--btn-color);
+      color: var(--color-bg);
+    }
+    .btn-filled:hover:not(:disabled) {
+      filter: brightness(1.1);
+    }
+    .btn-ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--btn-color);
+    }
+    .btn-ghost:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--btn-color) 10%, transparent);
+    }
+
+    /* Color modifiers — pick one. Sets the --btn-color CSS var. */
+    .btn-primary     { --btn-color: var(--color-primary); }
+    .btn-warn        { --btn-color: var(--color-warn); }
+    .btn-positive    { --btn-color: var(--color-positive); }
+    .btn-destructive { --btn-color: var(--color-destructive); }
+    .btn-neutral     { --btn-color: var(--color-text-muted); }
+
     /* Phase 4 CSS refactor — card pattern (slice 3).
        Standard slate-800 surface with slate-700 border. Used for content
        blocks, list-item containers, modal bodies, etc. Padding /
@@ -257,7 +315,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-21 02:25 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-21 02:43 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
