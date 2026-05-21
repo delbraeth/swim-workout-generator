@@ -68,6 +68,18 @@
       .pool-mode-buttons { flex-basis: calc(100% - 70px); }
     }
 
+    /* Phase 4 CSS refactor — card pattern (slice 3).
+       Standard slate-800 surface with slate-700 border. Used for content
+       blocks, list-item containers, modal bodies, etc. Padding /
+       borderRadius / marginBottom stay inline because they vary widely
+       across uses (radius 4-12, padding 10-22). Only the surface treatment
+       lives in the class — that's the single source of truth for future
+       palette tweaks. */
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+    }
+
     /* Phase 4 CSS refactor — pill pattern (slice 2).
        Rounded-rectangle indicator/toggle commonly used for type chips, mix
        selectors, training-phase pills, role badges. Colors (border /
@@ -245,7 +257,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-21 02:05 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-21 02:17 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -8685,7 +8697,7 @@
 
           {/* Goal progress — only renders if user has set at least one goal */}
           {goalProgress.length > 0 && (
-            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <div className="card" style={{ borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
                 🎯 Goals · current period
               </div>
@@ -8719,7 +8731,7 @@
           )}
 
           {/* Stats summary */}
-          <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div className="card" style={{ borderRadius: 12, padding: 16, marginBottom: 16 }}>
             {/* Key numbers row */}
             <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: stats.sessions > 0 ? 16 : 0 }}>
               {[
@@ -8953,7 +8965,7 @@
               ? Object.keys(entry.equipment).filter(k => equipMode(entry.equipment, k) !== "off")
               : [];
             return (
-              <div key={entry.id} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+              <div key={entry.id} className="card" style={{ borderRadius: 12, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 13, color: "#cbd5e1", fontVariantNumeric: "tabular-nums" }}>{entry.dateCompleted || "—"}</span>
@@ -9904,9 +9916,8 @@
       };
       const isSet = value != null;
       return (
-        <div style={{
+        <div className="card" style={{
           display: "flex", alignItems: "center", gap: 10,
-          background: "#1e293b", border: "1px solid #334155",
           borderRadius: 8, padding: "8px 12px",
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -9973,9 +9984,8 @@
     function PhaseRow({ value, onChange }) {
       const selected = value && PHASES[value] ? PHASES[value] : null;
       return (
-        <div style={{
+        <div className="card" style={{
           display: "flex", flexDirection: "column", gap: 8,
-          background: "#1e293b", border: "1px solid #334155",
           borderRadius: 8, padding: "8px 12px",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -10111,9 +10121,8 @@
       };
 
       return (
-        <div style={{
+        <div className="card" style={{
           display: "flex", flexDirection: "column", gap: 8,
-          background: "#1e293b", border: "1px solid #334155",
           borderRadius: 8, padding: "8px 12px",
         }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -10229,9 +10238,8 @@
     function LevelRow({ value, onChange }) {
       const selected = value && LEVEL_PRESETS[value] ? LEVEL_PRESETS[value] : null;
       return (
-        <div style={{
+        <div className="card" style={{
           display: "flex", flexDirection: "column", gap: 8,
-          background: "#1e293b", border: "1px solid #334155",
           borderRadius: 8, padding: "8px 12px",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -10298,9 +10306,8 @@
         return `${d} days`;
       })();
       return (
-        <div style={{
+        <div className="card" style={{
           display: "flex", alignItems: "center", gap: 10,
-          background: "#1e293b", border: "1px solid #334155",
           borderRadius: 8, padding: "8px 12px",
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -11786,7 +11793,7 @@
               style={{ marginBottom: 12, padding: "5px 11px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#94a3b8", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
               ← All teams
             </button>
-            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+            <div className="card" style={{ borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
                 {editingName ? (
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flex: 1 }}>
@@ -11856,7 +11863,7 @@
             </div>
 
             {activeTab === "members" && (
-            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+            <div className="card" style={{ borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <h3 style={{ color: "#e2e8f0", marginTop: 0, fontSize: 15 }}>Coaches ({detail.coaches?.length || 0})</h3>
               {(detail.coaches || []).map(c => (
                 <div key={c.coach_sub} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #334155" }}>
@@ -12154,7 +12161,7 @@
                     This coach is still primary on {removeConflict.groups.length} {removeConflict.groups.length === 1 ? "group" : "groups"}. Pick a new primary for each before removing them from the team.
                   </p>
                   {removeConflict.groups.map(g => (
-                    <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: 8, background: "#1e293b", border: "1px solid #334155", borderRadius: 6 }}>
+                    <div key={g.id} className="card" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: 8, borderRadius: 6 }}>
                       <span style={{ flex: 1, color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{g.name}</span>
                       <select value={transferPlan[g.id] || ""}
                         onChange={(e) => setTransferPlan(prev => ({ ...prev, [g.id]: e.target.value }))}
@@ -13072,7 +13079,7 @@
             </div>
 
             {w && w.blocks && w.blocks.map((b, i) => (
-              <div key={i} style={{ padding: 10, background: "#1e293b", border: "1px solid #334155", borderRadius: 6, marginBottom: 6 }}>
+              <div key={i} className="card" style={{ padding: 10, borderRadius: 6, marginBottom: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
                   <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                     {b.name || b.section}{b.label && ` — ${b.label}`}
@@ -14048,7 +14055,7 @@
                 </label>
               </div>
               {draft.plan_data.lanes.map((lane, lIdx) => (
-                <div key={lIdx} style={{ padding: 8, background: "#1e293b", border: "1px solid #334155", borderRadius: 4, marginBottom: 6 }}>
+                <div key={lIdx} className="card" style={{ padding: 8, borderRadius: 4, marginBottom: 6 }}>
                   <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                     <span style={{ fontSize: 10, color: "#64748b", padding: "5px 0" }}>#{lane.idx + 1}</span>
                     <input value={lane.label} onChange={e => updateDraftLane(lIdx, { label: e.target.value })} placeholder="Lane label" maxLength={40}
@@ -14619,7 +14626,7 @@
               ← All swimmers
             </button>
 
-            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+            <div className="card" style={{ borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
                 <div>
                   <h2 style={{ color: "#e2e8f0", margin: 0, fontSize: 20 }}>
@@ -15374,8 +15381,7 @@
             <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 8, marginBottom: 8 }}>
               Read-only browse of the workout-set bank as authored. No cross-unit conversion or fallback — see what's actually in each bucket per pool mode.
             </p>
-            <p style={{ color: "#f59e0b", fontSize: 12, marginTop: 0, marginBottom: 16, padding: "8px 12px",
-                        background: "#1e293b", border: "1px solid #334155", borderRadius: 6 }}>
+            <p className="card" style={{ color: "#f59e0b", fontSize: 12, marginTop: 0, marginBottom: 16, padding: "8px 12px", borderRadius: 6 }}>
               ⚠️ All intervals are calibrated for a <strong>masters baseline of 2:00/100yd</strong> (≈2:11/100m for SCM).
               On the workout page, set your actual pace and click <em>Rescale</em> to scale every interval proportionally.
               Faster swimmers tighten; slower swimmers loosen.
@@ -15492,7 +15498,7 @@
 
                 return (
                   <div key={key} className="catalog-option"
-                    style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8 }}>
+                    className="card" style={{ borderRadius: 8 }}>
                     {/* Row header — clickable to expand */}
                     <div onClick={() => setExpandedKey(expanded && !printAll ? null : key)}
                       style={{
@@ -15724,7 +15730,7 @@
                 const sMeta = STATUSES.find(s => s.id === f.status) || STATUSES[0];
                 const noteVal = id => (id in noteDrafts ? noteDrafts[id] : (f.admin_note || ""));
                 return (
-                  <div key={f.id} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: 14 }}>
+                  <div key={f.id} className="card" style={{ borderRadius: 10, padding: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: `${sMeta.color}22`, border: `1px solid ${sMeta.color}`, color: sMeta.color }}>
@@ -16001,7 +16007,7 @@
       if (invites === null) return <div style={{ color: "#64748b" }}>Loading…</div>;
       return (
         <div>
-          <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 12, marginBottom: 16 }}>
+          <div className="card" style={{ borderRadius: 8, padding: 12, marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Create invite</div>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr auto", gap: 8, alignItems: "center" }}>
               <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (e.g., for Sarah)"
@@ -17869,9 +17875,9 @@
                           {/* Click-outside catcher */}
                           <div onClick={() => setCoachMenuOpen(false)}
                             style={{ position: "fixed", inset: 0, zIndex: 50 }} />
-                          <div style={{
+                          <div className="card" style={{
                             position: "absolute", top: "calc(100% + 4px)", right: 0,
-                            background: "#1e293b", border: "1px solid #334155", borderRadius: 8,
+                            borderRadius: 8,
                             boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 180, zIndex: 51,
                             padding: 4,
                           }}>
@@ -18228,9 +18234,10 @@
                     {quickLaunch.map(ql => (
                       <div key={ql.id}
                         onClick={() => { setRunWorkout(ql.entry); setShowRestPicker(true); }}
+                        className="card"
                         style={{
                           display: "flex", flexDirection: "column",
-                          background: "#1e293b", border: "1px solid #334155", borderRadius: 10,
+                          borderRadius: 10,
                           padding: "10px 12px", cursor: "pointer",
                           transition: "border-color 0.15s, background 0.15s",
                           WebkitTapHighlightColor: "transparent",
@@ -18590,9 +18597,8 @@
                 {/* Focus note — pre-workout intention (screen, edit-in-place) */}
                 {loadedFromHistoryId ? (
                   focusNoteDraft && (
-                    <div className="screen-only" style={{
+                    <div className="screen-only card" style={{
                       marginBottom: 12, padding: "8px 12px",
-                      background: "#1e293b", border: "1px solid #334155",
                       borderRadius: 8, fontSize: 13, color: "#3b82f6", fontStyle: "italic",
                     }}>
                       🎯 Focus: {focusNoteDraft}
@@ -18754,8 +18760,8 @@
               display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
             }}
               onClick={() => setShowPrintDialog(false)}>
-              <div style={{
-                background: "#1e293b", border: "1px solid #334155", borderRadius: 12,
+              <div className="card" style={{
+                borderRadius: 12,
                 padding: "28px 32px", maxWidth: 400, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
               }}
                 onClick={e => e.stopPropagation()}>
