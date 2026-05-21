@@ -254,6 +254,7 @@
 
     <div class="nav-section">Workout View</div>
     <a href="#sections">Workout Sections</a>
+    <a href="#engine">Template Engine</a>
     <a href="#intervals">Intervals</a>
     <a href="#descriptions">Set Descriptions</a>
     <a href="#swap">Set Swap</a>
@@ -615,6 +616,32 @@
       </table>
 
       <p>Each block shows its name, total yardage, and a table of sets. The main set block also shows a <strong>⭐ favorite</strong> button and an optional repeat indicator (e.g. <strong>×2 rounds</strong>).</p>
+    </section>
+
+    <!-- ══ TEMPLATE ENGINE ══ -->
+    <section id="engine">
+      <h2>Template Engine — Bank / Engine / Mix</h2>
+      <p>Each section header has a <strong>[BANK][ENGINE][MIX]</strong> pill toggle that controls where its content comes from on the next generate or regen:</p>
+
+      <table>
+        <thead><tr><th>Source</th><th>What you get</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Bank</strong> (default)</td><td>A curated set from the hand-authored library — the original SetForge behavior.</td></tr>
+          <tr><td><strong>Engine</strong></td><td>A set generated on the fly from a structural template (pyramid, descend ladder, sandwich, race-day simulation, etc.). Sized to fit the section's yardage, validated against an 8-rule check, and retried up to 3 times before falling back to bank.</td></tr>
+          <tr><td><strong>Mix</strong></td><td>A bank prefix + an engine suffix in the same section. Two labeled sub-blocks render under one section header. Total yardage exceeds the section's bank allocation by ~50% — Mix is opt-in extra variety, not a strict budget mode.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>⚡ Engine badge</h3>
+      <p>Engine-generated sections show a small amber <strong>⚡ ENGINE</strong> badge in the section header. Hover the badge to see the template that produced the set (e.g. <em>pyramid_up_down</em>, <em>block_with_recovery</em>, <em>race_day_simulation</em>). The badge appears on the section header for pure Engine output, and on each sub-block divider for Mix output.</p>
+
+      <h3>Anti-repeat memory</h3>
+      <p>The engine remembers the last 10 (template, stroke) pairs you generated and avoids picking the same template-stroke combo twice in a row. If you toggle to <strong>Engine</strong> on a section where the last 10 generates already covered every applicable template, the engine silently falls back to the bank for that section.</p>
+
+      <h3>Bank fallback</h3>
+      <p>The engine isn't a guaranteed win — when validation retries fail or no template applies to your (type × section) combo, the section silently uses bank instead. No error, no surprise — you just see a regular bank label and no ⚡ badge. This is the safety net per spec §5.</p>
+
+      <p>Your toggle choice persists per-profile across logins and devices. Click a section's pin (📍) to lock it before regenerating others, exactly the same as bank-only mode.</p>
     </section>
 
     <!-- ══ INTERVALS ══ -->
