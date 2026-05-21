@@ -315,7 +315,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-21 04:58 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-21 05:05 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -3007,6 +3007,32 @@
         { label: "Back Build Repeat Unit", totalYards: 600, sets: [
             { id: "s_sjz85n", reps: 3, dist: 200, desc: "Backstroke — descend 1→3, each 200 faster than the last", interval: "On 5:00", focus: "Progressive backstroke effort — push the last 200 each round" },
           ]},
+        { label: "Back Underwater Chain", totalYards: 800, sets: [
+            { id: "s_9zysvh", reps: 1, dist: 200, desc: "Easy backstroke — open up, no underwater focus yet",                                                                              interval: "On 4:30", focus: "Prime" },
+            { id: "s_k9qein", reps: 8, dist:  50, desc: "Backstroke — 15m dolphin underwater off EVERY wall (push and turn), then surface and swim strong; count underwater kicks each rep", interval: "On 1:30", focus: "Underwater kick endurance — the part of the race most masters skip" },
+            { id: "s_97wyfa", reps: 1, dist: 200, desc: "Easy choice — flush",                                                                                                              interval: "On 5:00", focus: "Recover" },
+          ]},
+        { label: "Head-Still 200s", totalYards: 1000, sets: [
+            { id: "s_7woxli", reps: 5, dist: 200, desc: "Backstroke — moderate, focus on a stationary head (imagine a full water glass on your forehead); body rotates, head does not", interval: "On 4:30", focus: "Eliminate head bobble — the fastest fix for crooked backstroke" },
+          ]},
+        { label: "Back Hip-Drive Build", totalYards: 1200, sets: [
+            { id: "s_87olfx", reps: 4, dist: 100, desc: "Backstroke — easy, count your strokes per length (your baseline)",                                                       interval: "On 2:30", focus: "Establish stroke count" },
+            { reps: 4, dist: 100, desc: "Backstroke — moderate, drive each stroke from the hip rotation (\"one hip up, one hip up\"); hold baseline ±1",          interval: "On 2:30", focus: "Power source: hips, not arms" },
+            { id: "s_wyh2pm", reps: 4, dist: 100, desc: "Backstroke — strong, drive the hip AND lengthen the catch; count should hold even as effort climbs",                     interval: "On 2:30", focus: "Translate hip drive to speed without shortening the stroke" },
+          ]},
+        { label: "Back Crossover Killer", totalYards: 700, sets: [
+            { id: "s_0wshck", reps: 1, dist: 200, desc: "Easy backstroke — open up",                                                                                                                                  interval: "On 4:30", focus: "Prime" },
+            { id: "s_6t5cer", reps: 8, dist:  50, desc: "Backstroke — moderate-strong, every hand enters PINKY-FIRST at the 11 o'clock / 1 o'clock line (no thumb-first, no crossing over centerline); count strokes", interval: "On 1:30", focus: "Eliminate crossover — the source of S-curve backstroke" },
+            { id: "s_0a0l7n", reps: 1, dist: 100, desc: "Easy choice — flush",                                                                                                                                        interval: "On 2:30", focus: "Reset" },
+          ]},
+        { label: "Back Rolling Under/Swim 50s", totalYards: 1200, sets: [
+            { id: "s_1atklg", reps: 1, dist: 200, desc: "Easy backstroke — open up + 4×15m dolphin off the wall",                                                                                                  interval: "On 4:30", focus: "Prime underwater work" },
+            { id: "s_df5yu1", reps: 16, dist: 50, desc: "Backstroke — alternate by 50: odd 50s = 25 dolphin underwater + 25 swim; even 50s = full swim, moderate. Continuous, no wall rest (the easy 50 is recovery)", interval: "On 1:15", focus: "Train underwater-to-surface transition under aerobic load" },
+            { id: "s_nn6vsx", reps: 1, dist: 200, desc: "Easy choice — flush",                                                                                                                                      interval: "On 5:00", focus: "Cool down" },
+          ]},
+        { label: "Back Turn-Focus 200s", totalYards: 1200, sets: [
+            { id: "s_k7rlty", reps: 6, dist: 200, desc: "Backstroke — moderate-strong, but EVERY turn (3 per 200) is a back-to-front flip with a 10m dolphin underwater off the wall; rebuild the swim each length", interval: "On 5:00", focus: "Back-to-front turn — most masters never train it; the race-saving skill" },
+          ]},
       ],
       breast: [
         { label: "Breast 100s", totalYards: 1000, sets: [
@@ -3208,6 +3234,34 @@
           ]},
         { label: "Breast Build Repeat Unit", totalYards: 600, sets: [
             { id: "s_h4dksi", reps: 3, dist: 200, desc: "Breaststroke — descend 1→3, each faster than the last", interval: "On 6:00", focus: "Progressive breast effort — each round builds on the last" },
+          ]},
+        { label: "Breast Pullout Discipline", totalYards: 1000, sets: [
+            { id: "s_c2ae0r", reps: 1, dist: 200, desc: "Easy breast — open up, normal short pullouts",                                                                                                       interval: "On 5:30", focus: "Prime" },
+            { id: "s_58f1wm", reps: 10, dist: 75, desc: "Breaststroke — FULL legal pullout (one pull-down + one dolphin kick + one breaststroke kick) off the wall before first stroke; moderate-strong tempo", interval: "On 2:30", focus: "Pullout endurance — the defining race skill most masters underuse" },
+            { id: "s_qzayal", reps: 1, dist: 50, desc: "Easy choice — flush",                                                                                                                                  interval: "On 2:30", focus: "Recover" },
+          ]},
+        { label: "2-Kicks-Per-Pull", totalYards: 800, sets: [
+            { id: "s_31mpf4", reps: 8, dist: 100, desc: "Breaststroke — exaggerated 2 KICKS between every pull (illegal for racing — this is a training drill). Hold long glide after the second kick.", interval: "On 3:30", focus: "Strengthen the second kick + force a long, patient glide" },
+          ]},
+        { label: "Breast DPS Hold", totalYards: 1000, sets: [
+            { id: "s_apnaao", reps: 1, dist: 200, desc: "Easy breast — count strokes per length, find your minimum sustainable count",                                            interval: "On 5:30", focus: "Establish minimum-strokes baseline" },
+            { id: "s_qd9v6z", reps: 8, dist: 100, desc: "Breaststroke — moderate, hold baseline ±1 stroke per length; if you exceed baseline+1 on any length, restart the count", interval: "On 3:15", focus: "Distance per stroke under fatigue — the long-stroke discipline" },
+          ]},
+        { label: "Breast Broken 200 (Race Sim)", totalYards: 1200, sets: [
+            { id: "s_agnwjf", reps: 1, dist: 200, desc: "Easy breast — open up + 2× full pullouts (no swimming, just pullout off the wall)",                                                                                                 interval: "On 5:30", focus: "Prime the pullout muscles" },
+            { id: "s_tq3a8v", reps: 4, dist: 200, desc: "Breaststroke — BROKEN race-pace 200: 4×50 with 10s rest between, full pullout off EVERY wall, target your 200 race-pace ±2s per 50. Record splits.",                                interval: "On 7:30", focus: "Race-pace simulation with pullout focus across the broken rest" },
+            { id: "s_f2zigj", reps: 1, dist: 200, desc: "Very easy choice — flush",                                                                                                                                                          interval: "On 6:00", focus: "Recover lactate" },
+          ]},
+        { label: "Breast Tempo Ladder 100s", totalYards: 1200, sets: [
+            { id: "s_yvgkxg", reps: 3, dist: 100, desc: "Breaststroke — SLOW tempo (~14 strokes/100), long glide after kick",                              interval: "On 3:30", focus: "Bottom turnover — feel the glide" },
+            { id: "s_eun7w5", reps: 3, dist: 100, desc: "Breaststroke — moderate tempo (~16 strokes/100), shorten glide slightly",                          interval: "On 3:15", focus: "Step up" },
+            { id: "s_x10kto", reps: 3, dist: 100, desc: "Breaststroke — fast tempo (~18-19 strokes/100), minimal glide, race-style turnover",               interval: "On 3:00", focus: "Top turnover — find your race tempo" },
+            { id: "s_k8rnap", reps: 3, dist: 100, desc: "Breaststroke — drop back to moderate tempo, hold the feeling of fast catch from the previous set", interval: "On 3:15", focus: "Carry tempo discipline back down" },
+          ]},
+        { label: "Breast Pull-Down Power 25s", totalYards: 700, sets: [
+            { id: "s_oohk9y", reps: 1, dist: 200, desc: "Easy breast — open the shoulders",                                                                                                                  interval: "On 5:30", focus: "Prime" },
+            { id: "s_98hkiv", reps: 12, dist: 25, desc: "EXPLOSIVE pull-down only: push off, full underwater pullout (one pull-down + one dolphin + breaststroke kick), then ONE stroke and finish on stretch", interval: "On 0:50", focus: "Pull-down power and depth — the most-trained skill of elite breaststrokers" },
+            { id: "s_va8mjk", reps: 1, dist: 200, desc: "Easy choice — flush",                                                                                                                                interval: "On 5:00", focus: "Recover" },
           ]},
       ],
       fly: [
@@ -3415,6 +3469,44 @@
         { label: "Fly Build Repeat Unit", totalYards: 600, sets: [
             { id: "s_yi2hav", reps: 4, dist: 100, desc: "25 fly / 75 free — fly strong on lead 25, hold rhythm on the free", interval: "On 2:15", focus: "Fly volume without burnout — build fly quality each round" },
             { id: "s_6qxz9v", reps: 4, dist:  50, desc: "25 fly ALL OUT / 25 free easy", interval: "On 1:20", focus: "Top-speed fly to close each round" },
+          ]},
+        { label: "3-and-3 Fly", totalYards: 800, sets: [
+            { id: "s_ersioh", reps: 1, dist: 200, desc: "Easy choice — open up, 4×15m dolphin off the wall",                                                                                                       interval: "On 4:30", focus: "Prime dolphin kick" },
+            { id: "s_2x1dgr", reps: 8, dist:  50, desc: "Alternate stroke by 3-count throughout the length: 3 strokes fly / 3 strokes freestyle / 3 fly / 3 free / etc. Hold quality fly form on every fly stroke", interval: "On 1:30", focus: "Train fly rhythm with built-in recovery — tolerable fly volume" },
+            { id: "s_9ml36x", reps: 1, dist: 200, desc: "Easy backstroke — flush",                                                                                                                                  interval: "On 5:00", focus: "Recover" },
+          ]},
+        { label: "Reverse 3-and-3 Fly Pyramid", totalYards: 700, sets: [
+            { id: "s_x67zrw", reps: 1, dist: 200, desc: "Easy choice — open up, last 25 of each 100 with 2-3 fly strokes",                                                                                                                   interval: "On 4:30", focus: "Prime" },
+            { id: "s_84jumw", reps: 1, dist: 50,  desc: "Fly count: 1 stroke fly / 7 strokes free per length (low fly volume)",                                                                                                              interval: "On 1:30", focus: "Step 1 — fly cameo" },
+            { id: "s_sehqmm", reps: 1, dist: 50,  desc: "Fly count: 2 fly / 6 free per length",                                                                                                                                              interval: "On 1:30", focus: "Step 2" },
+            { id: "s_0v9gch", reps: 1, dist: 50,  desc: "Fly count: 3 fly / 5 free per length",                                                                                                                                              interval: "On 1:30", focus: "Step 3 — fly equal partner" },
+            { id: "s_9980r2", reps: 1, dist: 50,  desc: "Fly count: 4 fly / 4 free per length",                                                                                                                                              interval: "On 1:30", focus: "Step 4 — half and half" },
+            { id: "s_bkdl14", reps: 1, dist: 50,  desc: "Fly count: 5 fly / 3 free per length",                                                                                                                                              interval: "On 1:30", focus: "Step 5 — fly dominant" },
+            { id: "s_gg3v8t", reps: 1, dist: 50,  desc: "Fly count: 6 fly / 2 free per length",                                                                                                                                              interval: "On 1:30", focus: "Step 6 — fly with a free breath cameo" },
+            { id: "s_guuanc", reps: 1, dist: 50,  desc: "Fly count: 7 fly / 1 free per length",                                                                                                                                              interval: "On 1:30", focus: "Step 7 — almost full fly" },
+            { id: "s_flkncp", reps: 1, dist: 50,  desc: "FULL fly — top step",                                                                                                                                                               interval: "On 1:30", focus: "Top step — earned" },
+            { id: "s_owgx22", reps: 1, dist: 100, desc: "Easy backstroke — flush",                                                                                                                                                           interval: "On 2:30", focus: "Recover" },
+          ]},
+        { label: "Underwater + Swim Fly 50s", totalYards: 900, sets: [
+            { id: "s_egdaqj", reps: 1, dist: 200, desc: "Easy choice — open up, 4×15m dolphin off the wall",                                                              interval: "On 4:30", focus: "Prime dolphin kick + lungs" },
+            { id: "s_p33pf0", reps: 10, dist: 50, desc: "Butterfly — 25 dolphin underwater (head down, streamline) + 25 fly swim (strong); back off underwater length if you get lightheaded", interval: "On 1:45", focus: "Race-style fly: long underwaters powering surface speed" },
+            { id: "s_qoi2wy", reps: 1, dist: 200, desc: "Easy backstroke — flush",                                                                                          interval: "On 5:00", focus: "Cool down" },
+          ]},
+        { label: "Fly Stroke-Count Cap", totalYards: 700, sets: [
+            { id: "s_wcynn9", reps: 1, dist: 100, desc: "Easy fly — count your strokes per 25 (baseline)",                                                                            interval: "On 3:00", focus: "Establish stroke count" },
+            { id: "s_khaqxr", reps: 8, dist: 50,  desc: "Butterfly — moderate-strong, must stay AT OR UNDER baseline-1 strokes per 25. Take a longer underwater off the wall if needed.", interval: "On 2:00", focus: "Force long underwaters + late breakouts to keep count down" },
+            { id: "s_8ryqox", reps: 1, dist: 200, desc: "Easy backstroke — flush",                                                                                                       interval: "On 5:00", focus: "Recover" },
+          ]},
+        { label: "Crocodile Fly", totalYards: 800, sets: [
+            { id: "s_9ndp8m", reps: 1, dist: 200, desc: "Easy choice — open up; last 50 with low-profile fly recovery (hands barely clear water)", interval: "On 5:00", focus: "Prime low-profile fly" },
+            { id: "s_clvt11", reps: 8, dist: 50,  desc: "Butterfly — race form: flat body line, low recovery (hands skim water on the way forward), forward press of the chest. Strong tempo.", interval: "On 1:45", focus: "Eliminate up-and-down fly — train flat, fast race-style fly" },
+            { id: "s_vfu72m", reps: 1, dist: 200, desc: "Easy backstroke — flush",                                                                  interval: "On 5:00", focus: "Cool down" },
+          ]},
+        { label: "Broken 100 Fly", totalYards: 1100, sets: [
+            { id: "s_n2c24b", reps: 1, dist: 200, desc: "Easy choice — open up + 4×15m dolphin off the wall",                                                                                                        interval: "On 4:30", focus: "Prime" },
+            { id: "s_91gpuh", reps: 1, dist: 100, desc: "Easy fly — moderate, find rhythm",                                                                                                                          interval: "On 3:00", focus: "Wake up the stroke" },
+            { id: "s_t846eu", reps: 4, dist: 100, desc: "BROKEN 100 fly: race-pace 25 + 10s rest + race-pace 25 + 10s rest + race-pace 25 + 10s rest + race-pace 25. Target your 100 fly race-pace per 25. Record splits.", interval: "On 5:00", focus: "Race-pace 100 fly with rest you'd never get in a meet — train the speed" },
+            { id: "s_r1akco", reps: 1, dist: 400, desc: "Easy choice — long flush",                                                                                                                                  interval: "On 9:00", focus: "Cool down — lactate recovery" },
           ]},
       ],
     };
