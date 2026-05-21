@@ -1076,6 +1076,34 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         return res.status(400).json({ error: "level must be one of: " + allowed.join(", ") });
       }
     }
+    // Validate engine_recent_templates if present (S2.5 — template engine
+    // anti-repeat memory per TEMPLATE_ENGINE_SCOPE.md §6). Array of up to 10
+    // { template_id, stroke, ts } entries. Engine excludes (template_id,
+    // stroke) tuples present in the last 10 when generating.
+    if ("engine_recent_templates" in patch && patch.engine_recent_templates !== null) {
+      const arr = patch.engine_recent_templates;
+      if (!Array.isArray(arr)) {
+        return res.status(400).json({ error: "engine_recent_templates must be an array" });
+      }
+      if (arr.length > 10) {
+        return res.status(400).json({ error: "engine_recent_templates max length is 10" });
+      }
+      const VALID_STROKES = ["free", "back", "breast", "fly", "IM", "choice", "kick"];
+      for (const [i, e] of arr.entries()) {
+        if (!e || typeof e !== "object") {
+          return res.status(400).json({ error: `engine_recent_templates[${i}] must be an object` });
+        }
+        if (typeof e.template_id !== "string" || e.template_id.length === 0 || e.template_id.length > 64) {
+          return res.status(400).json({ error: `engine_recent_templates[${i}].template_id must be a 1-64 char string` });
+        }
+        if (typeof e.stroke !== "string" || !VALID_STROKES.includes(e.stroke)) {
+          return res.status(400).json({ error: `engine_recent_templates[${i}].stroke must be one of: ${VALID_STROKES.join(", ")}` });
+        }
+        if (e.ts != null && (typeof e.ts !== "number" || !Number.isFinite(e.ts))) {
+          return res.status(400).json({ error: `engine_recent_templates[${i}].ts must be a finite number or omitted` });
+        }
+      }
+    }
     await dbPatchSettingsExtra(req.userSub, patch);
     res.json({ ok: true });
   } catch (err) {

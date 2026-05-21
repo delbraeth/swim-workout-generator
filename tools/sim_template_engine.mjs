@@ -189,8 +189,8 @@ if (batch > 0) {
 }
 
 // Default: print one sample per (template, type, budget) for coach review
-console.log("S1 template engine — sample output matrix");
-console.log("(deterministic via seeded random would be S2; for now Math.random)\n");
+console.log("Template engine — sample output matrix");
+console.log("(deterministic via seeded random would be S3; for now Math.random)\n");
 for (const [tplId, typeKey, budget, label] of TEST_MATRIX) {
   if (onlyTemplate && tplId !== onlyTemplate) continue;
   if (!TEMPLATE_ENGINE.list().includes(tplId)) { console.log(`\n[skip] ${tplId} not registered`); continue; }
@@ -202,4 +202,105 @@ for (const [tplId, typeKey, budget, label] of TEST_MATRIX) {
   totalErrs += errs.length;
 }
 console.log(`\n${totalGen} samples generated, ${totalErrs} validation errors`);
-process.exit(totalErrs > 0 ? 1 : 0);
+
+// ─── S2.5 — validator + retry + anti-repeat tests ────────────────────────────
+// These don't run in batch mode (--batch exits earlier). They verify the
+// validator catches known-bad outputs, retry retries, and anti-repeat
+// exclusion fires correctly.
+console.log("\n\n── S2.5: validator + retry + anti-repeat tests ──");
+const s25Failures = [];
+const assertS25 = (name, cond, detail = "") => {
+  if (cond) console.log(`  PASS  ${name}`);
+  else { console.log(`  FAIL  ${name}  ${detail}`); s25Failures.push(name); }
+};
+
+// T1: validator catches missing focus (V8)
+{
+  const bad = { label: "x", totalYards: 100, sets: [{ reps: 1, dist: 100, desc: "x", interval: "On 2:30", focus: "" }] };
+  const errs = TEMPLATE_ENGINE.validate(bad, { budgetYd: 100 });
+  assertS25("V8: empty focus flagged", errs.some(e => e.code === "V8"), JSON.stringify(errs));
+}
+
+// T2: validator catches non-canonical dist (V2)
+{
+  const bad = { label: "x", totalYards: 125, sets: [{ reps: 1, dist: 125, desc: "x", interval: "On 3:00", focus: "x" }] };
+  const errs = TEMPLATE_ENGINE.validate(bad, { budgetYd: 125 });
+  assertS25("V2: non-canonical dist flagged", errs.some(e => e.code === "V2"), JSON.stringify(errs));
+}
+
+// T3: validator catches interval-too-tight (V4)
+{
+  // 100yd at baseline pace = 120s swim. Interval of 1:00 = 60s — way too tight.
+  const bad = { label: "x", totalYards: 100, sets: [{ reps: 1, dist: 100, desc: "x", interval: "On 1:00", focus: "x" }] };
+  const errs = TEMPLATE_ENGINE.validate(bad, { budgetYd: 100 });
+  assertS25("V4: interval shorter than swim time flagged", errs.some(e => e.code === "V4"), JSON.stringify(errs));
+}
+
+// T4: validator catches budget overshoot (V1)
+{
+  const bad = { label: "x", totalYards: 1500, sets: [{ reps: 1, dist: 500, desc: "x", interval: "On 11:00", focus: "x" }, { reps: 1, dist: 500, desc: "x", interval: "On 11:00", focus: "x" }, { reps: 1, dist: 500, desc: "x", interval: "On 11:00", focus: "x" }] };
+  const errs = TEMPLATE_ENGINE.validate(bad, { budgetYd: 1000 });
+  assertS25("V1: budget overshoot flagged", errs.some(e => e.code === "V1"), JSON.stringify(errs));
+}
+
+// T5: validator catches eq=pull without pull cue (V6)
+{
+  const bad = { label: "x", totalYards: 100, sets: [{ reps: 1, dist: 100, desc: "Freestyle moderate", interval: "On 2:30", focus: "x", eq: "pull" }] };
+  const errs = TEMPLATE_ENGINE.validate(bad, { budgetYd: 100 });
+  assertS25("V6: eq=pull without pull/paddle/buoy flagged", errs.some(e => e.code === "V6"), JSON.stringify(errs));
+}
+
+// T6: real engine output passes validator
+{
+  const opt = TEMPLATE_ENGINE.generate("aerobic_volume", "distance", "main", 1200);
+  const errs = TEMPLATE_ENGINE.validate(opt, { budgetYd: 1200 });
+  assertS25("real engine output passes validator", errs.length === 0, JSON.stringify(errs));
+}
+
+// T7: generateWithRetry returns option + templateUsed on success
+{
+  const r = TEMPLATE_ENGINE.generateWithRetry({
+    templateId: "aerobic_volume", typeKey: "distance", section: "main", budgetYd: 1200,
+  });
+  assertS25("generateWithRetry success: returns option", r.option != null);
+  assertS25("generateWithRetry success: templateUsed = requested", r.templateUsed === "aerobic_volume");
+  assertS25("generateWithRetry success: attempts ≥ 1", r.attempts.length >= 1);
+}
+
+// T8: anti-repeat skips requested template if in recent[]
+{
+  const r = TEMPLATE_ENGINE.generateWithRetry({
+    templateId: "aerobic_volume", typeKey: "distance", section: "main", budgetYd: 1200,
+    recent: [{ template_id: "aerobic_volume", stroke: "free", ts: Date.now() }],
+  });
+  // Should skip the original (excluded) and go straight to a different template
+  assertS25("anti-repeat: skipped excluded template",
+    r.templateUsed !== "aerobic_volume" && r.option != null,
+    `templateUsed=${r.templateUsed}`);
+}
+
+// T9: anti-repeat fallback — all templates excluded → null
+{
+  const allTemplateExclusions = TEMPLATE_ENGINE.list().map(id => ({ template_id: id, stroke: "free", ts: 0 }));
+  const r = TEMPLATE_ENGINE.generateWithRetry({
+    templateId: "aerobic_volume", typeKey: "distance", section: "main", budgetYd: 1200,
+    recent: allTemplateExclusions,
+  });
+  assertS25("anti-repeat full exhaustion: returns null option (bank fallback)",
+    r.option === null && r.templateUsed === null,
+    `templateUsed=${r.templateUsed}`);
+}
+
+// T10: unknown template → null with attempts including alternative
+{
+  const r = TEMPLATE_ENGINE.generateWithRetry({
+    templateId: "nonexistent_template", typeKey: "distance", section: "main", budgetYd: 1200,
+  });
+  // Original attempts fail with V0, then attempt 3 picks a real alternative which should succeed
+  assertS25("unknown template: alt picked", r.option != null && r.templateUsed !== "nonexistent_template",
+    `templateUsed=${r.templateUsed}, attempts=${JSON.stringify(r.attempts)}`);
+}
+
+console.log(`\nS2.5: ${s25Failures.length === 0 ? "all tests passed" : `${s25Failures.length} failures: ${s25Failures.join(", ")}`}`);
+
+process.exit(totalErrs > 0 || s25Failures.length > 0 ? 1 : 0);

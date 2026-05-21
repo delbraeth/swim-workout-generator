@@ -8427,10 +8427,78 @@
       },
     };
 
-    // Engine entry point. Generates an option from a template id.
-    // Returns null if the template isn't applicable to (section, typeKey).
-    // Validator + anti-repeat consultation ship in S2 — for S1 this is a
-    // straight generate.
+    // ── Validator (S2.5 — spec §5) ───────────────────────────────────
+    // Returns array of { code, msg } error objects. Empty array = passes.
+    // V5 (mix-distribution) and V7 (cross-rep descending intervals) are
+    // deferred: V5 needs picker context (mix pills) that engine doesn't
+    // see yet (S3); V7 doesn't apply to current templates whose descend
+    // shape is a single-row cue, not cross-rep intervals.
+    function templateValidate(option, context) {
+      const errs = [];
+      if (!option) { errs.push({ code: "V0", msg: "null output" }); return errs; }
+      if (!option.label) errs.push({ code: "V0", msg: "missing label" });
+      if (!Array.isArray(option.sets) || option.sets.length === 0) {
+        errs.push({ code: "V0", msg: "missing/empty sets" });
+        return errs;
+      }
+      // V1: yardage within ±5% of budget
+      if (context?.budgetYd) {
+        const pctOff = Math.abs(option.totalYards - context.budgetYd) / context.budgetYd;
+        if (pctOff > 0.05) {
+          errs.push({ code: "V1", msg: `yardage ${option.totalYards} vs budget ${context.budgetYd} (${(pctOff * 100).toFixed(1)}% off)` });
+        }
+      }
+      // Per-row checks
+      for (const [i, s] of option.sets.entries()) {
+        // V2: canonical distance
+        if (!TEMPLATE_CANONICAL_DISTS.includes(s.dist)) {
+          errs.push({ code: "V2", msg: `set[${i}] dist=${s.dist} not canonical` });
+        }
+        // V3: interval present + format
+        if (!s.interval) {
+          errs.push({ code: "V3", msg: `set[${i}] missing interval` });
+        } else if (s.interval !== NO_INTERVAL_CANONICAL && !/^On \d+:\d{2}$/.test(s.interval) && !/^On :\d{2}$/.test(s.interval)) {
+          errs.push({ code: "V3", msg: `set[${i}] interval malformed: ${s.interval}` });
+        } else {
+          // V4: interval realism — interval ≥ swim time + 5s rest at baseline pace
+          const secs = parseIntervalSecs(s.interval);
+          if (secs !== null) {
+            const swimTime = (s.dist / 100) * TEMPLATE_BASELINE_PACE_SECS;
+            if (secs < swimTime + 5) {
+              errs.push({ code: "V4", msg: `set[${i}] interval ${secs}s < swim time ${Math.round(swimTime)}s + 5s rest` });
+            }
+          }
+        }
+        // V6: equipment-cue match
+        const descBlob = (s.desc || "") + " " + (s.focus || "");
+        if (s.eq === "pull" && !/pull|paddle|buoy/i.test(descBlob)) {
+          errs.push({ code: "V6", msg: `set[${i}] eq=pull but no pull/paddle/buoy cue` });
+        }
+        if (s.eq === "kick" && !/kick|board/i.test(descBlob)) {
+          errs.push({ code: "V6", msg: `set[${i}] eq=kick but no kick/board cue` });
+        }
+        // V8: focus non-empty
+        if (!s.focus || s.focus.trim() === "") {
+          errs.push({ code: "V8", msg: `set[${i}] empty focus` });
+        }
+      }
+      return errs;
+    }
+
+    // Engine entry point. Two surfaces:
+    //   .generate(...)            — single-attempt template invocation.
+    //                                 Returns bank-shaped option or null.
+    //                                 No validation, no retry, no anti-repeat.
+    //                                 Useful for tests and direct invocations.
+    //   .generateWithRetry({...}) — validated invocation per spec §5.
+    //                                 Hybrid retry-3 per Cap'n's S2.5 choice:
+    //                                 attempt 1+2 = same template w/ new slots,
+    //                                 attempt 3 = different applicable template
+    //                                 (respecting anti-repeat). Returns
+    //                                 { option, errors, attempts, templateUsed }
+    //                                 or { option: null, ... } on full failure
+    //                                 — caller falls back to bank.
+    //   .validate(option, ctx)    — exposed validator.
     const TEMPLATE_ENGINE = {
       templates: TEMPLATE_DEFINITIONS,
       list() { return Object.keys(TEMPLATE_DEFINITIONS); },
@@ -8447,9 +8515,63 @@
         if (!tpl.applicableTypes.includes(typeKey)) return null;
         return tpl.generate(typeKey, section, budgetYd, rand);
       },
+      validate(option, context) {
+        return templateValidate(option, context);
+      },
+      generateWithRetry({ templateId, typeKey, section, budgetYd, recent = [], rand = Math.random }) {
+        const attempts = [];
+        const ctx = { budgetYd, typeKey, section };
+        const defaultStroke = templateDefaultStroke(typeKey);
+        // Anti-repeat lookup set, keyed by `template_id:stroke`.
+        // The picker (S3) passes the last 10 generated entries.
+        const excluded = new Set((recent || []).map(r => `${r.template_id}:${r.stroke}`));
+        // If the requested template+stroke is in the excluded set, we
+        // skip directly to the "different template" leg of retry.
+        const requestedExcluded = excluded.has(`${templateId}:${defaultStroke}`);
+        const tryGen = (tid) => {
+          const tpl = TEMPLATE_DEFINITIONS[tid];
+          if (!tpl) return { option: null, errors: [{ code: "V0", msg: `unknown template ${tid}` }] };
+          if (!tpl.applicableSections.includes(section)) return { option: null, errors: [{ code: "V0", msg: `${tid} not applicable to section ${section}` }] };
+          if (!tpl.applicableTypes.includes(typeKey)) return { option: null, errors: [{ code: "V0", msg: `${tid} not applicable to type ${typeKey}` }] };
+          const opt = tpl.generate(typeKey, section, budgetYd, rand);
+          const errs = templateValidate(opt, ctx);
+          return { option: opt, errors: errs };
+        };
+        // Attempts 1+2: original template, new slot rolls each time
+        // (slot picks are randomized inside each template — calling again
+        // produces a different shape). Skip if anti-repeat excluded it.
+        if (!requestedExcluded) {
+          for (let i = 0; i < 2; i++) {
+            const r = tryGen(templateId);
+            attempts.push({ templateId, errors: r.errors });
+            if (r.errors.length === 0) {
+              return { option: r.option, attempts, templateUsed: templateId };
+            }
+          }
+        }
+        // Attempt 3: pick a different applicable template (anti-repeat aware)
+        const alternatives = Object.keys(TEMPLATE_DEFINITIONS).filter(id => {
+          if (id === templateId) return false;
+          const tpl = TEMPLATE_DEFINITIONS[id];
+          if (!tpl.applicableSections.includes(section)) return false;
+          if (!tpl.applicableTypes.includes(typeKey)) return false;
+          if (excluded.has(`${id}:${defaultStroke}`)) return false;
+          return true;
+        });
+        if (alternatives.length) {
+          const altId = alternatives[Math.floor(rand() * alternatives.length)];
+          const r = tryGen(altId);
+          attempts.push({ templateId: altId, errors: r.errors });
+          if (r.errors.length === 0) {
+            return { option: r.option, attempts, templateUsed: altId };
+          }
+        }
+        // All attempts exhausted — caller falls back to bank
+        return { option: null, attempts, templateUsed: null };
+      },
     };
 
-    // Expose for browser-console smoke tests during S1. Wired to UI in S3.
+    // Expose for browser-console smoke tests during S1/S2. Wired to UI in S3.
     if (typeof window !== "undefined") window.TEMPLATE_ENGINE = TEMPLATE_ENGINE;
 
     // ═══════════════════════════════════════════════════════════════
