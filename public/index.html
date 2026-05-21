@@ -7656,6 +7656,314 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  TEMPLATE ENGINE (S1 — bank audit + 3 templates)
+    //
+    //  Generates bank-shaped option objects ({label, totalYards, sets[]})
+    //  from structural templates. Complements the bank, doesn't replace
+    //  it. Per TEMPLATE_ENGINE_SCOPE.md §2.
+    //
+    //  Output shape matches bank options EXACTLY:
+    //    { label, totalYards, sets: [{ id?, reps, dist, desc, interval, focus, eq? }, ...] }
+    //
+    //  Intervals are authored at the canonical baseline pace (2:00/100,
+    //  same as PACE_BASELINE_SECS in rescaleBlocksForPace). The existing
+    //  rescaleBlocksForPace path adjusts them to the user's actual pace
+    //  at render time — engine output integrates with the bank-fallback
+    //  path with no special handling.
+    //
+    //  S1 = 3 templates (block_with_recovery, aerobic_volume,
+    //  descend_ladder) chosen for combined ~24% bank coverage. S2 adds
+    //  validator + anti-repeat + DB. S3 wires the per-section UI toggle
+    //  and ⚡ badge.
+    //
+    //  Family selection priorities and definitions live in
+    //  tools/bank_audit.json (run tools/bank_audit.py to refresh).
+    // ═══════════════════════════════════════════════════════════════
+    const TEMPLATE_BASELINE_PACE_SECS = 120;  // 2:00 / 100 yd — matches rescaleBlocksForPace
+
+    // Canonical SCY distances per spec §1 V2. Engine output must pick from this set.
+    const TEMPLATE_CANONICAL_DISTS = [25, 50, 75, 100, 150, 200, 300, 400, 500];
+
+    // Per-effort rest offsets (added to swim-time at baseline pace).
+    // Tuned for masters; rescaleBlocksForPace adjusts proportionally for
+    // faster/slower swimmers.
+    const TEMPLATE_REST_BY_EFFORT = {
+      easy:      30,  // recovery rows
+      aerobic:   15,  // steady aerobic — tight enough to feel
+      moderate:  15,
+      strong:    20,
+      threshold: 15,  // sustainable hard; not full recovery
+      racePace:  60,  // full recovery for race-pace work
+      sprint:    60,  // full recovery between sprints
+    };
+
+    // Compute interval = swim_time(dist) + rest(effort), rounded to 5s.
+    function templateComputeInterval(distYd, effortKey) {
+      const restSecs = TEMPLATE_REST_BY_EFFORT[effortKey] ?? 15;
+      const swimSecs = (distYd / 100) * TEMPLATE_BASELINE_PACE_SECS;
+      const total = Math.max(30, Math.round((swimSecs + restSecs) / 5) * 5);
+      return formatIntervalSecs(total);
+    }
+
+    // Pick a value from an array using a seeded-or-random index. The S2
+    // anti-repeat layer will pass a seed; for S1 it's plain Math.random.
+    function templatePick(choices, rand = Math.random) {
+      if (!choices || choices.length === 0) return null;
+      return choices[Math.floor(rand() * choices.length)];
+    }
+
+    // Given (distChoices, budget, [minReps, maxReps], preference), return
+    // the {dist, reps} pair whose total comes closest to budget while
+    // satisfying the rep-count constraint AND staying within ±5% (spec V1).
+    // If no combination is within ±5%, returns the closest one anyway —
+    // S2's validator will retry with a different template. preference can
+    // be "longer" (bias toward longer dists when ties), "shorter" (bias
+    // shorter), or "any" (uniform among candidates within tolerance).
+    function templatePickRepShape(distChoices, budgetYd, minReps, maxReps, preference = "any", rand = Math.random) {
+      const cands = [];
+      for (const d of distChoices) {
+        // Rep count that gets closest to budget, clamped to [min, max]
+        const ideal = Math.round(budgetYd / d);
+        const reps = Math.max(minReps, Math.min(maxReps, ideal));
+        const total = reps * d;
+        const pctOff = Math.abs(total - budgetYd) / budgetYd;
+        cands.push({ dist: d, reps, total, pctOff });
+      }
+      // Step 1: If any candidate is in ±5% tolerance, apply preference
+      // among those. This is the happy path — coach gets a sensible
+      // choice with budget close to target.
+      const within = cands.filter(c => c.pctOff <= 0.05);
+      if (within.length) {
+        if (preference === "longer") {
+          within.sort((a, b) => b.dist - a.dist);
+          return templatePick(within.slice(0, 2), rand);
+        }
+        if (preference === "shorter") {
+          within.sort((a, b) => a.dist - b.dist);
+          return templatePick(within.slice(0, 2), rand);
+        }
+        within.sort((a, b) => a.pctOff - b.pctOff);
+        return templatePick(within.slice(0, Math.min(3, within.length)), rand);
+      }
+      // Step 2: No candidate in tolerance — preference is overridden by
+      // closeness so we don't ship a 31%-off "shorter" pick when a
+      // 6%-off "longer" one was available. S2's validator will catch the
+      // residual and retry with a different template.
+      cands.sort((a, b) => a.pctOff - b.pctOff);
+      return cands[0];
+    }
+
+    // Default stroke for a workout type. Stroke-specific types use that
+    // stroke; free-axis types default to freestyle.
+    function templateDefaultStroke(typeKey) {
+      if (["back", "breast", "fly", "free"].includes(typeKey)) return typeKey;
+      if (typeKey === "im") return "IM";
+      return "free";  // distance / sprint / endurance / mixed
+    }
+
+    // Stroke-name → desc-token (capitalization matches authored bank).
+    function templateStrokeLabel(stroke) {
+      const map = {
+        free: "Freestyle", back: "Backstroke", breast: "Breaststroke",
+        fly: "Butterfly", IM: "IM", choice: "Choice",
+      };
+      return map[stroke] || stroke;
+    }
+
+    // Distance bias by workout type — what rep distances make sense.
+    // Picks from TEMPLATE_CANONICAL_DISTS subset appropriate to the type.
+    function templateRepDistChoices(typeKey, section) {
+      // Section-level constraint: drills favor shorter pieces, mains longer
+      if (section === "drill") return [25, 50, 75, 100];
+      // Type biases
+      const typeBias = {
+        distance:  [100, 150, 200, 300, 400],
+        endurance: [100, 150, 200, 300],
+        sprint:    [25, 50, 75],
+        mixed:     [50, 75, 100, 150, 200],
+        free:      [50, 75, 100, 150, 200],
+        back:      [50, 75, 100, 150],
+        breast:    [50, 75, 100, 150],
+        fly:       [25, 50, 75, 100],
+        im:        [100, 200],
+      };
+      return typeBias[typeKey] || [50, 100, 150, 200];
+    }
+
+    // ── Template definitions ───────────────────────────────────────
+    // Each template defines slots + generate(). Generate returns a bank-
+    // shaped option object. S1 ships 3 templates; S2 adds 7-10 more.
+    const TEMPLATE_DEFINITIONS = {
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ aerobic_volume — single row, N×D, aerobic effort           │
+      // │ Coverage: 27 bank options (4.4%)                           │
+      // │ Example: "12×100 — moderate aerobic (RPE 6/10)"            │
+      // └────────────────────────────────────────────────────────────┘
+      aerobic_volume: {
+        id: "aerobic_volume",
+        family: "single_row",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "im"],
+        labelTemplate: (slots, totalYards) =>
+          `Aerobic ${slots.stroke === "IM" ? "IM " : ""}${slots.repDist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          // Aerobic favors longer reps: coaches more often program 10×100
+          // than 16×50 for the same yardage. Cap at 300yd (above that is
+          // continuous_long_swim territory).
+          const distChoices = templateRepDistChoices(typeKey, section).filter(d => d <= 300);
+          const shape = templatePickRepShape(distChoices, budgetYd, 6, 12, "longer", rand);
+          const effortPhrase = templatePick(
+            ["moderate aerobic", "easy/moderate", "aerobic pace (RPE 6/10)", "steady aerobic"],
+            rand,
+          );
+          const interval = templateComputeInterval(shape.dist, "aerobic");
+          const totalYards = shape.total;
+          const slots = { stroke, repDist: shape.dist, repCount: shape.reps, effortPhrase };
+          return {
+            label: this.labelTemplate(slots, totalYards),
+            totalYards,
+            sets: [{
+              reps: shape.reps, dist: shape.dist,
+              desc: `${templateStrokeLabel(stroke)} — ${effortPhrase}`,
+              interval,
+              focus: "Build aerobic volume at sustainable pace",
+            }],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ descend_ladder — single row, N×D with descend 1→N cue     │
+      // │ Coverage: 19 bank options (3.1%)                           │
+      // │ Example: "Descend 100s — 4×100, descend 1→4"               │
+      // └────────────────────────────────────────────────────────────┘
+      descend_ladder: {
+        id: "descend_ladder",
+        family: "single_row",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `Descend ${slots.stroke === "IM" ? "IM " : ""}${slots.repDist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          const distChoices = templateRepDistChoices(typeKey, section);
+          // Descend works best with 4-8 reps. No strong preference for
+          // longer/shorter — coaches descend equally happily 4×200 or 8×50.
+          const shape = templatePickRepShape(distChoices, budgetYd, 4, 8, "any", rand);
+          const interval = templateComputeInterval(shape.dist, "strong");
+          const totalYards = shape.total;
+          const slots = { stroke, repDist: shape.dist, repCount: shape.reps };
+          return {
+            label: this.labelTemplate(slots, totalYards),
+            totalYards,
+            sets: [{
+              reps: shape.reps, dist: shape.dist,
+              desc: `${templateStrokeLabel(stroke)} — moderate to strong, descend 1→${shape.reps}`,
+              interval,
+              focus: "Each rep faster than the last",
+            }],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ block_with_recovery — hard block + easy recovery row       │
+      // │ Coverage: 107 bank options (17.4%) — largest single family │
+      // │ Example: "8×100 race-pace + 1×100 easy recovery"           │
+      // │                                                            │
+      // │ Two-row composition. Allocates ~80% of budget to hard      │
+      // │ block, ~20% to recovery row.                               │
+      // └────────────────────────────────────────────────────────────┘
+      block_with_recovery: {
+        id: "block_with_recovery",
+        family: "multi_row_composition",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `${slots.effortAdj} ${slots.stroke === "IM" ? "IM " : ""}${slots.hardDist}s + Recovery (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          // Pick a hard effort appropriate for the type
+          const effortChoices = typeKey === "sprint"
+            ? [{ key: "racePace", phrase: "race pace, full recovery", adj: "Race-Pace" },
+               { key: "sprint",   phrase: "strong, near race pace",   adj: "Strong" }]
+            : [{ key: "threshold", phrase: "threshold pace (RPE 7-8/10)", adj: "Threshold" },
+               { key: "racePace",  phrase: "race pace, focused effort",   adj: "Race-Pace" },
+               { key: "strong",    phrase: "strong, sustained",           adj: "Strong" }];
+          const effort = templatePick(effortChoices, rand);
+          // Two-step budget allocation:
+          //   1. Aim hard block at ~80% of budget (leaves room for recovery)
+          //   2. Size recovery from the remainder, snapped to canonical
+          // This keeps total within ±5% of budget even when the hard
+          // block's discrete (dist, reps) options can't hit exactly 80%.
+          const hardTarget = Math.round(budgetYd * 0.8);
+          // Hard block: 4-10 reps. Sprint type prefers shorter (race-pace
+          // intervals are typically 25/50/75); everything else "any".
+          const hardDistChoices = templateRepDistChoices(typeKey, section);
+          const hardPref = typeKey === "sprint" ? "shorter" : "any";
+          const shape = templatePickRepShape(hardDistChoices, hardTarget, 4, 10, hardPref, rand);
+          const hardDist = shape.dist, hardReps = shape.reps;
+          const hardTotal = hardReps * hardDist;
+          // Recovery: pick canonical dist closest to (budget - hardTotal).
+          // Clamp to 50-300 to keep it a reasonable single-rep recovery.
+          const recoveryTarget = Math.max(50, Math.min(300, budgetYd - hardTotal));
+          const recoveryDist = TEMPLATE_CANONICAL_DISTS.reduce((best, d) =>
+            Math.abs(d - recoveryTarget) < Math.abs(best - recoveryTarget) ? d : best, 100);
+          const hardInterval = templateComputeInterval(hardDist, effort.key);
+          const recoveryInterval = templateComputeInterval(recoveryDist, "easy");
+          const totalYards = hardTotal + recoveryDist;
+          const slots = { stroke, hardDist, hardReps, recoveryDist,
+                          effortKey: effort.key, effortPhrase: effort.phrase, effortAdj: effort.adj };
+          return {
+            label: this.labelTemplate(slots, totalYards),
+            totalYards,
+            sets: [
+              {
+                reps: hardReps, dist: hardDist,
+                desc: `${templateStrokeLabel(stroke)} — ${effort.phrase}`,
+                interval: hardInterval,
+                focus: `Sustain ${effort.adj.toLowerCase()} effort across all ${hardReps}`,
+              },
+              {
+                reps: 1, dist: recoveryDist,
+                desc: "Easy choice — active recovery",
+                interval: recoveryInterval,
+                focus: "Flush and reset",
+              },
+            ],
+          };
+        },
+      },
+    };
+
+    // Engine entry point. Generates an option from a template id.
+    // Returns null if the template isn't applicable to (section, typeKey).
+    // Validator + anti-repeat consultation ship in S2 — for S1 this is a
+    // straight generate.
+    const TEMPLATE_ENGINE = {
+      templates: TEMPLATE_DEFINITIONS,
+      list() { return Object.keys(TEMPLATE_DEFINITIONS); },
+      applicable(section, typeKey) {
+        return Object.values(TEMPLATE_DEFINITIONS).filter(t =>
+          t.applicableSections.includes(section) &&
+          t.applicableTypes.includes(typeKey)
+        );
+      },
+      generate(templateId, typeKey, section, budgetYd, rand) {
+        const tpl = TEMPLATE_DEFINITIONS[templateId];
+        if (!tpl) return null;
+        if (!tpl.applicableSections.includes(section)) return null;
+        if (!tpl.applicableTypes.includes(typeKey)) return null;
+        return tpl.generate(typeKey, section, budgetYd, rand);
+      },
+    };
+
+    // Expose for browser-console smoke tests during S1. Wired to UI in S3.
+    if (typeof window !== "undefined") window.TEMPLATE_ENGINE = TEMPLATE_ENGINE;
+
+    // ═══════════════════════════════════════════════════════════════
     //  UNIT CONVERSION — yd ↔ m
     //  Used by the bank-fallback path when a content gap forces us to
     //  pull options authored for a different pool unit. Distances get

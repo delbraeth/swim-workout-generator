@@ -1,0 +1,157 @@
+// sim_template_engine.mjs — exercise the TEMPLATE_ENGINE (S1) from Node.
+//
+// Same extract-and-eval pattern as sim_engine.mjs. Generates samples from
+// each template across realistic (type × budget) combinations and prints
+// them for coach-plausibility review.
+//
+// Usage:
+//   node tools/sim_template_engine.mjs           # default sample matrix
+//   node tools/sim_template_engine.mjs --batch 50 --template aerobic_volume
+//
+// Verifies S1 acceptance: every output has valid label, canonical dists,
+// non-empty focus, and parseable intervals. Anything else is a regression
+// before we even ship S1.
+
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const HTML_PATH = path.join(__dirname, "..", "public", "index.html");
+
+const html = fs.readFileSync(HTML_PATH, "utf8");
+const lines = html.split("\n");
+const startMarker = lines.findIndex(l => /<script\s+type="text\/babel">/.test(l));
+const endMarker   = lines.findIndex(l => /^\s*function EquipmentBadge\b/.test(l));
+if (startMarker < 0 || endMarker < 0) {
+  console.error("could not locate <script> / EquipmentBadge boundaries");
+  process.exit(1);
+}
+const extracted = lines.slice(startMarker + 1, endMarker).join("\n");
+
+globalThis.React = { useState: () => [null, () => {}], useCallback: (f) => f, useMemo: (f) => f(), useEffect: () => {} };
+globalThis.fetch = async () => ({ ok: true, json: async () => ({}) });
+globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+
+const captured = {};
+const runner = new Function(
+  "captured",
+  extracted +
+    "\n;captured.TEMPLATE_ENGINE = TEMPLATE_ENGINE;" +
+    "\n;captured.TEMPLATE_CANONICAL_DISTS = TEMPLATE_CANONICAL_DISTS;" +
+    "\n;captured.parseIntervalSecs = parseIntervalSecs;",
+);
+runner(captured);
+
+const { TEMPLATE_ENGINE, TEMPLATE_CANONICAL_DISTS, parseIntervalSecs } = captured;
+
+// ─── validation ──────────────────────────────────────────────────────────────
+function validateOption(opt, template, ctx) {
+  const errs = [];
+  if (!opt) { errs.push("null output"); return errs; }
+  if (!opt.label) errs.push("missing label");
+  if (typeof opt.totalYards !== "number" || opt.totalYards <= 0) errs.push(`bad totalYards: ${opt.totalYards}`);
+  if (!Array.isArray(opt.sets) || opt.sets.length === 0) { errs.push("missing/empty sets"); return errs; }
+  const computedYards = opt.sets.reduce((sum, s) => sum + (s.reps || 1) * (s.dist || 0), 0);
+  if (computedYards !== opt.totalYards) errs.push(`totalYards mismatch: declared=${opt.totalYards} computed=${computedYards}`);
+  // Spec V1: ±5% of budget
+  if (ctx?.budget) {
+    const pctOff = Math.abs(opt.totalYards - ctx.budget) / ctx.budget;
+    if (pctOff > 0.05) errs.push(`budget overshoot: ${opt.totalYards}yd vs budget ${ctx.budget}yd (${(pctOff*100).toFixed(1)}% off, spec allows ±5%)`);
+  }
+  for (const [i, s] of opt.sets.entries()) {
+    if (!s.dist || !TEMPLATE_CANONICAL_DISTS.includes(s.dist)) errs.push(`set[${i}] dist=${s.dist} not canonical`);
+    if (typeof s.reps !== "number" || s.reps < 1) errs.push(`set[${i}] bad reps=${s.reps}`);
+    if (!s.desc || s.desc.trim() === "") errs.push(`set[${i}] empty desc`);
+    if (!s.focus || s.focus.trim() === "") errs.push(`set[${i}] empty focus`);
+    if (!s.interval) errs.push(`set[${i}] missing interval`);
+    else {
+      const secs = parseIntervalSecs(s.interval);
+      if (secs === null) errs.push(`set[${i}] unparseable interval: ${s.interval}`);
+      else if (secs < 30 || secs > 3600) errs.push(`set[${i}] interval out of range: ${secs}s`);
+    }
+  }
+  return errs;
+}
+
+function printOption(opt, header, errs) {
+  console.log(`\n  ── ${header} ──`);
+  if (!opt) { console.log("    NULL"); return; }
+  console.log(`    label:      ${opt.label}`);
+  console.log(`    totalYards: ${opt.totalYards}`);
+  for (const [i, s] of opt.sets.entries()) {
+    console.log(`    set[${i}]: ${s.reps}×${s.dist}  ${s.interval}`);
+    console.log(`              desc:  ${s.desc}`);
+    console.log(`              focus: ${s.focus}`);
+  }
+  if (errs.length) {
+    console.log(`    !! VALIDATION ERRORS: ${errs.length}`);
+    for (const e of errs) console.log(`       - ${e}`);
+  }
+}
+
+// ─── sample matrix ───────────────────────────────────────────────────────────
+const TEST_MATRIX = [
+  // (templateId, typeKey, budgetYd, label)
+  ["aerobic_volume",     "distance",  1200, "distance / 1200yd"],
+  ["aerobic_volume",     "endurance", 1500, "endurance / 1500yd"],
+  ["aerobic_volume",     "im",        1200, "im / 1200yd"],
+  ["aerobic_volume",     "free",       800, "free / 800yd"],
+  ["aerobic_volume",     "mixed",     1000, "mixed / 1000yd"],
+
+  ["descend_ladder",     "distance",  1000, "distance / 1000yd"],
+  ["descend_ladder",     "sprint",     400, "sprint / 400yd"],
+  ["descend_ladder",     "free",       800, "free / 800yd"],
+  ["descend_ladder",     "fly",        400, "fly / 400yd"],
+  ["descend_ladder",     "im",         800, "im / 800yd"],
+
+  ["block_with_recovery", "distance", 1200, "distance / 1200yd"],
+  ["block_with_recovery", "sprint",    800, "sprint / 800yd"],
+  ["block_with_recovery", "endurance",1400, "endurance / 1400yd"],
+  ["block_with_recovery", "im",       1200, "im / 1200yd"],
+  ["block_with_recovery", "back",     1000, "back / 1000yd"],
+];
+
+const args = process.argv.slice(2);
+const flag = (k, def=null) => { const i = args.indexOf(k); return i >= 0 ? args[i+1] : def; };
+const onlyTemplate = flag("--template");
+const batch = parseInt(flag("--batch", "0"), 10);
+
+let totalGen = 0, totalErrs = 0;
+
+if (batch > 0) {
+  // Stress-test: generate N samples of each, count errors
+  console.log(`Batch mode: ${batch} per (template, type)`);
+  for (const tplId of TEMPLATE_ENGINE.list()) {
+    if (onlyTemplate && tplId !== onlyTemplate) continue;
+    for (const [, typeKey, budget] of TEST_MATRIX.filter(r => r[0] === tplId)) {
+      let errCount = 0;
+      for (let i = 0; i < batch; i++) {
+        const opt = TEMPLATE_ENGINE.generate(tplId, typeKey, "main", budget);
+        const errs = validateOption(opt, tplId, { typeKey, budget });
+        if (errs.length) errCount++;
+        totalGen++;
+        totalErrs += errs.length;
+      }
+      console.log(`  ${tplId.padEnd(22)} ${typeKey.padEnd(10)} budget=${budget}  errors: ${errCount}/${batch}`);
+    }
+  }
+  console.log(`\nTotal: ${totalGen} generated, ${totalErrs} validation errors`);
+  process.exit(totalErrs > 0 ? 1 : 0);
+}
+
+// Default: print one sample per (template, type, budget) for coach review
+console.log("S1 template engine — sample output matrix");
+console.log("(deterministic via seeded random would be S2; for now Math.random)\n");
+for (const [tplId, typeKey, budget, label] of TEST_MATRIX) {
+  if (onlyTemplate && tplId !== onlyTemplate) continue;
+  if (!TEMPLATE_ENGINE.list().includes(tplId)) { console.log(`\n[skip] ${tplId} not registered`); continue; }
+  console.log(`\n=== ${tplId} :: ${label} ===`);
+  const opt = TEMPLATE_ENGINE.generate(tplId, typeKey, "main", budget);
+  const errs = validateOption(opt, tplId, { typeKey, budget });
+  printOption(opt, label, errs);
+  totalGen++;
+  totalErrs += errs.length;
+}
+console.log(`\n${totalGen} samples generated, ${totalErrs} validation errors`);
+process.exit(totalErrs > 0 ? 1 : 0);
