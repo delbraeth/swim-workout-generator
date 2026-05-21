@@ -68,6 +68,19 @@
       .pool-mode-buttons { flex-basis: calc(100% - 70px); }
     }
 
+    /* Phase 4 CSS refactor — pill pattern (slice 2).
+       Rounded-rectangle indicator/toggle commonly used for type chips, mix
+       selectors, training-phase pills, role badges. Colors (border /
+       background / text) stay inline because pills toggle between active /
+       inactive states with state-dependent colors. fontSize stays inline too
+       (varies 10-12). cursor stays inline (pointer for interactive,
+       inherited/none for display-only). */
+    .pill {
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
     /* Phase 4 CSS refactor — modal overlay pattern.
        Canonical centered-modal backdrop used across IntentForm, Copy
        workout, Schedule for…, Save as intent, and others. Padding stays
@@ -232,7 +245,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-21 01:46 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-21 02:05 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9983,12 +9996,12 @@
                 <button key={pid}
                   onClick={() => onChange(active ? null : pid)}
                   title={`${p.label} — ${p.description}`}
+                  className="pill"
                   style={{
-                    padding: "5px 11px", borderRadius: 999,
                     border: `1px solid ${active ? p.color : "#334155"}`,
                     background: active ? `${p.color}22` : "transparent",
                     color: active ? p.color : "#94a3b8",
-                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    fontSize: 12, cursor: "pointer",
                     display: "inline-flex", alignItems: "center", gap: 4,
                   }}>
                   <span>{p.emoji}</span>
@@ -10239,12 +10252,12 @@
                 <button key={lid}
                   onClick={() => onChange(active ? null : lid, active ? null : l.pace)}
                   title={`${l.label} — pace ${l.pace}/100 · ${l.description}`}
+                  className="pill"
                   style={{
-                    padding: "5px 11px", borderRadius: 999,
                     border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
                     background: active ? "rgba(245,158,11,0.18)" : "transparent",
                     color: active ? "#f59e0b" : "#94a3b8",
-                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    fontSize: 12, cursor: "pointer",
                     display: "inline-flex", alignItems: "center", gap: 4,
                   }}>
                   <span>{l.emoji}</span>
@@ -10431,12 +10444,12 @@
                     const active = category === c.id;
                     return (
                       <button key={c.id} onClick={() => setCategory(c.id)}
+                        className="pill"
                         style={{
-                          padding: "5px 11px", borderRadius: 999,
                           border: `1px solid ${active ? "#3b82f6" : "#334155"}`,
                           background: active ? "#1e3a5f" : "transparent",
                           color: active ? "#3b82f6" : "#94a3b8",
-                          fontSize: 12, fontWeight: 700, cursor: "pointer",
+                          fontSize: 12, cursor: "pointer",
                         }}>
                         {c.label}
                       </button>
@@ -12101,7 +12114,8 @@
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {Object.keys(TEAM_TYPE_LABELS).map(t => (
                     <button key={t} onClick={() => setCreateType(t)}
-                      style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${createType === t ? "#3b82f6" : "#334155"}`, background: createType === t ? "#3b82f622" : "transparent", color: createType === t ? "#3b82f6" : "#94a3b8", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      className="pill"
+                      style={{ border: `1px solid ${createType === t ? "#3b82f6" : "#334155"}`, background: createType === t ? "#3b82f622" : "transparent", color: createType === t ? "#3b82f6" : "#94a3b8", fontSize: 12, cursor: "pointer" }}>
                       {TEAM_TYPE_LABELS[t]}
                     </button>
                   ))}
@@ -12911,7 +12925,8 @@
                 const active = mix === m.id;
                 return (
                   <button key={m.id} onClick={() => setMix(m.id)}
-                    style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${active ? "#f59e0b" : "#334155"}`, background: active ? "rgba(245,158,11,0.18)" : "transparent", color: active ? "#f59e0b" : "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    className="pill"
+                    style={{ border: `1px solid ${active ? "#f59e0b" : "#334155"}`, background: active ? "rgba(245,158,11,0.18)" : "transparent", color: active ? "#f59e0b" : "#94a3b8", fontSize: 11, cursor: "pointer" }}>
                     {m.label}
                   </button>
                 );
@@ -13567,7 +13582,8 @@
               const color  = COMPLETION_LABELS[f.id]?.color || "#3b82f6";
               return (
                 <button key={f.id || "all"} onClick={() => setStateFilter(f.id)}
-                  style={{ padding: "5px 11px", borderRadius: 999, border: `1px solid ${active ? color : "#334155"}`, background: active ? `${color}22` : "transparent", color: active ? color : "#94a3b8", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  className="pill"
+                  style={{ border: `1px solid ${active ? color : "#334155"}`, background: active ? `${color}22` : "transparent", color: active ? color : "#94a3b8", fontSize: 12, cursor: "pointer" }}>
                   {f.label} ({f.n})
                 </button>
               );
@@ -15685,12 +15701,12 @@
               const active = statusFilter === s.id;
               return (
                 <button key={s.id || "all"} onClick={() => setStatusFilter(s.id)}
+                  className="pill"
                   style={{
-                    padding: "5px 11px", borderRadius: 999,
                     border: `1px solid ${active ? (s.color || "#3b82f6") : "#334155"}`,
                     background: active ? `${s.color || "#3b82f6"}22` : "transparent",
                     color: active ? (s.color || "#3b82f6") : "#94a3b8",
-                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    fontSize: 12, cursor: "pointer",
                   }}>
                   {s.label}
                 </button>
@@ -18057,14 +18073,14 @@
                   pushes the pair right; subsequent siblings flow naturally. */}
               {teamEventPill && (
                 <div title={`${teamEventPill.team_name}: ${teamEventPill.name} — ${teamEventPill.date}`}
+                  className="pill"
                   style={{
                     marginLeft: nextEventCountdown ? 0 : "auto",
                     display: "inline-flex", alignItems: "center", gap: 6,
-                    padding: "5px 11px", borderRadius: 999,
                     background: teamEventPill.days === 0 ? "#f59e0b22" : "#1e3a5f",
                     border: `1px solid ${teamEventPill.days === 0 ? "#f59e0b" : "#f59e0b"}`,
                     color: teamEventPill.days === 0 ? "#fde68a" : "#f59e0b",
-                    fontSize: 12, fontWeight: 700,
+                    fontSize: 12,
                   }}>
                   📅
                   <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
@@ -18078,14 +18094,14 @@
               )}
               {nextEventCountdown && (
                 <div title={`${nextEventCountdown.name} — ${nextEvent.date}`}
+                  className="pill"
                   style={{
                     marginLeft: teamEventPill ? 6 : "auto",
                     display: "inline-flex", alignItems: "center", gap: 6,
-                    padding: "5px 11px", borderRadius: 999,
                     background: nextEventCountdown.days === 0 ? "#f59e0b22" : "#1e3a5f",
                     border: `1px solid ${nextEventCountdown.days === 0 ? "#f59e0b" : "#3b82f6"}`,
                     color: nextEventCountdown.days === 0 ? "#fde68a" : "#3b82f6",
-                    fontSize: 12, fontWeight: 700,
+                    fontSize: 12,
                   }}>
                   🏁
                   <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
@@ -18145,12 +18161,12 @@
                 const active = sectionBias === m.id;
                 return (
                   <button key={m.id} onClick={() => setSectionBias(m.id)} title={m.desc}
+                    className="pill"
                     style={{
-                      padding: "5px 11px", borderRadius: 999,
                       border: `1px solid ${active ? "#f59e0b" : "#334155"}`,
                       background: active ? "rgba(245,158,11,0.15)" : "transparent",
                       color: active ? "#f59e0b" : "#64748b",
-                      fontSize: 11, fontWeight: 700, cursor: "pointer",
+                      fontSize: 11, cursor: "pointer",
                       transition: "all 0.15s",
                     }}>
                     {m.label}
