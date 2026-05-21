@@ -315,7 +315,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-21 02:43 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-21 02:54 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -12240,7 +12240,7 @@
                   )}
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
                     <button onClick={() => { setRemoveConflict(null); setTransferPlan({}); }}
-                      style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                      className="btn btn-lg btn-outlined btn-neutral">
                       Cancel
                     </button>
                     <button onClick={executeRemoveWithTransfers}
@@ -13014,7 +13014,7 @@
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
               <button onClick={onClose}
-                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                className="btn btn-lg btn-outlined btn-neutral">Cancel</button>
               <button onClick={submit} disabled={busy}
                 style={{ padding: "8px 14px", borderRadius: 6, border: "none", background: busy ? "var(--color-border)" : "var(--color-warn)", color: busy ? "var(--color-text-dim)" : "var(--color-bg)", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
                 {busy ? "…" : (editingId ? "Save intent" : "Plan intent ▸")}
@@ -13157,7 +13157,7 @@
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
               <button onClick={onClose} disabled={busy}
-                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                className="btn btn-lg btn-outlined btn-neutral">Cancel</button>
               <button onClick={() => onRegenerate(w)} disabled={busy}
                 style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #3b82f6", background: "transparent", color: "var(--color-primary)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>↻ Regenerate</button>
               <button onClick={handleSave} disabled={busy}
@@ -13385,12 +13385,12 @@
                 title="Copy this week's scheduled workouts to next week (skips days that already have rows)"
                 style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${repeatBusy ? "var(--color-border)" : "var(--color-warn)"}`, background: repeatBusy ? "transparent" : "rgba(245,158,11,0.12)", color: repeatBusy ? "var(--color-text-dim)" : "var(--color-warn)", fontSize: 13, fontWeight: 700, cursor: repeatBusy || (list || []).length === 0 ? "not-allowed" : "pointer", opacity: (list || []).length === 0 ? 0.4 : 1 }}>{repeatBusy ? "…" : "🗓 Repeat next week"}</button>
               <button onClick={goPrev} title="Previous week"
-                style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, cursor: "pointer" }}>‹ Prev</button>
+                className="btn btn-md btn-outlined btn-neutral">‹ Prev</button>
               <button onClick={goThis} disabled={showingThisWeek}
                 title="Jump to current ISO week"
                 style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${showingThisWeek ? "var(--color-border)" : "var(--color-primary)"}`, background: showingThisWeek ? "transparent" : "rgba(59,130,246,0.15)", color: showingThisWeek ? "var(--color-border-strong)" : "var(--color-primary)", fontSize: 13, fontWeight: 700, cursor: showingThisWeek ? "default" : "pointer" }}>This week</button>
               <button onClick={goNext} title="Next week"
-                style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, cursor: "pointer" }}>Next ›</button>
+                className="btn btn-md btn-outlined btn-neutral">Next ›</button>
             </div>
           </div>
 
@@ -13517,7 +13517,7 @@
                     style={{ width: "100%", padding: "8px 10px", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid #475569", borderRadius: 6, fontSize: 14 }} />
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
                     <button onClick={() => setCopyTarget(null)}
-                      style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                      className="btn btn-lg btn-outlined btn-neutral">Cancel</button>
                     <button onClick={() => {
                         const v = document.getElementById("copy-target-date")?.value;
                         if (v) handleCopy(copyTarget.sw, v);
@@ -18957,7 +18957,7 @@
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
                   <button onClick={() => setScheduleDate(null)}
-                    style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                    className="btn btn-lg btn-outlined btn-neutral">Cancel</button>
                   <button onClick={async () => {
                       if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) { setSaveError("Pick a valid date"); return; }
                       try {
@@ -19010,7 +19010,7 @@
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
                   <button onClick={() => setIntentDate(null)} disabled={intentSaveBusy}
-                    style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, cursor: intentSaveBusy ? "not-allowed" : "pointer" }}>Cancel</button>
+                    className="btn btn-lg btn-outlined btn-neutral">Cancel</button>
                   <button onClick={async () => {
                       if (!/^\d{4}-\d{2}-\d{2}$/.test(intentDate)) { setSaveError("Pick a valid date"); return; }
                       setIntentSaveBusy(true);
