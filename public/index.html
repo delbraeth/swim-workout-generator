@@ -7936,6 +7936,495 @@
           };
         },
       },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ main_plus_finisher — primary block + smaller closing block │
+      // │ Coverage: 64 bank options (10.4%) — second-largest family  │
+      // │ Example: "8×100 threshold + 4×50 sprint finisher"          │
+      // │                                                            │
+      // │ Two-row composition. Allocates ~70% to primary, ~30% to    │
+      // │ finisher. Finisher uses shorter dist + faster effort cue.  │
+      // └────────────────────────────────────────────────────────────┘
+      main_plus_finisher: {
+        id: "main_plus_finisher",
+        family: "multi_row_composition",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `${slots.primaryAdj} ${slots.stroke === "IM" ? "IM " : ""}${slots.primaryDist}s + ${slots.finisherDist}s Finisher (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          const primaryTarget = Math.round(budgetYd * 0.7);
+          const finisherTarget = budgetYd - primaryTarget;
+          const primaryEffort = templatePick(
+            [{ key: "threshold", phrase: "threshold pace (RPE 7-8/10)", adj: "Threshold" },
+             { key: "strong",    phrase: "strong, sustained",            adj: "Strong" },
+             { key: "racePace",  phrase: "race pace, focused",           adj: "Race-Pace" }],
+            rand,
+          );
+          const primaryDistChoices = templateRepDistChoices(typeKey, section);
+          const primaryShape = templatePickRepShape(primaryDistChoices, primaryTarget, 4, 10, "any", rand);
+          // Finisher: shorter dist + faster effort. Sprint type gets "sprint" cue;
+          // others step up one effort tier above primary.
+          const finisherDistChoices = primaryDistChoices.filter(d => d <= primaryShape.dist);
+          const finisherShape = templatePickRepShape(
+            finisherDistChoices.length ? finisherDistChoices : primaryDistChoices,
+            finisherTarget, 2, 6, "shorter", rand,
+          );
+          const finisherEffortKey = primaryEffort.key === "racePace" ? "sprint" : "racePace";
+          const finisherPhrase = finisherEffortKey === "sprint" ? "ALL OUT — empty the tank" : "race pace — close fast";
+          const primaryInterval = templateComputeInterval(primaryShape.dist, primaryEffort.key);
+          const finisherInterval = templateComputeInterval(finisherShape.dist, finisherEffortKey);
+          const totalYards = primaryShape.total + finisherShape.total;
+          const slots = { stroke, primaryDist: primaryShape.dist, finisherDist: finisherShape.dist,
+                          primaryAdj: primaryEffort.adj };
+          return {
+            label: this.labelTemplate(slots, totalYards),
+            totalYards,
+            sets: [
+              { reps: primaryShape.reps, dist: primaryShape.dist,
+                desc: `${templateStrokeLabel(stroke)} — ${primaryEffort.phrase}`,
+                interval: primaryInterval,
+                focus: `Sustain ${primaryEffort.adj.toLowerCase()} effort across all ${primaryShape.reps}` },
+              { reps: finisherShape.reps, dist: finisherShape.dist,
+                desc: `${templateStrokeLabel(stroke)} — ${finisherPhrase}`,
+                interval: finisherInterval,
+                focus: "Strong close after the main block" },
+            ],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ stroke_rotation — distinct stroke per row, equal yardage   │
+      // │ Coverage: 26 bank options (4.2%)                           │
+      // │ IM types do full fly/back/breast/free; mixed picks 3.      │
+      // └────────────────────────────────────────────────────────────┘
+      stroke_rotation: {
+        id: "stroke_rotation",
+        family: "multi_row_composition",
+        applicableSections: ["main"],
+        applicableTypes: ["im", "mixed"],
+        labelTemplate: (slots, totalYards) =>
+          `${slots.strokeCount}-stroke rotation ${slots.dist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const allStrokes = ["fly", "back", "breast", "free"];
+          const strokes = typeKey === "im"
+            ? allStrokes
+            : [...allStrokes].sort(() => rand() - 0.5).slice(0, 3);
+          const distChoices = templateRepDistChoices(typeKey, section);
+          const perStrokeBudget = Math.round(budgetYd / strokes.length);
+          // Wider rep range (1-8) so per-stroke budget can be hit exactly
+          // even when divisor produces awkward residuals.
+          const shape = templatePickRepShape(distChoices, perStrokeBudget, 1, 8, "any", rand);
+          const interval = templateComputeInterval(shape.dist, "strong");
+          const sets = strokes.map(s => ({
+            reps: shape.reps, dist: shape.dist,
+            desc: `${templateStrokeLabel(s)} — moderate to strong, smooth`,
+            interval,
+            focus: `Build ${s === "free" ? "freestyle" : s} feel and pace`,
+          }));
+          const totalYards = sets.reduce((sum, x) => sum + x.reps * x.dist, 0);
+          const slots = { strokeCount: strokes.length, dist: shape.dist };
+          return {
+            label: this.labelTemplate(slots, totalYards),
+            totalYards,
+            sets,
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ sandwich — easy → hard → easy bookend                      │
+      // │ Coverage: 25 bank options (4.1%)                           │
+      // │ 3-row composition. ~15% easy each side, ~70% hard middle.  │
+      // └────────────────────────────────────────────────────────────┘
+      sandwich: {
+        id: "sandwich",
+        family: "multi_row_composition",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im"],
+        labelTemplate: (slots, totalYards) =>
+          `${slots.hardAdj} ${slots.stroke === "IM" ? "IM " : ""}${slots.hardDist}s Sandwich (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          const easyTarget = Math.round(budgetYd * 0.15);
+          const hardTarget = budgetYd - 2 * easyTarget;
+          const easyDist = TEMPLATE_CANONICAL_DISTS.reduce((best, d) =>
+            Math.abs(d - easyTarget) < Math.abs(best - easyTarget) && d <= 300 ? d : best, 100);
+          const hardEffort = templatePick(
+            [{ key: "threshold", phrase: "threshold pace (RPE 7-8/10)", adj: "Threshold" },
+             { key: "racePace",  phrase: "race pace, focused",          adj: "Race-Pace" }],
+            rand,
+          );
+          const hardDistChoices = templateRepDistChoices(typeKey, section);
+          const hardShape = templatePickRepShape(hardDistChoices, hardTarget, 4, 10, "any", rand);
+          const totalYards = easyDist + hardShape.total + easyDist;
+          const slots = { stroke, hardDist: hardShape.dist, hardAdj: hardEffort.adj };
+          return {
+            label: this.labelTemplate(slots, totalYards),
+            totalYards,
+            sets: [
+              { reps: 1, dist: easyDist,
+                desc: `${templateStrokeLabel(stroke)} — easy warm-into`,
+                interval: templateComputeInterval(easyDist, "easy"),
+                focus: "Settle into stroke before the main block" },
+              { reps: hardShape.reps, dist: hardShape.dist,
+                desc: `${templateStrokeLabel(stroke)} — ${hardEffort.phrase}`,
+                interval: templateComputeInterval(hardShape.dist, hardEffort.key),
+                focus: `Sustain ${hardEffort.adj.toLowerCase()} across all ${hardShape.reps}` },
+              { reps: 1, dist: easyDist,
+                desc: "Easy choice — cool flush",
+                interval: templateComputeInterval(easyDist, "easy"),
+                focus: "Active recovery to close" },
+            ],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ repeat_unit — N identical rounds                           │
+      // │ Coverage: 24 bank options (3.9%)                           │
+      // │ Example: "3 rounds × 4×100"                                │
+      // └────────────────────────────────────────────────────────────┘
+      repeat_unit: {
+        id: "repeat_unit",
+        family: "multi_row_composition",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im"],
+        labelTemplate: (slots, totalYards) =>
+          `${slots.rounds} rounds × ${slots.repsPerRound}×${slots.dist} (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          const distChoices = templateRepDistChoices(typeKey, section);
+          // Try 2-4 rounds, find the (rounds, shape) combo closest to budget
+          let best = null;
+          for (const rounds of [2, 3, 4]) {
+            const perRoundBudget = Math.round(budgetYd / rounds);
+            const shape = templatePickRepShape(distChoices, perRoundBudget, 2, 6, "any", rand);
+            const total = rounds * shape.total;
+            const pctOff = Math.abs(total - budgetYd) / budgetYd;
+            if (!best || pctOff < best.pctOff) {
+              best = { rounds, shape, total, pctOff };
+            }
+          }
+          const interval = templateComputeInterval(best.shape.dist, "strong");
+          const sets = [];
+          for (let i = 0; i < best.rounds; i++) {
+            sets.push({
+              reps: best.shape.reps, dist: best.shape.dist,
+              desc: `${templateStrokeLabel(stroke)} — round ${i + 1} of ${best.rounds}, moderate to strong`,
+              interval,
+              focus: i === 0 ? "Set your pace on round 1" : (i === best.rounds - 1 ? "Hold pace through the final round" : "Match round 1's pace"),
+            });
+          }
+          const slots = { stroke, dist: best.shape.dist, repsPerRound: best.shape.reps, rounds: best.rounds };
+          return {
+            label: this.labelTemplate(slots, best.total),
+            totalYards: best.total,
+            sets,
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ drill_progression — multi-row drill sequence              │
+      // │ Coverage: 22 bank options (3.6%)                           │
+      // │ Type-specific drill sets (IM order, free drills, etc.)    │
+      // └────────────────────────────────────────────────────────────┘
+      drill_progression: {
+        id: "drill_progression",
+        family: "multi_row_composition",
+        applicableSections: ["main", "drill"],
+        applicableTypes: ["im", "back", "breast", "fly", "free"],
+        labelTemplate: (slots, totalYards) =>
+          `Drill Progression ${slots.dist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          // Type-specific drill banks. Each entry is [stroke, drill-description].
+          const drillsByType = {
+            im: [
+              ["fly",    "Fly drill — 3-3-3 or single-arm"],
+              ["back",   "Back drill — single-arm or catch-up"],
+              ["breast", "Breast drill — 2 kick / 1 pull"],
+              ["free",   "Free drill — catch-up or fingertip drag"],
+            ],
+            free: [
+              ["free", "Catch-up drill — front-quadrant timing"],
+              ["free", "Fingertip drag — high elbow recovery"],
+              ["free", "Single-arm — full extension hold"],
+            ],
+            back: [
+              ["back", "Single-arm back — focus on the catch"],
+              ["back", "Catch-up back — clean hand entries"],
+              ["back", "6-kick rotation drill"],
+            ],
+            breast: [
+              ["breast", "2-kick / 1-pull — feel the glide"],
+              ["breast", "Pull only with float kick"],
+              ["breast", "Kick only with board — drive from hips"],
+            ],
+            fly: [
+              ["fly", "3-3-3 drill — right / left / full"],
+              ["fly", "Single-arm fly — control rhythm"],
+              ["fly", "2-kick / 1-pull — find the rhythm"],
+            ],
+          };
+          const drills = drillsByType[typeKey] || drillsByType.free;
+          // 25yd dist is standard for drills (3-3-3, catch-up, single-arm
+          // typically authored as 25s). Include it even when the type's
+          // bias excludes it. Joint search over (dist, totalReps) to hit
+          // budget exactly — totalReps distributed across drills via
+          // asymmetric counts (e.g., 3 drills of 25yd with budget 400 →
+          // 16 total reps as 6+5+5). Asymmetric rep counts across drills
+          // are standard coaching practice ("3 reps on the first one,
+          // 2 on the next two").
+          const drillDists = [25, 50, 75, 100];
+          let best = null;
+          for (const dist of drillDists) {
+            // Total reps needed across all drills for exact budget match
+            const idealTotalReps = budgetYd / dist;
+            // Try rep counts that yield 1-6 reps per drill on average
+            for (let totalReps = drills.length; totalReps <= drills.length * 6; totalReps++) {
+              const total = totalReps * dist;
+              const pctOff = Math.abs(total - budgetYd) / budgetYd;
+              if (!best || pctOff < best.pctOff) {
+                best = { dist, totalReps, total, pctOff };
+              }
+            }
+          }
+          // Distribute totalReps across drills as evenly as possible.
+          // Remainder reps go to the first few drills (front-loaded).
+          const baseReps = Math.floor(best.totalReps / drills.length);
+          const remainderReps = best.totalReps - baseReps * drills.length;
+          const repsPerDrill = drills.map((_, i) => baseReps + (i < remainderReps ? 1 : 0));
+          const interval = templateComputeInterval(best.dist, "easy");
+          const sets = drills.map(([s, drillDesc], i) => ({
+            reps: repsPerDrill[i], dist: best.dist,
+            desc: drillDesc,
+            interval,
+            focus: "Slow, focused on the cue — drill quality over speed",
+          }));
+          const totalYards = best.total;
+          const slots = { dist: best.dist };
+          return {
+            label: this.labelTemplate(slots, totalYards),
+            totalYards,
+            sets,
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ build_within_rep — single row with within-rep escalation  │
+      // │ Coverage: 19 bank options (3.1%)                           │
+      // │ "Build", "negative split", or "locomotive" style.          │
+      // └────────────────────────────────────────────────────────────┘
+      build_within_rep: {
+        id: "build_within_rep",
+        family: "single_row",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im"],
+        labelTemplate: (slots, totalYards) =>
+          `Build ${slots.stroke === "IM" ? "IM " : ""}${slots.dist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          // Build needs room WITHIN a rep to escalate — require dist ≥ 75
+          const distChoices = templateRepDistChoices(typeKey, section).filter(d => d >= 75);
+          const shape = templatePickRepShape(
+            distChoices.length ? distChoices : [100, 150, 200],
+            budgetYd, 4, 8, "any", rand,
+          );
+          const buildStyle = templatePick(
+            ["build each rep — easy first quarter to fast last quarter",
+             "negative split — second half faster than first",
+             "locomotive — increase pace each segment of the rep"],
+            rand,
+          );
+          const interval = templateComputeInterval(shape.dist, "strong");
+          return {
+            label: this.labelTemplate({ stroke, dist: shape.dist }, shape.total),
+            totalYards: shape.total,
+            sets: [{
+              reps: shape.reps, dist: shape.dist,
+              desc: `${templateStrokeLabel(stroke)} — ${buildStyle}`,
+              interval,
+              focus: "Controlled escalation within each rep — finish faster than you started",
+            }],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ threshold_steady — single row at threshold pace            │
+      // │ Coverage: 18 bank options (2.9%)                           │
+      // │ Tighter intervals than aerobic_volume.                     │
+      // └────────────────────────────────────────────────────────────┘
+      threshold_steady: {
+        id: "threshold_steady",
+        family: "single_row",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "im"],
+        labelTemplate: (slots, totalYards) =>
+          `Threshold ${slots.stroke === "IM" ? "IM " : ""}${slots.dist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          const distChoices = templateRepDistChoices(typeKey, section);
+          const shape = templatePickRepShape(distChoices, budgetYd, 4, 10, "any", rand);
+          const interval = templateComputeInterval(shape.dist, "threshold");
+          return {
+            label: this.labelTemplate({ stroke, dist: shape.dist }, shape.total),
+            totalYards: shape.total,
+            sets: [{
+              reps: shape.reps, dist: shape.dist,
+              desc: `${templateStrokeLabel(stroke)} — threshold pace (RPE 7-8/10), sustainable`,
+              interval,
+              focus: "Hold threshold across all reps — controlled, not all out",
+            }],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ race_day_simulation — race-pace events + recovery between │
+      // │ Coverage: 17 bank options (2.8%)                           │
+      // │ Standard race distances; 2-6 events with recovery between. │
+      // └────────────────────────────────────────────────────────────┘
+      race_day_simulation: {
+        id: "race_day_simulation",
+        family: "multi_row_composition",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "mixed", "sprint", "im", "free"],
+        labelTemplate: (slots, totalYards) =>
+          `Race-Day Simulation: ${slots.eventCount}×${slots.eventDist} (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          const raceDistances = typeKey === "sprint" ? [50, 100] :
+                                 typeKey === "distance" ? [200, 400, 500] :
+                                 [100, 200, 400];
+          // Search all (eventDist, recoveryDist, count) — previously locked
+          // recovery to ~50% of event, which jumped past ±5% for some
+          // (event, budget) pairs. Letting recovery flex across canonical
+          // dists (25 to event_dist) closes the budget gap. Recovery is
+          // capped at event_dist so it stays a "recovery" semantically
+          // (longer recoveries become weird "easy main + race-pace blip").
+          let best = null;
+          for (const eventDist of raceDistances) {
+            const recoveryOptions = TEMPLATE_CANONICAL_DISTS.filter(d => d >= 25 && d <= eventDist);
+            for (const recoveryDist of recoveryOptions) {
+              for (let count = 2; count <= 6; count++) {
+                const total = count * eventDist + (count - 1) * recoveryDist;
+                const pctOff = Math.abs(total - budgetYd) / budgetYd;
+                if (!best || pctOff < best.pctOff) {
+                  best = { eventDist, recoveryDist, count, total, pctOff };
+                }
+              }
+            }
+          }
+          const sets = [];
+          for (let i = 0; i < best.count; i++) {
+            sets.push({
+              reps: 1, dist: best.eventDist,
+              desc: `${templateStrokeLabel(stroke)} — race pace, Event ${i + 1}`,
+              interval: templateComputeInterval(best.eventDist, "racePace"),
+              focus: "Race-pace simulation — hit your goal split",
+            });
+            if (i < best.count - 1) {
+              sets.push({
+                reps: 1, dist: best.recoveryDist,
+                desc: "Easy choice — between events",
+                interval: templateComputeInterval(best.recoveryDist, "easy"),
+                focus: "Recover before the next event",
+              });
+            }
+          }
+          return {
+            label: this.labelTemplate({ eventCount: best.count, eventDist: best.eventDist }, best.total),
+            totalYards: best.total,
+            sets,
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ pyramid_up_down — all reps=1, peak in middle               │
+      // │ Coverage: 13 bank options (2.1%) — spec marquee template   │
+      // │ Walks the canonical-distance ladder; non-uniform steps OK. │
+      // └────────────────────────────────────────────────────────────┘
+      pyramid_up_down: {
+        id: "pyramid_up_down",
+        family: "single_rep_multi_row",
+        applicableSections: ["main"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `Pyramid Up-Down ${slots.base}-${slots.peak} (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          // Type biases give an ALLOWED range for base/peak; we search the
+          // (base, peak, peak-reps) space to find the pyramid total closest
+          // to budget. Pyramid totals jump in big discrete steps (canonical
+          // dists have non-uniform gaps), so a narrow search misses ±5%
+          // tolerance often. Peak-reps ∈ {1, 2} lets us "hold the peak" for
+          // a finer-grained yardage knob without breaking the pyramid shape.
+          const typeBiases = {
+            sprint:    { baseMin: 25, baseMax: 50,  peakMin: 75,  peakMax: 100 },
+            fly:       { baseMin: 25, baseMax: 50,  peakMin: 75,  peakMax: 100 },
+            back:      { baseMin: 25, baseMax: 50,  peakMin: 100, peakMax: 200 },
+            breast:    { baseMin: 25, baseMax: 50,  peakMin: 100, peakMax: 200 },
+            distance:  { baseMin: 50, baseMax: 150, peakMin: 200, peakMax: 400 },
+            endurance: { baseMin: 50, baseMax: 100, peakMin: 150, peakMax: 300 },
+            im:        { baseMin: 50, baseMax: 100, peakMin: 150, peakMax: 300 },
+            mixed:     { baseMin: 25, baseMax: 100, peakMin: 100, peakMax: 300 },
+            free:      { baseMin: 25, baseMax: 75,  peakMin: 100, peakMax: 200 },
+          };
+          const bias = typeBiases[typeKey] || { baseMin: 50, baseMax: 100, peakMin: 100, peakMax: 200 };
+          const inRange = (d, lo, hi) => d >= lo && d <= hi;
+          const allowedBases = TEMPLATE_CANONICAL_DISTS.filter(d => inRange(d, bias.baseMin, bias.baseMax));
+          const allowedPeaks = TEMPLATE_CANONICAL_DISTS.filter(d => inRange(d, bias.peakMin, bias.peakMax));
+          let best = null;
+          for (const base of allowedBases) {
+            const baseIdx = TEMPLATE_CANONICAL_DISTS.indexOf(base);
+            for (const peak of allowedPeaks) {
+              const peakIdx = TEMPLATE_CANONICAL_DISTS.indexOf(peak);
+              if (peakIdx < baseIdx + 2) continue;  // need ≥3 rungs per side
+              for (const peakReps of [1, 2]) {
+                const dists = [];
+                for (let i = baseIdx; i <= peakIdx; i++) dists.push(TEMPLATE_CANONICAL_DISTS[i]);
+                if (peakReps === 2) dists.push(TEMPLATE_CANONICAL_DISTS[peakIdx]);  // hold peak
+                for (let i = peakIdx - 1; i >= baseIdx; i--) dists.push(TEMPLATE_CANONICAL_DISTS[i]);
+                const total = dists.reduce((s, d) => s + d, 0);
+                const pctOff = Math.abs(total - budgetYd) / budgetYd;
+                if (!best || pctOff < best.pctOff) {
+                  best = { dists, total, pctOff, base, peak, peakReps };
+                }
+              }
+            }
+          }
+          // Fallback (shouldn't fire with valid bias config)
+          if (!best) {
+            best = { dists: [50, 100, 150, 100, 50], total: 450, pctOff: 1, base: 50, peak: 150, peakReps: 1 };
+          }
+          // Peak position depends on whether we held the peak for 2 rungs
+          const ascLen = best.dists.length / 2 + (best.peakReps === 2 ? 0.5 : 0);
+          const sets = best.dists.map((d, i) => {
+            const atPeak = best.peakReps === 2
+              ? (d === best.peak && (i === Math.floor(ascLen - 0.5) || i === Math.floor(ascLen + 0.5)))
+              : d === best.peak;
+            return {
+              reps: 1, dist: d,
+              desc: atPeak
+                ? `${templateStrokeLabel(stroke)} — peak rung, push hard`
+                : `${templateStrokeLabel(stroke)} — ${i < ascLen ? "build up" : "descend down"} the pyramid`,
+              interval: templateComputeInterval(d, "strong"),
+              focus: atPeak ? "Apex — hardest rung" : "Maintain form and pace control",
+            };
+          });
+          return {
+            label: this.labelTemplate({ base: best.base, peak: best.peak }, best.total),
+            totalYards: best.total,
+            sets,
+          };
+        },
+      },
     };
 
     // Engine entry point. Generates an option from a template id.

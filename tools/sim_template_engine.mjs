@@ -93,6 +93,7 @@ function printOption(opt, header, errs) {
 // ─── sample matrix ───────────────────────────────────────────────────────────
 const TEST_MATRIX = [
   // (templateId, typeKey, budgetYd, label)
+  // ── S1 templates ──
   ["aerobic_volume",     "distance",  1200, "distance / 1200yd"],
   ["aerobic_volume",     "endurance", 1500, "endurance / 1500yd"],
   ["aerobic_volume",     "im",        1200, "im / 1200yd"],
@@ -110,6 +111,53 @@ const TEST_MATRIX = [
   ["block_with_recovery", "endurance",1400, "endurance / 1400yd"],
   ["block_with_recovery", "im",       1200, "im / 1200yd"],
   ["block_with_recovery", "back",     1000, "back / 1000yd"],
+
+  // ── S2 templates ──
+  ["main_plus_finisher", "distance",  1200, "distance / 1200yd"],
+  ["main_plus_finisher", "sprint",     800, "sprint / 800yd"],
+  ["main_plus_finisher", "endurance", 1400, "endurance / 1400yd"],
+  ["main_plus_finisher", "im",        1200, "im / 1200yd"],
+  ["main_plus_finisher", "free",      1000, "free / 1000yd"],
+
+  ["stroke_rotation",    "im",        1200, "im / 1200yd"],
+  ["stroke_rotation",    "mixed",     1000, "mixed / 1000yd"],
+
+  ["sandwich",           "distance",  1200, "distance / 1200yd"],
+  ["sandwich",           "endurance", 1400, "endurance / 1400yd"],
+  ["sandwich",           "im",        1200, "im / 1200yd"],
+  ["sandwich",           "fly",        600, "fly / 600yd"],
+
+  ["repeat_unit",        "distance",  1200, "distance / 1200yd"],
+  ["repeat_unit",        "endurance", 1500, "endurance / 1500yd"],
+  ["repeat_unit",        "im",        1200, "im / 1200yd"],
+  ["repeat_unit",        "free",       800, "free / 800yd"],
+
+  ["drill_progression",  "im",         800, "im / 800yd"],
+  ["drill_progression",  "free",       400, "free / 400yd"],
+  ["drill_progression",  "back",       400, "back / 400yd"],
+  ["drill_progression",  "fly",        300, "fly / 300yd"],
+
+  ["build_within_rep",   "distance",  1200, "distance / 1200yd"],
+  ["build_within_rep",   "endurance", 1000, "endurance / 1000yd"],
+  ["build_within_rep",   "free",       800, "free / 800yd"],
+  ["build_within_rep",   "im",        1000, "im / 1000yd"],
+
+  ["threshold_steady",   "distance",  1200, "distance / 1200yd"],
+  ["threshold_steady",   "endurance", 1500, "endurance / 1500yd"],
+  ["threshold_steady",   "im",        1200, "im / 1200yd"],
+  ["threshold_steady",   "free",      1000, "free / 1000yd"],
+
+  ["race_day_simulation", "sprint",    400, "sprint / 400yd"],
+  ["race_day_simulation", "distance", 1500, "distance / 1500yd"],
+  ["race_day_simulation", "mixed",    1000, "mixed / 1000yd"],
+  ["race_day_simulation", "im",       1200, "im / 1200yd"],
+
+  ["pyramid_up_down",    "distance",  1500, "distance / 1500yd"],
+  ["pyramid_up_down",    "sprint",     400, "sprint / 400yd"],
+  ["pyramid_up_down",    "endurance", 1400, "endurance / 1400yd"],
+  ["pyramid_up_down",    "free",       800, "free / 800yd"],
+  ["pyramid_up_down",    "im",        1200, "im / 1200yd"],
+  ["pyramid_up_down",    "back",       800, "back / 800yd"],
 ];
 
 const args = process.argv.slice(2);
