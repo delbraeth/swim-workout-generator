@@ -68,6 +68,23 @@
       .pool-mode-buttons { flex-basis: calc(100% - 70px); }
     }
 
+    /* Phase 4 CSS refactor — modal overlay pattern.
+       Canonical centered-modal backdrop used across IntentForm, Copy
+       workout, Schedule for…, Save as intent, and others. Padding stays
+       inline (varies per modal — usually 20, occasionally 16). Inner body
+       div styles stay inline (different maxWidth + maxHeight per modal).
+       Stacked overlays (zIndex 10000) like IntentPreviewOverlay keep their
+       inline style. Click-outside-to-close is a JSX onClick prop, not CSS. */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
     /* ────────────────────────────────────────────────────────────
        PRINT STYLES — clean, high-contrast, 8.5×11 B&W
        Hides all interactive UI, strips backgrounds and colors,
@@ -215,7 +232,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-21 01:27 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-21 01:46 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10390,11 +10407,7 @@
       ];
 
       return (
-        <div onClick={onClose} style={{
-          position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        }}>
+        <div onClick={onClose} className="modal-overlay" style={{ padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
           <div onClick={e => e.stopPropagation()} style={{
             background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
             maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto",
@@ -10739,10 +10752,7 @@
       const headerLabel = generateForTarget?.name || "Group";
 
       return (
-        <div onClick={onClose} style={{
-          position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-        }}>
+        <div onClick={onClose} className="modal-overlay" style={{ padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{
             background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
             padding: 22, maxWidth: 640, width: "100%", maxHeight: "90vh", overflowY: "auto",
@@ -11175,10 +11185,7 @@
       const poolUnit  = (m) => (m === "50m" || m === "25m") ? "m" : "yds";
 
       return (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-        }} onClick={onClose}>
+        <div className="modal-overlay" style={{ padding: 16 }} onClick={onClose}>
           <div onClick={e => e.stopPropagation()} style={{
             background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
             maxWidth: 560, width: "100%", maxHeight: "85vh", overflowY: "auto",
@@ -12124,7 +12131,7 @@
             );
             return (
               <div onClick={() => { setRemoveConflict(null); setTransferPlan({}); }}
-                style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+                className="modal-overlay" style={{ padding: 20 }}>
                 <div onClick={(e) => e.stopPropagation()}
                   style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 12, padding: 22, maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
                   <div style={{ color: "#f59e0b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Coach removal blocked</div>
@@ -12834,10 +12841,7 @@
       };
 
       return (
-        <div onClick={onClose} style={{
-          position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-        }}>
+        <div onClick={onClose} className="modal-overlay" style={{ padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{
             background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
             padding: 22, maxWidth: 520, width: "100%", maxHeight: "90vh", overflowY: "auto",
@@ -13420,10 +13424,7 @@
               return ymd(d);
             })();
             return (
-              <div onClick={() => setCopyTarget(null)} style={{
-                position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
-                display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-              }}>
+              <div onClick={() => setCopyTarget(null)} className="modal-overlay" style={{ padding: 20 }}>
                 <div onClick={(e) => e.stopPropagation()} style={{
                   background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
                   padding: 22, maxWidth: 420, width: "100%",
@@ -15897,10 +15898,7 @@
       };
 
       return (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-        }} onClick={onClose}>
+        <div className="modal-overlay" style={{ padding: 16 }} onClick={onClose}>
           <div onClick={e => e.stopPropagation()} style={{
             background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
             maxWidth: 480, width: "100%", color: "#cbd5e1",
@@ -18865,10 +18863,7 @@
               non-null (set by the 📅 Schedule for… button). Picks a date,
               POSTs to /api/scheduled-workouts with the current workout. */}
           {scheduleDate !== null && workout && (
-            <div onClick={() => setScheduleDate(null)} style={{
-              position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
-              display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-            }}>
+            <div onClick={() => setScheduleDate(null)} className="modal-overlay" style={{ padding: 20 }}>
               <div onClick={(e) => e.stopPropagation()} style={{
                 background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
                 padding: 22, maxWidth: 420, width: "100%",
@@ -18921,10 +18916,7 @@
               generator form state as an intent_params row; generation runs
               on the scheduled day via WeekView's ▶ Generate button. */}
           {intentDate !== null && (
-            <div onClick={() => setIntentDate(null)} style={{
-              position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)",
-              display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-            }}>
+            <div onClick={() => setIntentDate(null)} className="modal-overlay" style={{ padding: 20 }}>
               <div onClick={(e) => e.stopPropagation()} style={{
                 background: "#0f172a", border: "1px solid #334155", borderRadius: 12,
                 padding: 22, maxWidth: 460, width: "100%",
