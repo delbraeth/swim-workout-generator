@@ -315,7 +315,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "2026-05-21 03:02 UTC";         // replaced by _deploy.py at commit time
+    const BUILD_ID  = "2026-05-21 04:58 UTC";         // replaced by _deploy.py at commit time
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -1200,6 +1200,35 @@
             { id: "s_1yh6ud", reps: 4, dist: 100, desc: "100 IM — strong, focus on transitions", interval: "On 2:30", focus: "Race-pace IM finishers" },
             { id: "s_u8lv16", reps: 2, dist: 100, desc: "Easy choice — recovery", interval: "On 2:30", focus: "Cool down within the main" },
           ]},
+        { label: "Stroke-Count IM", totalYards: 1100, sets: [
+            { id: "s_6j86ds", reps: 1, dist: 200, desc: "IM — moderate, count strokes on the freestyle length (your baseline)", interval: "On 5:00", focus: "Establish your free-length stroke-count baseline" },
+            { id: "s_t1hb4d", reps: 8, dist: 100, desc: "100 IM — hold your baseline ±1 on the free length; faster turnover on the others",  interval: "On 2:45", focus: "Long stroke under fatigue across all four" },
+            { id: "s_hpf8ft", reps: 1, dist: 100, desc: "Easy backstroke — shake out",                                                         interval: "On 2:45", focus: "Recover" },
+          ]},
+        { label: "IM Goldilocks 100s", totalYards: 1100, sets: [
+            { id: "s_w32jyi", reps: 1, dist: 200, desc: "IM — easy/moderate, settle in",                              interval: "On 5:00", focus: "Open IM rhythm" },
+            { id: "s_hyecn7", reps: 3, dist: 100, desc: "100 IM — easy (RPE 5)",                                       interval: "On 2:30", focus: "Find the bottom" },
+            { id: "s_vd9ryw", reps: 3, dist: 100, desc: "100 IM — moderate (RPE 7)",                                   interval: "On 2:30", focus: "Find the middle" },
+            { id: "s_roo0q4", reps: 3, dist: 100, desc: "100 IM — strong (RPE 9), feel the contrast vs the easy reps", interval: "On 2:45", focus: "Find the top — pacing literacy" },
+          ]},
+        { label: "30/30 IM Continuous", totalYards: 1000, sets: [
+            { id: "s_dgn9nd", reps: 1, dist: 200, desc: "IM — easy, open the set",                                                                interval: "On 5:00", focus: "Settle in" },
+            { id: "s_0cd9js", reps: 12, dist: 50, desc: "50 IM (12.5 each) — alternate fast and easy reps (odd = fast, even = easy, continuous)", interval: "On 1:00", focus: "30s on / 30s off rhythm across IM strokes" },
+            { id: "s_ls4wja", reps: 1, dist: 200, desc: "Easy backstroke — cool down",                                                            interval: "On 5:30", focus: "Recover" },
+          ]},
+        { label: "IM Bookends", totalYards: 1000, sets: [
+            { id: "s_1gchsn", reps: 1, dist: 100, desc: "100 IM — race pace, opens the set under-rested",                interval: "On 3:00", focus: "Bookend #1 — race pace cold" },
+            { id: "s_da1v5t", reps: 6, dist: 100, desc: "100 IM — moderate aerobic, smooth transitions",                  interval: "On 2:30", focus: "Aerobic fill between bookends" },
+            { id: "s_rfl07c", reps: 1, dist: 100, desc: "100 IM — race pace, close the set under fatigue",               interval: "On 3:00", focus: "Bookend #2 — race pace tired" },
+            { id: "s_vec6hq", reps: 1, dist: 200, desc: "Easy choice — cool down",                                        interval: "On 5:30", focus: "Compare bookend times — within :03 is the win" },
+          ]},
+        { label: "Build-By-Stroke 200 IMs", totalYards: 1000, sets: [
+            { id: "s_c833e7", reps: 5, dist: 200, desc: "200 IM — fly easy, back moderate, breast strong, free ALL OUT (build by stroke)", interval: "On 5:30", focus: "Finish the IM faster than you start it" },
+          ]},
+        { label: "Hypoxic IM 200s", totalYards: 1000, sets: [
+            { id: "s_a91cz6", reps: 1, dist: 200, desc: "IM — moderate, settle into pace",                                                                interval: "On 5:00", focus: "Open IM rhythm" },
+            { id: "s_fqz7fo", reps: 4, dist: 200, desc: "200 IM — breathe every 2 on fly, every 3 on back, normal breast, breathe every 5 on free",       interval: "On 5:30", focus: "CO2 tolerance across strokes (back off if dizzy)" },
+          ]},
       ],
       distance: [
         { label: "200s Descend", totalYards: 1000, sets: [
@@ -1421,6 +1450,37 @@
             { id: "s_vlimah", reps: 1, dist: 1500, desc: "Freestyle — race-pace mile, even splits", interval: "On 33:00", focus: "Race-distance simulation" },
             { id: "s_fe3mw8", reps: 1, dist: 600, desc: "Freestyle — moderate-strong, hold the mile pace", interval: "On 12:00", focus: "Continue under fatigue" },
             { id: "s_xc4xtc", reps: 1, dist: 300, desc: "Freestyle — strong close, faster than mile pace", interval: "On 6:00", focus: "Closing effort under accumulated fatigue" },
+          ]},
+        { label: "The Holland Lift", totalYards: 2400, sets: [
+            { id: "s_07cz7n", reps: 1, dist: 400, desc: "Freestyle — easy build, settle into long-distance rhythm",     interval: "On 8:00",  focus: "Open the engine without spiking the heart rate" },
+            { id: "s_xhwvdd", reps: 1, dist: 500, desc: "Freestyle — moderate, hold one stroke count per length",       interval: "On 9:30",  focus: "Lock in the stroke" },
+            { id: "s_t64o9w", reps: 1, dist: 600, desc: "Freestyle — moderate-strong, lift pace 5s/100 vs the 500",     interval: "On 11:00", focus: "First step up — sustain it" },
+            { id: "s_4sfj9m", reps: 1, dist: 500, desc: "Freestyle — strong, hold the new pace under accumulated load", interval: "On 9:30",  focus: "Second step up — hold the lift" },
+            { id: "s_sx4w5n", reps: 1, dist: 400, desc: "Freestyle — fastest of the set, race-pace effort",             interval: "On 8:00",  focus: "Top step — finish faster than you started" },
+          ]},
+        { label: "DPS Hold 500", totalYards: 2500, sets: [
+            { id: "s_3sqqf7", reps: 1, dist: 500, desc: "Freestyle — moderate, count strokes on every length and record the average (your baseline)", interval: "On 9:00", focus: "Establish baseline stroke count" },
+            { id: "s_olkzup", reps: 4, dist: 500, desc: "Freestyle — moderate-strong, hold baseline ±1 stroke per length on every 500",                interval: "On 9:00", focus: "DPS discipline under fatigue — break form, restart the count" },
+          ]},
+        { label: "Step-Pace 1000", totalYards: 1000, sets: [
+            { id: "s_6bjckh", reps: 2, dist: 100, desc: "Freestyle — easy (RPE 4/10)",            interval: "On 1:45", focus: "Open" },
+            { id: "s_l19h73", reps: 2, dist: 100, desc: "Freestyle — moderate (RPE 6/10)",        interval: "On 1:45", focus: "First pace step" },
+            { id: "s_5cr6oo", reps: 2, dist: 100, desc: "Freestyle — moderate-strong (RPE 7/10)", interval: "On 1:45", focus: "Second step" },
+            { id: "s_t8idsp", reps: 2, dist: 100, desc: "Freestyle — strong (RPE 8/10)",          interval: "On 1:45", focus: "Third step — getting uncomfortable" },
+            { id: "s_dzdbr7", reps: 2, dist: 100, desc: "Freestyle — near max (RPE 9/10)",        interval: "On 1:45", focus: "Top step — fastest pair of the set" },
+          ]},
+        { label: "Lung Buster 500", totalYards: 1300, sets: [
+            { id: "s_ilg4ji", reps: 1, dist: 200, desc: "Freestyle — easy, breathe every 3",                                                                interval: "On 4:00", focus: "Open the lungs" },
+            { id: "s_77eyvw", reps: 1, dist: 500, desc: "Freestyle — moderate, breathe by 100: 5 / 7 / 9 / 7 / 5 (back off the pattern if dizzy)",          interval: "On 9:30", focus: "CO2 tolerance across distance — air discipline" },
+            { id: "s_n2fet7", reps: 1, dist: 100, desc: "Easy backstroke — flush",                                                                          interval: "On 2:30", focus: "Recover" },
+            { id: "s_llhab2", reps: 1, dist: 500, desc: "Freestyle — moderate-strong, breathe every 5 the whole way (or 3/5 by 50 if every-5 won't hold)",  interval: "On 9:30", focus: "Sustained restricted breathing — hold your stroke" },
+          ]},
+        { label: "Negative-Split 800", totalYards: 1600, sets: [
+            { id: "s_ji8lck", reps: 2, dist: 800, desc: "Freestyle — first 400 controlled, second 400 must be faster (record both splits); rest enough to reset between", interval: "On 18:00", focus: "Pacing discipline — finish faster than you start, twice" },
+          ]},
+        { label: "Stroke-Count Descending 200s", totalYards: 1000, sets: [
+            { id: "s_mdkwxc", reps: 1, dist: 200, desc: "Freestyle — easy, count strokes on every length and average them (your baseline)",                  interval: "On 4:30", focus: "Lock in baseline" },
+            { id: "s_edfudm", reps: 4, dist: 200, desc: "Freestyle — moderate, drop ONE stroke per length vs previous rep (baseline-1, baseline-2, etc.)", interval: "On 4:30", focus: "Forced length and glide — tempo drops as count drops" },
           ]},
       ],
       sprint: [
@@ -1722,6 +1782,44 @@
         { label: "Sprint Build Repeat Unit", totalYards: 600, sets: [
             { id: "s_olzz33", reps: 4, dist: 100, desc: "Freestyle — build to strong, last 25 sprint", interval: "On 2:00", focus: "Controlled build with sprint finish" },
             { id: "s_qp98ls", reps: 4, dist:  50, desc: "Choice stroke — ALL OUT", interval: "On 1:30", focus: "Max effort to close each round" },
+          ]},
+        { label: "30/30 Race Pace", totalYards: 1200, sets: [
+            { id: "s_1awalq", reps: 1, dist: 200, desc: "Easy choice — open up, long stroke",                                                                            interval: "On 4:30", focus: "Prime the system" },
+            { id: "s_zqccx5", reps: 16, dist: 50, desc: "Freestyle — alternate: odd 50s ALL OUT, even 50s easy active recovery (no rest between — the easy 50 IS the rest)", interval: "On 1:00", focus: "Race-pace repeatability — controlled recovery is the skill" },
+            { id: "s_7qwpgz", reps: 1, dist: 200, desc: "Easy backstroke — flush",                                                                                       interval: "On 5:00", focus: "Cool down" },
+          ]},
+        { label: "Bookend 50s", totalYards: 800, sets: [
+            { id: "s_qhyoi4", reps: 8, dist: 50, desc: "Freestyle — ALL OUT 25 + ALL OUT 25 with a 5-second pause at the wall (two max-effort 25s back-to-back as one 50)", interval: "On 2:00", focus: "Tolerate the second 25 — race finish under fatigue" },
+            { id: "s_xfqm29", reps: 8, dist: 50, desc: "Choice stroke — easy active recovery, long stroke",                                                                   interval: "On 1:30", focus: "Flush between sprint reps" },
+          ]},
+        { label: "Hot/Cold Ladder", totalYards: 800, sets: [
+            { id: "s_dzpbkc", reps: 1, dist: 25,  desc: "ALL OUT sprint — choice",     interval: "On 1:00", focus: "Hot" },
+            { id: "s_limfkn", reps: 1, dist: 100, desc: "Easy — active recovery",      interval: "On 2:30", focus: "Cold" },
+            { id: "s_hrs1nn", reps: 1, dist: 50,  desc: "ALL OUT sprint — choice",     interval: "On 1:30", focus: "Hot" },
+            { id: "s_bcc85y", reps: 1, dist: 100, desc: "Easy — active recovery",      interval: "On 2:30", focus: "Cold" },
+            { id: "s_8fdb5q", reps: 1, dist: 75,  desc: "ALL OUT sprint — choice",     interval: "On 2:00", focus: "Hot" },
+            { id: "s_r1s0eh", reps: 1, dist: 100, desc: "Easy — active recovery",      interval: "On 2:30", focus: "Cold" },
+            { id: "s_xgoxxh", reps: 1, dist: 100, desc: "ALL OUT — choice (the test)", interval: "On 2:30", focus: "Hottest — full distance" },
+            { id: "s_xxr86x", reps: 1, dist: 100, desc: "Easy — flush",                interval: "On 2:30", focus: "Cool down between cycles" },
+            { id: "s_d3fr2g", reps: 1, dist: 75,  desc: "ALL OUT sprint — choice",     interval: "On 2:00", focus: "Climb back down" },
+            { id: "s_zzmjey", reps: 1, dist: 50,  desc: "ALL OUT sprint — choice",     interval: "On 1:30", focus: "Hot" },
+            { id: "s_xu15op", reps: 1, dist: 25,  desc: "ALL OUT sprint — choice",     interval: "On 1:00", focus: "Top of the lap counter" },
+          ]},
+        { label: "The 5/35", totalYards: 1500, sets: [
+            { id: "s_a8t8gl", reps: 1, dist: 200, desc: "Easy choice — open up", interval: "On 4:30", focus: "Prime" },
+            { id: "s_3etag2", reps: 5, dist:  50, desc: "Freestyle — ALL OUT, on extra rest (full recovery between)", interval: "On 1:45", focus: "Top-end speed when fresh — note your time" },
+            { id: "s_h9kj6q", reps: 35, dist: 25, desc: "Freestyle — descend through the set: first 5 easy, next 10 moderate, next 10 strong, last 10 ALL OUT", interval: "On 0:30", focus: "Sprint repeatability — hold the last 10 within 1s of the opening 5x50 pace" },
+            { id: "s_li4ekm", reps: 1, dist: 175, desc: "Easy choice — flush", interval: "On 4:30", focus: "Cool down" },
+          ]},
+        { label: "Underwater Sprint 25s", totalYards: 600, sets: [
+            { id: "s_jb22c0", reps: 1, dist: 200, desc: "Easy choice — open up, long stroke",                                                                                                   interval: "On 5:00", focus: "Prime" },
+            { id: "s_yw5g9k", reps: 8, dist:  25, desc: "Freestyle ALL OUT — 7-10m underwater dolphin kick off the wall, then sprint to finish (back off underwaters if you get lightheaded)", interval: "On 0:45", focus: "Breakout speed — wall plus first strokes wins the race" },
+            { id: "s_ds19zi", reps: 1, dist: 200, desc: "Easy backstroke — flush",                                                                                                              interval: "On 5:00", focus: "Cool down" },
+          ]},
+        { label: "Reverse-Broken 100", totalYards: 1000, sets: [
+            { id: "s_i2sdvf", reps: 1, dist: 200, desc: "Easy choice — open up",                                                                                                              interval: "On 4:30", focus: "Prime" },
+            { id: "s_udk93p", reps: 6, dist: 100, desc: "Freestyle — sprint, but broken IN REVERSE: 10s rest after the FIRST 25, then 25 + 25 + 25 straight through (front-loaded recovery)", interval: "On 3:00", focus: "Build pain tolerance — the back 75 carries the work" },
+            { id: "s_i98pgv", reps: 1, dist: 200, desc: "Easy backstroke — flush",                                                                                                            interval: "On 5:00", focus: "Cool down" },
           ]},
       ],
       endurance: [
@@ -2315,6 +2413,38 @@
             { id: "s_ztpj3y", reps: 4, dist: 100, desc: "Freestyle — 50 catch-up drill / 50 swim, focus on full extension before pull", interval: "On 2:20", focus: "Extension and catch mechanics" },
             { id: "s_5ited0", reps: 4, dist:  50, desc: "Freestyle — swim normal, hold the feeling from the drill", interval: "On 1:15", focus: "Transfer drill to full swimming" },
           ]},
+        { label: "30/30 Aerobic", totalYards: 1500, sets: [
+            { id: "s_bhrhzu", reps: 1, dist: 200, desc: "Easy choice — settle in",                                                                                interval: "On 4:30", focus: "Open the aerobic engine" },
+            { id: "s_o9gnbm", reps: 20, dist: 50, desc: "Freestyle — alternate: odd 50s moderate-strong, even 50s easy (the easy 50 IS the rest, no wall rest)", interval: "On 1:00", focus: "Continuous aerobic — 1000 yards without leaving the water" },
+            { id: "s_7zbft9", reps: 1, dist: 300, desc: "Easy backstroke — long cooldown",                                                                        interval: "On 7:00", focus: "Flush the legs" },
+          ]},
+        { label: "Rolling 50s", totalYards: 1200, sets: [
+            { id: "s_7n06j3", reps: 24, dist: 50, desc: "Freestyle — every 4th 50 is strong; the rest are moderate. No rest between (rolling, continuous).",      interval: "On 1:00", focus: "Pace shifts inside continuous aerobic — train surge recovery" },
+          ]},
+        { label: "Aerobic Goldilocks", totalYards: 1500, sets: [
+            { id: "s_on80ig", reps: 5, dist: 100, desc: "Freestyle — too easy (RPE 4/10) — almost lazy long stroke",        interval: "On 2:00", focus: "Bottom of the band" },
+            { id: "s_7yomtu", reps: 5, dist: 100, desc: "Freestyle — too hard (RPE 8/10) — uncomfortable but sustainable", interval: "On 2:00", focus: "Top of the band" },
+            { id: "s_y4cxog", reps: 5, dist: 100, desc: "Freestyle — JUST RIGHT (RPE 6/10) — find the middle, hold it",    interval: "On 2:00", focus: "Sweet-spot aerobic — the pace you should know by feel" },
+          ]},
+        { label: "Hypoxic Pull 500", totalYards: 1500, sets: [
+            { id: "s_1n4sjx", reps: 1, dist: 300, desc: "Easy pull (buoy + paddles optional) — breathe every 3, open the lungs",                                                  interval: "On 6:30", focus: "Prime" },
+            { id: "s_s1fw1n", reps: 1, dist: 500, desc: "Pull — moderate, breathe every 5 the whole way (drop to 3/5 by 50 if you can't hold every 5)",                          interval: "On 11:00", focus: "Restricted-breathing endurance — keep the stroke long" },
+            { id: "s_4e6kgc", reps: 1, dist: 200, desc: "Easy free — every 3 — flush",                                                                                            interval: "On 4:30", focus: "Recover" },
+            { id: "s_3j5wwe", reps: 1, dist: 500, desc: "Pull — moderate, breathe by 100: 3 / 5 / 7 / 5 / 3 (ladder — back off if dizzy)",                                       interval: "On 11:00", focus: "Air-control variability under fatigue" },
+          ]},
+        { label: "Tempo Ladder 100s", totalYards: 1500, sets: [
+            { id: "s_6zhm58", reps: 3, dist: 100, desc: "Freestyle — easy tempo (RPE 5)",          interval: "On 2:00", focus: "Lowest tempo — long stroke" },
+            { id: "s_jr0gde", reps: 3, dist: 100, desc: "Freestyle — moderate tempo (RPE 6)",       interval: "On 2:00", focus: "Step 1" },
+            { id: "s_tg13g1", reps: 3, dist: 100, desc: "Freestyle — moderate-strong tempo (RPE 7)", interval: "On 2:00", focus: "Step 2" },
+            { id: "s_uh861c", reps: 3, dist: 100, desc: "Freestyle — strong tempo (RPE 8)",         interval: "On 2:00", focus: "Step 3 — hold form as turnover climbs" },
+            { id: "s_vv5dnk", reps: 3, dist: 100, desc: "Freestyle — drop back to moderate (RPE 6)", interval: "On 2:00", focus: "Recover the tempo on the way down" },
+          ]},
+        { label: "Step-Down 400s", totalYards: 1600, sets: [
+            { id: "s_ba1trk", reps: 1, dist: 400, desc: "Freestyle — RPE 5, easy aerobic",                            interval: "On 8:30", focus: "Bottom step" },
+            { id: "s_m1v4ig", reps: 1, dist: 400, desc: "Freestyle — RPE 6, drop 5s/100 vs the previous",             interval: "On 8:00", focus: "Step up" },
+            { id: "s_2743iq", reps: 1, dist: 400, desc: "Freestyle — RPE 7, drop another 5s/100 (10s total vs first)", interval: "On 7:30", focus: "Step up again" },
+            { id: "s_wc1sdk", reps: 1, dist: 400, desc: "Freestyle — RPE 8, drop another 5s/100 (15s total vs first)", interval: "On 7:00", focus: "Top step — finish faster, with shorter rest" },
+          ]},
       ],
       mixed: [
         { label: "Compact Mix", totalYards: 1000, sets: [
@@ -2639,6 +2769,37 @@
             { id: "s_acplno", reps: 4, dist: 150, desc: "Choice stroke — moderate-strong, switch strokes between reps", interval: "On 3:30", focus: "Stroke variety under aerobic load" },
             { id: "s_c87jy4", reps: 4, dist: 100, desc: "Freestyle — strong, hold target pace", interval: "On 2:15", focus: "Build pressure" },
             { id: "s_j30dxz", reps: 4, dist: 50, desc: "Choice stroke — sprint", interval: "On 1:15", focus: "Sprint finisher" },
+          ]},
+        { label: "Garbage 1500", totalYards: 1500, sets: [
+            { id: "s_i3w12w", reps: 1, dist: 1500, desc: "Freestyle — continuous, NO target pace. Mix it up freely: switch strokes by 100, drop in 25s of kick or drill whenever you want, change tempo, breathe how you like. The only rule is don't stop.", interval: "On 35:00", focus: "Garbage yardage — aerobic volume without judgment. Used by elite distance swimmers between hard sets." },
+          ]},
+        { label: "The 30/30", totalYards: 1500, sets: [
+            { id: "s_v21k3g", reps: 1, dist: 200, desc: "Easy choice — settle in",                                                                                                                              interval: "On 4:30", focus: "Prime" },
+            { id: "s_vzoxd8", reps: 20, dist: 50, desc: "Alternate by 50: odd 50s = strong freestyle, even 50s = easy choice stroke. Continuous — no wall rest. The easy 50 IS the recovery.",                  interval: "On 1:00", focus: "Stroke variety + pace shifts inside a continuous swim — train the surge-recover muscle" },
+            { id: "s_q64xm6", reps: 1, dist: 300, desc: "Easy backstroke — cooldown",                                                                                                                           interval: "On 7:00", focus: "Flush" },
+          ]},
+        { label: "Goldilocks 100s", totalYards: 1500, sets: [
+            { id: "s_yqy652", reps: 5, dist: 100, desc: "Freestyle — too easy (RPE 4) — almost lazy",            interval: "On 2:00", focus: "Bottom of the band — feel how slow is slow" },
+            { id: "s_tntue7", reps: 5, dist: 100, desc: "Choice stroke — too hard (RPE 8) — uncomfortable",       interval: "On 2:15", focus: "Top of the band — feel how hard is hard" },
+            { id: "s_hmo9r6", reps: 5, dist: 100, desc: "IM order (fly/back/breast/free/choice) — JUST RIGHT (RPE 6) — find the middle", interval: "On 2:15", focus: "Sweet-spot pace across multiple strokes — the one you should know by feel" },
+          ]},
+        { label: "Rolling 25s", totalYards: 1000, sets: [
+            { id: "s_dd5f7h", reps: 1, dist: 200, desc: "Easy choice — open up",                                                                                                       interval: "On 4:30", focus: "Prime" },
+            { id: "s_qwkd60", reps: 24, dist: 25, desc: "Continuous (no wall rest) — rotate by 25: free / back / breast / free / back / breast / ... — strong tempo throughout",       interval: "On 0:35", focus: "Stroke rotation under continuous load — find rhythm in the rotation" },
+            { id: "s_tj1ekj", reps: 1, dist: 200, desc: "Easy backstroke — flush",                                                                                                     interval: "On 5:00", focus: "Cool down" },
+          ]},
+        { label: "Mike's Mile (broken 1650)", totalYards: 1650, sets: [
+            { id: "s_7erb08", reps: 1, dist: 500, desc: "Freestyle — race pace, even splits",       interval: "On 9:30",  focus: "First piece — establish race pace" },
+            { id: "s_lgb7lt", reps: 1, dist: 500, desc: "Freestyle — race pace, no slower than #1", interval: "On 9:30",  focus: "Second piece — pace discipline" },
+            { id: "s_7odm46", reps: 1, dist: 400, desc: "Freestyle — race pace, no slower than #1", interval: "On 7:30",  focus: "Third piece — hold form" },
+            { id: "s_pmp6e8", reps: 1, dist: 250, desc: "Freestyle — faster than race pace (this is your closing speed in a real mile)", interval: "On 5:30", focus: "Race finish — empty the tank" },
+          ]},
+        { label: "Race Sim 500", totalYards: 1500, sets: [
+            { id: "s_hpyybv", reps: 1, dist: 300, desc: "Easy choice — open up + 2x25 fast off the wall (dive + breakout simulation)",      interval: "On 7:00",  focus: "Race warmup — primed and loose" },
+            { id: "s_dw40f3", reps: 1, dist: 100, desc: "Freestyle — fast 50 / easy 50 (open the legs without burning them)",                interval: "On 3:00",  focus: "Final prime — wake up the speed" },
+            { id: "s_qwq9v7", reps: 1, dist: 500, desc: "Freestyle — RACE: go-from-the-gun 500. Even splits or negative split. Record every 100.", interval: "On 12:00", focus: "Race simulation — this is the workout, treat it like the meet" },
+            { id: "s_om3i4o", reps: 1, dist: 200, desc: "Very easy backstroke — flush the lactate",                                          interval: "On 5:30",  focus: "Recover" },
+            { id: "s_iic9mr", reps: 1, dist: 400, desc: "Freestyle — moderate, hold form (this is your fitness check — can you swim well after racing?)", interval: "On 9:00", focus: "Post-race aerobic — race-day fitness" },
           ]},
       ],
       back: [
