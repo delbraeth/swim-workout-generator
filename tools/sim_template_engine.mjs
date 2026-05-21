@@ -65,7 +65,9 @@ function validateOption(opt, template, ctx) {
     if (!s.desc || s.desc.trim() === "") errs.push(`set[${i}] empty desc`);
     if (!s.focus || s.focus.trim() === "") errs.push(`set[${i}] empty focus`);
     if (!s.interval) errs.push(`set[${i}] missing interval`);
-    else {
+    else if (/^no\s*interval/i.test(s.interval)) {
+      // Canonical no-interval (used by warmup/cooldown templates) — accept
+    } else {
       const secs = parseIntervalSecs(s.interval);
       if (secs === null) errs.push(`set[${i}] unparseable interval: ${s.interval}`);
       else if (secs < 30 || secs > 3600) errs.push(`set[${i}] interval out of range: ${secs}s`);
@@ -158,6 +160,30 @@ const TEST_MATRIX = [
   ["pyramid_up_down",    "free",       800, "free / 800yd"],
   ["pyramid_up_down",    "im",        1200, "im / 1200yd"],
   ["pyramid_up_down",    "back",       800, "back / 800yd"],
+
+  // ── S3 warmup templates ──
+  ["aerobic_warmup",      "distance",  400, "distance / 400yd"],
+  ["aerobic_warmup",      "endurance", 600, "endurance / 600yd"],
+  ["aerobic_warmup",      "sprint",    400, "sprint / 400yd"],
+  ["aerobic_warmup",      "im",        500, "im / 500yd"],
+
+  ["warmup_build",        "distance",  500, "distance / 500yd"],
+  ["warmup_build",        "endurance", 600, "endurance / 600yd"],
+  ["warmup_build",        "free",      400, "free / 400yd"],
+
+  ["multi_stroke_warmup", "im",        600, "im / 600yd"],
+  ["multi_stroke_warmup", "mixed",     400, "mixed / 400yd"],
+  ["multi_stroke_warmup", "distance",  500, "distance / 500yd"],
+
+  // ── S3 cooldown templates ──
+  ["easy_swim_cooldown",  "distance",  300, "distance / 300yd"],
+  ["easy_swim_cooldown",  "endurance", 400, "endurance / 400yd"],
+  ["easy_swim_cooldown",  "sprint",    200, "sprint / 200yd"],
+  ["easy_swim_cooldown",  "back",      300, "back / 300yd"],
+
+  ["cooldown_descend",    "distance",  500, "distance / 500yd"],
+  ["cooldown_descend",    "endurance", 300, "endurance / 300yd"],
+  ["cooldown_descend",    "free",      450, "free / 450yd"],
 ];
 
 const args = process.argv.slice(2);
@@ -175,7 +201,7 @@ if (batch > 0) {
     for (const [, typeKey, budget] of TEST_MATRIX.filter(r => r[0] === tplId)) {
       let errCount = 0;
       for (let i = 0; i < batch; i++) {
-        const opt = TEMPLATE_ENGINE.generate(tplId, typeKey, "main", budget);
+        const opt = TEMPLATE_ENGINE.generate(tplId, typeKey, TEMPLATE_ENGINE.templates[tplId].applicableSections[0], budget);
         const errs = validateOption(opt, tplId, { typeKey, budget });
         if (errs.length) errCount++;
         totalGen++;
@@ -195,7 +221,7 @@ for (const [tplId, typeKey, budget, label] of TEST_MATRIX) {
   if (onlyTemplate && tplId !== onlyTemplate) continue;
   if (!TEMPLATE_ENGINE.list().includes(tplId)) { console.log(`\n[skip] ${tplId} not registered`); continue; }
   console.log(`\n=== ${tplId} :: ${label} ===`);
-  const opt = TEMPLATE_ENGINE.generate(tplId, typeKey, "main", budget);
+  const opt = TEMPLATE_ENGINE.generate(tplId, typeKey, TEMPLATE_ENGINE.templates[tplId].applicableSections[0], budget);
   const errs = validateOption(opt, tplId, { typeKey, budget });
   printOption(opt, label, errs);
   totalGen++;

@@ -6975,6 +6975,100 @@
       long_main:    { warmup: 0.06, drill: 0.07, main: 0.83, cooldown: 0.04 },
     };
 
+    // ── S3: helpers for engine routing per section ───────────────────
+    // generateEngineForSection — pick an applicable template (random
+    // among those applicable to section × typeKey) and invoke the
+    // engine's full pipeline (validate + retry-3 + anti-repeat).
+    // Returns { option, templateUsed, attempts } or { option: null } on
+    // no-applicable-template or full-failure (caller silently falls
+    // back to bank).
+    function generateEngineForSection(section, typeId, budgetYd, recent) {
+      if (typeof TEMPLATE_ENGINE === "undefined") return { option: null };
+      const applicable = TEMPLATE_ENGINE.applicable(section, typeId);
+      if (!applicable.length) return { option: null };
+      const tpl = applicable[Math.floor(Math.random() * applicable.length)];
+      return TEMPLATE_ENGINE.generateWithRetry({
+        templateId: tpl.id, typeKey: typeId, section, budgetYd, recent: recent || [],
+      });
+    }
+
+    // applyEngineOverrides — replace bank-picked sections with engine
+    // output when sectionSources[sect] === "engine" (or "mix" — TODO S3.4).
+    // The bank picker still chooses an option per section; if engine is
+    // requested, we replace that option AFTER the picker succeeds, sizing
+    // the engine output to the bank option's totalYards. This preserves
+    // the picker's combination validation (equipment, yardage min/max)
+    // while substituting content per section. Engine output gets a
+    // __engineMeta marker so the renderer can show the ⚡ badge.
+    function applyEngineOverrides(typeId, sections, sources, recent) {
+      if (!sources) return sections;
+      const out = { ...sections };
+      for (const sect of ["warmup", "drill", "main", "cooldown"]) {
+        const src = sources[sect] || "bank";
+        if (src === "engine") {
+          const original = sections[sect];
+          if (!original || !original.totalYards) continue;
+          const res = generateEngineForSection(sect, typeId, original.totalYards, recent);
+          if (res && res.option) {
+            out[sect] = {
+              ...res.option,
+              __engineMeta: {
+                template_id: res.templateUsed,
+                stroke: templateDefaultStroke(typeId),
+              },
+            };
+          }
+          // else: engine had no applicable template or all attempts failed —
+          // silent bank fallback (original section stays unchanged)
+        } else if (src === "mix") {
+          // Mix: bank prefix + engine suffix, two parented sub-blocks under
+          // one section header (per spec §7.3). Engine sub-block sized at
+          // ~50% of the bank prefix's totalYards. Total section yards =
+          // bank + engine, which exceeds the picker's per-section
+          // allocation; documented as known limitation (mix is opt-in
+          // extra variety, not a strict budget mode).
+          const original = sections[sect];
+          if (!original || !original.totalYards) continue;
+          const engineBudget = Math.max(100, Math.round(original.totalYards * 0.5));
+          const res = generateEngineForSection(sect, typeId, engineBudget, recent);
+          if (res && res.option) {
+            const stroke = templateDefaultStroke(typeId);
+            out[sect] = {
+              // Note: deliberately omit `section` so buildWorkout's
+              // hardcoded section value applies (passing undefined here
+              // would override the hardcode via the spread).
+              label: `${original.label} + Engine`,
+              totalYards: original.totalYards + res.option.totalYards,
+              // Renderer (WorkoutBlock) checks for subBlocks first and
+              // renders each as its own labeled box if present. Engine
+              // sub-block carries __engineMeta for the ⚡ badge.
+              subBlocks: [
+                {
+                  label: original.label,
+                  totalYards: original.totalYards,
+                  sets: original.sets,
+                },
+                {
+                  label: res.option.label,
+                  totalYards: res.option.totalYards,
+                  sets: res.option.sets,
+                  __engineMeta: { template_id: res.templateUsed, stroke },
+                },
+              ],
+              // Pass-through `sets` (concatenated) for backward compat
+              // with code that reads block.sets directly (totals, print).
+              sets: [...original.sets, ...res.option.sets],
+              // Top-level engineMeta marks "this section used the engine"
+              // for the write-side path that prepends to recent[].
+              __engineMeta: { template_id: res.templateUsed, stroke },
+            };
+          }
+          // else: no applicable engine template → silent bank fallback
+        }
+      }
+      return out;
+    }
+
     function generateWorkout({
       typeId,
       maxYards,
@@ -6988,6 +7082,8 @@
       phase = null,
       favoriteSetIds = null,
       sectionBias = "balanced",
+      sectionSources = null,            // S3 — { warmup, drill, main, cooldown } ∈ { bank, engine, mix }
+      recentEngineTemplates = [],       // S3 — anti-repeat memory (last 10 { template_id, stroke, ts })
     } = {}) {
       const biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
       const is25m    = poolMode === "25m";
@@ -7233,8 +7329,11 @@
 
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
+          // S3 — apply engine overrides per section, then recompute total
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates);
+          const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
-          return { ...buildWorkout(typeId, wu, dr, ma, cd, total), __genPath: "loop", __genAttempts: attempt + 1 };
+          return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "loop", __genAttempts: attempt + 1 };
         }
       }
 
@@ -7320,8 +7419,11 @@
       }
 
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
+      // S3 — apply engine overrides per section, then recompute total
+      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates);
+      const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
-      return { ...buildWorkout(typeId, wu, dr, ma, cd, total), __genPath: "fallback", __genAttempts: attempts };
+      return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "fallback", __genAttempts: attempts };
     }
 
     function buildWorkout(typeId, wu, dr, ma, cd, total) {
@@ -7371,6 +7473,8 @@
       recoveryMode = false,
       phase = null,
       favorites = [],
+      sectionSource = "bank",        // S3 — bank | engine | mix
+      recentEngineTemplates = [],    // S3 — anti-repeat memory
     } = {}) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
@@ -7476,9 +7580,21 @@
         drill:    "Drill / Pre-Main Set",
         cooldown: "Cool-Down",
       };
-      const newBlock = sectionKey === "main"
+      const bankBlock = sectionKey === "main"
         ? { name: `Main Set — ${picked.label}`, section: "main", ...picked }
         : { name: NAME_BY_SECTION[sectionKey], section: sectionKey, ...picked };
+
+      // S3 — engine override per section source
+      let newBlock = bankBlock;
+      if (sectionSource === "engine" || sectionSource === "mix") {
+        const overridden = applyEngineOverrides(
+          typeId,
+          { [sectionKey]: bankBlock },
+          { [sectionKey]: sectionSource },
+          recentEngineTemplates,
+        );
+        newBlock = { ...bankBlock, ...overridden[sectionKey] };
+      }
 
       const newBlocks = blocks.map((b, i) => i === idx ? newBlock : b);
       const total = newBlocks.reduce((s, b) => s + b.totalYards, 0);
@@ -8425,6 +8541,213 @@
           };
         },
       },
+
+      // ═══════════════════════════════════════════════════════════════
+      //  S3 — Warmup + cooldown templates
+      //  Per spec §11 these were originally out-of-scope for v1 ("Engine-
+      //  generated warmups and cooldowns"). Cap'n's S3 choice was to
+      //  enable engine for all 4 sections, which required templates for
+      //  warmup + cooldown. The five below are shaped on coaching norms
+      //  (warmups: 300-800yd easy/build, often no-interval; cooldowns:
+      //  200-400yd easy throughout).
+      // ═══════════════════════════════════════════════════════════════
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ aerobic_warmup — single row, easy aerobic                  │
+      // │ Warmup. Typical: 8×50 or 6×100 easy.                       │
+      // └────────────────────────────────────────────────────────────┘
+      aerobic_warmup: {
+        id: "aerobic_warmup",
+        family: "single_row",
+        applicableSections: ["warmup"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `Aerobic warmup ${slots.dist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          // Warmup dists stay short — 50/75/100 typical, sometimes 150
+          const distChoices = [50, 75, 100, 150].filter(d => d * 4 <= budgetYd * 1.5);
+          const shape = templatePickRepShape(
+            distChoices.length ? distChoices : [50, 75, 100],
+            budgetYd, 4, 10, "any", rand,
+          );
+          const effortPhrase = templatePick(
+            ["easy, settle in", "easy/moderate, loosen up", "aerobic pace, find your stroke"],
+            rand,
+          );
+          return {
+            label: this.labelTemplate({ dist: shape.dist }, shape.total),
+            totalYards: shape.total,
+            sets: [{
+              reps: shape.reps, dist: shape.dist,
+              desc: `${templateStrokeLabel(stroke)} — ${effortPhrase}`,
+              interval: NO_INTERVAL_CANONICAL,
+              focus: "Prime the aerobic engine — long stroke",
+            }],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ warmup_build — single row, build within rep                │
+      // │ Warmup. 4×100 easy→fast over the rep.                      │
+      // └────────────────────────────────────────────────────────────┘
+      warmup_build: {
+        id: "warmup_build",
+        family: "single_row",
+        applicableSections: ["warmup"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `Build warmup ${slots.dist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          // Build needs room within a rep — 75 or 100 minimum, 150 max for warmup
+          const distChoices = [75, 100, 150];
+          const shape = templatePickRepShape(distChoices, budgetYd, 3, 6, "any", rand);
+          return {
+            label: this.labelTemplate({ dist: shape.dist }, shape.total),
+            totalYards: shape.total,
+            sets: [{
+              reps: shape.reps, dist: shape.dist,
+              desc: `${templateStrokeLabel(stroke)} — build from easy to moderate across each rep`,
+              interval: templateComputeInterval(shape.dist, "aerobic"),
+              focus: "Progressive warm-up — finish each rep stronger than you started",
+            }],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ multi_stroke_warmup — N strokes, each row a different one  │
+      // │ Warmup. Loosens all four strokes before mains.             │
+      // └────────────────────────────────────────────────────────────┘
+      multi_stroke_warmup: {
+        id: "multi_stroke_warmup",
+        family: "multi_row_composition",
+        applicableSections: ["warmup"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `${slots.strokeCount}-stroke warmup ${slots.dist}s (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          // IM types do full 4-stroke order; everyone else 3 strokes
+          const allStrokes = ["fly", "back", "breast", "free"];
+          const strokes = typeKey === "im"
+            ? allStrokes
+            : [...allStrokes].sort(() => rand() - 0.5).slice(0, 3);
+          // Short pieces for warmup — 25/50/75. Joint search over (dist,
+          // totalReps) with front-loaded asymmetric distribution so the
+          // total can hit budget exactly even when budget/strokes.length
+          // doesn't divide cleanly (e.g., 400yd / 3 strokes / canonical
+          // dists). Same trick as drill_progression.
+          const warmupDists = [25, 50, 75];
+          let best = null;
+          for (const dist of warmupDists) {
+            for (let totalReps = strokes.length; totalReps <= strokes.length * 8; totalReps++) {
+              const total = totalReps * dist;
+              const pctOff = Math.abs(total - budgetYd) / budgetYd;
+              if (!best || pctOff < best.pctOff) {
+                best = { dist, totalReps, total, pctOff };
+              }
+            }
+          }
+          const baseReps = Math.floor(best.totalReps / strokes.length);
+          const remainderReps = best.totalReps - baseReps * strokes.length;
+          const repsPerStroke = strokes.map((_, i) => baseReps + (i < remainderReps ? 1 : 0));
+          const interval = templateComputeInterval(best.dist, "easy");
+          const sets = strokes.map((s, i) => ({
+            reps: repsPerStroke[i], dist: best.dist,
+            desc: `${templateStrokeLabel(s)} — easy, focus on stroke quality`,
+            interval,
+            focus: `Loosen ${s === "free" ? "freestyle" : s} mechanics`,
+          }));
+          const totalYards = best.total;
+          const shape = { dist: best.dist };
+          return {
+            label: this.labelTemplate({ strokeCount: strokes.length, dist: shape.dist }, totalYards),
+            totalYards,
+            sets,
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ easy_swim_cooldown — single long easy rep                  │
+      // │ Cooldown. 1×200/300/400 easy.                              │
+      // └────────────────────────────────────────────────────────────┘
+      easy_swim_cooldown: {
+        id: "easy_swim_cooldown",
+        family: "single_row",
+        applicableSections: ["cooldown"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `Easy ${slots.dist} cooldown (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          // Cooldown stroke: most types do freestyle; back/breast/fly/im swimmers
+          // appreciate doing the off-stroke (often back) for active recovery.
+          const cooldownStroke = ["back", "breast", "fly", "im"].includes(typeKey)
+            ? (typeKey === "back" ? "free" : "back")  // backstrokers cool down with free; others cool down with back
+            : (rand() < 0.7 ? "free" : "choice");
+          // Pick canonical dist closest to budget (single rep)
+          const cooldownDist = TEMPLATE_CANONICAL_DISTS.reduce((best, d) =>
+            (d >= 100 && d <= 500 && Math.abs(d - budgetYd) < Math.abs(best - budgetYd)) ? d : best, 200);
+          return {
+            label: this.labelTemplate({ dist: cooldownDist }, cooldownDist),
+            totalYards: cooldownDist,
+            sets: [{
+              reps: 1, dist: cooldownDist,
+              desc: `${templateStrokeLabel(cooldownStroke)} — easy, fully recovered`,
+              interval: NO_INTERVAL_CANONICAL,
+              focus: "Active recovery — flush the system",
+            }],
+          };
+        },
+      },
+
+      // ┌────────────────────────────────────────────────────────────┐
+      // │ cooldown_descend — descending ladder, each piece easier    │
+      // │ Cooldown. 200/150/100/50 type pattern.                     │
+      // └────────────────────────────────────────────────────────────┘
+      cooldown_descend: {
+        id: "cooldown_descend",
+        family: "single_rep_multi_row",
+        applicableSections: ["cooldown"],
+        applicableTypes: ["distance", "endurance", "mixed", "free", "back", "breast", "fly", "im", "sprint"],
+        labelTemplate: (slots, totalYards) =>
+          `Descending cooldown ${slots.peak}-${slots.base} (${totalYards} yd)`,
+        generate(typeKey, section, budgetYd, rand = Math.random) {
+          const stroke = templateDefaultStroke(typeKey);
+          // Build descending ladders of varying lengths to fit budget
+          // Patterns: [200, 150, 100, 50] = 500; [150, 100, 50] = 300;
+          // [100, 75, 50, 25] = 250; [200, 150, 100] = 450
+          const patterns = [
+            [200, 150, 100, 50],
+            [150, 100, 75, 50, 25],
+            [100, 75, 50, 25],
+            [200, 150, 100],
+            [150, 100, 50],
+            [100, 50, 25],
+          ];
+          let best = null;
+          for (const p of patterns) {
+            const total = p.reduce((s, d) => s + d, 0);
+            const pctOff = Math.abs(total - budgetYd) / Math.max(budgetYd, 1);
+            if (!best || pctOff < best.pctOff) {
+              best = { dists: p, total, pctOff };
+            }
+          }
+          const sets = best.dists.map((d, i) => ({
+            reps: 1, dist: d,
+            desc: `${templateStrokeLabel(stroke)} — ${i === 0 ? "easy" : "easier than the last"}`,
+            interval: NO_INTERVAL_CANONICAL,
+            focus: i === best.dists.length - 1 ? "Final flush" : "Bring the heart rate down",
+          }));
+          return {
+            label: this.labelTemplate({ peak: best.dists[0], base: best.dists[best.dists.length - 1] }, best.total),
+            totalYards: best.total,
+            sets,
+          };
+        },
+      },
     };
 
     // ── Validator (S2.5 — spec §5) ───────────────────────────────────
@@ -9137,7 +9460,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y" }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -9156,6 +9479,20 @@
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.dot, display: "inline-block" }} />
               <span style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.name}</span>
+              {block.__engineMeta && (
+                <span
+                  title={`Generated by the SetForge engine (template: ${block.__engineMeta.template_id})`}
+                  style={{
+                    display: "inline-flex", alignItems: "center",
+                    padding: "1px 7px", borderRadius: 999,
+                    background: "rgba(245,158,11,0.18)",
+                    border: "1px solid var(--color-warn)",
+                    color: isDarkHeader ? "var(--color-warn)" : "#92400e",
+                    fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                  }}>
+                  ⚡ ENGINE
+                </span>
+              )}
               <span className="screen-only"
                 title={`Effort zone: ${blockZone.label}`}
                 style={{
@@ -9192,6 +9529,32 @@
               })()}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* S3 — per-section Bank | Engine | Mix toggle. Triggers a
+                  regen of this section under the chosen source. Disabled
+                  when section is pinned (pin wins). */}
+              {onSectionSourceChange && !isPinned && (
+                <div className="screen-only" style={{ display: "inline-flex", gap: 2, borderRadius: 6, background: btnBg, padding: 2, border: `1px solid ${btnBorder}` }}>
+                  {["bank", "engine", "mix"].map(opt => {
+                    const active = sectionSource === opt;
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => onSectionSourceChange(opt)}
+                        title={`Set this section's source to ${opt === "bank" ? "the bank (curated sets)" : opt === "engine" ? "the engine (template-generated)" : "mix (bank prefix + engine suffix)"}`}
+                        style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                          padding: "2px 8px", borderRadius: 4,
+                          background: active ? (isDarkHeader ? "rgba(255,255,255,0.22)" : "rgba(15,23,42,0.18)") : "transparent",
+                          color: s.headerText, opacity: active ? 1 : 0.6,
+                          border: "none", cursor: "pointer", textTransform: "uppercase",
+                        }}>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} {unit}</span>
               {block.section === "main" && block.label && onToggleFavorite && (
                 <button
@@ -17827,6 +18190,14 @@
       const [pinnedSections, setPinnedSections]   = useState({});
       const [recoveryMode, setRecoveryMode]       = useState(false); // C: per-generation toggle, not persisted
       const [sectionBias, setSectionBias]         = useState("balanced"); // Section-proportion bias: balanced / warmup_heavy / drill_heavy / long_main. Per-generation, session-only.
+      // S3 — per-section engine source (bank | engine | mix), default all bank.
+      // Persisted to settings.extra.engine_section_sources on change. Read on
+      // mount via the settings fetch elsewhere in this component.
+      const [sectionSources, setSectionSources]   = useState({ warmup: "bank", drill: "bank", main: "bank", cooldown: "bank" });
+      // S3 — anti-repeat memory for engine (last 10 { template_id, stroke, ts }).
+      // Persisted as settings.extra.engine_recent_templates. Loaded on mount,
+      // updated client-side after each successful engine generate.
+      const [recentEngineTemplates, setRecentEngineTemplates] = useState([]);
 
       // Per-section regeneration error: { section: "warmup"|"drill"|"main"|"cooldown", message } | null
       const [regenError, setRegenError]           = useState(null);
@@ -17986,6 +18357,13 @@
                 }
                 return next;
               });
+            }
+            // S3 — template engine per-section toggle + anti-repeat memory
+            if (s.engine_section_sources && typeof s.engine_section_sources === "object") {
+              setSectionSources(prev => ({ ...prev, ...s.engine_section_sources }));
+            }
+            if (Array.isArray(s.engine_recent_templates)) {
+              setRecentEngineTemplates(s.engine_recent_templates.slice(0, 10));
             }
           })
           .catch(() => {});
@@ -18417,6 +18795,8 @@
           phase: effectivePhase,                                               // R-D: group-context override (#39)
           favoriteSetIds: favoriteSets,
           sectionBias,                                                          // Real-shift section-proportion controls (Mix pills)
+          sectionSources,                                                       // S3 — Bank/Engine/Mix per section
+          recentEngineTemplates,                                                // S3 — anti-repeat memory for engine
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -18465,6 +18845,32 @@
           newWorkout = { ...newWorkout, phase };
         }
         setWorkout(newWorkout);
+        // S3 — write side: prepend engine entries to recent[], cap at 10,
+        // post to settings.extra. Fire-and-forget; errors don't block UI.
+        const newEngineEntries = [];
+        for (const b of newWorkout.blocks || []) {
+          if (b && b.__engineMeta && b.__engineMeta.template_id) {
+            newEngineEntries.push({
+              template_id: b.__engineMeta.template_id,
+              stroke: b.__engineMeta.stroke || "free",
+              ts: Date.now(),
+            });
+          }
+        }
+        if (newEngineEntries.length) {
+          setRecentEngineTemplates(prev => {
+            const next = [...newEngineEntries, ...prev].slice(0, 10);
+            if (typeof fetch === "function" && csrf.token) {
+              fetch(`${API_BASE}/settings/extra`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf.token },
+                body: JSON.stringify({ engine_recent_templates: next }),
+              }).catch(() => {});
+            }
+            return next;
+          });
+        }
         // S4 #7 — record this session's main label for future anti-repeat.
         const mainLabel = newWorkout.blocks && newWorkout.blocks[2] && newWorkout.blocks[2].label;
         if (mainLabel) setSessionRecentLabels(prev => new Set([...prev, mainLabel]));
@@ -18478,7 +18884,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -18504,6 +18910,8 @@
           recoveryMode: isRecovery,
           phase,
           favorites,
+          sectionSource: sectionSources[sectionKey] || "bank",
+          recentEngineTemplates,
         });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -18547,7 +18955,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -19925,6 +20333,31 @@
                     onTogglePin={handleTogglePin}
                     recentMainLabels={recentMainLabels}
                     poolMode={poolMode}
+                    sectionSource={sectionSources[block.section] || "bank"}
+                    onSectionSourceChange={(newSource) => {
+                      setSectionSources(prev => {
+                        const next = { ...prev, [block.section]: newSource };
+                        // S3 — persist to settings.extra (fire-and-forget, errors
+                        // surface in console but don't block UI). Header CSRF + auth
+                        // wrappers piggy-back on the existing /api/settings/extra
+                        // route added by S2.5.
+                        if (typeof fetch === "function" && csrf.token) {
+                          fetch(`${API_BASE}/settings/extra`, {
+                            method: "POST",
+                            credentials: "include",
+                            headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf.token },
+                            body: JSON.stringify({ engine_section_sources: next }),
+                          }).catch(() => {});
+                        }
+                        return next;
+                      });
+                      // Trigger a regen of this section under the new source — only
+                      // if it's not pinned (pinned sections stay fixed).
+                      if (!pinnedSections[block.section]) {
+                        // Defer so state update lands before regen reads it.
+                        setTimeout(() => handleRegenerateSection(block.section), 0);
+                      }
+                    }}
                   />
                 ))}
 

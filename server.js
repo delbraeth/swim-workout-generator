@@ -1076,6 +1076,26 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         return res.status(400).json({ error: "level must be one of: " + allowed.join(", ") });
       }
     }
+    // Validate engine_section_sources if present (S3 — template engine
+    // per-section toggle state). Object with optional keys warmup/drill/
+    // main/cooldown, each value ∈ "bank" | "engine" | "mix". Anything
+    // unrecognized is rejected.
+    if ("engine_section_sources" in patch && patch.engine_section_sources !== null) {
+      const ss = patch.engine_section_sources;
+      if (!ss || typeof ss !== "object" || Array.isArray(ss)) {
+        return res.status(400).json({ error: "engine_section_sources must be an object" });
+      }
+      const VALID_SECTIONS = ["warmup", "drill", "main", "cooldown"];
+      const VALID_SOURCES = ["bank", "engine", "mix"];
+      for (const k of Object.keys(ss)) {
+        if (!VALID_SECTIONS.includes(k)) {
+          return res.status(400).json({ error: `engine_section_sources: unknown section "${k}"` });
+        }
+        if (!VALID_SOURCES.includes(ss[k])) {
+          return res.status(400).json({ error: `engine_section_sources.${k} must be one of: ${VALID_SOURCES.join(", ")}` });
+        }
+      }
+    }
     // Validate engine_recent_templates if present (S2.5 — template engine
     // anti-repeat memory per TEMPLATE_ENGINE_SCOPE.md §6). Array of up to 10
     // { template_id, stroke, ts } entries. Engine excludes (template_id,
