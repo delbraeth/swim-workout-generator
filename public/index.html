@@ -7567,11 +7567,13 @@
       recoveryMode = false,
       phase = null,
       favorites = [],
+      favoriteSetIds = null,         // Gap-1 (2026-05-22) — Set<set_id> with 3× weight per match on main section
       engineFavorites = [],          // v1.13 — (template_id, stroke) tuples with 3× engine pick weight
       sectionSource = "bank",        // S3 — bank | engine | mix
       recentEngineTemplates = [],    // S3 — anti-repeat memory
       disfavorites = [],             // v1.2 — labels with 0.25× pick weight
       engineDisfavorites = [],       // v1.3 — (template_id, stroke) tuples with 0.25× engine pick weight
+      disfavorSetIds = null,         // Gap-1 (2026-05-22) — Set<set_id> with 0.25× weight per match on main section
       disfavorMode = "downweight",   // v1.8 — "downweight" (0.25) or "exclude" (0)
       lanesPaceSecs = null,          // v2.0 — multi-lane fit filter on the section's pool
     } = {}) {
@@ -7714,6 +7716,21 @@
             const prefMatches = preferredEquipMatches(o, equipment);
             if (prefMatches > 0) w *= Math.pow(2, prefMatches);
             w *= favBoost(o);
+            // Gap-1 (2026-05-22) — set-level fav/disfavor on regen. Mirrors
+            // mainWeight's per-set logic in generateWorkout: per-set,
+            // favorite hit short-circuits disfavor (v1.13 universal rule).
+            // Multiplicative across multiple matching sets within one option.
+            if (Array.isArray(o.sets) && ((favoriteSetIds && favoriteSetIds.size) || (disfavorSetIds && disfavorSetIds.size))) {
+              let favSetMatches = 0;
+              let disSetMatches = 0;
+              for (const s of o.sets) {
+                if (!s.id) continue;
+                if (favoriteSetIds && favoriteSetIds.has(s.id))      favSetMatches++;
+                else if (disfavorSetIds && disfavorSetIds.has(s.id)) disSetMatches++;
+              }
+              if (favSetMatches > 0) w *= Math.pow(3, favSetMatches);
+              if (disSetMatches > 0) w *= Math.pow(disfavorMultiplier, disSetMatches);
+            }
             return w;
           })
         : sectionKey === "drill"
@@ -17741,7 +17758,7 @@
       );
     }
 
-    function CatalogView({ favorites, onToggleFavorite }) {
+    function CatalogView({ favorites, onToggleFavorite, favoriteSets, disfavorSets, onCycleSetStatus }) {
       const [poolMode,    setPoolMode]    = React.useState("25y");
       const [section,     setSection]     = React.useState("main");
       const [typeId,      setTypeId]      = React.useState("all");
@@ -18028,6 +18045,7 @@
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, color: "#cbd5e1" }}>
                           <thead>
                             <tr style={{ color: "var(--color-text-dim)", textAlign: "left", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                              {onCycleSetStatus && <th style={{ padding: "4px 8px", width: 24 }}></th>}
                               <th style={{ padding: "4px 8px", whiteSpace: "nowrap" }}>Reps × Dist</th>
                               <th style={{ padding: "4px 8px", whiteSpace: "nowrap" }}>Interval</th>
                               <th style={{ padding: "4px 8px" }}>Description</th>
@@ -18037,8 +18055,37 @@
                           <tbody>
                             {opt.sets.map((s, i) => {
                               const eqItems = equipmentForSet(s, CATALOG_ALL_EQUIP);
+                              // Gap-2 (2026-05-22) — per-set cycling button.
+                              // Only fires when set has an `id` and user is
+                              // authenticated. Mirrors SetRow's tri-state.
+                              const isFav = !!(s.id && favoriteSets && favoriteSets.has(s.id));
+                              const isDis = !!(s.id && disfavorSets && disfavorSets.has(s.id));
+                              const cycleIcon  = isFav ? "★" : (isDis ? "👎" : "☆");
+                              const cycleColor = isFav ? "var(--color-warn)" : (isDis ? "#ef4444" : "var(--color-text-dim)");
+                              const cycleTitle = isFav
+                                ? "Favorited — click to disfavor"
+                                : (isDis ? "Disfavored — click to clear" : "Click to favorite");
                               return (
                                 <tr key={i} style={{ borderTop: "1px solid #1e293b" }}>
+                                  {onCycleSetStatus && (
+                                    <td style={{ padding: "6px 4px", textAlign: "center" }}>
+                                      {s.id ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => onCycleSetStatus(s.id)}
+                                          title={cycleTitle}
+                                          style={{
+                                            background: "transparent", border: "none",
+                                            color: cycleColor, fontSize: 14, lineHeight: 1,
+                                            cursor: "pointer", padding: 2,
+                                          }}>
+                                          {cycleIcon}
+                                        </button>
+                                      ) : (
+                                        <span style={{ color: "var(--color-text-dim)", opacity: 0.3, fontSize: 10 }} title="No set ID — cannot favorite">·</span>
+                                      )}
+                                    </td>
+                                  )}
                                   <td style={{ padding: "6px 8px", whiteSpace: "nowrap", fontFamily: "monospace", fontWeight: 700, color: "var(--color-text)" }}>
                                     {s.reps > 1 ? `${s.reps}×${s.dist}` : `${s.dist}`} {unitLabel}
                                   </td>
@@ -20140,10 +20187,10 @@
           recoveryMode: isRecovery,
           phase,
           // v1.13 — union own + coach-propagated favorites (mirror v1.7).
-          // Note: set-level (favoriteSetIds/disfavorSetIds) NOT passed —
-          // regenerateSection doesn't currently consume them, pre-existing
-          // gap inherited from v1.5/v1.10. Open follow-up.
+          // Gap-1 (2026-05-22) — set-level (favoriteSetIds/disfavorSetIds)
+          // now wired in regenerateSection's main-section picker.
           favorites: Array.from(new Set([...favorites, ...effectiveFavoriteLabels])),
+          favoriteSetIds: new Set([...favoriteSets, ...effectiveFavoriteSetIds]),
           engineFavorites: (() => {
             const seen = new Set();
             const out = [];
@@ -20157,6 +20204,7 @@
           recentEngineTemplates,
           // v1.7 — union own + effective coach propagation (see handleGenerate)
           disfavorites: Array.from(new Set([...disfavorites, ...effectiveDisfavorLabels])),
+          disfavorSetIds: new Set([...disfavorSets, ...effectiveDisfavorSetIds]),
           engineDisfavorites: (() => {
             const seen = new Set();
             const out = [];
@@ -20233,7 +20281,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, effectiveDisfavorLabels, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveEngineFavorites]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, favoriteSets, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -20933,6 +20981,9 @@
               <CatalogView
                 favorites={favorites}
                 onToggleFavorite={authenticated ? handleToggleFavorite : null}
+                favoriteSets={favoriteSets}
+                disfavorSets={disfavorSets}
+                onCycleSetStatus={authenticated ? handleCycleSetStatus : null}
               />
             )}
 
