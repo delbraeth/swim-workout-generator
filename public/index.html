@@ -7421,7 +7421,13 @@
           const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
           const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
-          return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "loop", __genAttempts: attempt + 1 };
+          // v2.0 — attach laneFit fallback marker (closure vars live in generateWorkout scope).
+          const _laneFitFallbackSections = useLaneFit
+            ? Object.entries(laneFitFallback).filter(([_, v]) => v).map(([k]) => k)
+            : [];
+          const _loopResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "loop", __genAttempts: attempt + 1 };
+          if (_laneFitFallbackSections.length) _loopResult.__laneFitFallback = _laneFitFallbackSections;
+          return _loopResult;
         }
       }
 
@@ -7511,7 +7517,13 @@
       const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
       const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
-      return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "fallback", __genAttempts: attempts };
+      // v2.0 — same laneFit attachment as the loop-success path above.
+      const _fallbackLaneFitSections = useLaneFit
+        ? Object.entries(laneFitFallback).filter(([_, v]) => v).map(([k]) => k)
+        : [];
+      const _fallbackResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "fallback", __genAttempts: attempts };
+      if (_fallbackLaneFitSections.length) _fallbackResult.__laneFitFallback = _fallbackLaneFitSections;
+      return _fallbackResult;
     }
 
     function buildWorkout(typeId, wu, dr, ma, cd, total) {
@@ -7525,14 +7537,10 @@
         { name: "Cool-Down",            section: "cooldown", ...cd },
       ];
       const estimatedMin = calcEstimatedMin(blocks);
-      // v2.0 — attach laneFit fallback marker if any section couldn't be
-      // narrowed to lane-friendly options. UI surfaces "lanes too wide" hint.
-      const result = { blocks, totalYards: total, estimatedMin, typeId };
-      if (useLaneFit) {
-        const fallbackSections = Object.entries(laneFitFallback).filter(([_, v]) => v).map(([k]) => k);
-        if (fallbackSections.length) result.__laneFitFallback = fallbackSections;
-      }
-      return result;
+      return { blocks, totalYards: total, estimatedMin, typeId };
+      // NOTE: __laneFitFallback attachment happens at the buildWorkout
+      // call sites inside generateWorkout — buildWorkout is module-scope
+      // and can't see generateWorkout's locals (useLaneFit, laneFitFallback).
     }
 
     // ─── Per-section regeneration ────────────────────────────────────
