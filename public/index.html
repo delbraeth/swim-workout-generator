@@ -9576,39 +9576,52 @@
                 </div>
               )}
               <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} {unit}</span>
-              {block.section === "main" && block.label && onToggleFavorite && (
-                <button
-                  type="button"
-                  className="screen-only"
-                  onClick={() => onToggleFavorite(block.label)}
-                  title={isFavorited ? "Remove from favorites" : "Save as favorite"}
-                  style={{
-                    background: "transparent", border: "none",
-                    color: isFavorited ? "var(--color-warn)" : s.headerText,
-                    fontSize: 20, lineHeight: 1, cursor: "pointer",
-                    padding: "2px 4px", opacity: isFavorited ? 1 : 0.5,
-                    transition: "opacity 0.15s, color 0.15s",
-                  }}>
-                  {isFavorited ? "★" : "☆"}
-                </button>
-              )}
-              {/* v1.2 — Disfavor button: inverse of favorite. 0.25× pick weight.
-                  Mutex enforced server-side (dbAddDisfavorite clears favorite). */}
-              {block.section === "main" && block.label && onToggleDisfavorite && (
-                <button
-                  type="button"
-                  className="screen-only"
-                  onClick={() => onToggleDisfavorite(block.label)}
-                  title={isDisfavorited ? "Remove from disfavorites" : "Disfavor — pick this less often (0.25× weight)"}
-                  style={{
-                    background: "transparent", border: "none",
-                    color: isDisfavorited ? "#ef4444" : s.headerText,
-                    fontSize: 18, lineHeight: 1, cursor: "pointer",
-                    padding: "2px 4px", opacity: isDisfavorited ? 1 : 0.5,
-                    transition: "opacity 0.15s, color 0.15s",
-                  }}>
-                  👎
-                </button>
+              {/* v1.3 — Tri-state label-status toggle. Replaces the v1.2
+                  pair of separate ⭐ + 👎 buttons. Three segments — Favorite /
+                  Neutral / Disfavor — with the active one highlighted. Click
+                  on a segment sets that state directly (no cycling). Reuses
+                  the existing onToggleFavorite / onToggleDisfavorite handlers,
+                  which carry their server-side mutex behavior. */}
+              {block.section === "main" && block.label && (onToggleFavorite || onToggleDisfavorite) && (
+                <div className="screen-only" style={{
+                  display: "inline-flex", gap: 2, borderRadius: 6,
+                  background: btnBg, padding: 2, border: `1px solid ${btnBorder}`,
+                }}>
+                  {[
+                    { id: "favorite",  icon: "★",  active: isFavorited,    title: "Favorite — pick this more often (3× weight)",         activeColor: "var(--color-warn)" },
+                    { id: "neutral",   icon: "—",  active: !isFavorited && !isDisfavorited, title: "Neutral — default pick weight",        activeColor: s.headerText },
+                    { id: "disfavor",  icon: "👎", active: isDisfavorited, title: "Disfavor — pick this less often (0.25× weight)",       activeColor: "#ef4444" },
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        if (opt.id === "favorite" && !isFavorited && onToggleFavorite) {
+                          onToggleFavorite(block.label);
+                        } else if (opt.id === "disfavor" && !isDisfavorited && onToggleDisfavorite) {
+                          onToggleDisfavorite(block.label);
+                        } else if (opt.id === "neutral") {
+                          // Whichever is set, clear it (mutex means at most one is set)
+                          if (isFavorited && onToggleFavorite) onToggleFavorite(block.label);
+                          else if (isDisfavorited && onToggleDisfavorite) onToggleDisfavorite(block.label);
+                        }
+                      }}
+                      title={opt.title}
+                      style={{
+                        fontSize: 14, lineHeight: 1, cursor: "pointer",
+                        padding: "3px 7px", borderRadius: 4,
+                        background: opt.active
+                          ? (isDarkHeader ? "rgba(255,255,255,0.22)" : "rgba(15,23,42,0.18)")
+                          : "transparent",
+                        color: opt.active ? opt.activeColor : s.headerText,
+                        opacity: opt.active ? 1 : 0.55,
+                        border: "none",
+                        transition: "background 0.15s, opacity 0.15s",
+                      }}>
+                      {opt.icon}
+                    </button>
+                  ))}
+                </div>
               )}
               {onTogglePin && (
                 <button
