@@ -6976,17 +6976,36 @@
     };
 
     // ── S3: helpers for engine routing per section ───────────────────
-    // generateEngineForSection — pick an applicable template (random
-    // among those applicable to section × typeKey) and invoke the
+    // generateEngineForSection — pick an applicable template (weighted
+    // among those applicable to section × typeKey; v1.3 applies 0.25×
+    // weight to disfavored (template_id, stroke) tuples) and invoke the
     // engine's full pipeline (validate + retry-3 + anti-repeat).
     // Returns { option, templateUsed, attempts } or { option: null } on
     // no-applicable-template or full-failure (caller silently falls
     // back to bank).
-    function generateEngineForSection(section, typeId, budgetYd, recent) {
+    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites) {
       if (typeof TEMPLATE_ENGINE === "undefined") return { option: null };
       const applicable = TEMPLATE_ENGINE.applicable(section, typeId);
       if (!applicable.length) return { option: null };
-      const tpl = applicable[Math.floor(Math.random() * applicable.length)];
+      // v1.3 — weighted pick. Disfavored (template_id, stroke) gets 0.25×
+      // weight; others get 1×. Defensive: if all weights collapse to
+      // (near-)zero, fall back to uniform random.
+      const stroke = templateDefaultStroke(typeId);
+      const disSet = new Set((engineDisfavorites || []).map(d => `${d.template_id}:${d.stroke}`));
+      const weights = applicable.map(t => disSet.has(`${t.id}:${stroke}`) ? 0.25 : 1);
+      const totalW = weights.reduce((s, w) => s + w, 0);
+      let tpl;
+      if (totalW <= 0) {
+        tpl = applicable[Math.floor(Math.random() * applicable.length)];
+      } else {
+        let r = Math.random() * totalW;
+        let pickIdx = applicable.length - 1;
+        for (let i = 0; i < applicable.length; i++) {
+          r -= weights[i];
+          if (r < 0) { pickIdx = i; break; }
+        }
+        tpl = applicable[pickIdx];
+      }
       return TEMPLATE_ENGINE.generateWithRetry({
         templateId: tpl.id, typeKey: typeId, section, budgetYd, recent: recent || [],
       });
@@ -7000,7 +7019,7 @@
     // the picker's combination validation (equipment, yardage min/max)
     // while substituting content per section. Engine output gets a
     // __engineMeta marker so the renderer can show the ⚡ badge.
-    function applyEngineOverrides(typeId, sections, sources, recent) {
+    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites) {
       if (!sources) return sections;
       const out = { ...sections };
       for (const sect of ["warmup", "drill", "main", "cooldown"]) {
@@ -7008,7 +7027,7 @@
         if (src === "engine") {
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
-          const res = generateEngineForSection(sect, typeId, original.totalYards, recent);
+          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites);
           if (res && res.option) {
             out[sect] = {
               ...res.option,
@@ -7030,7 +7049,7 @@
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
           const engineBudget = Math.max(100, Math.round(original.totalYards * 0.5));
-          const res = generateEngineForSection(sect, typeId, engineBudget, recent);
+          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites);
           if (res && res.option) {
             const stroke = templateDefaultStroke(typeId);
             out[sect] = {
@@ -7085,6 +7104,7 @@
       sectionSources = null,            // S3 — { warmup, drill, main, cooldown } ∈ { bank, engine, mix }
       recentEngineTemplates = [],       // S3 — anti-repeat memory (last 10 { template_id, stroke, ts })
       disfavorites = [],                // v1.2 — labels with 0.25× pick weight (mutex with favorites)
+      engineDisfavorites = [],          // v1.3 — (template_id, stroke) tuples with 0.25× engine pick weight
     } = {}) {
       const biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
       const is25m    = poolMode === "25m";
@@ -7342,7 +7362,7 @@
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
           // S3 — apply engine overrides per section, then recompute total
-          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates);
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites);
           const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
           return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "loop", __genAttempts: attempt + 1 };
@@ -7432,7 +7452,7 @@
 
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       // S3 — apply engine overrides per section, then recompute total
-      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates);
+      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites);
       const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
       return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "fallback", __genAttempts: attempts };
@@ -7488,6 +7508,7 @@
       sectionSource = "bank",        // S3 — bank | engine | mix
       recentEngineTemplates = [],    // S3 — anti-repeat memory
       disfavorites = [],             // v1.2 — labels with 0.25× pick weight
+      engineDisfavorites = [],       // v1.3 — (template_id, stroke) tuples with 0.25× engine pick weight
     } = {}) {
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
@@ -7612,6 +7633,7 @@
           { [sectionKey]: bankBlock },
           { [sectionKey]: sectionSource },
           recentEngineTemplates,
+          engineDisfavorites,
         );
         newBlock = { ...bankBlock, ...overridden[sectionKey] };
       }
@@ -9480,7 +9502,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -9576,53 +9598,91 @@
                 </div>
               )}
               <span style={{ fontWeight: 600, fontSize: 13 }}>{block.totalYards.toLocaleString()} {unit}</span>
-              {/* v1.3 — Tri-state label-status toggle. Replaces the v1.2
-                  pair of separate ⭐ + 👎 buttons. Three segments — Favorite /
-                  Neutral / Disfavor — with the active one highlighted. Click
-                  on a segment sets that state directly (no cycling). Reuses
-                  the existing onToggleFavorite / onToggleDisfavorite handlers,
-                  which carry their server-side mutex behavior. */}
-              {block.section === "main" && block.label && (onToggleFavorite || onToggleDisfavorite) && (
-                <div className="screen-only" style={{
-                  display: "inline-flex", gap: 2, borderRadius: 6,
-                  background: btnBg, padding: 2, border: `1px solid ${btnBorder}`,
-                }}>
-                  {[
-                    { id: "favorite",  icon: "★",  active: isFavorited,    title: "Favorite — pick this more often (3× weight)",         activeColor: "var(--color-warn)" },
-                    { id: "neutral",   icon: "—",  active: !isFavorited && !isDisfavorited, title: "Neutral — default pick weight",        activeColor: s.headerText },
-                    { id: "disfavor",  icon: "👎", active: isDisfavorited, title: "Disfavor — pick this less often (0.25× weight)",       activeColor: "#ef4444" },
-                  ].map(opt => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        if (opt.id === "favorite" && !isFavorited && onToggleFavorite) {
-                          onToggleFavorite(block.label);
-                        } else if (opt.id === "disfavor" && !isDisfavorited && onToggleDisfavorite) {
-                          onToggleDisfavorite(block.label);
-                        } else if (opt.id === "neutral") {
-                          // Whichever is set, clear it (mutex means at most one is set)
-                          if (isFavorited && onToggleFavorite) onToggleFavorite(block.label);
-                          else if (isDisfavorited && onToggleDisfavorite) onToggleDisfavorite(block.label);
-                        }
-                      }}
-                      title={opt.title}
-                      style={{
-                        fontSize: 14, lineHeight: 1, cursor: "pointer",
-                        padding: "3px 7px", borderRadius: 4,
-                        background: opt.active
-                          ? (isDarkHeader ? "rgba(255,255,255,0.22)" : "rgba(15,23,42,0.18)")
-                          : "transparent",
-                        color: opt.active ? opt.activeColor : s.headerText,
-                        opacity: opt.active ? 1 : 0.55,
-                        border: "none",
-                        transition: "background 0.15s, opacity 0.15s",
-                      }}>
-                      {opt.icon}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* v1.3 — Tri-state label-status toggle. Behavior branches on
+                  whether the block is bank-sourced or engine-sourced:
+                  • Bank: [★ / — / 👎] targets `block.label` in fav/disfav tables
+                  • Engine: [★ disabled / — / 👎] targets `block.__engineMeta`
+                    (template_id, stroke) in engine_disfavorites — engine
+                    doesn't support favorites (per v1.3 scope choice), and
+                    favoriting a dynamic engine label wouldn't survive the
+                    next generate anyway.
+                  Mutex is server-side for bank, single-tag (no opposite) for
+                  engine. */}
+              {block.section === "main" && (block.label || block.__engineMeta) && (onToggleFavorite || onToggleDisfavorite || onToggleEngineDisfavor) && (() => {
+                const isEngineBlock = !!block.__engineMeta;
+                const segments = isEngineBlock
+                  ? [
+                      { id: "favorite", icon: "★",  active: false, disabled: true,
+                        title: "Favorite isn't supported for engine output — engine labels are dynamic each generate",
+                        activeColor: "var(--color-warn)" },
+                      { id: "neutral",  icon: "—",  active: !isEngineDisfavorited,
+                        title: "Neutral — default engine template weight",
+                        activeColor: s.headerText },
+                      { id: "disfavor", icon: "👎", active: !!isEngineDisfavorited,
+                        title: `Disfavor this template — pick "${block.__engineMeta.template_id}" + ${block.__engineMeta.stroke} less often (0.25× weight)`,
+                        activeColor: "#ef4444" },
+                    ]
+                  : [
+                      { id: "favorite", icon: "★",  active: isFavorited, disabled: false,
+                        title: "Favorite — pick this more often (3× weight)",
+                        activeColor: "var(--color-warn)" },
+                      { id: "neutral",  icon: "—",  active: !isFavorited && !isDisfavorited, disabled: false,
+                        title: "Neutral — default pick weight",
+                        activeColor: s.headerText },
+                      { id: "disfavor", icon: "👎", active: isDisfavorited, disabled: false,
+                        title: "Disfavor — pick this less often (0.25× weight)",
+                        activeColor: "#ef4444" },
+                    ];
+                return (
+                  <div className="screen-only" style={{
+                    display: "inline-flex", gap: 2, borderRadius: 6,
+                    background: btnBg, padding: 2, border: `1px solid ${btnBorder}`,
+                  }}>
+                    {segments.map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        disabled={opt.disabled}
+                        onClick={() => {
+                          if (opt.disabled) return;
+                          if (isEngineBlock) {
+                            // Engine: target (template_id, stroke) in engine_disfavorites
+                            if (opt.id === "disfavor" && !isEngineDisfavorited && onToggleEngineDisfavor) {
+                              onToggleEngineDisfavor(block.__engineMeta);
+                            } else if (opt.id === "neutral" && isEngineDisfavorited && onToggleEngineDisfavor) {
+                              onToggleEngineDisfavor(block.__engineMeta);
+                            }
+                          } else {
+                            // Bank: target block.label in favorites/disfavorites
+                            if (opt.id === "favorite" && !isFavorited && onToggleFavorite) {
+                              onToggleFavorite(block.label);
+                            } else if (opt.id === "disfavor" && !isDisfavorited && onToggleDisfavorite) {
+                              onToggleDisfavorite(block.label);
+                            } else if (opt.id === "neutral") {
+                              if (isFavorited && onToggleFavorite) onToggleFavorite(block.label);
+                              else if (isDisfavorited && onToggleDisfavorite) onToggleDisfavorite(block.label);
+                            }
+                          }
+                        }}
+                        title={opt.title}
+                        style={{
+                          fontSize: 14, lineHeight: 1,
+                          cursor: opt.disabled ? "not-allowed" : "pointer",
+                          padding: "3px 7px", borderRadius: 4,
+                          background: opt.active
+                            ? (isDarkHeader ? "rgba(255,255,255,0.22)" : "rgba(15,23,42,0.18)")
+                            : "transparent",
+                          color: opt.active ? opt.activeColor : s.headerText,
+                          opacity: opt.disabled ? 0.25 : (opt.active ? 1 : 0.55),
+                          border: "none",
+                          transition: "background 0.15s, opacity 0.15s",
+                        }}>
+                        {opt.icon}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
               {onTogglePin && (
                 <button
                   type="button"
@@ -18267,6 +18327,10 @@
       // Mutex with favorites enforced at the DB layer (dbAdd* helpers clear
       // the opposite table on insert).
       const [disfavorites, setDisfavorites]       = useState([]);
+      // v1.3 — Engine disfavorites: array of { template_id, stroke } pairs
+      // the user has marked as disfavored in engine output. 0.25× weight in
+      // the engine template picker. Persisted to settings.extra (no DB table).
+      const [engineDisfavorites, setEngineDisfavorites] = useState([]);
       // Set-level per-user favorites — Set<set_id> for O(1) lookup. Loaded
       // alongside label-favorites; toggled via /api/favorite-sets endpoints.
       const [favoriteSets, setFavoriteSets]       = useState(() => new Set());
@@ -18473,6 +18537,10 @@
             if (Array.isArray(s.engine_recent_templates)) {
               setRecentEngineTemplates(s.engine_recent_templates.slice(0, 10));
             }
+            // v1.3 — engine disfavorites
+            if (Array.isArray(s.engine_disfavorites)) {
+              setEngineDisfavorites(s.engine_disfavorites.slice(0, 50));
+            }
           })
           .catch(() => {});
       }, []);
@@ -18551,6 +18619,31 @@
           setFavorites(prev => isFav ? [...prev, label] : prev.filter(x => x !== label));
         }
       }, [favorites]);
+
+      // v1.3 — Toggle an engine (template_id, stroke) pair in/out of
+      // engine_disfavorites (settings.extra JSON array). 0.25× weight in
+      // the engine template picker. No server-side mutex needed (engine
+      // disfavor doesn't have a paired engine-favorite system in v1.3).
+      const handleToggleEngineDisfavor = useCallback(async (meta) => {
+        if (!meta || !meta.template_id || !meta.stroke) return;
+        const key = `${meta.template_id}:${meta.stroke}`;
+        const isDis = engineDisfavorites.some(e => `${e.template_id}:${e.stroke}` === key);
+        const next = isDis
+          ? engineDisfavorites.filter(e => `${e.template_id}:${e.stroke}` !== key)
+          : [...engineDisfavorites, { template_id: meta.template_id, stroke: meta.stroke }].slice(0, 50);
+        setEngineDisfavorites(next);
+        if (typeof fetch === "function" && csrf.token) {
+          fetch(`${API_BASE}/settings/extra`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf.token },
+            body: JSON.stringify({ engine_disfavorites: next }),
+          }).catch(() => {
+            // Revert optimistic update on network error
+            setEngineDisfavorites(engineDisfavorites);
+          });
+        }
+      }, [engineDisfavorites]);
 
       // v1.2 — Toggle a main-set label in/out of disfavorites. Mirror of
       // handleToggleFavorite with 0.25× pick weight in the picker. Server-
@@ -18935,6 +19028,7 @@
           sectionSources,                                                       // S3 — Bank/Engine/Mix per section
           recentEngineTemplates,                                                // S3 — anti-repeat memory for engine
           disfavorites,                                                         // v1.2 — 0.25× pick weight for disfavored labels
+          engineDisfavorites,                                                   // v1.3 — 0.25× weight for disfavored (template_id, stroke) in engine
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -19022,7 +19116,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -19051,6 +19145,7 @@
           sectionSource: sectionSources[sectionKey] || "bank",
           recentEngineTemplates,
           disfavorites,
+          engineDisfavorites,
         });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -19117,7 +19212,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -20491,6 +20586,8 @@
                     onToggleFavorite={handleToggleFavorite}
                     isDisfavorited={!!(block.label && disfavorites.includes(block.label))}
                     onToggleDisfavorite={handleToggleDisfavorite}
+                    isEngineDisfavorited={!!(block.__engineMeta && engineDisfavorites.some(e => e.template_id === block.__engineMeta.template_id && e.stroke === block.__engineMeta.stroke))}
+                    onToggleEngineDisfavor={handleToggleEngineDisfavor}
                     onRoundRestChange={handleRoundRestChange}
                     unit={unit}
                     isPinned={!!pinnedSections[block.section]}

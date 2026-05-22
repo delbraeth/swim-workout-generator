@@ -1097,6 +1097,33 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         }
       }
     }
+    // v1.3 — Validate engine_disfavorites if present. Array of (template_id,
+    // stroke) tuples the user has marked as disfavored in engine output.
+    // Engine template picker applies 0.25× weight to matching tuples.
+    // Capped at 50 entries (engine has ~17 templates × ~7 strokes; 50 is
+    // plenty of headroom without runaway). Mirror of engine_recent_templates
+    // shape but no ts (these are persistent prefs, not a rolling window).
+    if ("engine_disfavorites" in patch && patch.engine_disfavorites !== null) {
+      const arr = patch.engine_disfavorites;
+      if (!Array.isArray(arr)) {
+        return res.status(400).json({ error: "engine_disfavorites must be an array" });
+      }
+      if (arr.length > 50) {
+        return res.status(400).json({ error: "engine_disfavorites max length is 50" });
+      }
+      const VALID_STROKES = ["free", "back", "breast", "fly", "IM", "choice", "kick"];
+      for (const [i, e] of arr.entries()) {
+        if (!e || typeof e !== "object") {
+          return res.status(400).json({ error: `engine_disfavorites[${i}] must be an object` });
+        }
+        if (typeof e.template_id !== "string" || e.template_id.length === 0 || e.template_id.length > 64) {
+          return res.status(400).json({ error: `engine_disfavorites[${i}].template_id must be a 1-64 char string` });
+        }
+        if (typeof e.stroke !== "string" || !VALID_STROKES.includes(e.stroke)) {
+          return res.status(400).json({ error: `engine_disfavorites[${i}].stroke must be one of: ${VALID_STROKES.join(", ")}` });
+        }
+      }
+    }
     // Validate engine_recent_templates if present (S2.5 — template engine
     // anti-repeat memory per TEMPLATE_ENGINE_SCOPE.md §6). Array of up to 10
     // { template_id, stroke, ts } entries. Engine excludes (template_id,
