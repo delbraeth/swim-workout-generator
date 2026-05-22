@@ -937,13 +937,17 @@ export async function dbRemoveDisfavorSet(userSub, setId) {
 //     dedupes automatically
 export async function dbGetEffectiveDisfavorites(userSub) {
   if (!userSub) return { labels: [], set_ids: [], engine: [] };
-  // Find all primary coaches whose group this user belongs to.
-  // Real users (member_swimmer_sub) only — managed swimmers don't have
-  // their own auth and don't call this endpoint.
+  // Find all coaches (primary AND assistant) whose group this user
+  // belongs to. v1.9 expanded from primary-only to all active coaches —
+  // group_coaches table holds both roles; removed_at IS NULL filters
+  // soft-deleted entries. Real users (member_swimmer_sub) only —
+  // managed swimmers don't have their own auth and don't call this
+  // endpoint.
   const coachRows = await pool.query(
-    "SELECT DISTINCT g.`primary_coach_sub` AS coach " +
+    "SELECT DISTINCT gc.`coach_sub` AS coach " +
     "FROM `group_members` gm " +
-    "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+    "JOIN `groups` g          ON g.`id`        = gm.`group_id` " +
+    "JOIN `group_coaches` gc  ON gc.`group_id` = g.`id` AND gc.`removed_at` IS NULL " +
     "WHERE gm.`member_swimmer_sub` = ? " +
     "  AND gm.`left_at` IS NULL " +
     "  AND g.`archived` = 0",
