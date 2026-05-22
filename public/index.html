@@ -10966,6 +10966,12 @@
                     )}
                     <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>{(entry.totalYards || 0).toLocaleString()} {(entry.poolMode === "50m" || entry.poolMode === "25m") ? "m" : "yds"}</span>
                     {entry.estimatedMin && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>~{entry.estimatedMin} min</span>}
+                    {entry.multi_lane && Array.isArray(entry.multi_lane.lanes) && entry.multi_lane.lanes.length > 0 && (
+                      <span title={`Generated for ${entry.multi_lane.lanes.length} lanes: ${entry.multi_lane.lanes.map(l => l.pace).join(" / ")}`}
+                        style={{ background: "rgba(59, 130, 246, 0.18)", color: "var(--color-primary)", border: "1px solid rgba(59, 130, 246, 0.45)", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
+                        🏊 {entry.multi_lane.lanes.length}-lane
+                      </span>
+                    )}
                     <span title={entry.difficulty != null ? `Self-rated difficulty: ${entry.difficulty}/5 — click to change` : "Click to rate difficulty (1–5)"}>
                       <StarRating
                         value={entry.difficulty ?? null}
@@ -19328,6 +19334,15 @@
           .catch(() => {});
       }, []);
       useEffect(() => { refreshEffectiveDisfavorites(); }, [refreshEffectiveDisfavorites]);
+      // Periodic refresh (2026-05-22) — coach updates while swimmer is logged
+      // in stay stale until next page load. 5-min poll keeps the swimmer's
+      // picker effectively current without forcing a reload. Cheap relative
+      // to the picker's already-on-mount fetch; the server-side helper
+      // (dbGetEffectiveDisfavorites) is a small 3-query SELECT.
+      useEffect(() => {
+        const id = setInterval(refreshEffectiveDisfavorites, 5 * 60 * 1000);
+        return () => clearInterval(id);
+      }, [refreshEffectiveDisfavorites]);
 
       // v1.13 — Mirror of refreshEffectiveDisfavorites for the favorite side.
       const refreshEffectiveFavorites = useCallback(() => {
@@ -19342,6 +19357,11 @@
           .catch(() => {});
       }, []);
       useEffect(() => { refreshEffectiveFavorites(); }, [refreshEffectiveFavorites]);
+      // Periodic refresh mirror of the disfavor side.
+      useEffect(() => {
+        const id = setInterval(refreshEffectiveFavorites, 5 * 60 * 1000);
+        return () => clearInterval(id);
+      }, [refreshEffectiveFavorites]);
 
       // On mount: fetch goals (recurring targets for stats progress bars)
       const refreshGoals = useCallback(() => {
@@ -20104,18 +20124,23 @@
         if (phase && PHASES[phase]) {
           newWorkout = { ...newWorkout, phase };
         }
+        // v2.1 — stamp multi-lane state onto the workout so save-to-history
+        // round-trips it. Workout payload is JSON server-side so no migration.
+        if (useMultiLane) {
+          const lanesForPersist = manualLanesPace
+            .filter(l => parsePaceMSS(l.pace) !== null)
+            .map(l => ({ lane_label: l.lane_label || "Lane", pace: l.pace }));
+          if (lanesForPersist.length) {
+            newWorkout = { ...newWorkout, multi_lane: { lanes: lanesForPersist } };
+          }
+        }
         setWorkout(newWorkout);
         // v2.0 — multi-lane: auto-route to MultiPacePrintView. The print view
         // takes the canonical workout + lane paces and renders per-lane pages.
         // setMultiPaceLanes mounts the print overlay; coach can dismiss to
         // return to the editor with the workout still loaded.
-        if (useMultiLane) {
-          const lanesForPrint = manualLanesPace
-            .filter(l => parsePaceMSS(l.pace) !== null)
-            .map(l => ({ lane_label: l.lane_label || "Lane", pace: l.pace }));
-          if (lanesForPrint.length) {
-            setMultiPaceLanes({ lanes: lanesForPrint, mode: "per_lane" });
-          }
+        if (useMultiLane && newWorkout.multi_lane?.lanes?.length) {
+          setMultiPaceLanes({ lanes: newWorkout.multi_lane.lanes, mode: "per_lane" });
         }
         // S3 — write side: prepend engine entries to recent[], cap at 10,
         // post to settings.extra. Fire-and-forget; errors don't block UI.
@@ -20390,6 +20415,9 @@
           // R-D: assignment metadata snapshot persists in payload JSON so
           // history loads can render the pill without an extra fetch.
           assignment_target: workout.assignment_target || undefined,
+          // v2.1 — multi-lane snapshot for history. Carries the lanes the
+          // workout was generated for. Load-from-history restores App state.
+          multi_lane: workout.multi_lane || undefined,
         };
         // R-D: include assign_to for fanout when generate-for picker is set.
         // Server validates caller has access to the group + writes assignment
@@ -20623,13 +20651,23 @@
         setMaxYards(entry.maxYardsCap || 2400);
         setPoolMode(entry.poolMode || "25y");
         setEquipment(entry.equipment || { kickboard: "off", fins: "off", paddles: "off", pullBuoy: "off", snorkel: "off" });
-        // Reconstruct a workout-shaped object from the saved entry
+        // Reconstruct a workout-shaped object from the saved entry. v2.1:
+        // carry multi_lane through so the print view can re-render per-lane.
         setWorkout({
           blocks: entry.blocks,
           totalYards: entry.totalYards,
           estimatedMin: entry.estimatedMin,
           typeId: entry.type,
+          multi_lane: entry.multi_lane || undefined,
         });
+        // v2.1 — restore multi-lane App state when entry carries lanes.
+        if (entry.multi_lane && Array.isArray(entry.multi_lane.lanes) && entry.multi_lane.lanes.length) {
+          setMultiLaneMode(true);
+          setManualLanesPace(entry.multi_lane.lanes.map((l, i) => ({
+            lane_label: l.lane_label || `Lane ${i + 1}`,
+            pace: l.pace || "",
+          })));
+        }
         setLoadedFromHistoryId(entry.id);
         setFocusNoteDraft(entry.focusNote || "");
         setSaveStatus(null);
@@ -20654,7 +20692,16 @@
           totalYards: entry.totalYards,
           estimatedMin: entry.estimatedMin,
           typeId: entry.type,
+          multi_lane: entry.multi_lane || undefined,
         });
+        // v2.1 — restore multi-lane state for the repeat path too.
+        if (entry.multi_lane && Array.isArray(entry.multi_lane.lanes) && entry.multi_lane.lanes.length) {
+          setMultiLaneMode(true);
+          setManualLanesPace(entry.multi_lane.lanes.map((l, i) => ({
+            lane_label: l.lane_label || `Lane ${i + 1}`,
+            pace: l.pace || "",
+          })));
+        }
         setLoadedFromHistoryId(null);     // treat as fresh / unsaved
         setSaveStatus(null); setSaveError(null);
         setRegenError(null);

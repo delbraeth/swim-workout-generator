@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-22** (post v2.0 multi-lane-generate deploy)
+Last refreshed: **2026-05-22** (post inherited-gaps deploy)
 
 ## How this file works
 
@@ -22,8 +22,6 @@ _Nothing in progress as of 2026-05-22._
 
 ## Next (small, ready)
 
-- **regenerateSection set-level weights** — `regenerateSection` doesn't accept `favoriteSetIds` / `disfavorSetIds` / `engineFavorites` per-set, so per-set weight logic only fires on full generate. Inherited gap since v1.5/v1.10; v1.13 added a comment at the call site. ~45min. Source: [[swim-generator-favorites-prop-v13]]
-- **Show set IDs in catalog view** — wire the v1.6 cycling button into catalog rows so users can fav/disfavor sets without first generating a workout. ~45min. Source: [[swim-generator-set-status-button-v16]]
 - **Periodic refresh of effective fav + disfavor** — currently mount-only; coach updates while a swimmer is logged in go stale until next page load. Cheapest: poll every 5min. ~30min. Source: [[swim-generator-coach-propagation-v17]] [[swim-generator-favorites-prop-v13]]
 - **Phase 4 rebrand cleanup** — CSS refactor + favicons deferred from the rebrand ship. Source: [[swim-generator-rebrand-shipped]]
 
@@ -55,6 +53,8 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-22 | `inherited-gaps-2026-05-22` | regenerateSection set-level weights + catalog set cycling button |
+| 2026-05-22 | `multi-lane-polish-v1` | v2.0 polish: persist multi_lane + lane-fit fallback banner |
 | 2026-05-22 | `multi-lane-generate-v1` | v2.0 pace-aware picker + lane-fit validator + coach UI + auto-route to N6 |
 | 2026-05-22 | `favorites-prop-v1` | v1.13 coach-prop favorites + universal precedence + engine-favorite |
 | 2026-05-22 | `favorites-panel-v1` | v1.12 favorites audit panel |
