@@ -19121,7 +19121,7 @@
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
       // surface a per-section inline error.
-      const handleRegenerateSection = useCallback((sectionKey) => {
+      const handleRegenerateSection = useCallback((sectionKey, sourceOverride = null) => {
         if (!workout || !selectedType) return;
         if (pinnedSections[sectionKey]) return; // pinned sections can't be individually regenerated
         const isRecovery = !!workout.recovery;
@@ -19130,6 +19130,11 @@
           ...recentMainLabels.keys(),
           ...sessionRecentLabels,
         ]));
+        // v1.3 fix — sourceOverride lets callers (e.g. the section-source
+        // toggle's setTimeout) pass the new source EXPLICITLY, bypassing
+        // stale-closure issues where sectionSources hadn't repropagated yet
+        // when the regen was queued. If no override, read current state.
+        const effectiveSource = sourceOverride || sectionSources[sectionKey] || "bank";
         const result = regenerateSection({
           workout,
           typeId:       selectedType,
@@ -19142,7 +19147,7 @@
           recoveryMode: isRecovery,
           phase,
           favorites,
-          sectionSource: sectionSources[sectionKey] || "bank",
+          sectionSource: effectiveSource,
           recentEngineTemplates,
           disfavorites,
           engineDisfavorites,
@@ -20615,8 +20620,12 @@
                       // Trigger a regen of this section under the new source — only
                       // if it's not pinned (pinned sections stay fixed).
                       if (!pinnedSections[block.section]) {
-                        // Defer so state update lands before regen reads it.
-                        setTimeout(() => handleRegenerateSection(block.section), 0);
+                        // v1.3 fix — pass newSource explicitly. The setTimeout
+                        // closure captures the OLD handleRegenerateSection which
+                        // reads the OLD sectionSources. The sourceOverride arg
+                        // bypasses that staleness so the regen uses the source
+                        // the user JUST clicked.
+                        setTimeout(() => handleRegenerateSection(block.section, newSource), 0);
                       }
                     }}
                   />
