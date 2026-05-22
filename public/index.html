@@ -12786,15 +12786,19 @@
       const [loading, setLoading]   = React.useState(true);
       const [revoking, setRevoking] = React.useState(false);
       const [revokeMsg, setRevokeMsg] = React.useState(null);
+      // v1.4 — disfavorites audit panel
+      const [bankDisfavorites, setBankDisfavorites] = React.useState([]);
+      const [engineDisfavoritesLocal, setEngineDisfavoritesLocal] = React.useState([]);
 
       const loadAll = React.useCallback(async () => {
         setLoading(true);
         try {
-          const [meRes, sessRes, goalsRes, settingsRes] = await Promise.all([
+          const [meRes, sessRes, goalsRes, settingsRes, disfavRes] = await Promise.all([
             fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
             fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/goals", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/settings", { cache: "no-store" }).then(r => r.ok ? r.json() : {}),
+            fetch("/api/disfavorites", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
           ]);
           setMe(meRes);
           setSessions(Array.isArray(sessRes) ? sessRes : []);
@@ -12802,10 +12806,48 @@
           setNextEventLocal(settingsRes?.next_event && settingsRes.next_event.name && settingsRes.next_event.date ? settingsRes.next_event : null);
           setPhaseLocal(settingsRes?.phase && PHASES[settingsRes.phase] ? settingsRes.phase : null);
           setLevelLocal(settingsRes?.level && LEVEL_PRESETS[settingsRes.level] ? settingsRes.level : null);
+          // v1.4 — disfavorites panel
+          setBankDisfavorites(Array.isArray(disfavRes) ? disfavRes : []);
+          setEngineDisfavoritesLocal(Array.isArray(settingsRes?.engine_disfavorites) ? settingsRes.engine_disfavorites : []);
         } finally {
           setLoading(false);
         }
       }, []);
+
+      // v1.4 — remove a bank disfavorite (DELETE /api/disfavorites/:label)
+      const handleRemoveBankDisfavorite = async (label) => {
+        const prev = bankDisfavorites;
+        setBankDisfavorites(prev.filter(l => l !== label));
+        try {
+          await fetch(`/api/disfavorites/${encodeURIComponent(label)}`, {
+            method: "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          // Tell the parent app to refresh its local mirror via window event
+          // (ProfileModal is self-contained; the App's disfavorites array
+          // re-fetches on profile-change events).
+          if (onProfileChange) onProfileChange();
+        } catch (_) {
+          setBankDisfavorites(prev);
+        }
+      };
+
+      // v1.4 — remove an engine disfavorite (rewrite engine_disfavorites array)
+      const handleRemoveEngineDisfavorite = async (template_id, stroke) => {
+        const prev = engineDisfavoritesLocal;
+        const next = prev.filter(e => !(e.template_id === template_id && e.stroke === stroke));
+        setEngineDisfavoritesLocal(next);
+        try {
+          await fetch("/api/settings/extra", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ engine_disfavorites: next }),
+          });
+          if (onProfileChange) onProfileChange();
+        } catch (_) {
+          setEngineDisfavoritesLocal(prev);
+        }
+      };
 
       React.useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -13094,6 +13136,64 @@
                     <LevelRow value={level} onChange={handleSetLevel} />
                     <BenchmarksSection onPaceUpdate={onPaceUpdate} />
                   </div>
+                </div>
+
+                {/* v1.4 — Disfavorites audit panel. Shows bank + engine
+                    disfavorites with one-click remove. Empty state explains
+                    how to add disfavorites (click 👎 in a workout block). */}
+                <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
+                    Disfavorites ({bankDisfavorites.length + engineDisfavoritesLocal.length})
+                  </div>
+                  {bankDisfavorites.length === 0 && engineDisfavoritesLocal.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>
+                      No disfavorites yet. Click 👎 on any main-set in a workout to reduce its pick weight.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 12 }}>
+                      {bankDisfavorites.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                            Bank labels ({bankDisfavorites.length})
+                          </div>
+                          <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                            {bankDisfavorites.map(label => (
+                              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid #334155", borderRadius: 6, padding: "6px 10px" }}>
+                                <span style={{ color: "var(--color-text)" }}>{label}</span>
+                                <button onClick={() => handleRemoveBankDisfavorite(label)}
+                                  title="Remove from disfavorites"
+                                  style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, color: "var(--color-text-dim)", fontSize: 11, padding: "2px 8px", cursor: "pointer" }}>
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {engineDisfavoritesLocal.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                            Engine templates ({engineDisfavoritesLocal.length})
+                          </div>
+                          <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                            {engineDisfavoritesLocal.map((e, i) => (
+                              <div key={`${e.template_id}:${e.stroke}:${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid #334155", borderRadius: 6, padding: "6px 10px" }}>
+                                <span style={{ color: "var(--color-text)" }}>
+                                  <code style={{ fontSize: 11, color: "var(--color-warn)" }}>{e.template_id}</code>
+                                  <span style={{ color: "var(--color-text-dim)", marginLeft: 6 }}>+ {e.stroke}</span>
+                                </span>
+                                <button onClick={() => handleRemoveEngineDisfavorite(e.template_id, e.stroke)}
+                                  title="Remove from engine disfavorites"
+                                  style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, color: "var(--color-text-dim)", fontSize: 11, padding: "2px 8px", cursor: "pointer" }}>
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
@@ -20764,6 +20864,15 @@
                 // even if the modal stays open.
                 fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
                 refreshSettings();
+                // v1.4 — refresh disfavorites in App state when the user
+                // removed one from the panel. /api/disfavorites is separate
+                // from /api/settings so refreshSettings alone doesn't cover
+                // the bank list (engine list IS in settings.extra so it gets
+                // covered via refreshSettings).
+                fetch(`${API_BASE}/disfavorites`, { cache: "no-store" })
+                  .then(r => r.ok ? r.json() : [])
+                  .then(data => { if (Array.isArray(data)) setDisfavorites(data); })
+                  .catch(() => {});
               }}
               onPaceUpdate={(newPace) => {
                 // J — LevelRow pushes a preset pace up to App when a level
