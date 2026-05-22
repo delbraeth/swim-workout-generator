@@ -7600,9 +7600,22 @@
       }
 
       const curFp = sectionFingerprint(current);
-      const novel = validAll.filter(o => sectionFingerprint(o) !== curFp);
+      let novel = validAll.filter(o => sectionFingerprint(o) !== curFp);
       if (!novel.length) {
-        return { workout: null, error: "Only one option fits these constraints — adjust max yards or equipment for more variety." };
+        // v1.11 fix — the novelty check guards bank-mode regen from picking
+        // the same bank option again. Engine/Mix regens will produce a
+        // freshly-generated engine block downstream regardless of the bank
+        // pool size, so requiring bank novelty here mis-blocks them. When
+        // engine/mix source is set, fall back to validAll (skip novelty
+        // gate). The engine override below replaces the bankBlock.
+        if (sectionSource === "engine" || sectionSource === "mix") {
+          if (!validAll.length) {
+            return { workout: null, error: "No option for this section fits the remaining yardage budget." };
+          }
+          novel = validAll;  // skip the novelty gate; engine will produce fresh content
+        } else {
+          return { workout: null, error: "Only one option fits these constraints — adjust max yards or equipment for more variety." };
+        }
       }
       // N1: down-weight recently-used labels (main section only — no labels elsewhere).
       // N5: layer phase multipliers on top of the recent-label down-weight.
