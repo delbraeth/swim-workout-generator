@@ -13148,6 +13148,8 @@
       const [setFavoritesLocal, setSetFavoritesLocal] = React.useState([]);
       // v1.13 — engine favorites in the audit panel (mirror of v1.4 engine disfavorites)
       const [engineFavoritesLocal, setEngineFavoritesLocal] = React.useState([]);
+      // v3.0 — coach curation impact (last 30 days, aggregate counts)
+      const [impactData, setImpactData] = React.useState(null);
       // v1.8 — disfavor mode: "downweight" (default 0.25×) or "exclude" (weight 0)
       const [disfavorModeLocal, setDisfavorModeLocal] = React.useState("downweight");
 
@@ -13180,6 +13182,15 @@
           setSetFavoritesLocal(Array.isArray(favSetsRes) ? favSetsRes : []);
           // v1.13 — engine favorites (settings.extra.engine_favorites)
           setEngineFavoritesLocal(Array.isArray(settingsRes?.engine_favorites) ? settingsRes.engine_favorites : []);
+          // v3.0 — coach impact fetch (gated on coach role; fire-and-forget).
+          // We don't bundle into the Promise.all above because it requires the
+          // me result first AND non-coaches shouldn't pay the cost.
+          if (meRes && meRes.is_coach) {
+            fetch("/api/coach/curation-impact", { cache: "no-store" })
+              .then(r => r.ok ? r.json() : null)
+              .then(d => { if (d) setImpactData(d); })
+              .catch(() => {});
+          }
           // v1.8 — disfavor mode
           if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
             setDisfavorModeLocal(settingsRes.disfavor_mode);
@@ -13719,6 +13730,114 @@
                     </div>
                   )}
                 </div>
+
+                {/* v3.0 — Coach curation impact panel. Coach-only. Shows
+                    how the coach's own curation (labels + sets + engine
+                    tuples) is landing across their group's last-30d
+                    workouts. Aggregate counts only, no swimmer names. */}
+                {me?.is_coach && (
+                  <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
+                      Curation impact (last 30 days)
+                    </div>
+                    {!impactData ? (
+                      <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>Loading…</div>
+                    ) : impactData.groupCount === 0 ? (
+                      <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>
+                        You don't coach any active groups yet. Curation propagation runs through groups — add one to start seeing impact.
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 12 }}>
+                          {impactData.groupCount} {impactData.groupCount === 1 ? "group" : "groups"} · {impactData.swimmerCount} {impactData.swimmerCount === 1 ? "swimmer" : "swimmers"}
+                          {impactData.swimmersWithActivity !== impactData.swimmerCount && (
+                            <span> ({impactData.swimmersWithActivity} active in window)</span>
+                          )}
+                          {" · "}
+                          {impactData.workoutCount} {impactData.workoutCount === 1 ? "workout" : "workouts"}
+                        </div>
+                        {impactData.labels.length === 0 && impactData.sets.length === 0 && impactData.engine.length === 0 ? (
+                          <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>
+                            You haven't curated anything yet. Click ★ or 👎 on a set to start influencing your group's picks.
+                          </div>
+                        ) : (
+                          <div style={{ display: "grid", gap: 12 }}>
+                            {impactData.labels.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                                  Bank labels ({impactData.labels.length})
+                                </div>
+                                <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                                  {impactData.labels.map((row, i) => (
+                                    <div key={`l${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "6px 10px", gap: 10 }}>
+                                      <span style={{ color: "var(--color-text)" }}>
+                                        {row.kind === "favorite" ? "★" : "👎"} {row.label}
+                                      </span>
+                                      <span style={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                                        reach <strong style={{ color: "var(--color-text)" }}>{row.reach}</strong> · <strong style={{ color: "var(--color-text)" }}>{row.effectiveness}</strong> {row.effectiveness === 1 ? "wo" : "wos"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {impactData.engine.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                                  Engine templates ({impactData.engine.length})
+                                </div>
+                                <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                                  {impactData.engine.map((row, i) => (
+                                    <div key={`e${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "6px 10px", gap: 10 }}>
+                                      <span style={{ color: "var(--color-text)" }}>
+                                        {row.kind === "favorite" ? "★" : "👎"} <code style={{ fontSize: 11, color: "var(--color-warn)" }}>{row.template_id}</code>
+                                        <span style={{ color: "var(--color-text-dim)", marginLeft: 6 }}>+ {row.stroke}</span>
+                                      </span>
+                                      <span style={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                                        reach <strong style={{ color: "var(--color-text)" }}>{row.reach}</strong> · <strong style={{ color: "var(--color-text)" }}>{row.effectiveness}</strong> {row.effectiveness === 1 ? "wo" : "wos"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {impactData.sets.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                                  Sets ({impactData.sets.length})
+                                </div>
+                                <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                                  {impactData.sets.map((row, i) => {
+                                    const ctx = lookupSetContext(row.set_id);
+                                    return (
+                                      <div key={`s${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "6px 10px", gap: 10 }}>
+                                        <span style={{ color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flex: 1 }}>
+                                          {row.kind === "favorite" ? "★" : "👎"}
+                                          {ctx ? (
+                                            <>
+                                              <span style={{ marginLeft: 4 }}>{ctx.reps > 1 ? `${ctx.reps}×${ctx.dist}` : `${ctx.dist}`}</span>
+                                              <span style={{ color: "var(--color-text-dim)", margin: "0 6px" }}>·</span>
+                                              <span style={{ color: "var(--color-text-dim)" }}>{(ctx.desc || "").slice(0, 60)}</span>
+                                            </>
+                                          ) : (
+                                            <code style={{ fontSize: 11, color: "var(--color-warn)", marginLeft: 4 }}>{row.set_id}</code>
+                                          )}
+                                        </span>
+                                        <span style={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap", flexShrink: 0 }}>
+                                          reach <strong style={{ color: "var(--color-text)" }}>{row.reach}</strong> · <strong style={{ color: "var(--color-text)" }}>{row.effectiveness}</strong> {row.effectiveness === 1 ? "wo" : "wos"}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* v1.4 — Disfavorites audit panel. Shows bank + engine
                     disfavorites with one-click remove. Empty state explains

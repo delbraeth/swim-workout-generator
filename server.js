@@ -62,6 +62,7 @@ import {
   dbListDisfavorSets, dbAddDisfavorSet, dbRemoveDisfavorSet,
   dbGetEffectiveDisfavorites,
   dbGetEffectiveFavorites,
+  dbGetCoachImpact,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   dbIsUser, dbIsAdmin, dbIsCoach, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
@@ -1363,6 +1364,17 @@ app.get("/api/effective-disfavorites", requireAuth, async (req, res) => {
 app.get("/api/effective-favorites", requireAuth, async (req, res) => {
   try {
     res.json(await dbGetEffectiveFavorites(req.userSub));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// v3.0 — Coach curation impact. Coach-only. Returns per-curation-item
+// reach + effectiveness counts over the last 30 days, across all swimmers
+// in groups the coach coaches. Privacy: aggregate counts only, no names.
+app.get("/api/coach/curation-impact", requireAuth, requireCoach, async (req, res) => {
+  try {
+    res.json(await dbGetCoachImpact(req.userSub));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

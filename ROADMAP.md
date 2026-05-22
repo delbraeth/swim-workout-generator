@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-22** (post inherited-gaps deploy)
+Last refreshed: **2026-05-22** (post phase-4-css-sweep deploy — Next list now empty)
 
 ## How this file works
 
@@ -22,8 +22,7 @@ _Nothing in progress as of 2026-05-22._
 
 ## Next (small, ready)
 
-- **Periodic refresh of effective fav + disfavor** — currently mount-only; coach updates while a swimmer is logged in go stale until next page load. Cheapest: poll every 5min. ~30min. Source: [[swim-generator-coach-propagation-v17]] [[swim-generator-favorites-prop-v13]]
-- **Phase 4 rebrand cleanup** — CSS refactor + favicons deferred from the rebrand ship. Source: [[swim-generator-rebrand-shipped]]
+_Empty as of 2026-05-22. Pick from Bigger threads or Backlog for the next session._
 
 ## Bigger threads (need a planning session)
 
@@ -53,6 +52,8 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-22 | `phase-4-css-sweep` | 289 hex→var replacements + theme-color meta bug fix |
+| 2026-05-22 | `v2.1-multi-lane-history` | Periodic refresh + multi-lane workouts persist to history |
 | 2026-05-22 | `inherited-gaps-2026-05-22` | regenerateSection set-level weights + catalog set cycling button |
 | 2026-05-22 | `multi-lane-polish-v1` | v2.0 polish: persist multi_lane + lane-fit fallback banner |
 | 2026-05-22 | `multi-lane-generate-v1` | v2.0 pace-aware picker + lane-fit validator + coach UI + auto-route to N6 |

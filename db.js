@@ -994,6 +994,149 @@ export async function dbGetEffectiveDisfavorites(userSub) {
   };
 }
 
+// v3.0 — Coach curation impact (2026-05-22). For a coach, fetch the union
+// of their own labels/set_ids/engine tuples (favorites + disfavorites) and
+// scan the last 30 days of workouts from every swimmer in every group they
+// coach. Per curated item, count:
+//   reach: number of unique swimmers (in coach's groups) who had at least
+//          one workout containing the curated item
+//   effectiveness: total number of workouts containing the curated item
+//                  (counted per-block, not per-rep)
+//
+// Disfavor semantics: same numbers, opposite intent — high reach + high
+// effectiveness on a disfavored item means the picker's downweight didn't
+// keep it out (could be expected at 0.25× weight; could be exclude-mode
+// fallback firing). UI tags with kind: "favorite" | "disfavor" so the
+// coach can interpret.
+//
+// All numbers privacy-preserving (no swimmer names in return shape).
+// Coach themselves IS counted if they're in their own group (they're a
+// swimmer-coach in that case).
+export async function dbGetCoachImpact(coachSub) {
+  if (!coachSub) return { windowDays: 30, groupCount: 0, swimmerCount: 0, swimmersWithActivity: 0, workoutCount: 0, labels: [], sets: [], engine: [] };
+
+  // 1. Coach's active groups
+  const groups = await pool.query(
+    "SELECT DISTINCT gc.`group_id` AS gid FROM `group_coaches` gc " +
+    "JOIN `groups` g ON g.`id` = gc.`group_id` " +
+    "WHERE gc.`coach_sub` = ? AND gc.`removed_at` IS NULL AND g.`archived` = 0",
+    [coachSub]
+  );
+  const groupIds = groups.map(r => r.gid);
+  if (!groupIds.length) return { windowDays: 30, groupCount: 0, swimmerCount: 0, swimmersWithActivity: 0, workoutCount: 0, labels: [], sets: [], engine: [] };
+
+  // 2. Swimmers in those groups (real users only)
+  const groupPh = groupIds.map(() => "?").join(",");
+  const swimmers = await pool.query(
+    `SELECT DISTINCT \`member_swimmer_sub\` AS sub FROM \`group_members\` ` +
+    `WHERE \`group_id\` IN (${groupPh}) AND \`left_at\` IS NULL AND \`member_swimmer_sub\` IS NOT NULL`,
+    groupIds
+  );
+  const swimmerSubs = swimmers.map(r => r.sub);
+  if (!swimmerSubs.length) return { windowDays: 30, groupCount: groupIds.length, swimmerCount: 0, swimmersWithActivity: 0, workoutCount: 0, labels: [], sets: [], engine: [] };
+
+  // 3. Coach's own curation: labels, set_ids, engine tuples (own only, NOT
+  //    the propagated union — the question is "what did I curate?")
+  const [favLabels, disfavLabels, favSets, disfavSets, settingsRow] = await Promise.all([
+    pool.query("SELECT `label` FROM `favorites` WHERE `user_sub` = ?",         [coachSub]),
+    pool.query("SELECT `label` FROM `disfavorites` WHERE `user_sub` = ?",      [coachSub]),
+    pool.query("SELECT `set_id` FROM `user_favorite_sets` WHERE `user_sub` = ?", [coachSub]),
+    pool.query("SELECT `set_id` FROM `user_disfavor_sets` WHERE `user_sub` = ?", [coachSub]),
+    pool.query("SELECT `extra` FROM `settings` WHERE `user_sub` = ?",          [coachSub]),
+  ]);
+  let engineFav = [], engineDis = [];
+  if (settingsRow[0] && settingsRow[0].extra) {
+    try {
+      const extra = typeof settingsRow[0].extra === "string" ? JSON.parse(settingsRow[0].extra) : settingsRow[0].extra;
+      if (Array.isArray(extra.engine_favorites))    engineFav = extra.engine_favorites;
+      if (Array.isArray(extra.engine_disfavorites)) engineDis = extra.engine_disfavorites;
+    } catch (_) {}
+  }
+
+  const favLabelSet  = new Set(favLabels.map(r => r.label));
+  const favSetIdSet  = new Set(favSets.map(r => r.set_id));
+  const favEngineSet = new Set(engineFav.map(e => `${e.template_id}:${e.stroke}`));
+  const allLabels = new Set([...favLabelSet, ...disfavLabels.map(r => r.label)]);
+  const allSetIds = new Set([...favSetIdSet, ...disfavSets.map(r => r.set_id)]);
+  const allEngine = new Set([...favEngineSet, ...engineDis.map(e => `${e.template_id}:${e.stroke}`)]);
+
+  if (!allLabels.size && !allSetIds.size && !allEngine.size) {
+    return { windowDays: 30, groupCount: groupIds.length, swimmerCount: swimmerSubs.length, swimmersWithActivity: 0, workoutCount: 0, labels: [], sets: [], engine: [] };
+  }
+
+  // 4. Last 30 days of workouts from those swimmers
+  const swimmerPh = swimmerSubs.map(() => "?").join(",");
+  const workouts = await pool.query(
+    `SELECT \`user_sub\`, \`payload\` FROM \`workouts\` ` +
+    `WHERE \`user_sub\` IN (${swimmerPh}) AND \`saved_at\` >= (NOW() - INTERVAL 30 DAY)`,
+    swimmerSubs
+  );
+
+  // 5. Aggregate. Per curated item, track unique-swimmer Set + workout count.
+  const labelAgg = new Map();
+  const setAgg   = new Map();
+  const engAgg   = new Map();
+  for (const v of allLabels) labelAgg.set(v, { reach: new Set(), eff: 0 });
+  for (const v of allSetIds) setAgg.set(v,   { reach: new Set(), eff: 0 });
+  for (const v of allEngine) engAgg.set(v,   { reach: new Set(), eff: 0 });
+  const activeSwimmers = new Set();
+
+  for (const w of workouts) {
+    activeSwimmers.add(w.user_sub);
+    let payload;
+    try { payload = typeof w.payload === "string" ? JSON.parse(w.payload) : w.payload; } catch (_) { continue; }
+    if (!payload || !Array.isArray(payload.blocks)) continue;
+    for (const block of payload.blocks) {
+      // Bank label hit (counts once per block, not per workout)
+      if (block && block.label && allLabels.has(block.label)) {
+        const a = labelAgg.get(block.label);
+        a.reach.add(w.user_sub);
+        a.eff += 1;
+      }
+      // Set ID hits (count once per matching set in this block)
+      if (block && Array.isArray(block.sets)) {
+        for (const s of block.sets) {
+          if (s && s.id && allSetIds.has(s.id)) {
+            const a = setAgg.get(s.id);
+            a.reach.add(w.user_sub);
+            a.eff += 1;
+          }
+        }
+      }
+      // Engine tuple hit
+      if (block && block.__engineMeta && block.__engineMeta.template_id) {
+        const key = `${block.__engineMeta.template_id}:${block.__engineMeta.stroke || ""}`;
+        if (allEngine.has(key)) {
+          const a = engAgg.get(key);
+          a.reach.add(w.user_sub);
+          a.eff += 1;
+        }
+      }
+    }
+  }
+
+  return {
+    windowDays: 30,
+    groupCount:           groupIds.length,
+    swimmerCount:         swimmerSubs.length,
+    swimmersWithActivity: activeSwimmers.size,
+    workoutCount:         workouts.length,
+    labels: [...labelAgg.entries()].map(([label, a]) => ({
+      label, kind: favLabelSet.has(label) ? "favorite" : "disfavor",
+      reach: a.reach.size, effectiveness: a.eff,
+    })),
+    sets: [...setAgg.entries()].map(([set_id, a]) => ({
+      set_id, kind: favSetIdSet.has(set_id) ? "favorite" : "disfavor",
+      reach: a.reach.size, effectiveness: a.eff,
+    })),
+    engine: [...engAgg.entries()].map(([key, a]) => {
+      const [template_id, stroke] = key.split(":");
+      return { template_id, stroke, kind: favEngineSet.has(key) ? "favorite" : "disfavor",
+        reach: a.reach.size, effectiveness: a.eff };
+    }),
+  };
+}
+
 // v1.13 — Mirror of dbGetEffectiveDisfavorites for the favorite side.
 // Returns the union of the user's own favorites (labels + set IDs + engine
 // tuples) plus every favorite from every coach (primary OR assistant) of
