@@ -1099,6 +1099,17 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         }
       }
     }
+    // v1.8 — Validate disfavor_mode if present. Single user-level toggle
+    // controlling how all disfavor types (label / set ID / engine template)
+    // affect the picker. "downweight" = current 0.25× behavior;
+    // "exclude" = hard-exclude (weight 0; silent fallback to including
+    // excluded items if pool would empty).
+    if ("disfavor_mode" in patch && patch.disfavor_mode !== null) {
+      const allowed = ["downweight", "exclude"];
+      if (typeof patch.disfavor_mode !== "string" || !allowed.includes(patch.disfavor_mode)) {
+        return res.status(400).json({ error: "disfavor_mode must be one of: " + allowed.join(", ") });
+      }
+    }
     // v1.3 — Validate engine_disfavorites if present. Array of (template_id,
     // stroke) tuples the user has marked as disfavored in engine output.
     // Engine template picker applies 0.25× weight to matching tuples.

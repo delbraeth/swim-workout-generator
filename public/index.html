@@ -6983,16 +6983,18 @@
     // Returns { option, templateUsed, attempts } or { option: null } on
     // no-applicable-template or full-failure (caller silently falls
     // back to bank).
-    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites) {
+    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites, disfavorMode) {
       if (typeof TEMPLATE_ENGINE === "undefined") return { option: null };
       const applicable = TEMPLATE_ENGINE.applicable(section, typeId);
       if (!applicable.length) return { option: null };
-      // v1.3 — weighted pick. Disfavored (template_id, stroke) gets 0.25×
-      // weight; others get 1×. Defensive: if all weights collapse to
-      // (near-)zero, fall back to uniform random.
+      // v1.3 + v1.8 — weighted pick. Disfavored (template_id, stroke) gets
+      // the disfavor multiplier (0.25 in downweight mode, 0 in exclude).
+      // If all weights collapse to zero (e.g., exclude mode + every
+      // applicable template disfavored), fall back to uniform random.
       const stroke = templateDefaultStroke(typeId);
       const disSet = new Set((engineDisfavorites || []).map(d => `${d.template_id}:${d.stroke}`));
-      const weights = applicable.map(t => disSet.has(`${t.id}:${stroke}`) ? 0.25 : 1);
+      const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
+      const weights = applicable.map(t => disSet.has(`${t.id}:${stroke}`) ? disfavorMultiplier : 1);
       const totalW = weights.reduce((s, w) => s + w, 0);
       let tpl;
       if (totalW <= 0) {
@@ -7019,7 +7021,7 @@
     // the picker's combination validation (equipment, yardage min/max)
     // while substituting content per section. Engine output gets a
     // __engineMeta marker so the renderer can show the ⚡ badge.
-    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites) {
+    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode) {
       if (!sources) return sections;
       const out = { ...sections };
       for (const sect of ["warmup", "drill", "main", "cooldown"]) {
@@ -7027,7 +7029,7 @@
         if (src === "engine") {
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
-          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites);
+          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites, disfavorMode);
           if (res && res.option) {
             out[sect] = {
               ...res.option,
@@ -7049,7 +7051,7 @@
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
           const engineBudget = Math.max(100, Math.round(original.totalYards * 0.5));
-          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites);
+          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites, disfavorMode);
           if (res && res.option) {
             const stroke = templateDefaultStroke(typeId);
             out[sect] = {
@@ -7106,7 +7108,12 @@
       disfavorites = [],                // v1.2 — labels with 0.25× pick weight (mutex with favorites)
       engineDisfavorites = [],          // v1.3 — (template_id, stroke) tuples with 0.25× engine pick weight
       disfavorSetIds = null,            // v1.5 — Set<set_id> with 0.25× weight per match (mutex with favoriteSetIds)
+      disfavorMode = "downweight",      // v1.8 — "downweight" (0.25×) or "exclude" (hard-exclude, weight 0)
     } = {}) {
+      // v1.8 — Resolve the multiplier once. "exclude" zeros the weight;
+      // pickWeighted's existing "all weights zero → uniform fallback" is the
+      // silent failsafe when hard-exclude would empty the eligible pool.
+      const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
       const biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
@@ -7175,8 +7182,8 @@
       const disfavorSet = new Set(disfavorites || []);
       const favBoost = (o) => {
         if (!o.label) return 1;
-        if (favSet.has(o.label))      return 3;     // favorite × 3
-        if (disfavorSet.has(o.label)) return 0.25;  // disfavor × 0.25
+        if (favSet.has(o.label))      return 3;                  // favorite × 3
+        if (disfavorSet.has(o.label)) return disfavorMultiplier; // v1.8: downweight (0.25) or exclude (0)
         return 1;
       };
 
@@ -7315,8 +7322,8 @@
           const mainWeight = (o) => {
             let w = 1;
             if (favorites.length && o.label && favorites.includes(o.label)) w *= 3;
-            // v1.2 — disfavor: 0.25× pick weight, mutex with favorite at DB layer
-            if (disfavorites.length && o.label && disfavorites.includes(o.label)) w *= 0.25;
+            // v1.2 + v1.8 — disfavor: weight multiplier (0.25 downweight, 0 exclude)
+            if (disfavorites.length && o.label && disfavorites.includes(o.label)) w *= disfavorMultiplier;
             // Per-user set-favorites: count favorited sets present in this
             // option, multiply weight by 3^N. Mirrors the equipment-match
             // pattern below. Multiplicative — an option with 2 favorited
@@ -7329,14 +7336,14 @@
               }
               if (favSetMatches > 0) w *= Math.pow(3, favSetMatches);
             }
-            // v1.5 — set-level disfavor: 0.25× per matching disfavored set
-            // in the option. Mirrors the favorite-set ×3 multiplier above.
+            // v1.5 + v1.8 — set-level disfavor: multiplier per matching set
+            // (0.25^N downweight, or 0 if any match in exclude mode).
             if (disfavorSetIds && disfavorSetIds.size && Array.isArray(o.sets)) {
               let disSetMatches = 0;
               for (const s of o.sets) {
                 if (s.id && disfavorSetIds.has(s.id)) disSetMatches++;
               }
-              if (disSetMatches > 0) w *= Math.pow(0.25, disSetMatches);
+              if (disSetMatches > 0) w *= Math.pow(disfavorMultiplier, disSetMatches);
             }
             if ((o.rounds || 1) > 1) w *= 2;
             if (o.label && recentSet.has(o.label)) w *= 0.25;
@@ -7372,7 +7379,7 @@
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
           // S3 — apply engine overrides per section, then recompute total
-          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites);
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode);
           const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
           return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "loop", __genAttempts: attempt + 1 };
@@ -7519,7 +7526,10 @@
       recentEngineTemplates = [],    // S3 — anti-repeat memory
       disfavorites = [],             // v1.2 — labels with 0.25× pick weight
       engineDisfavorites = [],       // v1.3 — (template_id, stroke) tuples with 0.25× engine pick weight
+      disfavorMode = "downweight",   // v1.8 — "downweight" (0.25) or "exclude" (0)
     } = {}) {
+      // v1.8 — Resolve once for use below.
+      const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -7605,7 +7615,7 @@
       const favBoost  = (o) => {
         if (!o.label) return 1;
         if (favSet.has(o.label))      return 3;
-        if (disfavorSet.has(o.label)) return 0.25;
+        if (disfavorSet.has(o.label)) return disfavorMultiplier; // v1.8: 0.25 or 0
         return 1;
       };
       const phaseSpec = phase && PHASES[phase] ? PHASES[phase] : null;
@@ -7644,6 +7654,7 @@
           { [sectionKey]: sectionSource },
           recentEngineTemplates,
           engineDisfavorites,
+          disfavorMode,
         );
         newBlock = { ...bankBlock, ...overridden[sectionKey] };
       }
@@ -12833,6 +12844,8 @@
       // v1.4 — disfavorites audit panel
       const [bankDisfavorites, setBankDisfavorites] = React.useState([]);
       const [engineDisfavoritesLocal, setEngineDisfavoritesLocal] = React.useState([]);
+      // v1.8 — disfavor mode: "downweight" (default 0.25×) or "exclude" (weight 0)
+      const [disfavorModeLocal, setDisfavorModeLocal] = React.useState("downweight");
 
       const loadAll = React.useCallback(async () => {
         setLoading(true);
@@ -12853,6 +12866,10 @@
           // v1.4 — disfavorites panel
           setBankDisfavorites(Array.isArray(disfavRes) ? disfavRes : []);
           setEngineDisfavoritesLocal(Array.isArray(settingsRes?.engine_disfavorites) ? settingsRes.engine_disfavorites : []);
+          // v1.8 — disfavor mode
+          if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
+            setDisfavorModeLocal(settingsRes.disfavor_mode);
+          }
         } finally {
           setLoading(false);
         }
@@ -12873,6 +12890,25 @@
           if (onProfileChange) onProfileChange();
         } catch (_) {
           setBankDisfavorites(prev);
+        }
+      };
+
+      // v1.8 — switch disfavor mode (downweight ↔ exclude). POSTs to
+      // settings.extra and notifies the parent App via onProfileChange so
+      // its own disfavorMode state refreshes (which the picker reads).
+      const handleSetDisfavorMode = async (mode) => {
+        if (mode !== "downweight" && mode !== "exclude") return;
+        const prev = disfavorModeLocal;
+        setDisfavorModeLocal(mode);
+        try {
+          await fetch("/api/settings/extra", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ disfavor_mode: mode }),
+          });
+          if (onProfileChange) onProfileChange();
+        } catch (_) {
+          setDisfavorModeLocal(prev);
         }
       };
 
@@ -13188,6 +13224,34 @@
                 <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
                     Disfavorites ({bankDisfavorites.length + engineDisfavoritesLocal.length})
+                  </div>
+                  {/* v1.8 — mode toggle: applies to all disfavor types */}
+                  <div style={{ marginBottom: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>Mode:</span>
+                    <div style={{ display: "inline-flex", borderRadius: 6, border: "1px solid #334155", overflow: "hidden" }}>
+                      {[
+                        { id: "downweight", label: "Downweight (0.25×)", title: "Disfavored items get 0.25× pick weight — still possible but rare" },
+                        { id: "exclude",    label: "Hard-exclude",        title: "Disfavored items get 0 weight — never picked unless the pool would empty (silent fallback)" },
+                      ].map(opt => {
+                        const active = disfavorModeLocal === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => handleSetDisfavorMode(opt.id)}
+                            title={opt.title}
+                            style={{
+                              fontSize: 11, fontWeight: 600, padding: "5px 10px",
+                              background: active ? "var(--color-primary)" : "var(--color-card)",
+                              color: active ? "#fff" : "var(--color-text-dim)",
+                              border: "none", cursor: "pointer",
+                              transition: "background 0.15s, color 0.15s",
+                            }}>
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                   {bankDisfavorites.length === 0 && engineDisfavoritesLocal.length === 0 ? (
                     <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>
@@ -18475,6 +18539,11 @@
       // the user has marked as disfavored in engine output. 0.25× weight in
       // the engine template picker. Persisted to settings.extra (no DB table).
       const [engineDisfavorites, setEngineDisfavorites] = useState([]);
+      // v1.8 — Disfavor mode: "downweight" (0.25× weight, default) or
+      // "exclude" (hard-exclude, weight 0 with silent fallback if pool
+      // empties). Applies to ALL disfavor types (label, set, engine).
+      // Persisted to settings.extra.disfavor_mode.
+      const [disfavorMode, setDisfavorMode] = useState("downweight");
       // Set-level per-user favorites — Set<set_id> for O(1) lookup. Loaded
       // alongside label-favorites; toggled via /api/favorite-sets endpoints.
       const [favoriteSets, setFavoriteSets]       = useState(() => new Set());
@@ -18723,6 +18792,10 @@
             // v1.3 — engine disfavorites
             if (Array.isArray(s.engine_disfavorites)) {
               setEngineDisfavorites(s.engine_disfavorites.slice(0, 50));
+            }
+            // v1.8 — disfavor mode (downweight | exclude)
+            if (s.disfavor_mode === "downweight" || s.disfavor_mode === "exclude") {
+              setDisfavorMode(s.disfavor_mode);
             }
           })
           .catch(() => {});
@@ -19286,6 +19359,7 @@
             return out;
           })(),
           disfavorSetIds: new Set([...disfavorSets, ...effectiveDisfavorSetIds]),
+          disfavorMode,                                                         // v1.8 — downweight or exclude
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -19373,7 +19447,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -19417,6 +19491,7 @@
             }
             return out;
           })(),
+          disfavorMode,                                                         // v1.8
         });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -19483,7 +19558,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, effectiveDisfavorLabels, effectiveEngineDisfavorites]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, effectiveDisfavorLabels, effectiveEngineDisfavorites, disfavorMode]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
