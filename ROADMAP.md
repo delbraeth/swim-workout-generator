@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-22** (post view-as-v1 deploy)
+Last refreshed: **2026-05-22** (post fallback-tuning-drill-v1 deploy)
 
 ## How this file works
 
@@ -22,12 +22,12 @@ _Nothing in progress as of 2026-05-22._
 
 ## Next (small, ready)
 
-_Empty as of 2026-05-22. Pick from Bigger threads or Backlog for the next session._
+- **Add `data-tour` attributes to anchor targets in `public/index.html`** — preparation for any future in-app tour build. The solo onboarding training package's `in_app_tour_spec.md` defines 9 anchor targets (pace input, type picker, equipment checkboxes, yardage slider, Generate button, workout view, regen button, Print/Run buttons, post-swim log). Without stable `data-tour` IDs, CSS selectors will rot as the single-file React app evolves. Pure additive change — markup only, no logic. ~30min. Source: [[swim-generator-training-package]] (re-generated 2026-05-22), `TRAINING/solo/in_app_tour_spec.md`.
 
 ## Bigger threads (need a planning session)
 
 - **Pricing implementation** — spec locked in repo `PRICING.md`. Four-tier Patreon (Free / Supporter $3 / Coach $10 / Program $25). Coaches pay, swimmers free. Trigger: first paying pilot. Source: [[swim-generator-pricing-direction]]
-- **Bank fallback rate reduction** — engine still falls back to bank in ~17% of (type × section × budget) combos. Engine-tuning project: more templates, better stroke coverage, or relaxed budget gates. Unbounded scope until measured. Source: [[swim-generator-disfavor-v12]] §"Open follow-ups"
+- **Sprint/fly main templates for large budgets** — residual fallback after slice-1 (~4.4% overall) is concentrated in sprint mains ≥1200yd and fly mains ≥1000yd. Both fail validator due to "no rep > 100yd" + budget packing. Real coaches may not program these (so current behavior could be correct). Defer until coach pilot reports a problem. Source: [[swim-generator-fallback-tuning-drill-v1]]
 - **View-as v3: true impersonation with support_role gate** — admin or support_role-flagged user impersonates a specific other user, sees their actual data. NOT v1's role-flag override — server proxies the session as the target user. Requires: new `support_role` boolean (NOT just `is_admin`), server-side impersonation header check on every authenticated route, audit log every impersonated request, time-limited tokens, ToS update, persistent "Acting as X" banner. ~8-12h plus privacy review. Source: [[swim-generator-view-as-v1]] §Open follow-up
 
 ## Backlog (captured, low priority)
@@ -53,6 +53,7 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-22 | `fallback-tuning-drill-v1` | Engine fallback 16.2%→4.4%: drill_progression now covers distance/sprint/endurance/mixed |
 | 2026-05-22 | `view-as-v1` | Admin role-flag override (self/solo/coach) for UI QA |
 | 2026-05-22 | `coach-impact-v1` | Coach curation impact panel (reach + effectiveness, last 30d) |
 | 2026-05-22 | `hotfix-buildworkout-2026-05-22` | Hotfix: buildWorkout ReferenceError on useLaneFit (intro v2.0) |
