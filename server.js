@@ -1236,9 +1236,12 @@ app.get("/api/disfavor-sets", requireAuth, async (req, res) => {
 
 app.post("/api/disfavor-sets", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const { set_id } = req.body || {};
-    if (!set_id || typeof set_id !== "string") return res.status(400).json({ error: "set_id required" });
-    await dbAddDisfavorSet(req.userSub, set_id);
+    // v1.6 — align to /api/favorite-sets convention (camelCase `setId`).
+    // No existing client used /api/disfavor-sets POST yet (v1.5 shipped
+    // server route only, no UI), so this isn't a breaking change.
+    const { setId } = req.body || {};
+    if (!setId || typeof setId !== "string") return res.status(400).json({ error: "setId required" });
+    await dbAddDisfavorSet(req.userSub, setId);
     res.json({ ok: true });
   } catch (err) {
     // dbAddDisfavorSet throws on bad ID format; surface as 400 not 500.

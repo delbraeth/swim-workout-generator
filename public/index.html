@@ -9242,7 +9242,7 @@
       );
     }
 
-    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId, poolMode = "25y" }) {
+    function SetRow({ set, idx, blockIdx, setIdx, isSwapOpen, onToggleSwap, onApplySwap, equipment, isEditingInterval, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, isEditingDesc, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, unit = "yds", blockSection, blockZoneId, poolMode = "25y", isFavoriteSet, isDisfavorSet, onCycleSetStatus }) {
       const eqItems = equipmentForSet(set, equipment);
       const desc = enhanceDesc(set, equipment);
       const equiv = onToggleSwap ? getEquivalents(set, poolMode) : {};
@@ -9273,6 +9273,37 @@
                     ⇄
                   </button>
                 )}
+                {/* v1.6 — per-set fav/disfavor cycling button. Shows when
+                    the set has a stable ID (otherwise the API call would
+                    fail format validation). Click cycles: neutral → favorite
+                    → disfavor → neutral. Mutex enforced server-side. */}
+                {set.id && onCycleSetStatus && (() => {
+                  const state = isFavoriteSet ? "favorite" : isDisfavorSet ? "disfavor" : "neutral";
+                  const icon = state === "favorite" ? "★" : state === "disfavor" ? "👎" : "☆";
+                  const color = state === "favorite" ? "var(--color-warn)" : state === "disfavor" ? "#ef4444" : "var(--color-text-dim)";
+                  const titles = {
+                    neutral:  "Neutral — click to mark this set as favorite (next click: disfavor)",
+                    favorite: "Favorite (3× weight) — click to mark as disfavor",
+                    disfavor: "Disfavor (0.25× weight) — click to clear",
+                  };
+                  return (
+                    <button
+                      className="screen-only"
+                      onClick={() => onCycleSetStatus(set.id)}
+                      title={titles[state]}
+                      style={{
+                        fontSize: 12, lineHeight: 1, cursor: "pointer",
+                        padding: "2px 5px", borderRadius: 4,
+                        background: state !== "neutral" ? "rgba(245,158,11,0.10)" : "transparent",
+                        border: "none",
+                        color,
+                        opacity: state === "neutral" ? 0.35 : 1,
+                        transition: "opacity 0.15s, color 0.15s, background 0.15s",
+                      }}>
+                      {icon}
+                    </button>
+                  );
+                })()}
               </div>
             </td>
             <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: "var(--color-card)", whiteSpace: "nowrap" }}>
@@ -9512,7 +9543,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange, favoriteSets, disfavorSets, onCycleSetStatus }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -9834,6 +9865,9 @@
                             unit={unit}
                             blockSection={block.section}
                             blockZoneId={blockZoneId}
+                            isFavoriteSet={!!(set.id && favoriteSets && favoriteSets.has(set.id))}
+                            isDisfavorSet={!!(set.id && disfavorSets && disfavorSets.has(set.id))}
+                            onCycleSetStatus={onCycleSetStatus}
                           />
                         );
                       });
@@ -18806,6 +18840,14 @@
           if (isFav) next.delete(setId); else next.add(setId);
           return next;
         });
+        // v1.6 — mirror server-side mutex locally: adding to favorites
+        // removes from disfavor-sets for the same set_id.
+        if (!isFav) {
+          setDisfavorSets(prev => {
+            if (!prev.has(setId)) return prev;
+            const next = new Set(prev); next.delete(setId); return next;
+          });
+        }
         try {
           if (isFav) {
             await fetch(`${API_BASE}/favorite-sets/${encodeURIComponent(setId)}`, {
@@ -18828,6 +18870,58 @@
           });
         }
       }, [favoriteSets]);
+
+      // v1.6 — Toggle a single set in/out of per-user disfavor-sets.
+      // Mirror of handleToggleFavoriteSet. Local mutex with favoriteSets
+      // (server-side dbAddDisfavorSet already enforces this).
+      const handleToggleDisfavorSet = useCallback(async (setId) => {
+        if (!setId) return;
+        const isDis = disfavorSets.has(setId);
+        setDisfavorSets(prev => {
+          const next = new Set(prev);
+          if (isDis) next.delete(setId); else next.add(setId);
+          return next;
+        });
+        if (!isDis) {
+          setFavoriteSets(prev => {
+            if (!prev.has(setId)) return prev;
+            const next = new Set(prev); next.delete(setId); return next;
+          });
+        }
+        try {
+          if (isDis) {
+            await fetch(`${API_BASE}/disfavor-sets/${encodeURIComponent(setId)}`, {
+              method: "DELETE",
+              headers: { ...csrfHeaders() },
+            });
+          } else {
+            await fetch(`${API_BASE}/disfavor-sets`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...csrfHeaders() },
+              body: JSON.stringify({ setId }),
+            });
+          }
+        } catch (_) {
+          setDisfavorSets(prev => {
+            const next = new Set(prev);
+            if (isDis) next.add(setId); else next.delete(setId);
+            return next;
+          });
+        }
+      }, [disfavorSets]);
+
+      // v1.6 — Cycle a set's status: neutral → favorite → disfavor → neutral.
+      // Used by the SetRow's per-set status button. Both fav and disfavor
+      // handlers carry server-side AND local mutex, so a single call per
+      // transition suffices.
+      const handleCycleSetStatus = useCallback((setId) => {
+        if (!setId) return;
+        const isFav = favoriteSets.has(setId);
+        const isDis = disfavorSets.has(setId);
+        if (!isFav && !isDis) handleToggleFavoriteSet(setId);  // neutral → favorite
+        else if (isFav)       handleToggleDisfavorSet(setId);  // favorite → disfavor (server mutex clears favorite)
+        else                  handleToggleDisfavorSet(setId);  // disfavor → neutral (just untoggle)
+      }, [favoriteSets, disfavorSets, handleToggleFavoriteSet, handleToggleDisfavorSet]);
 
       const [openSwapKey, setOpenSwapKey] = useState(null);
 
@@ -20718,6 +20812,9 @@
                     onToggleDisfavorite={handleToggleDisfavorite}
                     isEngineDisfavorited={!!(block.__engineMeta && engineDisfavorites.some(e => e.template_id === block.__engineMeta.template_id && e.stroke === block.__engineMeta.stroke))}
                     onToggleEngineDisfavor={handleToggleEngineDisfavor}
+                    favoriteSets={favoriteSets}
+                    disfavorSets={disfavorSets}
+                    onCycleSetStatus={handleCycleSetStatus}
                     onRoundRestChange={handleRoundRestChange}
                     unit={unit}
                     isPinned={!!pinnedSections[block.section]}
