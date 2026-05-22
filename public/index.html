@@ -19347,6 +19347,18 @@
             if (Array.isArray(s.engine_favorites)) {
               setEngineFavorites(s.engine_favorites.slice(0, 50));
             }
+            // v2.0 polish — multi-lane persisted state (enabled + lanes)
+            if (s.multi_lane && typeof s.multi_lane === "object") {
+              if (typeof s.multi_lane.enabled === "boolean") {
+                setMultiLaneMode(s.multi_lane.enabled);
+              }
+              if (Array.isArray(s.multi_lane.lanes) && s.multi_lane.lanes.length > 0) {
+                setManualLanesPace(s.multi_lane.lanes.slice(0, 12).map((l, i) => ({
+                  lane_label: l.lane_label || `Lane ${i + 1}`,
+                  pace: l.pace || "",
+                })));
+              }
+            }
             // v1.8 — disfavor mode (downweight | exclude)
             if (s.disfavor_mode === "downweight" || s.disfavor_mode === "exclude") {
               setDisfavorMode(s.disfavor_mode);
@@ -19366,6 +19378,31 @@
           body: JSON.stringify({ audio_cues: next }),
         }).catch(() => {});
       }, []);
+
+      // v2.0 polish — Persist multi-lane state (enabled + lanes) to
+      // settings.extra. Debounced 800ms so per-keystroke pace edits coalesce
+      // into one POST. The ref skips the first effect run (initial render
+      // with defaults) so the second (post-refreshSettings) is the first
+      // server write. Harmless round-trip if user had persisted state.
+      const isFirstMultiLaneEffect = React.useRef(true);
+      const multiLaneSaveTimerRef = React.useRef(null);
+      useEffect(() => {
+        if (isFirstMultiLaneEffect.current) {
+          isFirstMultiLaneEffect.current = false;
+          return;
+        }
+        clearTimeout(multiLaneSaveTimerRef.current);
+        multiLaneSaveTimerRef.current = setTimeout(() => {
+          fetch(`${API_BASE}/settings/extra`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({
+              multi_lane: { enabled: multiLaneMode, lanes: manualLanesPace },
+            }),
+          }).catch(() => {});
+        }, 800);
+      }, [multiLaneMode, manualLanesPace]);
 
       // Debounced settings save — fires 1.5s after the last change
       const saveSettingsTimerRef = React.useRef(null);
@@ -21536,6 +21573,26 @@
                     </div>
                   ))}
                 </div>
+
+                {/* v2.0 polish — Lane-fit fallback banner. Shows when the
+                    multi-lane picker couldn't find lane-friendly options for
+                    one or more sections and fell back to the unfiltered pool.
+                    Tells the coach the workout may not fit every lane's pace
+                    as cleanly as they'd expect. */}
+                {Array.isArray(workout.__laneFitFallback) && workout.__laneFitFallback.length > 0 && (
+                  <div className="screen-only" style={{
+                    marginBottom: 16, padding: "10px 14px",
+                    background: "rgba(234, 179, 8, 0.10)",
+                    border: "1px solid rgba(234, 179, 8, 0.45)",
+                    borderRadius: 8,
+                    display: "flex", alignItems: "flex-start", gap: 10,
+                  }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>⚠️</span>
+                    <div style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.5 }}>
+                      <strong>Lane range is wide</strong> — the picker couldn't find options that fit every lane's pace for: <em>{workout.__laneFitFallback.join(", ")}</em>. Those sections used the unfiltered pool, so intervals may be tight for your slowest lane or loose for your fastest. Tighten the lane range or relax intervals to remove this warning.
+                    </div>
+                  </div>
+                )}
 
                 {/* Pace control (screen only) */}
                 <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "10px 16px", background: "var(--color-card)", borderRadius: 10, border: "1px solid #334155", flexWrap: "wrap" }}>

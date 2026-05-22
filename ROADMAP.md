@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-22** (post v1.13 favorites-prop deploy)
+Last refreshed: **2026-05-22** (post v2.0 multi-lane-generate deploy)
 
 ## How this file works
 
@@ -33,7 +33,6 @@ _Nothing in progress as of 2026-05-22._
 - **Coach "see how my fav/disfavor is rolling out" view** — group-impact dashboard. Symmetric for fav and disfavor sides. Needs scope. Source: [[swim-generator-coach-propagation-v17]] [[swim-generator-favorites-prop-v13]]
 - **Bank label backfill** — outstanding from catalog Phase II. ~216 option slots, ~85-90 unique labels. Source: [[swim-generator-catalog-plan]] §"Pending: label backfill"
 - **Bank fallback rate reduction** — engine still falls back to bank in ~17% of (type × section × budget) combos. Engine-tuning project: more templates, better stroke coverage, or relaxed budget gates. Unbounded scope until measured. Source: [[swim-generator-disfavor-v12]] §"Open follow-ups"
-- **Multi-lane multi-pace workout request function** — coach sets up N lanes with per-lane pace, generates ONE workout, prints wall-sheet with one column per lane. Partially shipped via N6 multi-pace export, but the "generate one workout that all lanes do simultaneously" piece is the unfinished half. Source: [[swim-generator-catalog-plan]] §"Future architecture concerns"
 
 ## Backlog (captured, low priority)
 
@@ -56,6 +55,7 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-22 | `multi-lane-generate-v1` | v2.0 pace-aware picker + lane-fit validator + coach UI + auto-route to N6 |
 | 2026-05-22 | `favorites-prop-v1` | v1.13 coach-prop favorites + universal precedence + engine-favorite |
 | 2026-05-22 | `favorites-panel-v1` | v1.12 favorites audit panel |
 | 2026-05-21 | `hard-exclude-v1` + 7 more | v1.2-v1.11 disfavor/fav system buildout |

@@ -1138,6 +1138,49 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         }
       }
     }
+    // v2.0 polish — Validate multi_lane state if present. Shape:
+    //   { enabled: bool, lanes: [{ lane_label: string, pace: string }] }
+    // Pace strings are validated as M:SS where SS<60 and total in 30..300s.
+    // lanes capped at 12 (no real-world masters pool has more).
+    if ("multi_lane" in patch && patch.multi_lane !== null) {
+      const ml = patch.multi_lane;
+      if (typeof ml !== "object" || Array.isArray(ml)) {
+        return res.status(400).json({ error: "multi_lane must be an object" });
+      }
+      if ("enabled" in ml && typeof ml.enabled !== "boolean") {
+        return res.status(400).json({ error: "multi_lane.enabled must be boolean" });
+      }
+      if ("lanes" in ml) {
+        if (!Array.isArray(ml.lanes)) {
+          return res.status(400).json({ error: "multi_lane.lanes must be an array" });
+        }
+        if (ml.lanes.length > 12) {
+          return res.status(400).json({ error: "multi_lane.lanes max length is 12" });
+        }
+        for (const [i, lane] of ml.lanes.entries()) {
+          if (!lane || typeof lane !== "object") {
+            return res.status(400).json({ error: `multi_lane.lanes[${i}] must be an object` });
+          }
+          if (typeof lane.lane_label !== "string" || lane.lane_label.length > 40) {
+            return res.status(400).json({ error: `multi_lane.lanes[${i}].lane_label must be a string ≤ 40 chars` });
+          }
+          if (typeof lane.pace !== "string") {
+            return res.status(400).json({ error: `multi_lane.lanes[${i}].pace must be a string` });
+          }
+          // Allow empty pace (in-progress edit); strict-validate non-empty.
+          if (lane.pace !== "") {
+            const m = lane.pace.match(/^(\d{1,2}):(\d{2})$/);
+            if (!m) {
+              return res.status(400).json({ error: `multi_lane.lanes[${i}].pace must be M:SS or empty` });
+            }
+            const total = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+            if (total < 30 || total > 300) {
+              return res.status(400).json({ error: `multi_lane.lanes[${i}].pace seconds must be in 30..300` });
+            }
+          }
+        }
+      }
+    }
     // v1.13 — Validate engine_favorites if present. Same shape as
     // engine_disfavorites (array of (template_id, stroke)). Engine template
     // picker applies 3× weight to matching tuples. Capped at 50 entries.
