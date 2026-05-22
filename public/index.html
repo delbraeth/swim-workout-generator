@@ -7585,9 +7585,25 @@
       const fitsBudget = (o) => o.totalYards >= lower && o.totalYards <= upper;
       let validAll = pool.filter(o => fitsBudget(o) && passesEquip(o));
       if (!validAll.length) {
-        return { workout: null, error: hasEquipReq
-          ? "No option for this section fits the remaining yardage and your equipment selection."
-          : "No option for this section fits the remaining yardage budget." };
+        // v1.11 fix — for engine/mix regen, bank validation isn't a hard
+        // gate. Engine output replaces the bank pick anyway, and engine
+        // generates at the section's target yardage independent of the
+        // bank pool. Fall back to bank options that fit equipment but
+        // ignore the strict yardage gate (engine will size correctly).
+        // If even THAT pool is empty (no equipment-compatible bank option
+        // exists at all), engine has nothing to seed from — return error.
+        if (sectionSource === "engine" || sectionSource === "mix") {
+          validAll = pool.filter(passesEquip);
+          if (!validAll.length) {
+            return { workout: null, error: hasEquipReq
+              ? "No bank option exists for this section to seed the engine and satisfy equipment. Try unrequiring equipment."
+              : "No bank option exists for this section to seed the engine." };
+          }
+        } else {
+          return { workout: null, error: hasEquipReq
+            ? "No option for this section fits the remaining yardage and your equipment selection."
+            : "No option for this section fits the remaining yardage budget." };
+        }
       }
 
       // Prefer type-matched warmups on regen (same logic as generateWorkout)
