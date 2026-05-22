@@ -12844,18 +12844,21 @@
       // v1.4 — disfavorites audit panel
       const [bankDisfavorites, setBankDisfavorites] = React.useState([]);
       const [engineDisfavoritesLocal, setEngineDisfavoritesLocal] = React.useState([]);
+      // v1.10 — set-level disfavorites for the audit panel
+      const [setDisfavoritesLocal, setSetDisfavoritesLocal] = React.useState([]);
       // v1.8 — disfavor mode: "downweight" (default 0.25×) or "exclude" (weight 0)
       const [disfavorModeLocal, setDisfavorModeLocal] = React.useState("downweight");
 
       const loadAll = React.useCallback(async () => {
         setLoading(true);
         try {
-          const [meRes, sessRes, goalsRes, settingsRes, disfavRes] = await Promise.all([
+          const [meRes, sessRes, goalsRes, settingsRes, disfavRes, disfavSetsRes] = await Promise.all([
             fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
             fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/goals", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/settings", { cache: "no-store" }).then(r => r.ok ? r.json() : {}),
             fetch("/api/disfavorites", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
+            fetch("/api/disfavor-sets", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
           ]);
           setMe(meRes);
           setSessions(Array.isArray(sessRes) ? sessRes : []);
@@ -12866,6 +12869,8 @@
           // v1.4 — disfavorites panel
           setBankDisfavorites(Array.isArray(disfavRes) ? disfavRes : []);
           setEngineDisfavoritesLocal(Array.isArray(settingsRes?.engine_disfavorites) ? settingsRes.engine_disfavorites : []);
+          // v1.10 — set-level disfavorites
+          setSetDisfavoritesLocal(Array.isArray(disfavSetsRes) ? disfavSetsRes : []);
           // v1.8 — disfavor mode
           if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
             setDisfavorModeLocal(settingsRes.disfavor_mode);
@@ -12910,6 +12915,51 @@
         } catch (_) {
           setDisfavorModeLocal(prev);
         }
+      };
+
+      // v1.10 — remove a set-level disfavorite (DELETE /api/disfavor-sets/:setId)
+      const handleRemoveSetDisfavorite = async (setId) => {
+        const prev = setDisfavoritesLocal;
+        setSetDisfavoritesLocal(prev.filter(s => s !== setId));
+        try {
+          await fetch(`/api/disfavor-sets/${encodeURIComponent(setId)}`, {
+            method: "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (onProfileChange) onProfileChange();
+        } catch (_) {
+          setSetDisfavoritesLocal(prev);
+        }
+      };
+
+      // v1.10 — context lookup: find an option that contains the given
+      // set_id, returning { label, desc } for the audit panel display.
+      // Scans MAIN/DRILL/WARMUP/COOLDOWN_OPTIONS (global script constants).
+      // Returns null if no match (orphaned set_id — bank evolution).
+      const lookupSetContext = (setId) => {
+        if (!setId) return null;
+        const banks = [
+          { src: typeof MAIN_OPTIONS     !== "undefined" ? MAIN_OPTIONS     : null, isTyped: true },
+          { src: typeof DRILL_OPTIONS    !== "undefined" ? DRILL_OPTIONS    : null, isTyped: true },
+          { src: typeof WARMUP_OPTIONS   !== "undefined" ? WARMUP_OPTIONS   : null, isTyped: false },
+          { src: typeof COOLDOWN_OPTIONS !== "undefined" ? COOLDOWN_OPTIONS : null, isTyped: false },
+        ];
+        for (const { src, isTyped } of banks) {
+          if (!src) continue;
+          const groups = isTyped ? Object.values(src) : [src];
+          for (const arr of groups) {
+            if (!Array.isArray(arr)) continue;
+            for (const opt of arr) {
+              if (!opt || !Array.isArray(opt.sets)) continue;
+              for (const s of opt.sets) {
+                if (s && s.id === setId) {
+                  return { label: opt.label, desc: s.desc, dist: s.dist, reps: s.reps };
+                }
+              }
+            }
+          }
+        }
+        return null;
       };
 
       // v1.4 — remove an engine disfavorite (rewrite engine_disfavorites array)
@@ -13223,7 +13273,7 @@
                     how to add disfavorites (click 👎 in a workout block). */}
                 <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
-                    Disfavorites ({bankDisfavorites.length + engineDisfavoritesLocal.length})
+                    Disfavorites ({bankDisfavorites.length + engineDisfavoritesLocal.length + setDisfavoritesLocal.length})
                   </div>
                   {/* v1.8 — mode toggle: applies to all disfavor types */}
                   <div style={{ marginBottom: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -13253,7 +13303,7 @@
                       })}
                     </div>
                   </div>
-                  {bankDisfavorites.length === 0 && engineDisfavoritesLocal.length === 0 ? (
+                  {bankDisfavorites.length === 0 && engineDisfavoritesLocal.length === 0 && setDisfavoritesLocal.length === 0 ? (
                     <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>
                       No disfavorites yet. Click 👎 on any main-set in a workout to reduce its pick weight.
                     </div>
@@ -13297,6 +13347,45 @@
                                 </button>
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* v1.10 — set-level disfavorites with context lookup */}
+                      {setDisfavoritesLocal.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                            Sets ({setDisfavoritesLocal.length})
+                          </div>
+                          <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                            {setDisfavoritesLocal.map((setId, i) => {
+                              const ctx = lookupSetContext(setId);
+                              return (
+                                <div key={`${setId}:${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid #334155", borderRadius: 6, padding: "6px 10px", gap: 10 }}>
+                                  <span style={{ color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flex: 1 }}>
+                                    {ctx ? (
+                                      <>
+                                        <span>{ctx.reps > 1 ? `${ctx.reps}×${ctx.dist}` : `${ctx.dist}`}</span>
+                                        <span style={{ color: "var(--color-text-dim)", margin: "0 6px" }}>·</span>
+                                        <span style={{ color: "var(--color-text-dim)" }}>{(ctx.desc || "").slice(0, 80)}</span>
+                                        <div style={{ fontSize: 10, color: "var(--color-text-dim)", marginTop: 2 }}>
+                                          from <em>{ctx.label}</em> · <code>{setId}</code>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <code style={{ fontSize: 11, color: "var(--color-warn)" }}>{setId}</code>
+                                        <span style={{ color: "var(--color-text-dim)", marginLeft: 6, fontStyle: "italic", fontSize: 10 }}>(no longer in the bank)</span>
+                                      </>
+                                    )}
+                                  </span>
+                                  <button onClick={() => handleRemoveSetDisfavorite(setId)}
+                                    title="Remove from set disfavorites"
+                                    style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, color: "var(--color-text-dim)", fontSize: 11, padding: "2px 8px", cursor: "pointer", flexShrink: 0 }}>
+                                    Remove
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -21117,6 +21206,14 @@
                   .then(r => r.ok ? r.json() : [])
                   .then(data => { if (Array.isArray(data)) setDisfavorites(data); })
                   .catch(() => {});
+                // v1.10 — also refresh set-level disfavorites (separate
+                // endpoint from settings.extra) and effective union
+                // (coach propagation re-merge).
+                fetch(`${API_BASE}/disfavor-sets`, { cache: "no-store" })
+                  .then(r => r.ok ? r.json() : [])
+                  .then(data => { if (Array.isArray(data)) setDisfavorSets(new Set(data)); })
+                  .catch(() => {});
+                refreshEffectiveDisfavorites();
               }}
               onPaceUpdate={(newPace) => {
                 // J — LevelRow pushes a preset pace up to App when a level
