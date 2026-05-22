@@ -7105,6 +7105,7 @@
       recentEngineTemplates = [],       // S3 — anti-repeat memory (last 10 { template_id, stroke, ts })
       disfavorites = [],                // v1.2 — labels with 0.25× pick weight (mutex with favorites)
       engineDisfavorites = [],          // v1.3 — (template_id, stroke) tuples with 0.25× engine pick weight
+      disfavorSetIds = null,            // v1.5 — Set<set_id> with 0.25× weight per match (mutex with favoriteSetIds)
     } = {}) {
       const biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
       const is25m    = poolMode === "25m";
@@ -7327,6 +7328,15 @@
                 if (s.id && favoriteSetIds.has(s.id)) favSetMatches++;
               }
               if (favSetMatches > 0) w *= Math.pow(3, favSetMatches);
+            }
+            // v1.5 — set-level disfavor: 0.25× per matching disfavored set
+            // in the option. Mirrors the favorite-set ×3 multiplier above.
+            if (disfavorSetIds && disfavorSetIds.size && Array.isArray(o.sets)) {
+              let disSetMatches = 0;
+              for (const s of o.sets) {
+                if (s.id && disfavorSetIds.has(s.id)) disSetMatches++;
+              }
+              if (disSetMatches > 0) w *= Math.pow(0.25, disSetMatches);
             }
             if ((o.rounds || 1) > 1) w *= 2;
             if (o.label && recentSet.has(o.label)) w *= 0.25;
@@ -18434,6 +18444,12 @@
       // Set-level per-user favorites — Set<set_id> for O(1) lookup. Loaded
       // alongside label-favorites; toggled via /api/favorite-sets endpoints.
       const [favoriteSets, setFavoriteSets]       = useState(() => new Set());
+      // v1.5 — Set-level disfavorites: Set<set_id>. 0.25× pick weight per
+      // matching set inside an option (vs favorite-sets' 3×). Mutex with
+      // favorite-sets enforced at the DB layer. Loaded on mount; no UI
+      // in v1.5 (mirrors favorite-sets' API-only setup) — future catalog
+      // or coach view can wire the toggle handler.
+      const [disfavorSets, setDisfavorSets]       = useState(() => new Set());
       const [goals, setGoals]                     = useState([]);
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
@@ -18591,6 +18607,14 @@
         fetch(`${API_BASE}/favorite-sets`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : [])
           .then(data => { if (Array.isArray(data)) setFavoriteSets(new Set(data)); })
+          .catch(() => {});
+      }, []);
+
+      // v1.5 — On mount: fetch per-user set-disfavorites (mirror of above)
+      useEffect(() => {
+        fetch(`${API_BASE}/disfavor-sets`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => { if (Array.isArray(data)) setDisfavorSets(new Set(data)); })
           .catch(() => {});
       }, []);
 
@@ -19129,6 +19153,7 @@
           recentEngineTemplates,                                                // S3 — anti-repeat memory for engine
           disfavorites,                                                         // v1.2 — 0.25× pick weight for disfavored labels
           engineDisfavorites,                                                   // v1.3 — 0.25× weight for disfavored (template_id, stroke) in engine
+          disfavorSetIds: disfavorSets,                                         // v1.5 — 0.25× per disfavored set match
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -19216,7 +19241,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and

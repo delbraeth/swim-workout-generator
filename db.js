@@ -861,6 +861,11 @@ export async function dbAddFavoriteSet(userSub, setId) {
   // assign_set_ids.py. Reject anything else to keep the table clean.
   if (!/^s_[a-z0-9]{4,16}$/.test(setId)) throw new Error("bad set_id format");
   await dbEnsureUser(userSub);
+  // v1.5 — mutex with user_disfavor_sets (mirrors label-level mutex)
+  await pool.query(
+    "DELETE FROM `user_disfavor_sets` WHERE `user_sub` = ? AND `set_id` = ?",
+    [userSub, setId]
+  );
   await pool.query(
     "INSERT IGNORE INTO `user_favorite_sets` (`user_sub`, `set_id`) VALUES (?, ?)",
     [userSub, setId]
@@ -871,6 +876,42 @@ export async function dbRemoveFavoriteSet(userSub, setId) {
   if (!userSub) return;
   await pool.query(
     "DELETE FROM `user_favorite_sets` WHERE `user_sub` = ? AND `set_id` = ?",
+    [userSub, setId]
+  );
+}
+
+// ─── disfavored SETS (v1.5) ─────────────────────────────────────────
+// Mirror of user_favorite_sets above. 0.25× pick weight per matching
+// disfavored set in an option (vs favorite-sets' 3×). Mutex enforced
+// here — adding to either clears the opposite.
+export async function dbListDisfavorSets(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    "SELECT `set_id` FROM `user_disfavor_sets` WHERE `user_sub` = ? ORDER BY `created_at`",
+    [userSub]
+  );
+  return rows.map(r => r.set_id);
+}
+
+export async function dbAddDisfavorSet(userSub, setId) {
+  if (!userSub || !setId) return;
+  if (!/^s_[a-z0-9]{4,16}$/.test(setId)) throw new Error("bad set_id format");
+  await dbEnsureUser(userSub);
+  // Mutex: clear any favorite-set for this same set_id
+  await pool.query(
+    "DELETE FROM `user_favorite_sets` WHERE `user_sub` = ? AND `set_id` = ?",
+    [userSub, setId]
+  );
+  await pool.query(
+    "INSERT IGNORE INTO `user_disfavor_sets` (`user_sub`, `set_id`) VALUES (?, ?)",
+    [userSub, setId]
+  );
+}
+
+export async function dbRemoveDisfavorSet(userSub, setId) {
+  if (!userSub) return;
+  await pool.query(
+    "DELETE FROM `user_disfavor_sets` WHERE `user_sub` = ? AND `set_id` = ?",
     [userSub, setId]
   );
 }

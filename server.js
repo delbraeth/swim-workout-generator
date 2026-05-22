@@ -59,6 +59,7 @@ import {
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbListFavoriteSets, dbAddFavoriteSet, dbRemoveFavoriteSet,
   dbListDisfavorites, dbAddDisfavorite, dbRemoveDisfavorite,
+  dbListDisfavorSets, dbAddDisfavorSet, dbRemoveDisfavorSet,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   dbIsUser, dbIsAdmin, dbIsCoach, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
@@ -1216,6 +1217,41 @@ app.delete("/api/disfavorites/:label", checkOrigin, requireAuth, requireCsrf, wr
   try {
     const label = decodeURIComponent(req.params.label);
     await dbRemoveDisfavorite(req.userSub, label);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ───── Set-level disfavorites (v1.5 — mirror of /api/favorite-sets) ────
+// IDs from tools/assign_set_ids.py. dbAddDisfavorSet validates format and
+// enforces mutex with user_favorite_sets.
+app.get("/api/disfavor-sets", requireAuth, async (req, res) => {
+  try {
+    res.json(await dbListDisfavorSets(req.userSub));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post("/api/disfavor-sets", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { set_id } = req.body || {};
+    if (!set_id || typeof set_id !== "string") return res.status(400).json({ error: "set_id required" });
+    await dbAddDisfavorSet(req.userSub, set_id);
+    res.json({ ok: true });
+  } catch (err) {
+    // dbAddDisfavorSet throws on bad ID format; surface as 400 not 500.
+    const msg = err.message || String(err);
+    const status = /bad set_id format/i.test(msg) ? 400 : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+app.delete("/api/disfavor-sets/:setId", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const setId = decodeURIComponent(req.params.setId);
+    await dbRemoveDisfavorSet(req.userSub, setId);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
