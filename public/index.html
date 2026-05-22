@@ -12875,19 +12875,24 @@
       const [engineDisfavoritesLocal, setEngineDisfavoritesLocal] = React.useState([]);
       // v1.10 — set-level disfavorites for the audit panel
       const [setDisfavoritesLocal, setSetDisfavoritesLocal] = React.useState([]);
+      // v1.12 — favorites audit (parallel of disfavor panel)
+      const [bankFavoritesLocal, setBankFavoritesLocal] = React.useState([]);
+      const [setFavoritesLocal, setSetFavoritesLocal] = React.useState([]);
       // v1.8 — disfavor mode: "downweight" (default 0.25×) or "exclude" (weight 0)
       const [disfavorModeLocal, setDisfavorModeLocal] = React.useState("downweight");
 
       const loadAll = React.useCallback(async () => {
         setLoading(true);
         try {
-          const [meRes, sessRes, goalsRes, settingsRes, disfavRes, disfavSetsRes] = await Promise.all([
+          const [meRes, sessRes, goalsRes, settingsRes, disfavRes, disfavSetsRes, favRes, favSetsRes] = await Promise.all([
             fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
             fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/goals", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/settings", { cache: "no-store" }).then(r => r.ok ? r.json() : {}),
             fetch("/api/disfavorites", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/disfavor-sets", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
+            fetch("/api/favorites", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
+            fetch("/api/favorite-sets", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
           ]);
           setMe(meRes);
           setSessions(Array.isArray(sessRes) ? sessRes : []);
@@ -12900,6 +12905,9 @@
           setEngineDisfavoritesLocal(Array.isArray(settingsRes?.engine_disfavorites) ? settingsRes.engine_disfavorites : []);
           // v1.10 — set-level disfavorites
           setSetDisfavoritesLocal(Array.isArray(disfavSetsRes) ? disfavSetsRes : []);
+          // v1.12 — favorites audit
+          setBankFavoritesLocal(Array.isArray(favRes) ? favRes : []);
+          setSetFavoritesLocal(Array.isArray(favSetsRes) ? favSetsRes : []);
           // v1.8 — disfavor mode
           if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
             setDisfavorModeLocal(settingsRes.disfavor_mode);
@@ -13005,6 +13013,36 @@
           if (onProfileChange) onProfileChange();
         } catch (_) {
           setEngineDisfavoritesLocal(prev);
+        }
+      };
+
+      // v1.12 — remove a bank favorite (DELETE /api/favorites/:label)
+      const handleRemoveBankFavorite = async (label) => {
+        const prev = bankFavoritesLocal;
+        setBankFavoritesLocal(prev.filter(l => l !== label));
+        try {
+          await fetch(`/api/favorites/${encodeURIComponent(label)}`, {
+            method: "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (onProfileChange) onProfileChange();
+        } catch (_) {
+          setBankFavoritesLocal(prev);
+        }
+      };
+
+      // v1.12 — remove a set-level favorite (DELETE /api/favorite-sets/:id)
+      const handleRemoveSetFavorite = async (setId) => {
+        const prev = setFavoritesLocal;
+        setSetFavoritesLocal(prev.filter(s => s !== setId));
+        try {
+          await fetch(`/api/favorite-sets/${encodeURIComponent(setId)}`, {
+            method: "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (onProfileChange) onProfileChange();
+        } catch (_) {
+          setSetFavoritesLocal(prev);
         }
       };
 
@@ -13295,6 +13333,80 @@
                     <LevelRow value={level} onChange={handleSetLevel} />
                     <BenchmarksSection onPaceUpdate={onPaceUpdate} />
                   </div>
+                </div>
+
+                {/* v1.12 — Favorites audit panel. Mirrors the v1.4/v1.10
+                    Disfavorites panel for favorites. Bank labels + set IDs
+                    favorited by this user, with one-click remove. */}
+                <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
+                    Favorites ({bankFavoritesLocal.length + setFavoritesLocal.length})
+                  </div>
+                  {bankFavoritesLocal.length === 0 && setFavoritesLocal.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>
+                      No favorites yet. Click ★ on any main-set in a workout, or use the ☆ button on a specific set, to boost pick weight.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 12 }}>
+                      {bankFavoritesLocal.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                            Bank labels ({bankFavoritesLocal.length})
+                          </div>
+                          <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                            {bankFavoritesLocal.map(label => (
+                              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid #334155", borderRadius: 6, padding: "6px 10px" }}>
+                                <span style={{ color: "var(--color-text)" }}>★ {label}</span>
+                                <button onClick={() => handleRemoveBankFavorite(label)}
+                                  title="Remove from favorites"
+                                  style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, color: "var(--color-text-dim)", fontSize: 11, padding: "2px 8px", cursor: "pointer" }}>
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {setFavoritesLocal.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                            Sets ({setFavoritesLocal.length})
+                          </div>
+                          <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                            {setFavoritesLocal.map((setId, i) => {
+                              const ctx = lookupSetContext(setId);
+                              return (
+                                <div key={`${setId}:${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid #334155", borderRadius: 6, padding: "6px 10px", gap: 10 }}>
+                                  <span style={{ color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flex: 1 }}>
+                                    {ctx ? (
+                                      <>
+                                        <span>{ctx.reps > 1 ? `${ctx.reps}×${ctx.dist}` : `${ctx.dist}`}</span>
+                                        <span style={{ color: "var(--color-text-dim)", margin: "0 6px" }}>·</span>
+                                        <span style={{ color: "var(--color-text-dim)" }}>{(ctx.desc || "").slice(0, 80)}</span>
+                                        <div style={{ fontSize: 10, color: "var(--color-text-dim)", marginTop: 2 }}>
+                                          from <em>{ctx.label}</em> · <code>{setId}</code>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <code style={{ fontSize: 11, color: "var(--color-warn)" }}>{setId}</code>
+                                        <span style={{ color: "var(--color-text-dim)", marginLeft: 6, fontStyle: "italic", fontSize: 10 }}>(no longer in the bank)</span>
+                                      </>
+                                    )}
+                                  </span>
+                                  <button onClick={() => handleRemoveSetFavorite(setId)}
+                                    title="Remove from set favorites"
+                                    style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, color: "var(--color-text-dim)", fontSize: 11, padding: "2px 8px", cursor: "pointer", flexShrink: 0 }}>
+                                    Remove
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* v1.4 — Disfavorites audit panel. Shows bank + engine
@@ -21243,6 +21355,18 @@
                   .then(data => { if (Array.isArray(data)) setDisfavorSets(new Set(data)); })
                   .catch(() => {});
                 refreshEffectiveDisfavorites();
+                // v1.12 — also refresh favorites + favorite-sets so removes
+                // from the new audit panel propagate to App-level picker
+                // state (favorites get 3× boost; coach-propagated favorites
+                // are not implemented yet, so own-only refresh is enough).
+                fetch(`${API_BASE}/favorites`, { cache: "no-store" })
+                  .then(r => r.ok ? r.json() : [])
+                  .then(data => { if (Array.isArray(data)) setFavorites(data); })
+                  .catch(() => {});
+                fetch(`${API_BASE}/favorite-sets`, { cache: "no-store" })
+                  .then(r => r.ok ? r.json() : [])
+                  .then(data => { if (Array.isArray(data)) setFavoriteSets(new Set(data)); })
+                  .catch(() => {});
               }}
               onPaceUpdate={(newPace) => {
                 // J — LevelRow pushes a preset pace up to App when a level
