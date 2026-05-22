@@ -916,6 +916,80 @@ export async function dbRemoveDisfavorSet(userSub, setId) {
   );
 }
 
+// v1.7 — Coach-group propagation. For a given swimmer, compute the
+// EFFECTIVE disfavorites = union of (their own) + (any primary coach
+// whose group includes them). Three flavors merged:
+//   - bank labels (disfavorites table)
+//   - set IDs (user_disfavor_sets table)
+//   - engine (template_id, stroke) tuples (settings.extra.engine_disfavorites JSON)
+//
+// Used by the picker. The user's audit panel continues to read OWN-ONLY
+// lists via the existing dbList* helpers, so coach contributions are
+// applied silently (per Cap'n's "invisible" scope choice).
+//
+// Edge cases:
+//   - User in no groups → returns own list only
+//   - User in multiple groups → union all primary coaches (distinct)
+//   - Coach is also a swimmer in someone else's group → does NOT recurse
+//     (one-way: coach → swimmer, not swimmer → coach)
+//   - Archived groups excluded (g.archived = 0)
+//   - User self in coach list is harmless (already in allSubs); UNION
+//     dedupes automatically
+export async function dbGetEffectiveDisfavorites(userSub) {
+  if (!userSub) return { labels: [], set_ids: [], engine: [] };
+  // Find all primary coaches whose group this user belongs to.
+  // Real users (member_swimmer_sub) only — managed swimmers don't have
+  // their own auth and don't call this endpoint.
+  const coachRows = await pool.query(
+    "SELECT DISTINCT g.`primary_coach_sub` AS coach " +
+    "FROM `group_members` gm " +
+    "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+    "WHERE gm.`member_swimmer_sub` = ? " +
+    "  AND gm.`left_at` IS NULL " +
+    "  AND g.`archived` = 0",
+    [userSub]
+  );
+  const allSubs = [userSub];
+  for (const r of coachRows) {
+    if (r.coach && r.coach !== userSub) allSubs.push(r.coach);
+  }
+  const placeholders = allSubs.map(() => "?").join(",");
+  // Labels
+  const labelRows = await pool.query(
+    `SELECT DISTINCT \`label\` FROM \`disfavorites\` WHERE \`user_sub\` IN (${placeholders})`,
+    allSubs
+  );
+  // Set IDs
+  const setRows = await pool.query(
+    `SELECT DISTINCT \`set_id\` FROM \`user_disfavor_sets\` WHERE \`user_sub\` IN (${placeholders})`,
+    allSubs
+  );
+  // Engine disfavorites — pull settings.extra rows and union the JSON arrays
+  const settingsRows = await pool.query(
+    `SELECT \`extra\` FROM \`settings\` WHERE \`user_sub\` IN (${placeholders})`,
+    allSubs
+  );
+  const engineMap = new Map();  // key = `${template_id}:${stroke}`
+  for (const r of settingsRows) {
+    if (!r.extra) continue;
+    let extra;
+    try {
+      extra = typeof r.extra === "string" ? JSON.parse(r.extra) : r.extra;
+    } catch (_) { continue; }
+    if (!extra || !Array.isArray(extra.engine_disfavorites)) continue;
+    for (const e of extra.engine_disfavorites) {
+      if (e && typeof e.template_id === "string" && typeof e.stroke === "string") {
+        engineMap.set(`${e.template_id}:${e.stroke}`, { template_id: e.template_id, stroke: e.stroke });
+      }
+    }
+  }
+  return {
+    labels:  labelRows.map(r => r.label),
+    set_ids: setRows.map(r => r.set_id),
+    engine:  Array.from(engineMap.values()),
+  };
+}
+
 // ── Goals ────────────────────────────────────────────────────────────
 // Metric set is fixed; period_start/end are NULL for recurring goals
 // (the only kind exposed by the UI in MVP). Multiple historical rows

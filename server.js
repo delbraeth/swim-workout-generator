@@ -60,6 +60,7 @@ import {
   dbListFavoriteSets, dbAddFavoriteSet, dbRemoveFavoriteSet,
   dbListDisfavorites, dbAddDisfavorite, dbRemoveDisfavorite,
   dbListDisfavorSets, dbAddDisfavorSet, dbRemoveDisfavorSet,
+  dbGetEffectiveDisfavorites,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   dbIsUser, dbIsAdmin, dbIsCoach, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
@@ -1256,6 +1257,19 @@ app.delete("/api/disfavor-sets/:setId", checkOrigin, requireAuth, requireCsrf, w
     const setId = decodeURIComponent(req.params.setId);
     await dbRemoveDisfavorSet(req.userSub, setId);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// v1.7 — Effective disfavorites endpoint. Returns the union of this user's
+// own disfavorites with any primary coach's disfavorites for groups this
+// user belongs to. Used by the client picker to apply coach-pushed-down
+// disfavor silently. The OWN-only lists are still served by /api/disfavorites
+// + /api/disfavor-sets + settings.engine_disfavorites for the audit panel.
+app.get("/api/effective-disfavorites", requireAuth, async (req, res) => {
+  try {
+    res.json(await dbGetEffectiveDisfavorites(req.userSub));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

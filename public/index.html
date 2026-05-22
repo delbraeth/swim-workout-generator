@@ -18484,6 +18484,15 @@
       // in v1.5 (mirrors favorite-sets' API-only setup) — future catalog
       // or coach view can wire the toggle handler.
       const [disfavorSets, setDisfavorSets]       = useState(() => new Set());
+      // v1.7 — Effective disfavorites (own + coach propagation). Fetched
+      // from /api/effective-disfavorites on mount. Used by the picker so
+      // primary coach's disfavorites silently apply to swimmers in their
+      // group. The audit panel + tri-state UI still read the OWN lists
+      // (disfavorites + disfavorSets + engineDisfavorites) so swimmers
+      // don't see coach contributions in their UI.
+      const [effectiveDisfavorLabels, setEffectiveDisfavorLabels] = useState([]);
+      const [effectiveDisfavorSetIds, setEffectiveDisfavorSetIds] = useState(() => new Set());
+      const [effectiveEngineDisfavorites, setEffectiveEngineDisfavorites] = useState([]);
       const [goals, setGoals]                     = useState([]);
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
@@ -18651,6 +18660,22 @@
           .then(data => { if (Array.isArray(data)) setDisfavorSets(new Set(data)); })
           .catch(() => {});
       }, []);
+
+      // v1.7 — On mount: fetch effective disfavorites (own + coach
+      // propagation). Updated separately from the own-only lists so the
+      // audit panel keeps showing only the user's own picks.
+      const refreshEffectiveDisfavorites = useCallback(() => {
+        return fetch(`${API_BASE}/effective-disfavorites`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (!data || typeof data !== "object") return;
+            if (Array.isArray(data.labels))  setEffectiveDisfavorLabels(data.labels);
+            if (Array.isArray(data.set_ids)) setEffectiveDisfavorSetIds(new Set(data.set_ids));
+            if (Array.isArray(data.engine))  setEffectiveEngineDisfavorites(data.engine);
+          })
+          .catch(() => {});
+      }, []);
+      useEffect(() => { refreshEffectiveDisfavorites(); }, [refreshEffectiveDisfavorites]);
 
       // On mount: fetch goals (recurring targets for stats progress bars)
       const refreshGoals = useCallback(() => {
@@ -19245,9 +19270,22 @@
           sectionBias,                                                          // Real-shift section-proportion controls (Mix pills)
           sectionSources,                                                       // S3 — Bank/Engine/Mix per section
           recentEngineTemplates,                                                // S3 — anti-repeat memory for engine
-          disfavorites,                                                         // v1.2 — 0.25× pick weight for disfavored labels
-          engineDisfavorites,                                                   // v1.3 — 0.25× weight for disfavored (template_id, stroke) in engine
-          disfavorSetIds: disfavorSets,                                         // v1.5 — 0.25× per disfavored set match
+          // v1.7 — union user's OWN disfavorites with effective coach
+          // propagation. Union (not effective alone) so optimistic toggle
+          // updates apply immediately even before refreshEffectiveDisfavorites
+          // re-fetches. Coach contributions stay invisible to the swimmer's
+          // audit panel (which reads own-only state).
+          disfavorites: Array.from(new Set([...disfavorites, ...effectiveDisfavorLabels])),
+          engineDisfavorites: (() => {
+            const seen = new Set();
+            const out = [];
+            for (const e of [...engineDisfavorites, ...effectiveEngineDisfavorites]) {
+              const k = `${e.template_id}:${e.stroke}`;
+              if (!seen.has(k)) { seen.add(k); out.push(e); }
+            }
+            return out;
+          })(),
+          disfavorSetIds: new Set([...disfavorSets, ...effectiveDisfavorSetIds]),
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -19335,7 +19373,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -19368,8 +19406,17 @@
           favorites,
           sectionSource: effectiveSource,
           recentEngineTemplates,
-          disfavorites,
-          engineDisfavorites,
+          // v1.7 — union own + effective coach propagation (see handleGenerate)
+          disfavorites: Array.from(new Set([...disfavorites, ...effectiveDisfavorLabels])),
+          engineDisfavorites: (() => {
+            const seen = new Set();
+            const out = [];
+            for (const e of [...engineDisfavorites, ...effectiveEngineDisfavorites]) {
+              const k = `${e.template_id}:${e.stroke}`;
+              if (!seen.has(k)) { seen.add(k); out.push(e); }
+            }
+            return out;
+          })(),
         });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -19436,7 +19483,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, effectiveDisfavorLabels, effectiveEngineDisfavorites]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
