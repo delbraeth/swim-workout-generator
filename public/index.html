@@ -6983,7 +6983,7 @@
     // Returns { option, templateUsed, attempts } or { option: null } on
     // no-applicable-template or full-failure (caller silently falls
     // back to bank).
-    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites, disfavorMode, engineFavorites) {
+    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs) {
       if (typeof TEMPLATE_ENGINE === "undefined") return { option: null };
       const applicable = TEMPLATE_ENGINE.applicable(section, typeId);
       if (!applicable.length) return { option: null };
@@ -7017,7 +7017,7 @@
         tpl = applicable[pickIdx];
       }
       return TEMPLATE_ENGINE.generateWithRetry({
-        templateId: tpl.id, typeKey: typeId, section, budgetYd, recent: recent || [],
+        templateId: tpl.id, typeKey: typeId, section, budgetYd, recent: recent || [], lanesPaceSecs,
       });
     }
 
@@ -7029,7 +7029,7 @@
     // the picker's combination validation (equipment, yardage min/max)
     // while substituting content per section. Engine output gets a
     // __engineMeta marker so the renderer can show the ⚡ badge.
-    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode, engineFavorites) {
+    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs) {
       if (!sources) return sections;
       const out = { ...sections };
       for (const sect of ["warmup", "drill", "main", "cooldown"]) {
@@ -7037,7 +7037,7 @@
         if (src === "engine") {
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
-          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites, disfavorMode, engineFavorites);
+          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
           if (res && res.option) {
             out[sect] = {
               ...res.option,
@@ -7059,7 +7059,7 @@
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
           const engineBudget = Math.max(100, Math.round(original.totalYards * 0.5));
-          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites, disfavorMode, engineFavorites);
+          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
           if (res && res.option) {
             const stroke = templateDefaultStroke(typeId);
             out[sect] = {
@@ -7118,6 +7118,7 @@
       engineFavorites = [],             // v1.13 — (template_id, stroke) tuples with 3× engine pick weight
       disfavorSetIds = null,            // v1.5 — Set<set_id> with 0.25× weight per match (mutex with favoriteSetIds)
       disfavorMode = "downweight",      // v1.8 — "downweight" (0.25×) or "exclude" (hard-exclude, weight 0)
+      lanesPaceSecs = null,             // v2.0 — array of lane paces (sec/100). When set, picker filters options that don't fit all lanes (see optionFitsAllLanes). null/empty = single-pace path unchanged.
     } = {}) {
       // v1.8 — Resolve the multiplier once. "exclude" zeros the weight;
       // pickWeighted's existing "all weights zero → uniform fallback" is the
@@ -7129,10 +7130,33 @@
       const isMeters = is25m || is50m;
       // Unit-aware bank lookup. Each call returns options already in the
       // user's pool unit (converted from yd↔m if the fallback crossed banks).
-      const allWarmups   = getBankOptions("warmup",   typeId, poolMode);
-      const allCooldowns = getBankOptions("cooldown", typeId, poolMode);
-      const drillList    = getBankOptions("drill",    typeId, poolMode);
-      let   mainList     = getBankOptions("main",     typeId, poolMode);
+      const _allWarmupsRaw   = getBankOptions("warmup",   typeId, poolMode);
+      const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode);
+      const _drillListRaw    = getBankOptions("drill",    typeId, poolMode);
+      const _mainListRaw     = getBankOptions("main",     typeId, poolMode);
+
+      // v2.0 — Multi-lane lane-fit pre-filter. When lanesPaceSecs is non-empty,
+      // narrow each pool to options whose intervals fit ALL lanes (rest ∈
+      // [MIN_REST, MAX_REST_RATIO × swimTime]). Graceful fallback per section:
+      // if the filter empties a pool, fall back to the unfiltered pool and
+      // flag laneFitFallback so the UI can surface a "lanes too wide" warning.
+      // When lanesPaceSecs is null/empty, the filter is a no-op and the path
+      // is byte-identical to the single-pace flow.
+      const useLaneFit = Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0;
+      const laneFitFallback = { warmup: false, drill: false, main: false, cooldown: false };
+      const _narrowByLanes = (pool, sectionKey) => {
+        if (!useLaneFit) return pool;
+        const filtered = pool.filter(o => optionFitsAllLanes(o, lanesPaceSecs));
+        if (filtered.length === 0) {
+          laneFitFallback[sectionKey] = true;
+          return pool;
+        }
+        return filtered;
+      };
+      const allWarmups   = _narrowByLanes(_allWarmupsRaw,   "warmup");
+      const allCooldowns = _narrowByLanes(_allCooldownsRaw, "cooldown");
+      const drillList    = _narrowByLanes(_drillListRaw,    "drill");
+      let   mainList     = _narrowByLanes(_mainListRaw,     "main");
 
       // C: recovery mode — filter mains down to easy/aerobic zone options.
       // If the filter would empty the pool, fall back to all mains and let
@@ -7393,7 +7417,7 @@
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
           // S3 — apply engine overrides per section, then recompute total
-          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites);
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
           const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
           return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "loop", __genAttempts: attempt + 1 };
@@ -7483,7 +7507,7 @@
 
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       // S3 — apply engine overrides per section, then recompute total
-      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites);
+      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
       const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
       return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "fallback", __genAttempts: attempts };
@@ -7500,7 +7524,14 @@
         { name: "Cool-Down",            section: "cooldown", ...cd },
       ];
       const estimatedMin = calcEstimatedMin(blocks);
-      return { blocks, totalYards: total, estimatedMin, typeId };
+      // v2.0 — attach laneFit fallback marker if any section couldn't be
+      // narrowed to lane-friendly options. UI surfaces "lanes too wide" hint.
+      const result = { blocks, totalYards: total, estimatedMin, typeId };
+      if (useLaneFit) {
+        const fallbackSections = Object.entries(laneFitFallback).filter(([_, v]) => v).map(([k]) => k);
+        if (fallbackSections.length) result.__laneFitFallback = fallbackSections;
+      }
+      return result;
     }
 
     // ─── Per-section regeneration ────────────────────────────────────
@@ -7542,6 +7573,7 @@
       disfavorites = [],             // v1.2 — labels with 0.25× pick weight
       engineDisfavorites = [],       // v1.3 — (template_id, stroke) tuples with 0.25× engine pick weight
       disfavorMode = "downweight",   // v1.8 — "downweight" (0.25) or "exclude" (0)
+      lanesPaceSecs = null,          // v2.0 — multi-lane fit filter on the section's pool
     } = {}) {
       // v1.8 — Resolve once for use below.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
@@ -7584,6 +7616,14 @@
             return variants;
           });
         }
+      }
+      // v2.0 — Multi-lane fit pre-filter on the section's pool. Same
+      // graceful fallback as generateWorkout (use unfiltered if empty).
+      let _laneFitFallback = false;
+      if (Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0) {
+        const filtered = pool.filter(o => optionFitsAllLanes(o, lanesPaceSecs));
+        if (filtered.length > 0) pool = filtered;
+        else                     _laneFitFallback = true;
       }
 
       const hasEquipReq = equipment && Object.keys(EQUIP_REQUIREMENTS).some(k => isEquipRequired(equipment, k));
@@ -7700,6 +7740,7 @@
           engineDisfavorites,
           disfavorMode,
           engineFavorites,
+          lanesPaceSecs,
         );
         newBlock = { ...bankBlock, ...overridden[sectionKey] };
       }
@@ -7707,7 +7748,9 @@
       const newBlocks = blocks.map((b, i) => i === idx ? newBlock : b);
       const total = newBlocks.reduce((s, b) => s + b.totalYards, 0);
 
-      return { workout: { blocks: newBlocks, totalYards: total, estimatedMin: calcEstimatedMin(newBlocks), typeId }, error: null };
+      const regenResult = { blocks: newBlocks, totalYards: total, estimatedMin: calcEstimatedMin(newBlocks), typeId };
+      if (_laneFitFallback) regenResult.__laneFitFallback = [sectionKey];
+      return { workout: regenResult, error: null };
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -7877,6 +7920,49 @@
       if (secs === null) return intervalStr;
       const scaled = Math.max(30, Math.round((secs * ratio) / 5) * 5);
       return formatIntervalSecs(scaled);
+    }
+
+    // v2.0 — Multi-lane fit check. Given an option (warmup/drill/main/cooldown
+    // shape) and an array of lane pace strings (e.g. ["1:30", "1:45", "2:00"]),
+    // returns true iff every set with a parseable interval leaves every lane
+    // a rest time in [minRest, maxRestRatio * swimTime].
+    //
+    // The math:
+    //   swimTime_L(set) = (paceL / paceBaseline) * baseSwimTime(set)
+    //   rest_L(set)     = interval(set) - swimTime_L(set)
+    // baseSwimTime is the "swim time at baseline pace" for this set —
+    // approximated as (dist / 100) * paceBaseline since intervals are
+    // authored relative to a 100-yd reference. This is the same model
+    // rescaleBlocksForPace uses.
+    //
+    // Sets without an interval (NO_INTERVAL_CANONICAL, warmups, cooldowns)
+    // are skipped (return true for that set — they're not interval-driven).
+    // An option with NO interval-driven sets passes trivially.
+    //
+    // Edge cases:
+    //   - Empty/null lanesPace: returns true (single-pace path, no filter)
+    //   - Unparseable pace: skipped (treated as "any pace" — defensive)
+    //   - dist <= 0 or missing: set skipped (defensive against bad bank rows)
+    function optionFitsAllLanes(option, lanesPaceSecs, minRest = 5, maxRestRatio = 1.5, paceBaseline = 120) {
+      if (!option || !Array.isArray(option.sets) || option.sets.length === 0) return true;
+      if (!Array.isArray(lanesPaceSecs) || lanesPaceSecs.length === 0) return true;
+      const validLanes = lanesPaceSecs.filter(p => typeof p === "number" && p > 0);
+      if (!validLanes.length) return true;
+      for (const set of option.sets) {
+        const intervalSecs = parseIntervalSecs(set.interval);
+        if (intervalSecs === null) continue;   // no interval → unconstrained
+        const dist = set.dist;
+        if (!dist || dist <= 0) continue;       // defensive: skip malformed
+        // baseSwimTime at baseline pace: dist/100 yards × baseline seconds per 100
+        const baseSwimTime = (dist / 100) * paceBaseline;
+        for (const paceL of validLanes) {
+          const swimTimeL = (paceL / paceBaseline) * baseSwimTime;
+          const restL = intervalSecs - swimTimeL;
+          if (restL < minRest) return false;                          // slowest lane can't finish
+          if (restL > maxRestRatio * swimTimeL) return false;         // fastest lane idle
+        }
+      }
+      return true;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -8913,6 +8999,18 @@
           errs.push({ code: "V8", msg: `set[${i}] empty focus` });
         }
       }
+      // v2.0 — V-Lane: every set's interval fits all lane paces (rest ≥ 5s
+      // for slowest lane, rest ≤ 1.5× swimTime for fastest). Only fires
+      // when context.lanesPaceSecs is non-empty (single-pace generate path
+      // skips this check entirely). Same math as the bank picker's
+      // optionFitsAllLanes — instead of returning bool we surface specific
+      // failures so the retry path knows the rule was violated.
+      if (Array.isArray(context?.lanesPaceSecs) && context.lanesPaceSecs.length > 0) {
+        const lanes = context.lanesPaceSecs.filter(p => typeof p === "number" && p > 0);
+        if (lanes.length && !optionFitsAllLanes(option, lanes, 5, 1.5, TEMPLATE_BASELINE_PACE_SECS)) {
+          errs.push({ code: "V-Lane", msg: "engine output's intervals don't fit all lane paces" });
+        }
+      }
       return errs;
     }
 
@@ -8949,9 +9047,9 @@
       validate(option, context) {
         return templateValidate(option, context);
       },
-      generateWithRetry({ templateId, typeKey, section, budgetYd, recent = [], rand = Math.random }) {
+      generateWithRetry({ templateId, typeKey, section, budgetYd, recent = [], lanesPaceSecs = null, rand = Math.random }) {
         const attempts = [];
-        const ctx = { budgetYd, typeKey, section };
+        const ctx = { budgetYd, typeKey, section, lanesPaceSecs };
         const defaultStroke = templateDefaultStroke(typeKey);
         // Anti-repeat lookup set, keyed by `template_id:stroke`.
         // The picker (S3) passes the last 10 generated entries.
@@ -12557,6 +12655,125 @@
       const secs = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
       if (secs < 30 || secs > 300) return null;
       return secs;
+    }
+
+    // v2.0 — Multi-lane multi-pace generate control. Sits below YardageSlider
+    // when the viewer is a coach. Toggle ON expands to N lane rows; user
+    // edits paces; the picker filters options that fit ALL lanes.
+    function MultiLaneControl({ multiLaneMode, setMultiLaneMode, manualLanesPace, setManualLanesPace, lanePlansForTarget, generateForPlanId }) {
+      const currentPlan = (lanePlansForTarget || []).find(p => p.id === generateForPlanId) || null;
+      const planLanes = currentPlan && currentPlan.plan_data && Array.isArray(currentPlan.plan_data.lanes)
+        ? currentPlan.plan_data.lanes
+        : null;
+      const usePlanPrefill = () => {
+        if (!planLanes || !planLanes.length) return;
+        setManualLanesPace(planLanes.map((l, i) => ({
+          lane_label: l.lane_label || `Lane ${i + 1}`,
+          pace: l.pace || "",
+        })));
+      };
+      const addRow = () => setManualLanesPace(prev => [
+        ...prev,
+        { lane_label: `Lane ${prev.length + 1}`, pace: "" },
+      ]);
+      const removeRow = (idx) => setManualLanesPace(prev =>
+        prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
+      );
+      const updateRow = (idx, field, val) => setManualLanesPace(prev =>
+        prev.map((r, i) => i === idx ? { ...r, [field]: val } : r)
+      );
+      return (
+        <div style={{ marginTop: -4, marginBottom: 14, padding: 10, border: "1px solid #334155", borderRadius: 8, background: "var(--color-card)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Multi-lane
+            </span>
+            <button
+              type="button"
+              onClick={() => setMultiLaneMode(v => !v)}
+              title="When ON, the picker only chooses options whose intervals fit every lane's pace, and the result opens in the multi-pace print view."
+              style={{
+                fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6,
+                border: "1px solid #475569",
+                background: multiLaneMode ? "var(--color-primary)" : "transparent",
+                color: multiLaneMode ? "#fff" : "var(--color-text-dim)",
+                cursor: "pointer",
+              }}>
+              {multiLaneMode ? "ON" : "OFF"}
+            </button>
+            {multiLaneMode && planLanes && planLanes.length > 0 && (
+              <button
+                type="button"
+                onClick={usePlanPrefill}
+                title={`Prefill from lane plan "${currentPlan?.name || "(default)"}"`}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 6,
+                  border: "1px solid #475569",
+                  background: "transparent",
+                  color: "var(--color-text-dim)",
+                  cursor: "pointer",
+                }}>
+                Use lane plan
+              </button>
+            )}
+          </div>
+          {multiLaneMode && (
+            <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+              {manualLanesPace.map((row, i) => {
+                const isValid = row.pace === "" || parsePaceMSS(row.pace) !== null;
+                return (
+                  <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="text"
+                      value={row.lane_label}
+                      onChange={e => updateRow(i, "lane_label", e.target.value)}
+                      placeholder={`Lane ${i + 1}`}
+                      style={{
+                        fontSize: 12, padding: "4px 8px", borderRadius: 4,
+                        border: "1px solid #475569", background: "var(--color-bg)",
+                        color: "var(--color-text)", width: 100,
+                      }} />
+                    <input
+                      type="text"
+                      value={row.pace}
+                      onChange={e => updateRow(i, "pace", e.target.value)}
+                      placeholder="M:SS"
+                      style={{
+                        fontSize: 12, fontFamily: "monospace", padding: "4px 8px", borderRadius: 4,
+                        border: `1px solid ${isValid ? "#475569" : "#ef4444"}`,
+                        background: "var(--color-bg)", color: "var(--color-text)", width: 60,
+                      }} />
+                    <span style={{ fontSize: 10, color: "var(--color-text-dim)" }}>/ 100</span>
+                    {manualLanesPace.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeRow(i)}
+                        title="Remove lane"
+                        style={{
+                          fontSize: 11, padding: "2px 7px", borderRadius: 4,
+                          border: "1px solid #475569", background: "transparent",
+                          color: "var(--color-text-dim)", cursor: "pointer",
+                        }}>
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                onClick={addRow}
+                style={{
+                  fontSize: 11, padding: "4px 10px", borderRadius: 4,
+                  border: "1px dashed #475569", background: "transparent",
+                  color: "var(--color-text-dim)", cursor: "pointer", justifySelf: "start",
+                }}>
+                + Add lane
+              </button>
+            </div>
+          )}
+        </div>
+      );
     }
 
     // Take a blocks array, rescale every set's interval to a target pace.
@@ -18814,6 +19031,15 @@
       const [maxYards, setMaxYards]         = useState(2400);
       const [poolMode, setPoolMode]         = useState("25y");
       const [paceInput, setPaceInput]       = useState("2:00");
+      // v2.0 — multi-lane mode (coach-only). When ON, picker filters
+      // options to those whose intervals fit ALL lane paces, and the
+      // generate flow auto-routes to MultiPacePrintView. manualLanesPace
+      // holds { lane_label, pace } rows; user types or seeds from a plan.
+      const [multiLaneMode, setMultiLaneMode] = useState(false);
+      const [manualLanesPace, setManualLanesPace] = useState([
+        { lane_label: "Lane 1", pace: "1:45" },
+        { lane_label: "Lane 2", pace: "2:00" },
+      ]);
       const [sliderMin, setSliderMin]       = useState(1900);
       const [sliderMax, setSliderMax]       = useState(5000);
       const [workout, setWorkout]           = useState(null);
@@ -19696,6 +19922,13 @@
           ...recentMainLabels.keys(),
           ...sessionRecentLabels,
         ]));
+        // v2.0 — multi-lane: parse rows into pace-seconds array. Invalid rows
+        // are dropped silently (the input box turns red so the coach sees it).
+        // If multiLaneMode is OFF or no valid lanes, fall back to single-pace.
+        const lanesPaceSecs = multiLaneMode
+          ? manualLanesPace.map(l => parsePaceMSS(l.pace)).filter(s => s !== null)
+          : null;
+        const useMultiLane = multiLaneMode && Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0;
         let newWorkout = generateWorkout({
           typeId:         selectedType,
           maxYards,
@@ -19739,6 +19972,7 @@
           })(),
           disfavorSetIds: new Set([...disfavorSets, ...effectiveDisfavorSetIds]),
           disfavorMode,                                                         // v1.8 — downweight or exclude
+          lanesPaceSecs: useMultiLane ? lanesPaceSecs : null,                   // v2.0 — multi-lane fit filter
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -19787,6 +20021,18 @@
           newWorkout = { ...newWorkout, phase };
         }
         setWorkout(newWorkout);
+        // v2.0 — multi-lane: auto-route to MultiPacePrintView. The print view
+        // takes the canonical workout + lane paces and renders per-lane pages.
+        // setMultiPaceLanes mounts the print overlay; coach can dismiss to
+        // return to the editor with the workout still loaded.
+        if (useMultiLane) {
+          const lanesForPrint = manualLanesPace
+            .filter(l => parsePaceMSS(l.pace) !== null)
+            .map(l => ({ lane_label: l.lane_label || "Lane", pace: l.pace }));
+          if (lanesForPrint.length) {
+            setMultiPaceLanes({ lanes: lanesForPrint, mode: "per_lane" });
+          }
+        }
         // S3 — write side: prepend engine entries to recent[], cap at 10,
         // post to settings.extra. Fire-and-forget; errors don't block UI.
         const newEngineEntries = [];
@@ -19826,7 +20072,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -20840,6 +21086,21 @@
 
               {/* Max Yardage / Distance Slider */}
               <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} />
+
+              {/* v2.0 — Multi-lane multi-pace generate. Coach-only. When ON, the
+                  picker filters options that fit ALL lane paces and the generate
+                  flow auto-opens MultiPacePrintView. Prefills from the selected
+                  lane plan when one is in play; otherwise the coach edits rows. */}
+              {me?.is_coach && (
+                <MultiLaneControl
+                  multiLaneMode={multiLaneMode}
+                  setMultiLaneMode={setMultiLaneMode}
+                  manualLanesPace={manualLanesPace}
+                  setManualLanesPace={setManualLanesPace}
+                  lanePlansForTarget={lanePlansForTarget}
+                  generateForPlanId={generateForPlanId}
+                />
+              )}
 
               {/* Quick-launch — last 3 of your own completed workouts (pre-pool "do yesterday's again") */}
               {!workout && quickLaunch.length > 0 && (
