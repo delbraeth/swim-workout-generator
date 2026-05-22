@@ -61,6 +61,7 @@ import {
   dbListDisfavorites, dbAddDisfavorite, dbRemoveDisfavorite,
   dbListDisfavorSets, dbAddDisfavorSet, dbRemoveDisfavorSet,
   dbGetEffectiveDisfavorites,
+  dbGetEffectiveFavorites,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   dbIsUser, dbIsAdmin, dbIsCoach, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
@@ -1137,6 +1138,32 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         }
       }
     }
+    // v1.13 — Validate engine_favorites if present. Same shape as
+    // engine_disfavorites (array of (template_id, stroke)). Engine template
+    // picker applies 3× weight to matching tuples. Capped at 50 entries.
+    // No mutex with engine_disfavorites enforced here — client-side
+    // handlers manage that, and the DB column is a single JSON blob.
+    if ("engine_favorites" in patch && patch.engine_favorites !== null) {
+      const arr = patch.engine_favorites;
+      if (!Array.isArray(arr)) {
+        return res.status(400).json({ error: "engine_favorites must be an array" });
+      }
+      if (arr.length > 50) {
+        return res.status(400).json({ error: "engine_favorites max length is 50" });
+      }
+      const VALID_STROKES = ["free", "back", "breast", "fly", "IM", "choice", "kick"];
+      for (const [i, e] of arr.entries()) {
+        if (!e || typeof e !== "object") {
+          return res.status(400).json({ error: `engine_favorites[${i}] must be an object` });
+        }
+        if (typeof e.template_id !== "string" || e.template_id.length === 0 || e.template_id.length > 64) {
+          return res.status(400).json({ error: `engine_favorites[${i}].template_id must be a 1-64 char string` });
+        }
+        if (typeof e.stroke !== "string" || !VALID_STROKES.includes(e.stroke)) {
+          return res.status(400).json({ error: `engine_favorites[${i}].stroke must be one of: ${VALID_STROKES.join(", ")}` });
+        }
+      }
+    }
     // Validate engine_recent_templates if present (S2.5 — template engine
     // anti-repeat memory per TEMPLATE_ENGINE_SCOPE.md §6). Array of up to 10
     // { template_id, stroke, ts } entries. Engine excludes (template_id,
@@ -1281,6 +1308,18 @@ app.delete("/api/disfavor-sets/:setId", checkOrigin, requireAuth, requireCsrf, w
 app.get("/api/effective-disfavorites", requireAuth, async (req, res) => {
   try {
     res.json(await dbGetEffectiveDisfavorites(req.userSub));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// v1.13 — Mirror of /api/effective-disfavorites. Returns the union of own
+// favorites (labels + set_ids + engine tuples) with every coach (primary
+// AND assistant) favorite from every group the user is in. Audit panel
+// still reads own-only via /api/favorites and /api/favorite-sets.
+app.get("/api/effective-favorites", requireAuth, async (req, res) => {
+  try {
+    res.json(await dbGetEffectiveFavorites(req.userSub));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

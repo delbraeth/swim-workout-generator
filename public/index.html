@@ -6983,18 +6983,26 @@
     // Returns { option, templateUsed, attempts } or { option: null } on
     // no-applicable-template or full-failure (caller silently falls
     // back to bank).
-    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites, disfavorMode) {
+    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites, disfavorMode, engineFavorites) {
       if (typeof TEMPLATE_ENGINE === "undefined") return { option: null };
       const applicable = TEMPLATE_ENGINE.applicable(section, typeId);
       if (!applicable.length) return { option: null };
-      // v1.3 + v1.8 — weighted pick. Disfavored (template_id, stroke) gets
-      // the disfavor multiplier (0.25 in downweight mode, 0 in exclude).
-      // If all weights collapse to zero (e.g., exclude mode + every
-      // applicable template disfavored), fall back to uniform random.
+      // v1.3 + v1.8 + v1.13 — weighted pick.
+      //   Favorite (template_id, stroke) → 3× weight (UNIVERSAL precedence:
+      //     favorite wins over disfavor when both apply to same tuple).
+      //   Disfavored (template_id, stroke) → disfavorMultiplier (0.25 in
+      //     downweight mode, 0 in exclude mode) — IF not also favorited.
+      //   If all weights collapse to zero, fall back to uniform random.
       const stroke = templateDefaultStroke(typeId);
+      const favSet = new Set((engineFavorites    || []).map(f => `${f.template_id}:${f.stroke}`));
       const disSet = new Set((engineDisfavorites || []).map(d => `${d.template_id}:${d.stroke}`));
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
-      const weights = applicable.map(t => disSet.has(`${t.id}:${stroke}`) ? disfavorMultiplier : 1);
+      const weights = applicable.map(t => {
+        const k = `${t.id}:${stroke}`;
+        if (favSet.has(k)) return 3;                  // v1.13: favorite wins
+        if (disSet.has(k)) return disfavorMultiplier; // disfavor downweight
+        return 1;
+      });
       const totalW = weights.reduce((s, w) => s + w, 0);
       let tpl;
       if (totalW <= 0) {
@@ -7021,7 +7029,7 @@
     // the picker's combination validation (equipment, yardage min/max)
     // while substituting content per section. Engine output gets a
     // __engineMeta marker so the renderer can show the ⚡ badge.
-    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode) {
+    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode, engineFavorites) {
       if (!sources) return sections;
       const out = { ...sections };
       for (const sect of ["warmup", "drill", "main", "cooldown"]) {
@@ -7029,7 +7037,7 @@
         if (src === "engine") {
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
-          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites, disfavorMode);
+          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites, disfavorMode, engineFavorites);
           if (res && res.option) {
             out[sect] = {
               ...res.option,
@@ -7051,7 +7059,7 @@
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
           const engineBudget = Math.max(100, Math.round(original.totalYards * 0.5));
-          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites, disfavorMode);
+          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites, disfavorMode, engineFavorites);
           if (res && res.option) {
             const stroke = templateDefaultStroke(typeId);
             out[sect] = {
@@ -7107,6 +7115,7 @@
       recentEngineTemplates = [],       // S3 — anti-repeat memory (last 10 { template_id, stroke, ts })
       disfavorites = [],                // v1.2 — labels with 0.25× pick weight (mutex with favorites)
       engineDisfavorites = [],          // v1.3 — (template_id, stroke) tuples with 0.25× engine pick weight
+      engineFavorites = [],             // v1.13 — (template_id, stroke) tuples with 3× engine pick weight
       disfavorSetIds = null,            // v1.5 — Set<set_id> with 0.25× weight per match (mutex with favoriteSetIds)
       disfavorMode = "downweight",      // v1.8 — "downweight" (0.25×) or "exclude" (hard-exclude, weight 0)
     } = {}) {
@@ -7321,28 +7330,33 @@
           const phaseSpec = phase && PHASES[phase] ? PHASES[phase] : null;
           const mainWeight = (o) => {
             let w = 1;
-            if (favorites.length && o.label && favorites.includes(o.label)) w *= 3;
-            // v1.2 + v1.8 — disfavor: weight multiplier (0.25 downweight, 0 exclude)
-            if (disfavorites.length && o.label && disfavorites.includes(o.label)) w *= disfavorMultiplier;
-            // Per-user set-favorites: count favorited sets present in this
-            // option, multiply weight by 3^N. Mirrors the equipment-match
-            // pattern below. Multiplicative — an option with 2 favorited
-            // sets gets ×9 vs a similar option with 0. Silent — same
-            // "intended bias, never guaranteed" semantics as label-favorites.
-            if (favoriteSetIds && favoriteSetIds.size && Array.isArray(o.sets)) {
-              let favSetMatches = 0;
-              for (const s of o.sets) {
-                if (s.id && favoriteSetIds.has(s.id)) favSetMatches++;
-              }
-              if (favSetMatches > 0) w *= Math.pow(3, favSetMatches);
+            // v1.13 — UNIVERSAL precedence rule: presence in ANY favorite list
+            // (own or coach-propagated, since `favorites` is the unioned set
+            // by the time it reaches here) skips the disfavor multiplier
+            // entirely. Same per-set: if a set is favorited, it does NOT
+            // also get the disfavor multiplier even if its ID is in the
+            // disfavor set. Previously (≤ v1.12) these multiplied, so a
+            // favorite+disfavor collision yielded 0.75×; now favorite wins.
+            const isLabelFav = !!(favorites.length && o.label && favorites.includes(o.label));
+            if (isLabelFav) {
+              w *= 3;
+            } else if (disfavorites.length && o.label && disfavorites.includes(o.label)) {
+              w *= disfavorMultiplier;
             }
-            // v1.5 + v1.8 — set-level disfavor: multiplier per matching set
-            // (0.25^N downweight, or 0 if any match in exclude mode).
-            if (disfavorSetIds && disfavorSetIds.size && Array.isArray(o.sets)) {
+            // Per-set: count fav vs disfavor matches PER SET and apply 3× per
+            // favorited set OR disfavorMultiplier per disfavored set — never
+            // both for the same set (favorite wins on collisions). Mutex at
+            // DB layer already prevents own collisions; coach-propagated
+            // values can still collide with own, hence the per-set check.
+            if (Array.isArray(o.sets) && ((favoriteSetIds && favoriteSetIds.size) || (disfavorSetIds && disfavorSetIds.size))) {
+              let favSetMatches = 0;
               let disSetMatches = 0;
               for (const s of o.sets) {
-                if (s.id && disfavorSetIds.has(s.id)) disSetMatches++;
+                if (!s.id) continue;
+                if (favoriteSetIds && favoriteSetIds.has(s.id))      favSetMatches++;
+                else if (disfavorSetIds && disfavorSetIds.has(s.id)) disSetMatches++;
               }
+              if (favSetMatches > 0) w *= Math.pow(3, favSetMatches);
               if (disSetMatches > 0) w *= Math.pow(disfavorMultiplier, disSetMatches);
             }
             if ((o.rounds || 1) > 1) w *= 2;
@@ -7379,7 +7393,7 @@
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
           // S3 — apply engine overrides per section, then recompute total
-          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode);
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites);
           const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
           return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "loop", __genAttempts: attempt + 1 };
@@ -7469,7 +7483,7 @@
 
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       // S3 — apply engine overrides per section, then recompute total
-      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites);
+      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites);
       const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
       return { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "fallback", __genAttempts: attempts };
@@ -7522,6 +7536,7 @@
       recoveryMode = false,
       phase = null,
       favorites = [],
+      engineFavorites = [],          // v1.13 — (template_id, stroke) tuples with 3× engine pick weight
       sectionSource = "bank",        // S3 — bank | engine | mix
       recentEngineTemplates = [],    // S3 — anti-repeat memory
       disfavorites = [],             // v1.2 — labels with 0.25× pick weight
@@ -7684,6 +7699,7 @@
           recentEngineTemplates,
           engineDisfavorites,
           disfavorMode,
+          engineFavorites,
         );
         newBlock = { ...bankBlock, ...overridden[sectionKey] };
       }
@@ -9583,7 +9599,7 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange, favoriteSets, disfavorSets, onCycleSetStatus }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, isEngineFavorited, onToggleEngineFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange, favoriteSets, disfavorSets, onCycleSetStatus }) {
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -9689,14 +9705,18 @@
                     next generate anyway.
                   Mutex is server-side for bank, single-tag (no opposite) for
                   engine. */}
-              {block.section === "main" && (block.label || block.__engineMeta) && (onToggleFavorite || onToggleDisfavorite || onToggleEngineDisfavor) && (() => {
+              {block.section === "main" && (block.label || block.__engineMeta) && (onToggleFavorite || onToggleDisfavorite || onToggleEngineDisfavor || onToggleEngineFavorite) && (() => {
                 const isEngineBlock = !!block.__engineMeta;
                 const segments = isEngineBlock
                   ? [
-                      { id: "favorite", icon: "★",  active: false, disabled: true,
-                        title: "Favorite isn't supported for engine output — engine labels are dynamic each generate",
+                      // v1.13 — ★ now active for engine blocks too. Targets
+                      // (template_id, stroke) in engine_favorites (settings
+                      // .extra) with 3× pick weight. Universal precedence:
+                      // favorite wins over disfavor on the same tuple.
+                      { id: "favorite", icon: "★",  active: !!isEngineFavorited, disabled: false,
+                        title: `Favorite this template — pick "${block.__engineMeta.template_id}" + ${block.__engineMeta.stroke} more often (3× weight)`,
                         activeColor: "var(--color-warn)" },
-                      { id: "neutral",  icon: "—",  active: !isEngineDisfavorited,
+                      { id: "neutral",  icon: "—",  active: !isEngineDisfavorited && !isEngineFavorited,
                         title: "Neutral — default engine template weight",
                         activeColor: s.headerText },
                       { id: "disfavor", icon: "👎", active: !!isEngineDisfavorited,
@@ -9727,11 +9747,18 @@
                         onClick={() => {
                           if (opt.disabled) return;
                           if (isEngineBlock) {
-                            // Engine: target (template_id, stroke) in engine_disfavorites
-                            if (opt.id === "disfavor" && !isEngineDisfavorited && onToggleEngineDisfavor) {
+                            // v1.13 — Engine: ★ targets engine_favorites,
+                            // 👎 targets engine_disfavorites, — clears
+                            // whichever was active. Mutex handled in the
+                            // App-level toggle handlers (favorite-add
+                            // strips disfavor and vice versa).
+                            if (opt.id === "favorite" && !isEngineFavorited && onToggleEngineFavorite) {
+                              onToggleEngineFavorite(block.__engineMeta);
+                            } else if (opt.id === "disfavor" && !isEngineDisfavorited && onToggleEngineDisfavor) {
                               onToggleEngineDisfavor(block.__engineMeta);
-                            } else if (opt.id === "neutral" && isEngineDisfavorited && onToggleEngineDisfavor) {
-                              onToggleEngineDisfavor(block.__engineMeta);
+                            } else if (opt.id === "neutral") {
+                              if (isEngineFavorited && onToggleEngineFavorite) onToggleEngineFavorite(block.__engineMeta);
+                              else if (isEngineDisfavorited && onToggleEngineDisfavor) onToggleEngineDisfavor(block.__engineMeta);
                             }
                           } else {
                             // Bank: target block.label in favorites/disfavorites
@@ -12878,6 +12905,8 @@
       // v1.12 — favorites audit (parallel of disfavor panel)
       const [bankFavoritesLocal, setBankFavoritesLocal] = React.useState([]);
       const [setFavoritesLocal, setSetFavoritesLocal] = React.useState([]);
+      // v1.13 — engine favorites in the audit panel (mirror of v1.4 engine disfavorites)
+      const [engineFavoritesLocal, setEngineFavoritesLocal] = React.useState([]);
       // v1.8 — disfavor mode: "downweight" (default 0.25×) or "exclude" (weight 0)
       const [disfavorModeLocal, setDisfavorModeLocal] = React.useState("downweight");
 
@@ -12908,6 +12937,8 @@
           // v1.12 — favorites audit
           setBankFavoritesLocal(Array.isArray(favRes) ? favRes : []);
           setSetFavoritesLocal(Array.isArray(favSetsRes) ? favSetsRes : []);
+          // v1.13 — engine favorites (settings.extra.engine_favorites)
+          setEngineFavoritesLocal(Array.isArray(settingsRes?.engine_favorites) ? settingsRes.engine_favorites : []);
           // v1.8 — disfavor mode
           if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
             setDisfavorModeLocal(settingsRes.disfavor_mode);
@@ -13013,6 +13044,23 @@
           if (onProfileChange) onProfileChange();
         } catch (_) {
           setEngineDisfavoritesLocal(prev);
+        }
+      };
+
+      // v1.13 — remove an engine favorite (rewrite engine_favorites array)
+      const handleRemoveEngineFavorite = async (template_id, stroke) => {
+        const prev = engineFavoritesLocal;
+        const next = prev.filter(e => !(e.template_id === template_id && e.stroke === stroke));
+        setEngineFavoritesLocal(next);
+        try {
+          await fetch("/api/settings/extra", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ engine_favorites: next }),
+          });
+          if (onProfileChange) onProfileChange();
+        } catch (_) {
+          setEngineFavoritesLocal(prev);
         }
       };
 
@@ -13340,9 +13388,9 @@
                     favorited by this user, with one-click remove. */}
                 <div style={{ padding: "18px 20px", borderTop: "1px solid #1e293b" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
-                    Favorites ({bankFavoritesLocal.length + setFavoritesLocal.length})
+                    Favorites ({bankFavoritesLocal.length + setFavoritesLocal.length + engineFavoritesLocal.length})
                   </div>
-                  {bankFavoritesLocal.length === 0 && setFavoritesLocal.length === 0 ? (
+                  {bankFavoritesLocal.length === 0 && setFavoritesLocal.length === 0 && engineFavoritesLocal.length === 0 ? (
                     <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>
                       No favorites yet. Click ★ on any main-set in a workout, or use the ☆ button on a specific set, to boost pick weight.
                     </div>
@@ -13359,6 +13407,28 @@
                                 <span style={{ color: "var(--color-text)" }}>★ {label}</span>
                                 <button onClick={() => handleRemoveBankFavorite(label)}
                                   title="Remove from favorites"
+                                  style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, color: "var(--color-text-dim)", fontSize: 11, padding: "2px 8px", cursor: "pointer" }}>
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {engineFavoritesLocal.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                            Engine templates ({engineFavoritesLocal.length})
+                          </div>
+                          <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                            {engineFavoritesLocal.map((e, i) => (
+                              <div key={`${e.template_id}:${e.stroke}:${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-card)", border: "1px solid #334155", borderRadius: 6, padding: "6px 10px" }}>
+                                <span style={{ color: "var(--color-text)" }}>
+                                  ★ <code style={{ fontSize: 11, color: "var(--color-warn)" }}>{e.template_id}</code>
+                                  <span style={{ color: "var(--color-text-dim)", marginLeft: 6 }}>+ {e.stroke}</span>
+                                </span>
+                                <button onClick={() => handleRemoveEngineFavorite(e.template_id, e.stroke)}
+                                  title="Remove from engine favorites"
                                   style={{ background: "transparent", border: "1px solid #475569", borderRadius: 4, color: "var(--color-text-dim)", fontSize: 11, padding: "2px 8px", cursor: "pointer" }}>
                                   Remove
                                 </button>
@@ -18792,6 +18862,16 @@
       const [effectiveDisfavorLabels, setEffectiveDisfavorLabels] = useState([]);
       const [effectiveDisfavorSetIds, setEffectiveDisfavorSetIds] = useState(() => new Set());
       const [effectiveEngineDisfavorites, setEffectiveEngineDisfavorites] = useState([]);
+      // v1.13 — Effective favorites mirror. Own favorites + coach (primary
+      // + assistant) favorites silently boost picks. Audit panel still
+      // own-only via /api/favorites + /api/favorite-sets.
+      const [effectiveFavoriteLabels, setEffectiveFavoriteLabels] = useState([]);
+      const [effectiveFavoriteSetIds, setEffectiveFavoriteSetIds] = useState(() => new Set());
+      const [effectiveEngineFavorites, setEffectiveEngineFavorites] = useState([]);
+      // v1.13 — Own engine favorites (separate from effective so the
+      // audit panel can list user's own without coach contributions).
+      // Lives in settings.extra.engine_favorites, loaded on mount.
+      const [engineFavorites, setEngineFavorites]               = useState([]);
       const [goals, setGoals]                     = useState([]);
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
@@ -18976,6 +19056,20 @@
       }, []);
       useEffect(() => { refreshEffectiveDisfavorites(); }, [refreshEffectiveDisfavorites]);
 
+      // v1.13 — Mirror of refreshEffectiveDisfavorites for the favorite side.
+      const refreshEffectiveFavorites = useCallback(() => {
+        return fetch(`${API_BASE}/effective-favorites`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (!data || typeof data !== "object") return;
+            if (Array.isArray(data.labels))  setEffectiveFavoriteLabels(data.labels);
+            if (Array.isArray(data.set_ids)) setEffectiveFavoriteSetIds(new Set(data.set_ids));
+            if (Array.isArray(data.engine))  setEffectiveEngineFavorites(data.engine);
+          })
+          .catch(() => {});
+      }, []);
+      useEffect(() => { refreshEffectiveFavorites(); }, [refreshEffectiveFavorites]);
+
       // On mount: fetch goals (recurring targets for stats progress bars)
       const refreshGoals = useCallback(() => {
         fetch(`${API_BASE}/goals`, { cache: "no-store" })
@@ -19022,6 +19116,10 @@
             // v1.3 — engine disfavorites
             if (Array.isArray(s.engine_disfavorites)) {
               setEngineDisfavorites(s.engine_disfavorites.slice(0, 50));
+            }
+            // v1.13 — own engine favorites (settings.extra.engine_favorites)
+            if (Array.isArray(s.engine_favorites)) {
+              setEngineFavorites(s.engine_favorites.slice(0, 50));
             }
             // v1.8 — disfavor mode (downweight | exclude)
             if (s.disfavor_mode === "downweight" || s.disfavor_mode === "exclude") {
@@ -19108,28 +19206,68 @@
 
       // v1.3 — Toggle an engine (template_id, stroke) pair in/out of
       // engine_disfavorites (settings.extra JSON array). 0.25× weight in
-      // the engine template picker. No server-side mutex needed (engine
-      // disfavor doesn't have a paired engine-favorite system in v1.3).
+      // the engine template picker.
+      // v1.13 — Now mutex-enforced with engine_favorites: adding a
+      // disfavor strips any matching favorite, both updated in a single
+      // /api/settings/extra patch.
       const handleToggleEngineDisfavor = useCallback(async (meta) => {
         if (!meta || !meta.template_id || !meta.stroke) return;
         const key = `${meta.template_id}:${meta.stroke}`;
         const isDis = engineDisfavorites.some(e => `${e.template_id}:${e.stroke}` === key);
-        const next = isDis
+        const nextDis = isDis
           ? engineDisfavorites.filter(e => `${e.template_id}:${e.stroke}` !== key)
           : [...engineDisfavorites, { template_id: meta.template_id, stroke: meta.stroke }].slice(0, 50);
-        setEngineDisfavorites(next);
+        // v1.13 — mutex: if we're ADDING a disfavor, clear any matching favorite
+        const nextFav = (!isDis)
+          ? engineFavorites.filter(e => `${e.template_id}:${e.stroke}` !== key)
+          : engineFavorites;
+        setEngineDisfavorites(nextDis);
+        if (!isDis) setEngineFavorites(nextFav);
         if (typeof fetch === "function" && csrf.token) {
+          const body = { engine_disfavorites: nextDis };
+          if (!isDis) body.engine_favorites = nextFav;
           fetch(`${API_BASE}/settings/extra`, {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf.token },
-            body: JSON.stringify({ engine_disfavorites: next }),
+            body: JSON.stringify(body),
           }).catch(() => {
             // Revert optimistic update on network error
             setEngineDisfavorites(engineDisfavorites);
+            setEngineFavorites(engineFavorites);
           });
         }
-      }, [engineDisfavorites]);
+      }, [engineDisfavorites, engineFavorites]);
+
+      // v1.13 — Mirror of handleToggleEngineDisfavor for the favorite side.
+      // 3× weight in the engine template picker. Mutex with disfavorites.
+      const handleToggleEngineFavorite = useCallback(async (meta) => {
+        if (!meta || !meta.template_id || !meta.stroke) return;
+        const key = `${meta.template_id}:${meta.stroke}`;
+        const isFav = engineFavorites.some(e => `${e.template_id}:${e.stroke}` === key);
+        const nextFav = isFav
+          ? engineFavorites.filter(e => `${e.template_id}:${e.stroke}` !== key)
+          : [...engineFavorites, { template_id: meta.template_id, stroke: meta.stroke }].slice(0, 50);
+        // Mutex: adding a favorite strips any matching disfavor
+        const nextDis = (!isFav)
+          ? engineDisfavorites.filter(e => `${e.template_id}:${e.stroke}` !== key)
+          : engineDisfavorites;
+        setEngineFavorites(nextFav);
+        if (!isFav) setEngineDisfavorites(nextDis);
+        if (typeof fetch === "function" && csrf.token) {
+          const body = { engine_favorites: nextFav };
+          if (!isFav) body.engine_disfavorites = nextDis;
+          fetch(`${API_BASE}/settings/extra`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf.token },
+            body: JSON.stringify(body),
+          }).catch(() => {
+            setEngineFavorites(engineFavorites);
+            setEngineDisfavorites(engineDisfavorites);
+          });
+        }
+      }, [engineFavorites, engineDisfavorites]);
 
       // v1.2 — Toggle a main-set label in/out of disfavorites. Mirror of
       // handleToggleFavorite with 0.25× pick weight in the picker. Server-
@@ -19561,18 +19699,29 @@
         let newWorkout = generateWorkout({
           typeId:         selectedType,
           maxYards,
+          // v1.13 — same union pattern as disfavor: own + coach-propagated.
+          favorites:      Array.from(new Set([...favorites, ...effectiveFavoriteLabels])),
           equipment,
-          favorites,
           poolMode,
           userMin:        sliderMin,
           pinnedBlocks:   pinned,
           recentLabels,
           recoveryMode,
           phase: effectivePhase,                                               // R-D: group-context override (#39)
-          favoriteSetIds: favoriteSets,
+          favoriteSetIds: new Set([...favoriteSets, ...effectiveFavoriteSetIds]),
           sectionBias,                                                          // Real-shift section-proportion controls (Mix pills)
           sectionSources,                                                       // S3 — Bank/Engine/Mix per section
           recentEngineTemplates,                                                // S3 — anti-repeat memory for engine
+          // v1.13 — engine favorites union (own + coach-propagated)
+          engineFavorites: (() => {
+            const seen = new Set();
+            const out = [];
+            for (const e of [...engineFavorites, ...effectiveEngineFavorites]) {
+              const k = `${e.template_id}:${e.stroke}`;
+              if (!seen.has(k)) { seen.add(k); out.push(e); }
+            }
+            return out;
+          })(),
           // v1.7 — union user's OWN disfavorites with effective coach
           // propagation. Union (not effective alone) so optimistic toggle
           // updates apply immediately even before refreshEffectiveDisfavorites
@@ -19677,7 +19826,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -19707,7 +19856,20 @@
           recentLabels,
           recoveryMode: isRecovery,
           phase,
-          favorites,
+          // v1.13 — union own + coach-propagated favorites (mirror v1.7).
+          // Note: set-level (favoriteSetIds/disfavorSetIds) NOT passed —
+          // regenerateSection doesn't currently consume them, pre-existing
+          // gap inherited from v1.5/v1.10. Open follow-up.
+          favorites: Array.from(new Set([...favorites, ...effectiveFavoriteLabels])),
+          engineFavorites: (() => {
+            const seen = new Set();
+            const out = [];
+            for (const e of [...engineFavorites, ...effectiveEngineFavorites]) {
+              const k = `${e.template_id}:${e.stroke}`;
+              if (!seen.has(k)) { seen.add(k); out.push(e); }
+            }
+            return out;
+          })(),
           sectionSource: effectiveSource,
           recentEngineTemplates,
           // v1.7 — union own + effective coach propagation (see handleGenerate)
@@ -19788,7 +19950,7 @@
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, effectiveDisfavorLabels, effectiveEngineDisfavorites, disfavorMode]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, effectiveDisfavorLabels, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveEngineFavorites]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -21164,6 +21326,8 @@
                     onToggleDisfavorite={handleToggleDisfavorite}
                     isEngineDisfavorited={!!(block.__engineMeta && engineDisfavorites.some(e => e.template_id === block.__engineMeta.template_id && e.stroke === block.__engineMeta.stroke))}
                     onToggleEngineDisfavor={handleToggleEngineDisfavor}
+                    isEngineFavorited={!!(block.__engineMeta && engineFavorites.some(e => e.template_id === block.__engineMeta.template_id && e.stroke === block.__engineMeta.stroke))}
+                    onToggleEngineFavorite={handleToggleEngineFavorite}
                     favoriteSets={favoriteSets}
                     disfavorSets={disfavorSets}
                     onCycleSetStatus={handleCycleSetStatus}
@@ -21355,10 +21519,9 @@
                   .then(data => { if (Array.isArray(data)) setDisfavorSets(new Set(data)); })
                   .catch(() => {});
                 refreshEffectiveDisfavorites();
-                // v1.12 — also refresh favorites + favorite-sets so removes
+                // v1.12 — refresh own favorites + favorite-sets so removes
                 // from the new audit panel propagate to App-level picker
-                // state (favorites get 3× boost; coach-propagated favorites
-                // are not implemented yet, so own-only refresh is enough).
+                // state (favorites get 3× boost).
                 fetch(`${API_BASE}/favorites`, { cache: "no-store" })
                   .then(r => r.ok ? r.json() : [])
                   .then(data => { if (Array.isArray(data)) setFavorites(data); })
@@ -21367,6 +21530,9 @@
                   .then(r => r.ok ? r.json() : [])
                   .then(data => { if (Array.isArray(data)) setFavoriteSets(new Set(data)); })
                   .catch(() => {});
+                // v1.13 — coach-propagated favorites: re-merge the union so
+                // panel removes propagate to the App's picker state.
+                refreshEffectiveFavorites();
               }}
               onPaceUpdate={(newPace) => {
                 // J — LevelRow pushes a preset pace up to App when a level

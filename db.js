@@ -994,6 +994,66 @@ export async function dbGetEffectiveDisfavorites(userSub) {
   };
 }
 
+// v1.13 — Mirror of dbGetEffectiveDisfavorites for the favorite side.
+// Returns the union of the user's own favorites (labels + set IDs + engine
+// tuples) plus every favorite from every coach (primary OR assistant) of
+// every group the user is in. Same coach-resolution query as v1.9, same
+// JSON-array merge for engine_favorites in settings.extra. Caller is
+// responsible for any precedence rules (the universal "favorite wins over
+// disfavor" rule lives in the client picker, not here).
+export async function dbGetEffectiveFavorites(userSub) {
+  if (!userSub) return { labels: [], set_ids: [], engine: [] };
+  const coachRows = await pool.query(
+    "SELECT DISTINCT gc.`coach_sub` AS coach " +
+    "FROM `group_members` gm " +
+    "JOIN `groups` g          ON g.`id`        = gm.`group_id` " +
+    "JOIN `group_coaches` gc  ON gc.`group_id` = g.`id` AND gc.`removed_at` IS NULL " +
+    "WHERE gm.`member_swimmer_sub` = ? " +
+    "  AND gm.`left_at` IS NULL " +
+    "  AND g.`archived` = 0",
+    [userSub]
+  );
+  const allSubs = [userSub];
+  for (const r of coachRows) {
+    if (r.coach && r.coach !== userSub) allSubs.push(r.coach);
+  }
+  const placeholders = allSubs.map(() => "?").join(",");
+  // Labels (table: favorites)
+  const labelRows = await pool.query(
+    `SELECT DISTINCT \`label\` FROM \`favorites\` WHERE \`user_sub\` IN (${placeholders})`,
+    allSubs
+  );
+  // Set IDs (table: user_favorite_sets)
+  const setRows = await pool.query(
+    `SELECT DISTINCT \`set_id\` FROM \`user_favorite_sets\` WHERE \`user_sub\` IN (${placeholders})`,
+    allSubs
+  );
+  // Engine favorites — pull settings.extra rows, union the JSON arrays
+  const settingsRows = await pool.query(
+    `SELECT \`extra\` FROM \`settings\` WHERE \`user_sub\` IN (${placeholders})`,
+    allSubs
+  );
+  const engineMap = new Map();
+  for (const r of settingsRows) {
+    if (!r.extra) continue;
+    let extra;
+    try {
+      extra = typeof r.extra === "string" ? JSON.parse(r.extra) : r.extra;
+    } catch (_) { continue; }
+    if (!extra || !Array.isArray(extra.engine_favorites)) continue;
+    for (const e of extra.engine_favorites) {
+      if (e && typeof e.template_id === "string" && typeof e.stroke === "string") {
+        engineMap.set(`${e.template_id}:${e.stroke}`, { template_id: e.template_id, stroke: e.stroke });
+      }
+    }
+  }
+  return {
+    labels:  labelRows.map(r => r.label),
+    set_ids: setRows.map(r => r.set_id),
+    engine:  Array.from(engineMap.values()),
+  };
+}
+
 // ── Goals ────────────────────────────────────────────────────────────
 // Metric set is fixed; period_start/end are NULL for recurring goals
 // (the only kind exposed by the UI in MVP). Multiple historical rows
