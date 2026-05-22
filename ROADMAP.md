@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-22** (post phase-4-css-sweep deploy — Next list now empty)
+Last refreshed: **2026-05-22** (post view-as-v1 deploy)
 
 ## How this file works
 
@@ -27,9 +27,8 @@ _Empty as of 2026-05-22. Pick from Bigger threads or Backlog for the next sessio
 ## Bigger threads (need a planning session)
 
 - **Pricing implementation** — spec locked in repo `PRICING.md`. Four-tier Patreon (Free / Supporter $3 / Coach $10 / Program $25). Coaches pay, swimmers free. Trigger: first paying pilot. Source: [[swim-generator-pricing-direction]]
-- **Coach "see how my fav/disfavor is rolling out" view** — group-impact dashboard. Symmetric for fav and disfavor sides. Needs scope. Source: [[swim-generator-coach-propagation-v17]] [[swim-generator-favorites-prop-v13]]
-- **Bank label backfill** — outstanding from catalog Phase II. ~216 option slots, ~85-90 unique labels. Source: [[swim-generator-catalog-plan]] §"Pending: label backfill"
 - **Bank fallback rate reduction** — engine still falls back to bank in ~17% of (type × section × budget) combos. Engine-tuning project: more templates, better stroke coverage, or relaxed budget gates. Unbounded scope until measured. Source: [[swim-generator-disfavor-v12]] §"Open follow-ups"
+- **View-as v3: true impersonation with support_role gate** — admin or support_role-flagged user impersonates a specific other user, sees their actual data. NOT v1's role-flag override — server proxies the session as the target user. Requires: new `support_role` boolean (NOT just `is_admin`), server-side impersonation header check on every authenticated route, audit log every impersonated request, time-limited tokens, ToS update, persistent "Acting as X" banner. ~8-12h plus privacy review. Source: [[swim-generator-view-as-v1]] §Open follow-up
 
 ## Backlog (captured, low priority)
 
@@ -38,6 +37,7 @@ _Empty as of 2026-05-22. Pick from Bigger threads or Backlog for the next sessio
 - **Validator V5 + V7** — V5 needs mix-pill context (mix shipped; V5 still unwired). V7 only relevant if a future template uses cross-rep descending intervals (none do today). Source: [[swim-generator-template-engine-s25]]
 - **Recovery-mode behavior gap** — validated as real but mild (15/200 workouts <1800yd; rest land near max). Picker still favors larger options when budget allows. Not a bug, considered for tuning. Source: [[swim-generator-bank-review-todo]] §Status
 - **iOS native** — paused 2026-05-18, not declined. `/api/auth/native` stays live for TestFlight users. No new iOS features. Source: [[swim-generator-ios-paused]]
+- **View-as v2: persona simulation** — extend view-as v1 (role-flag override) to also filter App state so admin viewing-as-solo doesn't see their own groups/lane plans. ~5-7h, 30-40 site touches. True "what does a new user see?" preview. Lower priority than v3 (real impersonation) which gives more bug coverage. Source: [[swim-generator-view-as-v1]] §Open follow-up
 
 ## Closed / Declined (do not relitigate)
 
@@ -45,6 +45,7 @@ _Empty as of 2026-05-22. Pick from Bigger threads or Backlog for the next sessio
 - **In-app bank label quality iteration** — declined 2026-05-15. Same architecture reason as Phase III. Source: [[swim-generator-catalog-plan]]
 - **Watch companion (iOS)** — formally declined. Source: [[swim-generator-ios-paused]]
 - **Password/email auth** — never. OAuth-only (Apple + Google planned). Source: [[feedback-no-password-auth]]
+- **Bank label backfill** — verified done 2026-05-22 via `tools/bank_audit.py`: 616/616 options labeled, 598 unique. Catalog memo's "85-90 unlabeled" claim was stale; that work shipped during catalog Phase II week (2026-05-15).
 
 ## Recently shipped (last ~10 days, for context)
 
@@ -52,6 +53,9 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-22 | `view-as-v1` | Admin role-flag override (self/solo/coach) for UI QA |
+| 2026-05-22 | `coach-impact-v1` | Coach curation impact panel (reach + effectiveness, last 30d) |
+| 2026-05-22 | `hotfix-buildworkout-2026-05-22` | Hotfix: buildWorkout ReferenceError on useLaneFit (intro v2.0) |
 | 2026-05-22 | `phase-4-css-sweep` | 289 hex→var replacements + theme-color meta bug fix |
 | 2026-05-22 | `v2.1-multi-lane-history` | Periodic refresh + multi-lane workouts persist to history |
 | 2026-05-22 | `inherited-gaps-2026-05-22` | regenerateSection set-level weights + catalog set cycling button |

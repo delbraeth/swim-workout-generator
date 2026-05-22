@@ -8472,11 +8472,18 @@
         id: "drill_progression",
         family: "multi_row_composition",
         applicableSections: ["main", "drill"],
-        applicableTypes: ["im", "back", "breast", "fly", "free"],
+        // 2026-05-22: extended applicableTypes to include the 4 workout-types
+        // (distance, sprint, endurance, mixed) that previously had ZERO
+        // applicable drill templates — measured at 100% drill fallback
+        // before this change. drillsByType gets matching entries below.
+        applicableTypes: ["im", "back", "breast", "fly", "free", "distance", "sprint", "endurance", "mixed"],
         labelTemplate: (slots, totalYards) =>
           `Drill Progression ${slots.dist}s (${totalYards} yd)`,
         generate(typeKey, section, budgetYd, rand = Math.random) {
           // Type-specific drill banks. Each entry is [stroke, drill-description].
+          // First 5 keys are stroke-types (clean stroke focus); the next 4
+          // are workout-types (distance/sprint/endurance map to free-heavy
+          // drill blocks; mixed cycles all four strokes).
           const drillsByType = {
             im: [
               ["fly",    "Fly drill — 3-3-3 or single-arm"],
@@ -8503,6 +8510,28 @@
               ["fly", "3-3-3 drill — right / left / full"],
               ["fly", "Single-arm fly — control rhythm"],
               ["fly", "2-kick / 1-pull — find the rhythm"],
+            ],
+            distance: [
+              ["free", "Catch-up — long stroke, deliberate timing"],
+              ["free", "6-3-6 — kick balance into stroke rhythm"],
+              ["free", "Fingertip drag — high-elbow recovery"],
+              ["free", "Single-arm — full extension hold"],
+            ],
+            sprint: [
+              ["free", "Fast-tempo build — short, quick turnover"],
+              ["free", "Underwater dolphin off the wall — power"],
+              ["free", "Catch acceleration — fast first 12 yd"],
+            ],
+            endurance: [
+              ["free", "Distance per stroke — count strokes/length"],
+              ["free", "Long pull — extend the glide"],
+              ["free", "Bilateral breathing — symmetric balance"],
+            ],
+            mixed: [
+              ["free",   "Free drill — catch-up"],
+              ["back",   "Back drill — single-arm"],
+              ["breast", "Breast drill — 2-kick / 1-pull"],
+              ["fly",    "Fly drill — 3-3-3"],
             ],
           };
           const drills = drillsByType[typeKey] || drillsByType.free;

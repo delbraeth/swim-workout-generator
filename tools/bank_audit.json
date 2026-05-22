@@ -1242,32 +1242,7 @@
   "coverage_gaps_lt3": [
     {
       "type_cell": "drill:back",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:back",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:back",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:back",
-      "family": "block_with_recovery",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:back",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:back",
-      "family": "pyramid_up",
+      "family": "broken_race_pace",
       "count": 0
     },
     {
@@ -1282,17 +1257,47 @@
     },
     {
       "type_cell": "drill:back",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:back",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:back",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:back",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:back",
+      "family": "build_within_rep",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:back",
+      "family": "block_with_recovery",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:back",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:back",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:back",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:back",
+      "family": "sandwich",
       "count": 0
     },
     {
@@ -1306,38 +1311,8 @@
       "count": 0
     },
     {
-      "type_cell": "drill:back",
+      "type_cell": "drill:breast",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:breast",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:breast",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:breast",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:breast",
-      "family": "block_with_recovery",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:breast",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:breast",
-      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -1352,17 +1327,47 @@
     },
     {
       "type_cell": "drill:breast",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:breast",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:breast",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:breast",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:breast",
+      "family": "build_within_rep",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:breast",
+      "family": "block_with_recovery",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:breast",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:breast",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:breast",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:breast",
+      "family": "sandwich",
       "count": 0
     },
     {
@@ -1376,38 +1381,8 @@
       "count": 0
     },
     {
-      "type_cell": "drill:breast",
+      "type_cell": "drill:distance",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:distance",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:distance",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:distance",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:distance",
-      "family": "block_with_recovery",
-      "count": 1
-    },
-    {
-      "type_cell": "drill:distance",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:distance",
-      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -1422,17 +1397,47 @@
     },
     {
       "type_cell": "drill:distance",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:distance",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:distance",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:distance",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:distance",
+      "family": "build_within_rep",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:distance",
+      "family": "block_with_recovery",
+      "count": 1
+    },
+    {
+      "type_cell": "drill:distance",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:distance",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:distance",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:distance",
+      "family": "sandwich",
       "count": 0
     },
     {
@@ -1446,38 +1451,8 @@
       "count": 0
     },
     {
-      "type_cell": "drill:distance",
+      "type_cell": "drill:endurance",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:endurance",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:endurance",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:endurance",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:endurance",
-      "family": "block_with_recovery",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:endurance",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:endurance",
-      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -1487,17 +1462,47 @@
     },
     {
       "type_cell": "drill:endurance",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:endurance",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:endurance",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:endurance",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:endurance",
+      "family": "build_within_rep",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:endurance",
+      "family": "block_with_recovery",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:endurance",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:endurance",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:endurance",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:endurance",
+      "family": "sandwich",
       "count": 0
     },
     {
@@ -1511,38 +1516,8 @@
       "count": 0
     },
     {
-      "type_cell": "drill:endurance",
+      "type_cell": "drill:fly",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:fly",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:fly",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:fly",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:fly",
-      "family": "block_with_recovery",
-      "count": 1
-    },
-    {
-      "type_cell": "drill:fly",
-      "family": "build_within_rep",
-      "count": 2
-    },
-    {
-      "type_cell": "drill:fly",
-      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -1557,17 +1532,47 @@
     },
     {
       "type_cell": "drill:fly",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:fly",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:fly",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:fly",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:fly",
+      "family": "build_within_rep",
+      "count": 2
+    },
+    {
+      "type_cell": "drill:fly",
+      "family": "block_with_recovery",
+      "count": 1
+    },
+    {
+      "type_cell": "drill:fly",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:fly",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:fly",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:fly",
+      "family": "sandwich",
       "count": 0
     },
     {
@@ -1581,38 +1586,8 @@
       "count": 0
     },
     {
-      "type_cell": "drill:fly",
+      "type_cell": "drill:im",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:im",
-      "family": "race_pace_steady",
-      "count": 1
-    },
-    {
-      "type_cell": "drill:im",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:im",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:im",
-      "family": "block_with_recovery",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:im",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:im",
-      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -1627,17 +1602,47 @@
     },
     {
       "type_cell": "drill:im",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:im",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:im",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:im",
+      "family": "race_pace_steady",
+      "count": 1
+    },
+    {
+      "type_cell": "drill:im",
+      "family": "build_within_rep",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:im",
+      "family": "block_with_recovery",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:im",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:im",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:im",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:im",
+      "family": "sandwich",
       "count": 0
     },
     {
@@ -1651,38 +1656,8 @@
       "count": 1
     },
     {
-      "type_cell": "drill:im",
+      "type_cell": "drill:mixed",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:mixed",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:mixed",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:mixed",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:mixed",
-      "family": "block_with_recovery",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:mixed",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:mixed",
-      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -1697,17 +1672,47 @@
     },
     {
       "type_cell": "drill:mixed",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:mixed",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:mixed",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:mixed",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:mixed",
+      "family": "build_within_rep",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:mixed",
+      "family": "block_with_recovery",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:mixed",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:mixed",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:mixed",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:mixed",
+      "family": "sandwich",
       "count": 0
     },
     {
@@ -1721,38 +1726,8 @@
       "count": 1
     },
     {
-      "type_cell": "drill:mixed",
+      "type_cell": "drill:sprint",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:sprint",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:sprint",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:sprint",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:sprint",
-      "family": "block_with_recovery",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:sprint",
-      "family": "build_within_rep",
-      "count": 2
-    },
-    {
-      "type_cell": "drill:sprint",
-      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -1767,17 +1742,47 @@
     },
     {
       "type_cell": "drill:sprint",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:sprint",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:sprint",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:sprint",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:sprint",
+      "family": "build_within_rep",
+      "count": 2
+    },
+    {
+      "type_cell": "drill:sprint",
+      "family": "block_with_recovery",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:sprint",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:sprint",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:sprint",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:sprint",
+      "family": "sandwich",
       "count": 0
     },
     {
@@ -1791,38 +1796,8 @@
       "count": 1
     },
     {
-      "type_cell": "drill:sprint",
+      "type_cell": "drill:technique",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:technique",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:technique",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:technique",
-      "family": "sandwich",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:technique",
-      "family": "block_with_recovery",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:technique",
-      "family": "build_within_rep",
-      "count": 1
-    },
-    {
-      "type_cell": "drill:technique",
-      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -1837,158 +1812,163 @@
     },
     {
       "type_cell": "drill:technique",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:technique",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "drill:technique",
-      "family": "hot_cold_ladder",
+      "family": "threshold_steady",
       "count": 0
     },
     {
       "type_cell": "drill:technique",
-      "family": "pace_ladder",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:technique",
-      "family": "repeat_unit",
-      "count": 0
-    },
-    {
-      "type_cell": "drill:technique",
-      "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "main:back",
       "family": "race_pace_steady",
-      "count": 1
-    },
-    {
-      "type_cell": "main:back",
-      "family": "sprint_block",
       "count": 0
     },
     {
-      "type_cell": "main:back",
+      "type_cell": "drill:technique",
       "family": "build_within_rep",
       "count": 1
     },
     {
-      "type_cell": "main:back",
-      "family": "pyramid_up",
-      "count": 0
-    },
-    {
-      "type_cell": "main:back",
-      "family": "pyramid_up_down",
-      "count": 1
-    },
-    {
-      "type_cell": "main:back",
-      "family": "threshold_steady",
-      "count": 2
-    },
-    {
-      "type_cell": "main:back",
-      "family": "hot_cold_ladder",
-      "count": 0
-    },
-    {
-      "type_cell": "main:back",
-      "family": "pace_ladder",
-      "count": 0
-    },
-    {
-      "type_cell": "main:back",
-      "family": "repeat_unit",
-      "count": 1
-    },
-    {
-      "type_cell": "main:back",
-      "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "race_pace_steady",
-      "count": 1
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "build_within_rep",
-      "count": 1
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "pyramid_up",
-      "count": 0
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "pyramid_up_down",
-      "count": 1
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "threshold_steady",
-      "count": 2
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "hot_cold_ladder",
-      "count": 0
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "pace_ladder",
-      "count": 0
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "repeat_unit",
-      "count": 2
-    },
-    {
-      "type_cell": "main:breast",
-      "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "main:distance",
-      "family": "race_pace_steady",
-      "count": 1
-    },
-    {
-      "type_cell": "main:distance",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "main:distance",
-      "family": "sandwich",
-      "count": 2
-    },
-    {
-      "type_cell": "main:distance",
+      "type_cell": "drill:technique",
       "family": "block_with_recovery",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:technique",
+      "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:technique",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:technique",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:technique",
+      "family": "sandwich",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:technique",
+      "family": "pace_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "drill:technique",
+      "family": "repeat_unit",
+      "count": 0
+    },
+    {
+      "type_cell": "main:back",
+      "family": "broken_race_pace",
+      "count": 0
+    },
+    {
+      "type_cell": "main:back",
+      "family": "pyramid_up_down",
+      "count": 1
+    },
+    {
+      "type_cell": "main:back",
+      "family": "threshold_steady",
+      "count": 2
+    },
+    {
+      "type_cell": "main:back",
+      "family": "race_pace_steady",
+      "count": 1
+    },
+    {
+      "type_cell": "main:back",
+      "family": "build_within_rep",
+      "count": 1
+    },
+    {
+      "type_cell": "main:back",
+      "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:back",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "main:back",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "main:back",
+      "family": "pace_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:back",
+      "family": "repeat_unit",
+      "count": 1
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "broken_race_pace",
+      "count": 0
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "pyramid_up_down",
+      "count": 1
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "threshold_steady",
+      "count": 2
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "race_pace_steady",
+      "count": 1
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "build_within_rep",
+      "count": 1
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "pace_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:breast",
+      "family": "repeat_unit",
       "count": 2
     },
     {
       "type_cell": "main:distance",
-      "family": "pyramid_up",
-      "count": 1
+      "family": "broken_race_pace",
+      "count": 2
     },
     {
       "type_cell": "main:distance",
@@ -2002,8 +1982,33 @@
     },
     {
       "type_cell": "main:distance",
+      "family": "race_pace_steady",
+      "count": 1
+    },
+    {
+      "type_cell": "main:distance",
+      "family": "block_with_recovery",
+      "count": 2
+    },
+    {
+      "type_cell": "main:distance",
       "family": "hot_cold_ladder",
       "count": 0
+    },
+    {
+      "type_cell": "main:distance",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "main:distance",
+      "family": "pyramid_up",
+      "count": 1
+    },
+    {
+      "type_cell": "main:distance",
+      "family": "sandwich",
+      "count": 2
     },
     {
       "type_cell": "main:distance",
@@ -2013,31 +2018,16 @@
     {
       "type_cell": "main:distance",
       "family": "repeat_unit",
-      "count": 1
-    },
-    {
-      "type_cell": "main:distance",
-      "family": "broken_race_pace",
-      "count": 2
-    },
-    {
-      "type_cell": "main:endurance",
-      "family": "sprint_block",
       "count": 1
     },
     {
       "type_cell": "main:endurance",
-      "family": "sandwich",
-      "count": 1
+      "family": "broken_race_pace",
+      "count": 0
     },
     {
       "type_cell": "main:endurance",
       "family": "block_with_recovery",
-      "count": 1
-    },
-    {
-      "type_cell": "main:endurance",
-      "family": "pyramid_up",
       "count": 1
     },
     {
@@ -2047,33 +2037,28 @@
     },
     {
       "type_cell": "main:endurance",
-      "family": "pace_ladder",
-      "count": 0
+      "family": "sprint_block",
+      "count": 1
     },
     {
       "type_cell": "main:endurance",
-      "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "main:fly",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "main:fly",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "main:fly",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "main:fly",
       "family": "pyramid_up",
+      "count": 1
+    },
+    {
+      "type_cell": "main:endurance",
+      "family": "sandwich",
+      "count": 1
+    },
+    {
+      "type_cell": "main:endurance",
+      "family": "pace_ladder",
       "count": 0
+    },
+    {
+      "type_cell": "main:fly",
+      "family": "broken_race_pace",
+      "count": 1
     },
     {
       "type_cell": "main:fly",
@@ -2087,17 +2072,37 @@
     },
     {
       "type_cell": "main:fly",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "main:fly",
       "family": "descend_ladder",
       "count": 0
     },
     {
       "type_cell": "main:fly",
+      "family": "threshold_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "main:fly",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "main:fly",
+      "family": "build_within_rep",
+      "count": 0
+    },
+    {
+      "type_cell": "main:fly",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:fly",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "main:fly",
+      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -2111,26 +2116,6 @@
       "count": 1
     },
     {
-      "type_cell": "main:fly",
-      "family": "broken_race_pace",
-      "count": 1
-    },
-    {
-      "type_cell": "main:im",
-      "family": "race_pace_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "main:im",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "main:im",
-      "family": "pyramid_up",
-      "count": 0
-    },
-    {
       "type_cell": "main:im",
       "family": "aerobic_volume",
       "count": 1
@@ -2142,17 +2127,32 @@
     },
     {
       "type_cell": "main:im",
-      "family": "threshold_steady",
-      "count": 2
-    },
-    {
-      "type_cell": "main:im",
       "family": "descend_ladder",
       "count": 1
     },
     {
       "type_cell": "main:im",
+      "family": "threshold_steady",
+      "count": 2
+    },
+    {
+      "type_cell": "main:im",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "main:im",
       "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:im",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "main:im",
+      "family": "pyramid_up",
       "count": 0
     },
     {
@@ -2167,28 +2167,8 @@
     },
     {
       "type_cell": "main:mixed",
-      "family": "race_pace_steady",
+      "family": "broken_race_pace",
       "count": 0
-    },
-    {
-      "type_cell": "main:mixed",
-      "family": "sprint_block",
-      "count": 0
-    },
-    {
-      "type_cell": "main:mixed",
-      "family": "sandwich",
-      "count": 2
-    },
-    {
-      "type_cell": "main:mixed",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "main:mixed",
-      "family": "pyramid_up",
-      "count": 1
     },
     {
       "type_cell": "main:mixed",
@@ -2202,18 +2182,43 @@
     },
     {
       "type_cell": "main:mixed",
-      "family": "threshold_steady",
-      "count": 1
-    },
-    {
-      "type_cell": "main:mixed",
       "family": "descend_ladder",
       "count": 1
     },
     {
       "type_cell": "main:mixed",
+      "family": "threshold_steady",
+      "count": 1
+    },
+    {
+      "type_cell": "main:mixed",
+      "family": "race_pace_steady",
+      "count": 0
+    },
+    {
+      "type_cell": "main:mixed",
+      "family": "build_within_rep",
+      "count": 0
+    },
+    {
+      "type_cell": "main:mixed",
       "family": "hot_cold_ladder",
       "count": 0
+    },
+    {
+      "type_cell": "main:mixed",
+      "family": "sprint_block",
+      "count": 0
+    },
+    {
+      "type_cell": "main:mixed",
+      "family": "pyramid_up",
+      "count": 1
+    },
+    {
+      "type_cell": "main:mixed",
+      "family": "sandwich",
+      "count": 2
     },
     {
       "type_cell": "main:mixed",
@@ -2221,34 +2226,9 @@
       "count": 1
     },
     {
-      "type_cell": "main:mixed",
+      "type_cell": "main:sprint",
       "family": "broken_race_pace",
-      "count": 0
-    },
-    {
-      "type_cell": "main:sprint",
-      "family": "race_pace_steady",
       "count": 1
-    },
-    {
-      "type_cell": "main:sprint",
-      "family": "sprint_block",
-      "count": 2
-    },
-    {
-      "type_cell": "main:sprint",
-      "family": "sandwich",
-      "count": 2
-    },
-    {
-      "type_cell": "main:sprint",
-      "family": "build_within_rep",
-      "count": 0
-    },
-    {
-      "type_cell": "main:sprint",
-      "family": "pyramid_up",
-      "count": 0
     },
     {
       "type_cell": "main:sprint",
@@ -2262,18 +2242,43 @@
     },
     {
       "type_cell": "main:sprint",
+      "family": "descend_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:sprint",
       "family": "threshold_steady",
       "count": 0
     },
     {
       "type_cell": "main:sprint",
-      "family": "descend_ladder",
+      "family": "race_pace_steady",
+      "count": 1
+    },
+    {
+      "type_cell": "main:sprint",
+      "family": "build_within_rep",
       "count": 0
     },
     {
       "type_cell": "main:sprint",
       "family": "hot_cold_ladder",
       "count": 1
+    },
+    {
+      "type_cell": "main:sprint",
+      "family": "sprint_block",
+      "count": 2
+    },
+    {
+      "type_cell": "main:sprint",
+      "family": "pyramid_up",
+      "count": 0
+    },
+    {
+      "type_cell": "main:sprint",
+      "family": "sandwich",
+      "count": 2
     },
     {
       "type_cell": "main:sprint",
@@ -2286,9 +2291,29 @@
       "count": 2
     },
     {
-      "type_cell": "main:sprint",
+      "type_cell": "main:technique",
       "family": "broken_race_pace",
+      "count": 0
+    },
+    {
+      "type_cell": "main:technique",
+      "family": "aerobic_volume",
       "count": 1
+    },
+    {
+      "type_cell": "main:technique",
+      "family": "pyramid_up_down",
+      "count": 1
+    },
+    {
+      "type_cell": "main:technique",
+      "family": "descend_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:technique",
+      "family": "threshold_steady",
+      "count": 0
     },
     {
       "type_cell": "main:technique",
@@ -2297,13 +2322,8 @@
     },
     {
       "type_cell": "main:technique",
-      "family": "sprint_block",
+      "family": "build_within_rep",
       "count": 0
-    },
-    {
-      "type_cell": "main:technique",
-      "family": "sandwich",
-      "count": 1
     },
     {
       "type_cell": "main:technique",
@@ -2312,7 +2332,12 @@
     },
     {
       "type_cell": "main:technique",
-      "family": "build_within_rep",
+      "family": "hot_cold_ladder",
+      "count": 0
+    },
+    {
+      "type_cell": "main:technique",
+      "family": "sprint_block",
       "count": 0
     },
     {
@@ -2322,37 +2347,12 @@
     },
     {
       "type_cell": "main:technique",
-      "family": "aerobic_volume",
+      "family": "sandwich",
       "count": 1
-    },
-    {
-      "type_cell": "main:technique",
-      "family": "pyramid_up_down",
-      "count": 1
-    },
-    {
-      "type_cell": "main:technique",
-      "family": "threshold_steady",
-      "count": 0
-    },
-    {
-      "type_cell": "main:technique",
-      "family": "descend_ladder",
-      "count": 0
-    },
-    {
-      "type_cell": "main:technique",
-      "family": "hot_cold_ladder",
-      "count": 0
     },
     {
       "type_cell": "main:technique",
       "family": "pace_ladder",
-      "count": 0
-    },
-    {
-      "type_cell": "main:technique",
-      "family": "broken_race_pace",
       "count": 0
     }
   ],
