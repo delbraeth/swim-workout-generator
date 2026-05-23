@@ -890,6 +890,14 @@
         <div class="callout-icon">📱</div>
         <div class="callout-body"><strong>iOS Safari:</strong> phone-deck audio works because the AudioContext is primed when you tap <strong>▶ Start</strong> in the rest picker. If you don't hear anything, double-check your phone isn't on silent mode (the silent switch overrides Web Audio on iOS).</div>
       </div>
+
+      <h3>✋ Lap button</h3>
+      <p>Right under the Audio cues toggle in the Start Workout dialog, there's a <strong>✋ Lap button</strong> toggle. It controls how the running timer behaves during sets:</p>
+      <ul>
+        <li><strong>ON (default):</strong> while a rep is timing, the big primary button is <strong>✓ Lap</strong>. Tap it as you touch the wall each rep — the timer records your actual split time and shows you <em>last delta</em> and <em>avg delta</em> vs. the interval. Useful when you want a record of how you actually swam each rep.</li>
+        <li><strong>OFF:</strong> the primary button becomes <strong>⏸ Pause</strong>. You don't tap per rep — the timer auto-advances when it hits zero on each interval. The splits feedback pill disappears since every split would be on-time. Useful when you just want a quiet pace clock and don't care about per-rep splits.</li>
+      </ul>
+      <p>Either way, the <strong>Skip →</strong> button stays available, and the auto-advance behavior at T-0 is unchanged. The preference is saved per-account; default is ON.</p>
     </section>
 
     <!-- ══ SAVING ══ -->

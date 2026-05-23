@@ -1385,6 +1385,15 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         }
       }
     }
+    // Run-screen v1 — Validate lap_button (boolean). When false, PaceClockView
+    // drops the ✓ Lap button and splits pill; timer auto-advances only and
+    // ⏸ Pause becomes the primary action. Default behavior (lap_button=true
+    // or absent) preserves the existing ✓ Lap UX.
+    if ("lap_button" in patch && patch.lap_button !== null) {
+      if (typeof patch.lap_button !== "boolean") {
+        return res.status(400).json({ error: "lap_button must be boolean" });
+      }
+    }
     await dbPatchSettingsExtra(req.userSub, patch);
     res.json({ ok: true });
   } catch (err) {

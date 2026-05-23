@@ -11159,7 +11159,7 @@
       return `${m}:${String(s).padStart(2, "0")}`;
     }
 
-    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, onWorkoutFinish, onLap, isLastSet, restSecs, autoStart, elapsed, audioCues = false, unit = "yds" }) {
+    function PaceClockView({ set, sectionName, focusNote, onClose, onNext, onWorkoutFinish, onLap, isLastSet, restSecs, autoStart, elapsed, audioCues = false, lapButton = true, unit = "yds" }) {
       const totalSecs  = parseIntervalSeconds(set.interval);
       const hasTimer   = totalSecs !== null;
       const isLandscape = useIsLandscape();
@@ -11280,7 +11280,7 @@
         const t = m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `0:${String(s).padStart(2, "0")}`;
         return (n > 0 ? "+" : n < 0 ? "−" : "±") + t;
       };
-      const splitFeedback = hasTimer && (setSplits.length > 0 || lastSplit) && (
+      const splitFeedback = lapButton && hasTimer && (setSplits.length > 0 || lastSplit) && (
         <div className="screen-only" style={{
           display: "flex", alignItems: "center", justifyContent: "center", gap: 14,
           padding: "6px 12px", borderRadius: 999,
@@ -11323,30 +11323,43 @@
       // Controls shared between portrait and landscape
       const btnBase = {
         borderRadius: 16, fontWeight: 700, cursor: "pointer",
-        padding: isLandscape ? "12px 0" : "22px 0",
-        minHeight: isLandscape ? 52 : 70,
-        fontSize: isLandscape ? 17 : 22,
+        padding: isLandscape ? "14px 0" : "22px 0",
+        minHeight: isLandscape ? 60 : 70,
+        fontSize: isLandscape ? 18 : 22,
       };
       const controls = (
         <div style={{ display: "flex", gap: isLandscape ? 10 : 14, width: "100%" }}>
           {!finished && (
             <>
               {hasTimer && running ? (
-                // E: when timer is running, the primary action is "✓ Lap".
-                <>
-                  <button onClick={handleLap} style={{
-                    ...btnBase, flex: 2, border: "none", background: "#16a34a",
+                lapButton ? (
+                  // E: when timer is running AND lap button is on, the primary
+                  // action is "✓ Lap" — coach taps each rep to record splits.
+                  <>
+                    <button onClick={handleLap} style={{
+                      ...btnBase, flex: 2, border: "none", background: "#16a34a",
+                      color: "#fff", fontSize: isLandscape ? 20 : 26, fontWeight: 800,
+                    }}>
+                      ✓ Lap
+                    </button>
+                    <button onClick={() => setRunning(false)} style={{
+                      ...btnBase, flex: 1, border: "1px solid var(--color-border)",
+                      background: "var(--color-bg)", color: "#cbd5e1",
+                    }}>
+                      ⏸
+                    </button>
+                  </>
+                ) : (
+                  // Run-screen v1: lap button OFF — primary action is Pause
+                  // (no manual lap input; timer auto-advances on hit).
+                  <button onClick={() => setRunning(false)} style={{
+                    ...btnBase, flex: 2, border: "none",
+                    background: "var(--color-primary)",
                     color: "#fff", fontSize: isLandscape ? 20 : 26, fontWeight: 800,
                   }}>
-                    ✓ Lap
+                    ⏸ Pause
                   </button>
-                  <button onClick={() => setRunning(false)} style={{
-                    ...btnBase, flex: 1, border: "1px solid var(--color-border)",
-                    background: "var(--color-bg)", color: "#cbd5e1",
-                  }}>
-                    ⏸
-                  </button>
-                </>
+                )
               ) : hasTimer ? (
                 <button onClick={() => setRunning(r => !r)} style={{
                   ...btnBase, flex: 2, border: "none",
@@ -11407,6 +11420,32 @@
 
       if (isLandscape) {
         // ── LANDSCAPE: two-column layout ──────────────────────────────
+        // Run-screen v1 rebuild for poolside glance-readability:
+        //  - Info hierarchy swapped: live state (REP X OF Y, clock) dominates
+        //    over static set info on the left.
+        //  - Clock grown 80→128. State label ("INTERVAL"/"REST"/"GO") sits
+        //    above the number so glance disambiguates without reading color.
+        //  - repDots moved to the right column under the clock (dynamic state
+        //    with dynamic state). splitFeedback stays on the left.
+        //  - Column ratio flipped 1.1:1 → 1:1.2 so the clock side gets the
+        //    extra real estate.
+        //  - Right column wrapped in a min-height container so the swap
+        //    between running / REST / Set Complete doesn't shift layout.
+
+        // State label + color drive the glance disambiguation.
+        let phaseLabel = null;
+        let phaseColor = "var(--color-text-dim)";
+        if (finished && restLeft !== null && restLeft > 0) {
+          if (restLeft <= 3) { phaseLabel = "GO IN"; phaseColor = "#4ade80"; }
+          else               { phaseLabel = "REST";  phaseColor = "var(--color-warn)"; }
+        } else if (finished) {
+          phaseLabel = null; // celebration screen has its own headline
+        } else if (hasTimer) {
+          phaseLabel = "INTERVAL"; phaseColor = running ? "var(--color-text)" : "var(--color-border-strong)";
+        } else {
+          phaseLabel = "FREE";     phaseColor = "var(--color-border-strong)";
+        }
+
         return (
           <div style={{
             position: "fixed", inset: 0, zIndex: 10000,
@@ -11436,81 +11475,95 @@
               </div>
               <div style={{ minWidth: 44, textAlign: "right" }}>
                 {elapsed !== undefined && (
-                  <div style={{ fontSize: 30, color: "var(--color-warn)", fontWeight: 700, fontFamily: "monospace", letterSpacing: "0.04em" }}>
+                  <div style={{ fontSize: 36, color: "var(--color-warn)", fontWeight: 700, fontFamily: "monospace", letterSpacing: "0.04em" }}>
                     {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Two-column content */}
+            {/* Two-column content — right column gets more room */}
             <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-              {/* Left: set info */}
+              {/* Left: set info (now visually secondary to the clock) */}
               <div style={{
-                flex: 1.1, display: "flex", flexDirection: "column",
+                flex: 1, display: "flex", flexDirection: "column",
                 justifyContent: "center", padding: "12px 20px",
                 borderRight: "1px solid var(--color-card)",
               }}>
-                <div style={{ fontSize: 45, fontWeight: 800, color: "var(--color-text)", marginBottom: 6 }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: "var(--color-text)", marginBottom: 8 }}>
                   {set.reps} × {set.dist} {unit}
                 </div>
-                <div style={{ fontSize: 32, color: "#cbd5e1", lineHeight: 1.35, marginBottom: 6 }}>
+                <div style={{ fontSize: 24, color: "#cbd5e1", lineHeight: 1.35, marginBottom: 6 }}>
                   {set.desc}
                 </div>
-                <div style={{ fontSize: 32, color: "var(--color-border-strong)", fontFamily: "monospace", marginBottom: 12 }}>
+                <div style={{ fontSize: 22, color: "var(--color-border-strong)", fontFamily: "monospace" }}>
                   {set.interval}
                 </div>
-                {repDots}
-                {splitFeedback && <div style={{ marginTop: 10 }}>{splitFeedback}</div>}
+                {splitFeedback && <div style={{ marginTop: 14 }}>{splitFeedback}</div>}
               </div>
 
-              {/* Right: clock */}
+              {/* Right: clock — bigger flex, bigger number, label above */}
               <div style={{
-                flex: 1, display: "flex", flexDirection: "column",
+                flex: 1.2, display: "flex", flexDirection: "column",
                 alignItems: "center", justifyContent: "center", padding: "12px 16px",
               }}>
-                {finished ? (
-                  restLeft !== null && restLeft > 0 ? (
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-warn)", letterSpacing: "0.12em", marginBottom: 6 }}>REST</div>
-                      <div style={{ fontSize: 80, fontWeight: 900, color: "var(--color-warn)", fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1 }}>
-                        {restLeft}
-                      </div>
-                      <div style={{ fontSize: 13, color: "var(--color-text-dim)", marginTop: 6 }}>Next set starting soon…</div>
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
-                      <div style={{ fontSize: 18, color: "var(--color-text-dim)", marginTop: 6 }}>
-                        {set.reps} rep{set.reps !== 1 ? "s" : ""} done
-                      </div>
-                    </div>
-                  )
-                ) : (
-                  <>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: "var(--color-text-dim)", marginBottom: 8, letterSpacing: "0.06em" }}>
-                      REP <span style={{ color: "var(--color-text)" }}>{repIdx + 1}</span>
-                      {" "}<span style={{ color: "var(--color-border)" }}>OF</span>{" "}
-                      {set.reps}
-                    </div>
-                    {hasTimer ? (
-                      <div style={{
-                        fontSize: 80, fontWeight: 900,
-                        color: running ? "#ffffff" : "var(--color-border)",
-                        fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1,
-                        transition: "color 0.25s",
-                      }}>
-                        {fmtTime(secsLeft)}
+                {/* Min-height container kills layout shift between states */}
+                <div style={{
+                  minHeight: 220, width: "100%",
+                  display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center",
+                }}>
+                  {finished ? (
+                    restLeft !== null && restLeft > 0 ? (
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: phaseColor, letterSpacing: "0.14em", marginBottom: 8 }}>
+                          {phaseLabel}
+                        </div>
+                        <div style={{ fontSize: 128, fontWeight: 900, color: phaseColor, fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1 }}>
+                          {restLeft}
+                        </div>
+                        <div style={{ fontSize: 13, color: "var(--color-text-dim)", marginTop: 8 }}>Next set starting soon…</div>
                       </div>
                     ) : (
-                      <div style={{ fontSize: 20, color: "var(--color-border-strong)", fontStyle: "italic" }}>
-                        No interval — swim easy
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 56, marginBottom: 10 }}>✅</div>
+                        <div style={{ fontSize: 32, fontWeight: 800, color: "#4ade80" }}>Set Complete!</div>
+                        <div style={{ fontSize: 18, color: "var(--color-text-dim)", marginTop: 8 }}>
+                          {set.reps} rep{set.reps !== 1 ? "s" : ""} done
+                        </div>
                       </div>
-                    )}
-                  </>
-                )}
+                    )
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 32, fontWeight: 700, color: "var(--color-text-dim)", marginBottom: 8, letterSpacing: "0.06em" }}>
+                        REP <span style={{ color: "var(--color-text)" }}>{repIdx + 1}</span>
+                        {" "}<span style={{ color: "var(--color-border)" }}>OF</span>{" "}
+                        {set.reps}
+                      </div>
+                      {phaseLabel && (
+                        <div style={{ fontSize: 13, fontWeight: 800, color: phaseColor, letterSpacing: "0.14em", marginBottom: 4 }}>
+                          {phaseLabel}
+                        </div>
+                      )}
+                      {hasTimer ? (
+                        <div style={{
+                          fontSize: 128, fontWeight: 900,
+                          color: running ? "#ffffff" : "var(--color-border)",
+                          fontFamily: "monospace", letterSpacing: "-0.03em", lineHeight: 1,
+                          transition: "color 0.25s",
+                        }}>
+                          {fmtTime(secsLeft)}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 22, color: "var(--color-border-strong)", fontStyle: "italic" }}>
+                          Swim easy
+                        </div>
+                      )}
+                      {repDots && <div style={{ marginTop: 14 }}>{repDots}</div>}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -19031,7 +19084,7 @@
       );
     }
 
-    function RestPickerModal({ restSecs, onChange, onStart, onCancel, audioCues, onAudioCuesChange }) {
+    function RestPickerModal({ restSecs, onChange, onStart, onCancel, audioCues, onAudioCuesChange, lapButton, onLapButtonChange }) {
       return (
         <div style={{
           position: "fixed", inset: 0, zIndex: 9998,
@@ -19090,6 +19143,27 @@
                 </span>
               </button>
             )}
+            {/* Run-screen v1: lap-button toggle. When OFF, PaceClockView drops
+                the ✓ Lap action and the splits feedback pill; ⏸ Pause becomes
+                the primary action. Default ON preserves existing UX. */}
+            {onLapButtonChange && (
+              <button onClick={() => onLapButtonChange(!lapButton)}
+                title="✓ Lap button during sets — tap each rep to record split times. Off = timer auto-advances on hit, no manual lap input."
+                style={{
+                  width: "100%", marginBottom: 22,
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "10px 14px", borderRadius: 10,
+                  border: `1px solid ${lapButton ? "var(--color-primary)" : "var(--color-border)"}`,
+                  background: lapButton ? "#1e3a5f" : "var(--color-bg)",
+                  color: lapButton ? "var(--color-primary)" : "var(--color-text-dim)",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}>
+                <span>✋ Lap button</span>
+                <span style={{ fontSize: 11, color: lapButton ? "var(--color-primary)" : "var(--color-border-strong)" }}>
+                  {lapButton ? "ON · per-rep splits" : "OFF · auto-advance only"}
+                </span>
+              </button>
+            )}
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={onCancel} style={{
                 flex: 1, padding: "14px 0", borderRadius: 12,
@@ -19123,7 +19197,7 @@
 
     const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
 
-    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, personalFirstName, audioCues = false, unit = "yds" }) {
+    function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, personalFirstName, audioCues = false, lapButton = true, unit = "yds" }) {
       const [idx, setIdx]               = useState(0);
       const [paceIdx, setPaceIdx]       = useState(null);
       const [elapsed, setElapsed]       = useState(0); // seconds since workout started
@@ -19305,6 +19379,7 @@
               autoStart={autoStartNext}
               elapsed={elapsed}
               audioCues={audioCues}
+              lapButton={lapButton}
               unit={unit}
             />
           )}
@@ -19557,6 +19632,7 @@
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
       const [audioCues, setAudioCues]             = useState(true); // W1: rest-timer beeps default ON
+      const [lapButton, setLapButton]             = useState(true); // Run-screen v1: ✓ Lap button default ON
       const [loadedFromHistoryId, setLoadedFromHistoryId] = useState(null);
       const [saveStatus, setSaveStatus]           = useState(null); // null | "saving" | "saved" | "error"
       const [saveError, setSaveError]             = useState(null);
@@ -19894,6 +19970,8 @@
             setPhase(s.phase && PHASES[s.phase] ? s.phase : null);
             // W1: audio_cues persisted per-user; default ON when unset.
             if (typeof s.audio_cues === "boolean") setAudioCues(s.audio_cues);
+            // Run-screen v1: lap_button persisted per-user; default ON when unset.
+            if (typeof s.lap_button === "boolean") setLapButton(s.lap_button);
             // F: equipment_modes is a per-item map { kickboard: "off"|"preferred"|"required", ... }
             if (s.equipment_modes && typeof s.equipment_modes === "object") {
               setEquipment(prev => {
@@ -19949,6 +20027,17 @@
           method: "POST",
           headers: { "Content-Type": "application/json", ...csrfHeaders() },
           body: JSON.stringify({ audio_cues: next }),
+        }).catch(() => {});
+      }, []);
+
+      // Run-screen v1: persist the lap_button toggle. Mirror of audio_cues
+      // pattern — optimistic local update + best-effort POST.
+      const handleLapButtonToggle = useCallback((next) => {
+        setLapButton(next);
+        fetch(`${API_BASE}/settings/extra`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify({ lap_button: next }),
         }).catch(() => {});
       }, []);
 
@@ -22437,6 +22526,8 @@
               onCancel={() => { setRunWorkout(null); setShowRestPicker(false); setRunAssignmentId(null); }}
               audioCues={audioCues}
               onAudioCuesChange={handleAudioCuesToggle}
+              lapButton={lapButton}
+              onLapButtonChange={handleLapButtonToggle}
             />
           )}
           {!showRestPicker && runWorkout && (
@@ -22447,6 +22538,7 @@
               onLogAsToday={handleLogAsToday}
               personalFirstName={personalFirstName}
               audioCues={audioCues}
+              lapButton={lapButton}
               unit={unit}
             />
           )}
