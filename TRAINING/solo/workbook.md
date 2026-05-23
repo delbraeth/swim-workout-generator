@@ -8,9 +8,9 @@
 
 **SetForge — Solo Athlete Workbook**
 
-Generate your own swim workouts. Read them on deck. Track what you actually swim.
+Generate your own swim workouts. Read them on deck. Tell SetForge what you like. Track what you actually swim.
 
-This workbook is designed to be printed (12 pages) or read alongside the app on your phone. It assumes you can already swim — what's new is the workflow around picking the workout. By the end you'll have run five workouts and have a clear sense of which types and structures suit you.
+This workbook is designed to be printed (~13 pages) or read alongside the app on your phone. It assumes you can already swim — what's new is the workflow around picking the workout. By the end you'll have run five workouts, taught the generator your preferences, and have a clear sense of which types and structures suit you.
 
 *Use it solo. No coach required.*
 
@@ -43,7 +43,7 @@ You need three things before page 2 makes sense.
 4. Note your finish time.
 5. **Divide by 2.** That's your per-100 pace.
 
-Example: 3:18 finish on 200 → 1:39/100. Round to the nearest 5 seconds when you enter it in SetForge: **1:40 / 100**.
+Example: 3:18 finish on 200 → 1:39 per 100. Round to the nearest 5 seconds when you enter it in SetForge: **1:40 / 100**.
 
 **Reality check:**
 
@@ -59,7 +59,7 @@ If your 200 felt brutal, your pace is honest. If you finished feeling like you s
 
 **Entering it in SetForge:** type the value in the pace field above the yardage slider as `M:SS` (for example, `1:50`). It saves automatically about 1.5 seconds after you stop typing.
 
-> **Shortcut.** If you genuinely have no idea and don't want to test today, open Profile → 🎯 Swimmer level and pick **Recreational** (2:30), **Masters** (2:00), or **Competitive** (1:30). You can refine later.
+> **Shortcut.** If you genuinely have no idea and don't want to test today, open 👤 Profile → 🎯 Swimmer level and pick **Recreational** (2:30), **Masters** (2:00), or **Competitive** (1:30). You can refine later.
 
 ---
 
@@ -103,9 +103,11 @@ Reps × Distance     Description                              Interval
 
 - **Colored effort-zone pill** (e.g. ● THRESHOLD in yellow) — the dominant intensity of that block. Use it to pace yourself across the workout.
 - **↺ button** — regenerate just that block, keep the others.
-- **⭐ / 👎 button on the Main block** — favorite or disfavor. Favoriting nudges the generator toward this set in the future; disfavoring nudges away.
+- **Tri-state ★ / — / 👎 toggle on the Main block** — favorite, neutral, or disfavor. See Page 3.
+- **Cycling button on each set row** (☆ → ★ → 👎 → ☆) — favorite or disfavor that one set inside the block.
 - **⇄ button on individual sets** — swap that set for a shorter or longer equivalent.
 - **× 2 rounds** label — the main set is a repeat. You swim the same set twice (or three times) with rest between rounds.
+- **⚡ ENGINE** badge (sometimes) — that block was built on the fly from a structural template, not picked from the hand-authored library. Hover for the template name. Works the same way otherwise.
 
 ### "No interval — swim easy"
 
@@ -113,7 +115,76 @@ Some sets won't have a number. That's intentional. It means swim it at a relaxed
 
 ---
 
-## Page 3 — The Nine Workout Types
+## Page 3 — Favorites & Disfavorites (the bias system)
+
+SetForge picks at random from a library of workout options. **Favorites and disfavorites are how you bend that randomness toward what you actually want.** This is the one feature most worth learning on day one — it shapes every future workout.
+
+### The shorthand
+
+- **★ Favorite** = picked **3× more often** than baseline.
+- **— Neutral** = baseline (the default).
+- **👎 Disfavor** = picked **¼ as often** as baseline.
+
+A label can be in exactly one state at a time. Setting one clears the others.
+
+### Where to tap
+
+**Two places:**
+
+**A. The block header — main set level.**
+
+Every main set block carries a three-segment toggle in its header:
+
+```
+[ ★ Favorite  |  — Neutral  |  👎 Disfavor ]
+```
+
+Tap the segment you want. The change saves immediately and follows you across devices. This bias applies to the whole *label* (e.g. *"IM Descend Ladder"*) — every time that label is in the pick pool in the future, your bias applies.
+
+**B. The set row — individual set level.**
+
+Every set row inside any block has a leading cycling button: **☆ → ★ → 👎 → ☆**. Tap once to favorite that specific set, again to disfavor, again to clear.
+
+Use this when you don't have a strong opinion about the whole label, just one specific set inside it — e.g., you love the 4×200 inside an IM workout but you're neutral on the rest of the set.
+
+### When to use which
+
+| Situation | What to tap |
+|---|---|
+| Whole main set was great — give me more like this | **★** on the block header |
+| One specific piece was great, rest was fine | **★** on the set row |
+| Whole main set was a slog — show it less often | **👎** on the block header |
+| I keep getting this exact set and I'm tired of it | **👎** on the set row |
+| Changed my mind | Tap the active state again to clear, or pick a different state |
+
+### "But will I still see it?"
+
+Yes — disfavor is a *downweight*, not a ban. A disfavored item still appears occasionally (about a quarter as often). If you really want certainty — never pick this — see **Hard-exclude mode** below.
+
+### The Profile audit panels
+
+Open **👤 Profile** any time to see everything you've curated:
+
+- **Favorites panel** — every label, every set, every engine template you've starred. One-tap **Remove** per row.
+- **Disfavorites panel** — same, for thumbs-down. Plus a **Mode** toggle at the top: **Downweight (0.25×)** (the default) or **Hard-exclude** (weight 0 — disfavored items skipped entirely). Hard-exclude applies to everything you've disfavored, not per-item.
+
+Hard-exclude has a safety net: if your filter ever empties the pick pool for a workout, SetForge silently falls back to picking from the excluded pool so you still get a workout. If you hit that often, your disfavor list is too aggressive — clear a few.
+
+### The favorite-wins rule
+
+If you accidentally have something both starred AND thumbs-downed (or you star something a coach has disfavored — relevant later if you ever join a group), **the favorite wins**. The 3× boost applies; the disfavor is silently ignored. SetForge will never punish you for something you actively wanted.
+
+### A starter pattern
+
+You don't need to curate before swimming. Just keep a light touch:
+
+- After your first 5–10 workouts, scan back through your history. Star 2–3 mains you'd want to see again.
+- If a label shows up 3 weeks in a row and bores you, thumbs-down it — it'll show up rarely going forward.
+- Don't disfavor based on one bad day. A workout that broke you on Tuesday may be exactly what you wanted on Saturday.
+
+---
+
+## Page 4 — The Nine Workout Types
 
 Pick the type that matches what your body and your week need today. There's no wrong choice — pick by mood when in doubt.
 
@@ -141,7 +212,7 @@ Three days a week is a perfectly good starting point. Five is great if your body
 
 ---
 
-## Page 4 — Starter Workout #1: Easy Aerobic Distance
+## Page 5 — Starter Workout #1: Easy Aerobic Distance
 
 **Type:** Distance
 **Target:** 2,000 yards · ~50 minutes
@@ -180,7 +251,7 @@ COOL-DOWN                                             300 yds
 
 ---
 
-## Page 5 — Starter Workout #2: Mixed Variety
+## Page 6 — Starter Workout #2: Mixed Variety
 
 **Type:** Mixed
 **Target:** 2,200 yards · ~55 minutes
@@ -218,7 +289,7 @@ COOL-DOWN                                             200 yds
 
 ---
 
-## Page 6 — Starter Workout #3: Sprint Day
+## Page 7 — Starter Workout #3: Sprint Day
 
 **Type:** Sprint
 **Target:** 1,800 yards · ~45 minutes
@@ -257,7 +328,7 @@ COOL-DOWN                                             200 yds
 
 ---
 
-## Page 7 — Starter Workout #4: Technique Focus
+## Page 8 — Starter Workout #4: Technique Focus
 
 **Type:** Technique
 **Target:** 2,000 yards · ~55 minutes
@@ -296,7 +367,7 @@ COOL-DOWN                                             200 yds
 
 ---
 
-## Page 8 — Starter Workout #5: Build-Up Distance Day
+## Page 9 — Starter Workout #5: Build-Up Distance Day
 
 **Type:** Distance
 **Target:** 3,000 yards · ~75 minutes
@@ -333,17 +404,17 @@ That's 2,400 yards in the main alone — three rounds of 8×100. Big day. Eat af
 - Pace the first round 5 seconds slower than target. Match target round 2. Try to negative-split round 3.
 - If you start cooking in round 2, take an extra 10 seconds between rounds. The rest is editable in the app — tap the `── 30s rest ──` row and bump it.
 
-**Reflect:** This is the workout that earns the post-swim coffee.
+**Reflect:** This is the workout that earns the post-swim coffee. Star the main if you'd want it again.
 
 ---
 
-## Page 9 — Troubleshooting
+## Page 10 — Troubleshooting
 
 ### Pace feels too tight (you can't make the interval)
 
 Three options, easiest first:
 
-1. **Edit your per-100 pace** in the field above the slider. Bump it by 5–10 seconds slower. Hit **Rescale all** — every interval in the current workout updates.
+1. **Edit your per-100 pace** in the field above the slider. Bump it by 5–10 seconds slower. Every interval in the current workout updates automatically.
 2. **Edit a single interval** by tapping it inline. Type a more achievable number. Press Enter.
 3. **Use the ⊘ button** while editing to set the interval to "No interval — swim easy." Turns the set into a pace-free swim.
 
@@ -363,7 +434,7 @@ That's data. Three responses:
 
 ### Equipment I don't have shows up
 
-Set the equipment card to **off** before generating — it gets cycled when you tap it: off → preferred → required → off. If a set already generated has fins in the description and you don't have fins, just swim without them — the set still works.
+Set the equipment card to **off** before generating — it cycles when you tap: off → preferred → required → off. If a set already generated has fins in the description and you don't have fins, just swim without them — the set still works.
 
 ### I want to skip the warm-up (already swam an hour ago)
 
@@ -374,7 +445,19 @@ SetForge always generates a warm-up. Two workarounds:
 
 ### The same main set keeps coming up
 
-SetForge already down-weights sets you completed in the last 7 days to 25%. If it still picks one (rare), tap **↺** on the main block to regenerate just that section. If a specific main set you've seen a few times is wearing thin, tap the **👎** button on the block — SetForge will weight it down to 25% for you specifically.
+Three layers of defense, weakest to strongest:
+
+1. SetForge already down-weights mains you completed in the last 7 days to 25%. Look for the red **last seen Nd ago** pill — that's the signal it fired.
+2. Tap **↺** on the main block to regenerate just that section. The new option will be a different fingerprint.
+3. **Thumbs-down the label.** Tap **👎** in the main block header. SetForge drops it to a quarter weight for you specifically, going forward. Want it gone for sure? Open Profile → Disfavorites and flip the **Mode** toggle to **Hard-exclude**.
+
+### A specific set inside a main keeps appearing and I want it gone
+
+Tap the cycling button at the start of that set row until it shows **👎**. That's set-level disfavor — the label may still come up, but the picker weights against options that contain that specific set.
+
+### I disfavored too much and now everything feels filtered
+
+Open **👤 Profile → Disfavorites**. Scan the list. Hit **Remove** on anything you don't feel strongly about anymore. If you're in Hard-exclude mode and the picker is silently falling back too often, switch back to Downweight — it's the gentler default.
 
 ### The interval clock seems wrong on a swap
 
@@ -384,17 +467,29 @@ The ⇄ swap uses a non-linear interval calc — doubling a 100 to a 200 doesn't
 
 Check the physical silent switch on the side of your phone. iOS Safari respects it for Web Audio — silent switch on = no beeps. Tap to enable audio cues in the rest picker triggers a one-beep preview so you can confirm.
 
+### I got a Required-equipment error banner
+
+You've set an equipment item to **Required** (amber ★ badge), but the generator can't find any combination of warm-up + drill + main + cool-down at your max yardage that includes it. Fix one of these:
+
+- Raise the max-yardage on the slider.
+- Switch the item from **Required** back to **Preferred** (tap once more to cycle).
+- Tap the 📍 pin off any sections you'd locked from previous generates.
+
 ---
 
-## Page 10 — Glossary
+## Page 11 — Glossary
 
 | Term | Meaning |
 |---|---|
 | **Bank** | The hand-authored library of workout sets SetForge picks from. Default source for every block. |
 | **Block** | One of the four color-coded sections in a workout (Warm-Up, Drill, Main, Cool-Down). |
 | **Cruise pace** | Your honest sustainable 100 — what you'd hold for a long set, not your race 100. |
-| **Engine** | Optional second source for a block: a structural template (pyramid, ladder, sandwich) generated on the fly. Toggle per block. |
+| **Disfavor (👎)** | Tells the picker to pick a label, set, or engine template ¼ as often. Tri-state toggle on main blocks; cycling button on set rows. |
+| **Downweight mode** | Default disfavor mode — disfavored items still appear, just less often (0.25× weight). |
+| **Engine** | Optional second source for a block: a structural template (pyramid, ladder, sandwich) generated on the fly. Toggle per block — ⚡ badge in the header indicates engine output. |
+| **Favorite (★)** | Tells the picker to pick a label, set, or engine template 3× as often. Same tri-state toggle as disfavor. Beats disfavor on collisions (favorite-wins rule). |
 | **Focus note** | A one-line intention you set before generating. Shows on print + Run Mode header. |
+| **Hard-exclude** | Stronger disfavor mode — disfavored items get weight 0 (skipped entirely). Toggle in the Profile → Disfavorites panel. Applies to all your disfavorites at once. |
 | **Interval** | The time you leave the wall on. `On 2:00` = push off every 2 minutes regardless of how fast you swam. |
 | **LCM** | Long Course Meters — 50m pool. |
 | **Lap** | In Run Mode, the **✓ Lap** button captures your actual time on the rep just finished. |
@@ -404,18 +499,18 @@ Check the physical silent switch on the side of your phone. iOS Safari respects 
 | **Recovery Mode** | Per-generation toggle that produces an easy day — filtered mains, no repeats, stretched intervals. |
 | **Regen** | Regenerate — swap one block or one set without touching the rest of the workout. |
 | **Repeat block** | A main set that runs 2 or 3 rounds with rest between, labeled "Round 1 / Round 2…" |
-| **Rescale all** | Update your pace and every interval in the workout updates proportionally. |
 | **Run Mode** | The full-screen, set-by-set deck view of a generated workout. |
 | **SCM** | Short Course Meters — 25m pool. |
 | **SCY** | Short Course Yards — 25-yard pool (default). |
 | **Set** | One row inside a block — `reps × distance · description · interval`. |
 | **Split** | Your actual time on a rep, captured by tapping **✓ Lap**. Stored with the workout in history. |
 | **Swap** | The ⇄ button on a set — swap for a shorter or longer equivalent. |
+| **Tri-state toggle** | The ★ / — / 👎 three-segment control in main block headers. Pick one — they're mutually exclusive. |
 | **Zone** | Effort level — Easy, Aerobic, Threshold, VO2, Anaerobic. Shown as a colored pill on each block. |
 
 ---
 
-## Page 11 — Reflection Exercises
+## Page 12 — Reflection Exercises
 
 ### Exercise 1 — Track effort for two weeks (after 6+ workouts)
 
@@ -427,9 +522,21 @@ After six entries, open History and scan the stars next to the workout types. Pa
 - Are distance days always 2 stars? You may be sandbagging the pace. Try a 10-second-faster pace input.
 - Are technique days 4–5 stars? You're probably trying to make them aerobic. Slow down — they're meant to feel restorative.
 
-Difficulty data is yours alone right now. Use it to recalibrate your pace and your weekly mix.
+Difficulty data is yours alone. Use it to recalibrate your pace and your weekly mix.
 
-### Exercise 2 — Identify your favorite type (after ~10 workouts)
+### Exercise 2 — Curate three things (after 5+ workouts)
+
+Open your recent history. Pick:
+
+1. **One main set you loved** — find the workout in history, open it, tap **★** on the main block header.
+2. **One main set that was a slog** — same flow, tap **👎**.
+3. **One specific set you want to see more often** — find a set row inside a main, tap the cycling button until it shows **★**.
+
+Open **👤 Profile**. Scroll to the Favorites and Disfavorites panels. You'll see all three rows. You've just biased every future generate toward what you actually want.
+
+Repeat this exercise every couple of weeks. The bank is large enough that you can curate for months without running out of material.
+
+### Exercise 3 — Identify your favorite type (after ~10 workouts)
 
 Open History → look at the **Type Breakdown** chart in the stats panel. Set the toggle to **12 wks**.
 
@@ -439,9 +546,9 @@ Two questions:
 
 If one type is dominating because you keep defaulting to it, try locking a workout type to a day of the week — e.g., "Wednesday is always Technique." Use **Plan an intent** in the week view (the 📅 button in the header) to commit ahead of time.
 
-### Exercise 3 — Set a 4-week goal
+### Exercise 4 — Set a 4-week goal
 
-Open Account → 🎯 Goals → **+ Set a goal**. Pick one:
+Open 👤 Account → 🎯 Goals → **+ Set a goal**. Pick one:
 
 - **Workouts per week** — e.g., 3. Highest leverage for habit formation.
 - **Yards per week** — e.g., 8,000. Best for volume builds toward a target distance.
@@ -453,7 +560,7 @@ If you miss a week, don't reset — just keep going. The goal is a direction, no
 
 ---
 
-## Page 12 — Quick Reference Card
+## Page 13 — Quick Reference Card
 
 *(Cut this page out and stick it in your gear bag.)*
 
@@ -470,11 +577,18 @@ GENERATE
 
 ON DECK
   ▶ Run            →  Full-screen deck view
-  Print            →  8.5×11 sheet
+  🖨 Print         →  8.5×11 sheet
   ↺ on a block     →  Swap just that block
   ⇄ on a set       →  Shorter / longer version
   Tap an interval  →  Edit inline
   Tap description  →  Edit inline
+
+TASTE — TEACH THE PICKER
+  ★  block header  →  Pick this label 3× more often
+  👎 block header  →  Pick this label ¼ as often
+  ☆→★→👎 on a set  →  Same, but per-individual-set
+  👤 Profile       →  See & remove every fav / disfavor
+  Hard-exclude     →  Mode toggle: 👎 = zero weight
 
 RUN MODE
   Rest picker      →  Manual / 0 / 5 / 10 / 15 sec
@@ -490,10 +604,10 @@ AFTER
 
 REGRET / RESET
   ↺ block button       →  New option for that block
-  ↻ Regenerate         →  Replace whole workout
   Recovery mode toggle →  Easy day, this workout only
+  Profile → remove     →  Undo a fav / disfavor
 ```
 
 ---
 
-*That's the workbook. Generate something. Swim it. Log it. See you next week.*
+*That's the workbook. Generate something. Star what worked. Swim it. Log it. See you next week.*

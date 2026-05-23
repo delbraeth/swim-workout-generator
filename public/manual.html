@@ -736,7 +736,7 @@
     <!-- ══ FAVORITES ══ -->
     <section id="favorites">
       <h2>Favorites &amp; Disfavorites</h2>
-      <p>Setforge lets you bias the workout generator toward things you like and away from things you don't, at three different levels of granularity. The shorthand: <strong>★ favorite</strong> = 3× pick weight, <strong>👎 disfavor</strong> = 0.25× pick weight (or zero, see Hard-exclude mode below).</p>
+      <p>SetForge lets you bias the workout generator toward things you like and away from things you don't, at three different levels of granularity. The shorthand: <strong>★ favorite</strong> = 3× pick weight, <strong>👎 disfavor</strong> = 0.25× pick weight (or zero, see Hard-exclude mode below).</p>
 
       <h3>The tri-state toggle</h3>
       <p>Every main-set block in a generated workout has a three-segment toggle in its header: <strong>[ ★ Favorite / — Neutral / 👎 Disfavor ]</strong>. Tap a segment to set that state — a label can be in exactly one state at a time. The states are mutually exclusive: favoriting a label automatically clears it from your disfavorites list and vice versa.</p>
@@ -1231,7 +1231,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Mirror of the Favorites panel, for 👎 disfavorites. Same three subsections (bank labels, engine templates, sets), same one-click <strong>Remove</strong>.</p>
       <p>At the top of this panel: the <strong>Mode</strong> toggle — <strong>Downweight (0.25×)</strong> (default) or <strong>Hard-exclude</strong>. Switching to Hard-exclude tells the picker to set disfavored items' weight to zero across all three tiers; if the pool would empty, the picker silently falls back to a uniform random pick from the excluded pool so you always get a workout. See <a href="#favorites">Favorites &amp; Disfavorites</a> for the full system.</p>
 
-      <h3 id="curation-impact">Curation impact <span style="color: var(--color-text-dim); font-weight: 400;">(coach access)</span></h3>
+      <h3 id="curation-impact">Curation impact <span style="color: var(--muted); font-weight: 400;">(coach access)</span></h3>
       <p>Coach-only panel showing how your fav/disfavor curation is rolling out across your group(s) in the last 30 days. Top line: number of groups, number of swimmers, number of swimmers active in the window, total workouts in the window. Per curated item (label, set, or engine template), two numbers:</p>
       <ul>
         <li><strong>reach</strong> — how many unique swimmers in your group(s) had at least one workout that contained this curated item</li>
@@ -1239,7 +1239,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       </ul>
       <p>For a <strong>favorited</strong> item, higher = more effective (the picker boosted it as intended). For a <strong>disfavored</strong> item, higher = LESS effective (it still appeared despite the downweight — expected at 0.25× weight, more notable at hard-exclude). Aggregate counts only; no swimmer names appear in this panel.</p>
 
-      <h3 id="view-as">View as <span style="color: var(--color-text-dim); font-weight: 400;">(admin QA)</span></h3>
+      <h3 id="view-as">View as <span style="color: var(--muted); font-weight: 400;">(admin QA)</span></h3>
       <p>Admin-only switcher for previewing how the UI looks to other roles without changing your actual permissions. Three options:</p>
       <ul>
         <li><strong>Self</strong> — your real role flags (default)</li>
