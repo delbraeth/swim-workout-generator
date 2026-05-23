@@ -171,11 +171,15 @@ const authLimiter = rateLimit({
   legacyHeaders:    false,
   message:          { error: "too many auth requests, try again later" },
   handler: (req, res, _next, options) => {
-    dbAuditEvent({
+    // 2026-05-23: explicit log + catch so a silent audit-insert failure is
+    // visible in Hyperlift logs (previously dbAuditEvent's internal catch
+    // swallowed everything and the row never landed without a trace).
+    console.warn("[rate_limit.hit] scope=auth path=" + req.path + " ip=" + req.ip);
+    Promise.resolve(dbAuditEvent({
       eventType: "rate_limit.hit",
       ...reqMeta(req),
       details:   { scope: "auth", path: req.path, limit: options.limit, window_ms: options.windowMs },
-    });
+    })).catch(err => console.error("[rate_limit.hit audit insert failed]", err.message));
     res.status(options.statusCode).json(options.message);
   },
 });
@@ -201,12 +205,16 @@ const writeLimiter = rateLimit({
   skip:             (req) => req.userSub && ADMIN_SUBS.has(req.userSub),
   message:          { error: "too many requests, try again later" },
   handler: (req, res, _next, options) => {
-    dbAuditEvent({
+    // 2026-05-23: explicit log + catch so a silent audit-insert failure is
+    // visible in Hyperlift logs (previously dbAuditEvent's internal catch
+    // swallowed everything and the row never landed without a trace).
+    console.warn("[rate_limit.hit] scope=write userSub=" + (req.userSub || "anon") + " path=" + req.method + " " + req.path);
+    Promise.resolve(dbAuditEvent({
       userSub:   req.userSub || null,
       eventType: "rate_limit.hit",
       ...reqMeta(req),
       details:   { scope: "write", path: req.path, method: req.method, limit: options.limit, window_ms: options.windowMs },
-    });
+    })).catch(err => console.error("[rate_limit.hit audit insert failed]", err.message));
     res.status(options.statusCode).json(options.message);
   },
 });
@@ -793,12 +801,23 @@ app.delete("/api/admin/invites/:code", checkOrigin, requireAuth, requireAdmin, r
 
 app.get("/api/admin/audit-events", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || "100", 10)));
+    // 2026-05-23: default limit 100→500. Impersonation chatter (per-request
+    // audit rows during a support session) buries other event types in a
+    // 100-row window; 500 gives meaningful headroom.
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || "500", 10)));
     const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
+    // event_type_groups is a comma-sep list of group keys mapped server-side
+    // (auth/admin/impersonation/coach/rate_limit/csrf/other). Unknown keys
+    // are silently dropped so client/server enum drift never returns 400.
+    const groupsRaw = (req.query.event_type_groups || "").trim();
+    const eventTypeGroups = groupsRaw
+      ? groupsRaw.split(",").map(s => s.trim()).filter(Boolean)
+      : null;
     const events = await dbAdminListAuditEvents({
       limit, offset,
-      eventType: req.query.event_type || null,
-      userSub:   req.query.user_sub   || null,
+      eventType:       req.query.event_type || null,
+      eventTypeGroups,
+      userSub:         req.query.user_sub   || null,
     });
     res.json(events);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }

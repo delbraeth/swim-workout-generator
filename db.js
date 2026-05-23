@@ -815,10 +815,43 @@ export async function dbAdminDeleteInvite(code) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
-export async function dbAdminListAuditEvents({ limit = 100, offset = 0, eventType = null, userSub = null } = {}) {
+// Event groups for the admin UI's checkbox filter. Each key maps to a SQL
+// LIKE pattern matched against event_type. "other" is everything not
+// covered by the named groups (computed via NOT LIKE chain at query time).
+const AUDIT_EVENT_GROUPS = {
+  auth:          ["auth.%"],
+  admin:         ["admin.%"],
+  impersonation: ["impersonation.%"],
+  coach:         ["coach.%"],
+  rate_limit:    ["rate_limit.%"],
+  csrf:          ["csrf.%"],
+  // "other" is built in dbAdminListAuditEvents — NOT LIKE the union of above.
+};
+const _AUDIT_NAMED_PATTERNS = Object.values(AUDIT_EVENT_GROUPS).flat();
+
+export async function dbAdminListAuditEvents({ limit = 500, offset = 0, eventType = null, eventTypeGroups = null, userSub = null } = {}) {
   const where = [];
   const args  = [];
   if (eventType) { where.push("`event_type` = ?"); args.push(eventType); }
+  // Group filter: each requested group contributes its LIKE patterns. "other"
+  // becomes a NOT LIKE chain against every named pattern. Combined via OR.
+  if (eventTypeGroups && Array.isArray(eventTypeGroups) && eventTypeGroups.length > 0) {
+    const ors = [];
+    for (const g of eventTypeGroups) {
+      if (g === "other") {
+        const nots = _AUDIT_NAMED_PATTERNS.map(() => "`event_type` NOT LIKE ?").join(" AND ");
+        ors.push(`(${nots})`);
+        args.push(..._AUDIT_NAMED_PATTERNS);
+      } else if (AUDIT_EVENT_GROUPS[g]) {
+        for (const pat of AUDIT_EVENT_GROUPS[g]) {
+          ors.push("`event_type` LIKE ?");
+          args.push(pat);
+        }
+      }
+      // Unknown group names are silently ignored — client/server enum drift safe.
+    }
+    if (ors.length > 0) where.push(`(${ors.join(" OR ")})`);
+  }
   if (userSub)   { where.push("`user_sub` = ?");   args.push(userSub); }
   const wh = where.length ? `WHERE ${where.join(" AND ")}` : "";
   args.push(Number(limit), Number(offset));
