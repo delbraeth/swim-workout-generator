@@ -259,7 +259,7 @@
     <a href="#descriptions">Set Descriptions</a>
     <a href="#swap">Set Swap</a>
     <a href="#repeat-sets">Repeat Sets</a>
-    <a href="#favorites">Favorites</a>
+    <a href="#favorites">Favorites &amp; Disfavorites</a>
     <a href="#regen">Regenerating Sections</a>
 
     <div class="nav-section">Running a Workout</div>
@@ -292,6 +292,8 @@
     <a href="#swimmers">Managed Swimmers (coaches)</a>
     <a href="#catalog">Workout Catalog (coaches)</a>
     <a href="#coach-fanout">Coach: Planning for a Group</a>
+    <a href="#coach-propagation">Coach group propagation</a>
+    <a href="#multi-lane-generate">Multi-lane generate</a>
     <a href="#parse-intent">Quick Input (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
     <a href="#tips">Tips &amp; Tricks</a>
@@ -733,15 +735,36 @@
 
     <!-- ══ FAVORITES ══ -->
     <section id="favorites">
-      <h2>Favorites</h2>
-      <p>Tap the <strong>⭐</strong> button on any main set block (in the generator) to mark it as a favorite. Favorited sets:</p>
+      <h2>Favorites &amp; Disfavorites</h2>
+      <p>Setforge lets you bias the workout generator toward things you like and away from things you don't, at three different levels of granularity. The shorthand: <strong>★ favorite</strong> = 3× pick weight, <strong>👎 disfavor</strong> = 0.25× pick weight (or zero, see Hard-exclude mode below).</p>
+
+      <h3>The tri-state toggle</h3>
+      <p>Every main-set block in a generated workout has a three-segment toggle in its header: <strong>[ ★ Favorite / — Neutral / 👎 Disfavor ]</strong>. Tap a segment to set that state — a label can be in exactly one state at a time. The states are mutually exclusive: favoriting a label automatically clears it from your disfavorites list and vice versa.</p>
+      <p>On engine-generated main sets (badge <strong>⚡</strong>), the same three-segment toggle appears, but it acts on the engine <em>template</em> (e.g. <code>descend_ladder</code> + stroke <code>im</code>), not on a label — engine labels are dynamic each generate.</p>
+
+      <h3>The three tiers</h3>
+      <p>You can favorite or disfavor at three levels. The picker honors all three simultaneously.</p>
       <ul>
-        <li>Get <strong>3× extra weight</strong> in the generator's pick pool — you'll see them more often.</li>
-        <li>Appear in a dedicated <strong>Favorites</strong> panel in the History view.</li>
-        <li>Are stored per-user in the cloud and sync across devices.</li>
+        <li><strong>Bank labels</strong> — the workout's main-set label (e.g. <em>"IM Descend Ladder"</em>). 3× / 0.25× pick weight in the bank picker. Tri-state toggle on each generated bank-sourced main block.</li>
+        <li><strong>Engine templates</strong> — a (template_id, stroke) pair (e.g. <code>descend_ladder + im</code>). 3× / 0.25× weight when the engine picks which template to invoke. Tri-state toggle on each generated engine-sourced main block (⚡ badge).</li>
+        <li><strong>Individual sets</strong> — a specific set inside an option (e.g. a particular <em>4×200 threshold</em>). 3× / 0.25× per matching set, multiplicative across multiple matching sets in one option. Cycling button (<strong>☆ → ★ → 👎 → ☆</strong>) on each set row, both inside a generated workout and in the Catalog (coach access).</li>
       </ul>
-      <p>Tap the ⭐ again to remove a favorite. Unfavoriting takes effect immediately in both the generator and the history panel.</p>
-      <p><strong>From the Catalog (coaches):</strong> the catalog now shows a <strong>☆</strong> on every option row — warmup, drill, main, and cool-down — alongside the 🚩 Flag button. Tapping it favorites that option. Unlike the generator's main-only star, catalog favorites work for all four section types — the generator picker now applies the ×3 bias to warmup, drill, and cool-down picks too (same as it always has for main sets). The Favorites panel in the History view still shows only main labels for now; warmup/drill/cool-down favorites work silently in the picker.</p>
+
+      <h3>Universal precedence rule</h3>
+      <p>When the same label, set, or engine tuple is both favorited (by you OR by your coach via propagation) AND disfavored (by you OR your coach), the favorite wins. The picker applies the 3× boost and skips the 0.25× downweight. This is consistent across all three tiers — if it's a favorite anywhere in the effective list, it gets boosted; the disfavor is silently ignored for that item.</p>
+
+      <h3>Hard-exclude mode</h3>
+      <p>By default, disfavor is a <em>downweight</em>: 0.25× pick weight, so disfavored items still appear occasionally. If you want certainty — never pick this — flip the mode toggle in your Profile's Disfavorites panel from <strong>Downweight (0.25×)</strong> to <strong>Hard-exclude</strong>. In hard-exclude mode, disfavored items get weight 0 and won't be picked. The setting applies to all three tiers (labels, sets, engine templates).</p>
+      <p>Safety net: if hard-exclude would empty the pick pool (every applicable option is disfavored), the picker falls back to a uniform random pick from the excluded pool so you still get a workout. This is silent — no warning. The honest read: if you're hitting it often, your disfavor list is too aggressive.</p>
+
+      <h3>From the Catalog (coach access)</h3>
+      <p>The catalog shows a <strong>☆</strong> on every option row — warmup, drill, main, and cool-down — alongside the 🚩 Flag button. Tapping it favorites that option's label. Each set <em>inside</em> the expanded option also gets the cycling <strong>☆ → ★ → 👎 → ☆</strong> button per row, so coaches can curate at the per-set level without first generating a workout. Sets without an authored ID show a dim "·" placeholder.</p>
+
+      <h3>Auditing what you've curated</h3>
+      <p>Open your Profile to see two audit panels — <a href="#favorites-panel">Favorites</a> and <a href="#disfavorites-panel">Disfavorites</a> — that list everything you've curated across all three tiers, with one-click <strong>Remove</strong> per row. See those sections under <a href="#account">Account &amp; Sessions</a> for details.</p>
+
+      <h3>Coach group propagation</h3>
+      <p>If a coach has favorited or disfavored something, their picks silently propagate to every swimmer in their groups. The swimmer sees the picker bias but no UI indication that the coach's curation is in effect — their own audit panel still shows only what THEY personally curated. See <a href="#coach-propagation">Coach group propagation</a> under Coach docs for the details.</p>
     </section>
 
     <!-- ══ REGENERATING SECTIONS ══ -->
@@ -1200,6 +1223,32 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>Goals</h3>
       <p>Set or clear recurring targets for workouts/week, yards/week, and yards/month. Progress bars render in the stats panel of the History view — see <a href="#goals">Goals</a> for the full details.</p>
 
+      <h3 id="favorites-panel">Favorites panel</h3>
+      <p>Audits everything you've ★ favorited across all three tiers — bank labels, engine templates, and individual sets. Each row shows the item with a <strong>Remove</strong> button. Set rows show the reps×dist + a description preview pulled from the bank; orphaned set IDs (set was removed from the bank) show the raw ID with a "no longer in the bank" note — still removable so the entry doesn't linger.</p>
+      <p>Empty state explains how to add favorites if the panel is empty: click ★ on any main-set in a workout, or use the ☆ button on a specific set inside the Catalog or a generated workout.</p>
+
+      <h3 id="disfavorites-panel">Disfavorites panel</h3>
+      <p>Mirror of the Favorites panel, for 👎 disfavorites. Same three subsections (bank labels, engine templates, sets), same one-click <strong>Remove</strong>.</p>
+      <p>At the top of this panel: the <strong>Mode</strong> toggle — <strong>Downweight (0.25×)</strong> (default) or <strong>Hard-exclude</strong>. Switching to Hard-exclude tells the picker to set disfavored items' weight to zero across all three tiers; if the pool would empty, the picker silently falls back to a uniform random pick from the excluded pool so you always get a workout. See <a href="#favorites">Favorites &amp; Disfavorites</a> for the full system.</p>
+
+      <h3 id="curation-impact">Curation impact <span style="color: var(--color-text-dim); font-weight: 400;">(coach access)</span></h3>
+      <p>Coach-only panel showing how your fav/disfavor curation is rolling out across your group(s) in the last 30 days. Top line: number of groups, number of swimmers, number of swimmers active in the window, total workouts in the window. Per curated item (label, set, or engine template), two numbers:</p>
+      <ul>
+        <li><strong>reach</strong> — how many unique swimmers in your group(s) had at least one workout that contained this curated item</li>
+        <li><strong>wos</strong> (workouts) — total count of workouts containing it</li>
+      </ul>
+      <p>For a <strong>favorited</strong> item, higher = more effective (the picker boosted it as intended). For a <strong>disfavored</strong> item, higher = LESS effective (it still appeared despite the downweight — expected at 0.25× weight, more notable at hard-exclude). Aggregate counts only; no swimmer names appear in this panel.</p>
+
+      <h3 id="view-as">View as <span style="color: var(--color-text-dim); font-weight: 400;">(admin QA)</span></h3>
+      <p>Admin-only switcher for previewing how the UI looks to other roles without changing your actual permissions. Three options:</p>
+      <ul>
+        <li><strong>Self</strong> — your real role flags (default)</li>
+        <li><strong>Solo</strong> — hide all coach + admin UI</li>
+        <li><strong>Coach</strong> — show coach UI, hide admin UI</li>
+      </ul>
+      <p>When set to Solo or Coach, a sticky amber banner appears at the top of the app reading "Viewing as X — coach/admin UI hidden" with an <strong>Exit</strong> button. The setting persists across page reloads (localStorage). The switcher stays visible in your Profile even while view-as is active, so you can always switch back.</p>
+      <p>Honest caveats: this is UI-only. Coach/admin API endpoints still respond if called directly — server-side permissions are unchanged. And if you're in groups, you'll still see the data from those groups even when viewing-as-solo (the role flags flip; the data state doesn't). Useful for catching "did I leak coach UI to a swimmer?" — not a substitute for a real test account.</p>
+
       <h3>Active sessions</h3>
       <p>One row per device/browser where you're currently signed in. Each row shows the browser/OS string, IP address, and last-seen timestamp. Your current device is highlighted blue with a <strong>● this device</strong> badge.</p>
 
@@ -1486,6 +1535,11 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>Browsing</h3>
       <p>Each row shows the option's label, type badge (for typed sections), zone pill, total yardage, and set count. A red <strong>⚠ sum mismatch</strong> badge appears if the declared <code>totalYards</code> doesn't equal Σ reps × dist (a data-quality flag). Click a row to expand the full set list with reps × dist, interval, description, equipment badges, and focus.</p>
+      <p>Each option row also has a <strong>☆</strong> Favorite button that label-favorites the option (3× pick weight) and a <strong>🚩 Flag</strong> button to send to feedback. Both work for warmup / drill / main / cool-down rows.</p>
+
+      <h3>Per-set cycling button</h3>
+      <p>Inside an expanded option, each set row gets a leading <strong>☆ → ★ → 👎 → ☆</strong> cycling button that toggles that specific set in/out of your favorites and disfavorites. Tap once to favorite, again to disfavor, again to clear. Mutex applies — a set can't be both at once. Sets without an authored set ID show a dim "·" placeholder (older bank entries that haven't been backfilled with IDs).</p>
+      <p>This is the same per-set state surfaced in the cycling button on each <a href="#favorites">SetRow inside a generated workout</a> — they read and write the same underlying favorites/disfavorites lists. Curate from the catalog before generating, or curate after generating; same outcome.</p>
 
       <h3>Flag for review</h3>
       <p>Each option row has a small <strong>🚩 Flag</strong> button on the right. Click it to open the feedback modal pre-filled with the option's identity (label, pool mode, section, type, index, total yardage, set count) and a "What to review" prompt. Add your note and submit — the flag lands in the admin Feedback tab under the <strong>🚩 Catalog flag</strong> category for triage. Useful for surfacing wrong intervals, misleading labels, mis-categorized workouts, etc.</p>
@@ -1542,6 +1596,51 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <div class="callout-icon">ℹ️</div>
         <div class="callout-body"><strong>v1 quirk if you swim the workout too.</strong> When you ▶ Run a group intent you've planned and then complete it in Run mode yourself, your history will show two entries: the snapshot (created when you committed) and the actual swim (with splits, created when you finish). The schedule row stays linked to the snapshot. This is acknowledged and on the backlog to refactor; for now you can delete one of the entries manually if it bothers you.</div>
       </div>
+    </section>
+
+    <!-- ══ COACH GROUP PROPAGATION ══ -->
+    <section id="coach-propagation">
+      <h2>Coach group propagation (fav/disfavor)</h2>
+      <p>Anything you favorite or disfavor — at any of the three tiers (bank labels, individual sets, engine templates) — silently propagates to every swimmer in every group you coach. Your swimmers see the picker bias take effect but don't see any UI hint that the curation came from you; their own Favorites and Disfavorites panels in Profile show only what THEY personally curated.</p>
+
+      <h3>Scope</h3>
+      <ul>
+        <li><strong>Both directions of curation propagate.</strong> Your favorites and your disfavorites both reach your group swimmers.</li>
+        <li><strong>Both coach roles propagate.</strong> Primary AND assistant coaches contribute to their swimmers' effective list. (Internally: every active row in <code>group_coaches</code>, regardless of role.)</li>
+        <li><strong>One-way only.</strong> The flow is coach → swimmer, never swimmer → coach. Your own swimmers' fav/disfavor lists don't bias your picks.</li>
+        <li><strong>Universal favorite-wins precedence applies.</strong> If you disfavor an item and a swimmer favorites it themselves (or another coach favorites it), the favorite wins for that swimmer — they get the 3× boost, your downweight is suppressed for them.</li>
+      </ul>
+
+      <h3>Refresh cadence</h3>
+      <p>Swimmers' apps refresh their effective fav/disfavor list every 5 minutes while they're signed in. If you toggle a curation, expect propagation to reach an actively-using swimmer within the window. A page reload also picks up the change immediately.</p>
+
+      <h3>Auditing rollout</h3>
+      <p>The <a href="#curation-impact">Curation impact</a> panel in your Profile shows per-item reach + workout-count numbers for the last 30 days, so you can see which of your curations are actually landing. Aggregate counts only; no per-swimmer breakdown.</p>
+    </section>
+
+    <!-- ══ MULTI-LANE GENERATE ══ -->
+    <section id="multi-lane-generate">
+      <h2>Multi-lane generate (coach access)</h2>
+      <p>The companion to <a href="#copy-print">Multi-pace print</a>: instead of taking an existing workout and printing it per lane, this generates a NEW workout that's chosen to fit every lane's pace from the start. Coach-only, gated on <code>is_coach</code>.</p>
+
+      <h3>Where it lives</h3>
+      <p>Below the yardage slider in the generator, you'll see a <strong>Multi-lane</strong> control with an OFF/ON toggle. When ON, the single pace input expands to N lane rows; you type a pace per lane. If a group is selected and it has a default lane plan, a <strong>Use lane plan</strong> button prefills the rows from the plan's lanes.</p>
+
+      <h3>What changes when it's ON</h3>
+      <ul>
+        <li>The picker filters options to only those whose intervals fit ALL the lane paces. Specifically: per set, every lane's rest must be ≥ 5 seconds (slowest lane needs to breathe) AND ≤ 1.5× swim time (fastest lane shouldn't idle).</li>
+        <li>The engine validator applies the same lane-fit rule to engine-generated output.</li>
+        <li>On successful Generate, the multi-pace print view opens automatically with the new workout rendered at each lane's pace.</li>
+      </ul>
+
+      <h3>Lane-fit fallback banner</h3>
+      <p>When your lane range is wide enough that the picker can't find lane-friendly options for one or more sections, it falls back to the unfiltered pool for those sections and shows a yellow ⚠️ banner: <em>"Lane range is wide — the picker couldn't find options that fit every lane's pace for: [sections]. Those sections used the unfiltered pool, so intervals may be tight for your slowest lane or loose for your fastest."</em> Tighten the lane range or relax the intervals to remove the warning.</p>
+
+      <h3>Persistence</h3>
+      <p>The Multi-lane toggle state and your lane rows are saved per-account (via <code>settings.extra.multi_lane</code>) — they survive page reload and follow you across devices. Up to 12 lanes per setup.</p>
+
+      <h3>History</h3>
+      <p>Multi-lane workouts save to history with the lane configuration embedded. History rows display a blue <strong>🏊 N-lane</strong> chip when present; tooltip shows the paces (e.g. <em>"Generated for 3 lanes: 1:30 / 1:45 / 2:00"</em>). Loading the workout from history restores the multi-lane state and the lane rows — useful for re-running the same configuration without retyping.</p>
     </section>
 
     <!-- ══ PARSE INTENT ══ -->
