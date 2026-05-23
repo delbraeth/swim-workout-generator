@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-23** (post impersonation manual-docs deploy)
+Last refreshed: **2026-05-23** (post run-screen v1 + rate-limit/audit-log fixes)
 
 ## How this file works
 
@@ -22,7 +22,7 @@ _Nothing in progress as of 2026-05-23._
 
 ## Next (small, ready)
 
-- **Run-screen UI cleanup** — captured 2026-05-22 (Cap'n flagged that this fell off the list). Specific scope TBD; when picking this up, start by opening Run mode on a real workout and listing the rough edges. Likely candidates worth checking: rest-timer prominence, set navigation flow, landscape-mode behavior, finish-screen tightness, audio-cue toggle discoverability. Confirm specifics with Cap'n before starting work.
+_Empty. Pick from Bigger threads or wait for a new rough edge._
 
 ## Bigger threads (need a planning session)
 
@@ -54,6 +54,9 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-23 | (no tag) | AdminUsers: 📋 sub copy button + ROADMAP: tier-aware rate limits backlog entry |
+| 2026-05-23 | (no tag) | Rate-limit + audit-log: writeLimiter D (compound key + bump 30→100 + ADMIN_SUBS skip), handler explicit logging, audit chip filters in admin UI |
+| 2026-05-23 | `run-screen-v1` | PaceClockView landscape rebuild (clock 80→128px, hierarchy swap, INTERVAL/REST/GO label, repDots to right col, button-height bump) + ✋ Lap-button toggle in start modal |
 | 2026-05-23 | `manual-impersonation-docs` | Manual: new Impersonation section under Admin docs + audit-log event types updated |
 | 2026-05-22 | `view-as-v3-client` | v3 Phase B: impersonation client (fetch wrapper, banner, modal, Admin→Users buttons) — feature complete end-to-end |
 | 2026-05-22 | `view-as-v3-server-only` | v3 Phase A: impersonation server-side (header auth, support_role, read-only, audit, 30-min cap) |
