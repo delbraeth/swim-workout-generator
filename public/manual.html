@@ -1302,7 +1302,60 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>user_sub</strong> — full Apple sub. Useful when investigating a specific user's activity.</li>
         <li><strong>Clear</strong> button to reset filters.</li>
       </ul>
-      <p>Event categories you'll see: <code>auth.*</code> (login/logout/signup/reject/disabled_attempt), <code>admin.*</code> (user.disable/enable/delete/update, user.coach.grant/revoke, invite.create/delete, access_denied, feedback.update), <code>coach.*</code> (access_denied), <code>invite.consume</code>, <code>workout.delete</code>, <code>csrf.reject</code>, <code>rate_limit.hit</code>, <code>feedback.submit</code>, <code>user.profile.update</code>.</p>
+      <p>Event categories you'll see: <code>auth.*</code> (login/logout/signup/reject/disabled_attempt), <code>admin.*</code> (user.disable/enable/delete/update, user.coach.grant/revoke, user.support_role.grant/revoke, invite.create/delete, access_denied, feedback.update), <code>coach.*</code> (access_denied), <code>impersonation.*</code> (start, end, access — see Impersonation section below), <code>invite.consume</code>, <code>workout.delete</code>, <code>csrf.reject</code>, <code>rate_limit.hit</code>, <code>feedback.submit</code>, <code>user.profile.update</code>.</p>
+      <p>Audit rows during an active impersonation session carry both the impersonated user's <code>user_sub</code> (the target) AND an <code>impersonator_sub</code> (the admin or support_role user who initiated the session). The Audit log UI surfaces both so you can query "what happened to user X" (filter by user_sub) or "what did admin A do while impersonating" (filter by impersonator_sub).</p>
+    </section>
+
+    <!-- ══ IMPERSONATION (SUPPORT) ══ -->
+    <section id="impersonation">
+      <h2>Impersonation (admin + support_role)</h2>
+      <p>Customer-support tool. An admin or a user with the <code>support_role</code> flag can act AS another specific user for up to 30 minutes, seeing their actual favorites, history, groups, generated workouts — everything that user would see when logged in. Used for diagnosing user-reported issues without asking the user to share screen or hand over their credentials.</p>
+      <p><strong>This is NOT the same as <a href="#view-as">View as</a>.</strong> View-as is a UI preview that hides coach/admin features so you can see what other roles see, using YOUR data. Impersonation is a true session swap — you see the OTHER user's actual data, and any reads are recorded against them in the audit log. Different tools for different jobs.</p>
+
+      <h3>Who has the right</h3>
+      <p>Either flag grants impersonation access:</p>
+      <ul>
+        <li><strong><code>is_admin</code></strong> — full admin already has the right. Toggled at <strong>Admin → Users → Edit</strong> (the underlying flag).</li>
+        <li><strong><code>support_role</code></strong> — new flag for support staff who should be able to impersonate WITHOUT full admin rights (can't disable users, can't manage invites, can't grant other roles). Toggled at <strong>Admin → Users → Support</strong>. Admin-only to grant: <code>support_role</code> cannot grant <code>support_role</code> to other users.</li>
+      </ul>
+
+      <h3>How to start a session</h3>
+      <p>Two entry points:</p>
+      <ul>
+        <li><strong>Admin → Users</strong> — each row shows a red <strong>🛂 Impersonate</strong> button. Click → confirmation dialog → session starts. Best when you already know who you're impersonating.</li>
+        <li><strong>Top-nav 🛂 button</strong> — opens a quick-start modal with live search by email, name, initials, or sub. Best for quick lookups when you've forgotten the exact name.</li>
+      </ul>
+      <p>You cannot impersonate yourself. Starting a new session while one is already active automatically ends the prior session (one active session at a time per admin).</p>
+
+      <h3>What you can and can't do</h3>
+      <p>Impersonation is <strong>read-only</strong>. The server blocks all writes (POST/PUT/PATCH/DELETE) for the duration of the session except the explicit Exit endpoint. Specifically you CAN view:</p>
+      <ul>
+        <li>The target's generator screen as they'd see it (their pace, equipment, type selection, etc.)</li>
+        <li>Their workout history and stats</li>
+        <li>Their favorites and disfavorites (and curation impact, if they're a coach)</li>
+        <li>Their group memberships, lane plans, assigned workouts</li>
+      </ul>
+      <p>You <strong>cannot</strong> generate a workout, save anything, change their settings, or toggle their favorites. If you click a write control, the server returns 403 and the UI does nothing.</p>
+
+      <h3>30-minute hard cap</h3>
+      <p>Every session expires 30 minutes from start. The red banner at the top of the app shows a live countdown — when it hits zero, the session auto-ends and you're returned to your own account. To continue past 30 minutes, exit and start a new session (which generates a new audit row).</p>
+      <p>Click <strong>Exit</strong> on the banner at any time to end early. Exiting reloads the page so any cached target data is cleared.</p>
+
+      <h3>Audit trail</h3>
+      <p>Every API call made during an impersonation session is logged to <code>audit_events</code> with both your sub (<code>impersonator_sub</code>) and the target user's sub (<code>user_sub</code>). Event types: <code>impersonation.start</code>, <code>impersonation.access</code> (per request), <code>impersonation.end</code>. Filter the admin Audit log by <code>impersonator_sub</code> to review your own (or another admin's) impersonation activity.</p>
+
+      <h3>User notification policy</h3>
+      <p>Impersonated users are <strong>not notified</strong> when a session starts or ends. The audit log is the only record visible (only to admins). This is a deliberate v3.0 choice — the trade-off is that customer-support workflows can act without consent friction, at the cost of less user-side transparency. A v3.1 enhancement to surface impersonation events to the impersonated user on their next login is on the backlog.</p>
+
+      <h3>State persistence</h3>
+      <p>If you reload the page while a session is active, the banner reappears and the session continues — the client recovers state from <code>/api/impersonation/active</code> on auth. The 30-minute clock keeps ticking from when the session started, not from when you reloaded.</p>
+
+      <h3>Limitations to know</h3>
+      <ul>
+        <li><strong>Multi-tab</strong> — if you have SetForge open in two tabs and start impersonation in tab A, tab B's existing session stays unaffected (acts as your real account). Only tab A sends the impersonation header. Acceptable, but be aware that "what you see in this tab" may differ.</li>
+        <li><strong>You're still in your groups</strong> — impersonating doesn't actually log you in as the target. Your own coach/admin permissions are still active for your own account in other tabs.</li>
+        <li><strong>No revoke from another device</strong> — if you started a session from a laptop and want to end it from your phone, you'd need to wait for the 30-min expiry or sign in to the same admin session on the phone. v3.x could add a force-end-all-my-sessions endpoint if this becomes an issue.</li>
+      </ul>
     </section>
 
     <!-- ══ TEAMS (COACH) ══ -->
