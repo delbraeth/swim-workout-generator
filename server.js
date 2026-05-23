@@ -129,6 +129,19 @@ const APPLE_PRIVATE_KEY  = (process.env.APPLE_PRIVATE_KEY || "").replace(/\\n/g,
 
 const APPLE_AUTH_ACTIVE = !!(APPLE_CLIENT_ID && APPLE_TEAM_ID && APPLE_KEY_ID && APPLE_PRIVATE_KEY);
 
+// Subs (Apple identifiers) that are exempt from the writeLimiter. Comma-
+// separated env var. Used so admin testing across multiple devices doesn't
+// trip the per-user write quota. Empty / unset = nobody is exempt.
+// NOTE: this is a SEPARATE concept from is_admin (DB flag). We don't read
+// the DB here to keep the limiter check synchronous and zero-cost on the
+// hot path.
+const ADMIN_SUBS = new Set(
+  (process.env.ADMIN_SUBS || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean)
+);
+
 const app = express();
 
 // Trust Hyperlift's reverse proxy so req.ip resolves to the real client.
@@ -167,14 +180,25 @@ const authLimiter = rateLimit({
   },
 });
 
-// Writes: 30/min keyed on userSub (falls back to IP for pre-auth). Catches
-// authenticated abuse without trying to police per-IP traffic.
+// Writes: 100/min keyed on (userSub + IP) so each device gets its own
+// bucket when the same user is signed in on multiple devices. Falls back
+// to IP-only when pre-auth. Catches authenticated abuse without
+// punishing legitimate multi-device use (phone + iPad + laptop on the
+// same Apple ID no longer share one quota).
+//
+// Bumped 30→100 in 2026-05-23 after multi-device dev testing repeatedly
+// tripped the lower ceiling. CSRF still gates abuse; this is defense-
+// in-depth, not the primary gate.
+//
+// ADMIN_SUBS env-var list is exempted entirely — admin testing across
+// many devices/tabs would otherwise self-DoS investigation flows.
 const writeLimiter = rateLimit({
   windowMs:         60 * 1000,
-  limit:            30,
+  limit:            100,
   standardHeaders:  true,
   legacyHeaders:    false,
-  keyGenerator:     (req) => req.userSub || req.ip,
+  keyGenerator:     (req) => `${req.userSub || ""}|${req.ip}`,
+  skip:             (req) => req.userSub && ADMIN_SUBS.has(req.userSub),
   message:          { error: "too many requests, try again later" },
   handler: (req, res, _next, options) => {
     dbAuditEvent({
