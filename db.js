@@ -578,7 +578,7 @@ export async function dbListCoachesForPicker(excludeSub) {
 export async function dbAdminListUsers() {
   const rows = await pool.query(`
     SELECT u.sub, u.email, u.email_verified, u.display_name, u.initials,
-           u.is_admin, u.is_coach, u.is_disabled, u.created_at, u.last_login_at,
+           u.is_admin, u.is_coach, u.is_disabled, u.support_role, u.created_at, u.last_login_at,
            COALESCE(w.cnt, 0) AS workout_count
       FROM users u
       LEFT JOIN (SELECT user_sub, COUNT(*) AS cnt FROM workouts GROUP BY user_sub) w
@@ -589,6 +589,7 @@ export async function dbAdminListUsers() {
     sub: r.sub, email: r.email, email_verified: !!r.email_verified,
     display_name: r.display_name, initials: r.initials,
     is_admin: !!r.is_admin, is_coach: !!r.is_coach, is_disabled: !!r.is_disabled,
+    support_role: !!r.support_role,
     created_at: r.created_at, last_login_at: r.last_login_at,
     workout_count: Number(r.workout_count),
   }));

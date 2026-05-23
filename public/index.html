@@ -333,6 +333,33 @@
       return csrf.token ? { "X-CSRF-Token": csrf.token } : {};
     }
 
+    // v3 impersonation client (2026-05-22 per VIEW_AS_V3_SCOPE.md).
+    // Module-scope so the fetch wrapper below can read it without React
+    // closure complexity. App.jsx sets/clears it via setImpersonation().
+    // Shape: { target_sub, target_name, target_email, expires_at } | null.
+    const impersonation = { active: null };
+    function setImpersonation(state) {
+      impersonation.active = state || null;
+    }
+    // Wrap window.fetch to auto-add X-Impersonate-Sub to every /api/* call
+    // when an impersonation session is active. Targeting only /api/ keeps
+    // CDN/asset fetches untouched. The header is the only signal the
+    // server needs to rewrite req.userSub; the server validates the
+    // header against an active session row on every request (see
+    // server.js requireAuth).
+    if (typeof window !== "undefined" && window.fetch && !window.__sfImpersonationFetchWrapped) {
+      const _origFetch = window.fetch.bind(window);
+      window.fetch = function(input, init) {
+        const url = typeof input === "string" ? input : (input && input.url) || "";
+        if (impersonation.active && impersonation.active.target_sub && url.startsWith("/api/")) {
+          init = init || {};
+          init.headers = { ...(init.headers || {}), "X-Impersonate-Sub": impersonation.active.target_sub };
+        }
+        return _origFetch(input, init);
+      };
+      window.__sfImpersonationFetchWrapped = true;
+    }
+
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
       return (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
@@ -12722,6 +12749,149 @@
     // v2.0 — Multi-lane multi-pace generate control. Sits below YardageSlider
     // when the viewer is a coach. Toggle ON expands to N lane rows; user
     // edits paces; the picker filters options that fit ALL lanes.
+    // v3 impersonation — dedicated quick-start modal. Top-nav button opens
+    // this; coach/support types a name/email fragment, picks a target, hits
+    // Confirm. Fetches /api/admin/users (admin-gated server-side) so the
+    // search list is the same source-of-truth as AdminUsers. Read-only safe.
+    function ImpersonationStartModal({ me, onClose, onStartImpersonation }) {
+      const [users,  setUsers]  = React.useState(null);
+      const [query,  setQuery]  = React.useState("");
+      const [picked, setPicked] = React.useState(null);
+      const [err,    setErr]    = React.useState(null);
+      const [busy,   setBusy]   = React.useState(false);
+      React.useEffect(() => {
+        fetch("/api/admin/users", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(setUsers)
+          .catch(() => setUsers([]));
+      }, []);
+      const filtered = React.useMemo(() => {
+        if (!users) return [];
+        const q = query.trim().toLowerCase();
+        if (!q) return users.slice(0, 20);
+        return users.filter(u => {
+          return (u.email || "").toLowerCase().includes(q)
+            || (u.display_name || "").toLowerCase().includes(q)
+            || (u.initials || "").toLowerCase().includes(q)
+            || u.sub.toLowerCase().includes(q);
+        }).slice(0, 20);
+      }, [users, query]);
+      const confirm = async () => {
+        if (!picked) return;
+        setBusy(true); setErr(null);
+        try {
+          await onStartImpersonation(picked.sub, picked.display_name || picked.initials || picked.email, picked.email);
+          onClose();
+        } catch (e) {
+          setErr(e.message); setBusy(false);
+        }
+      };
+      return (
+        <div onClick={onClose} className="modal-overlay" style={{ padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
+            padding: 22, maxWidth: 560, width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+              <div style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>🛂 Start impersonation</div>
+              <button onClick={onClose} style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", fontSize: 18, cursor: "pointer", padding: 0 }}>×</button>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10 }}>
+              30-min read-only session. Audit-logged. The user will NOT be notified.
+            </div>
+            <input type="text" value={query} onChange={e => { setQuery(e.target.value); setPicked(null); }}
+              autoFocus placeholder="Search by email, name, initials, or sub…"
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-border-strong)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 13, marginBottom: 12 }} />
+            {users === null ? (
+              <div style={{ color: "var(--color-text-dim)", fontSize: 12 }}>Loading users…</div>
+            ) : (
+              <div style={{ overflowY: "auto", flex: 1, border: "1px solid var(--color-border)", borderRadius: 6 }}>
+                {filtered.length === 0 ? (
+                  <div style={{ padding: 16, color: "var(--color-text-dim)", fontSize: 12, fontStyle: "italic" }}>No matches.</div>
+                ) : filtered.map(u => {
+                  const isSelf = u.sub === me?.sub;
+                  const isPicked = picked && picked.sub === u.sub;
+                  return (
+                    <div key={u.sub} onClick={() => !isSelf && setPicked(u)}
+                      style={{
+                        padding: "8px 12px", borderBottom: "1px solid var(--color-card)",
+                        cursor: isSelf ? "not-allowed" : "pointer",
+                        background: isPicked ? "rgba(220,38,38,0.18)" : "transparent",
+                        opacity: isSelf ? 0.4 : 1,
+                      }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                        <span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{u.display_name || u.initials || "—"}</span>
+                        <span style={{ color: "var(--color-text-dim)", fontSize: 11, fontFamily: "monospace" }}>{u.email || u.sub.slice(0, 16) + "…"}</span>
+                      </div>
+                      {isSelf && <div style={{ fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>cannot impersonate yourself</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {err && <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 8 }}>{err}</div>}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+              <button onClick={onClose} disabled={busy}
+                style={{ padding: "8px 14px", borderRadius: 6, background: "var(--color-border)", border: "none", color: "var(--color-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+              <button onClick={confirm} disabled={!picked || busy}
+                style={{ padding: "8px 14px", borderRadius: 6, background: picked ? "#dc2626" : "var(--color-border)", border: "none", color: "#fff", fontSize: 13, fontWeight: 700, cursor: picked ? "pointer" : "not-allowed" }}>
+                {busy ? "Starting…" : "🛂 Impersonate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // v3 impersonation banner. Persistent sticky red bar at the top of the
+    // app while an impersonation session is active. Shows target identity +
+    // a countdown to expiry + Exit button. Ticks every 5s. Auto-fires the
+    // exit when the timer hits zero so the UI doesn't get stuck.
+    function ImpersonationBanner({ state, onExit }) {
+      const [now, setNow] = React.useState(() => Date.now());
+      React.useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), 5000);
+        return () => clearInterval(id);
+      }, []);
+      const expiresMs = state.expires_at ? new Date(state.expires_at).getTime() : 0;
+      const remainingSec = Math.max(0, Math.floor((expiresMs - now) / 1000));
+      const mm = Math.floor(remainingSec / 60);
+      const ss = remainingSec % 60;
+      // Auto-exit on expiry — fire once when the timer crosses zero.
+      const firedRef = React.useRef(false);
+      React.useEffect(() => {
+        if (remainingSec === 0 && !firedRef.current) {
+          firedRef.current = true;
+          onExit && onExit();
+        }
+      }, [remainingSec, onExit]);
+      return (
+        <div className="screen-only" style={{
+          position: "sticky", top: 0, zIndex: 9100,
+          background: "#dc2626", color: "#fff",
+          padding: "8px 16px", fontSize: 12, fontWeight: 700,
+          display: "flex", justifyContent: "center", alignItems: "center", gap: 12, flexWrap: "wrap",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+        }}>
+          <span>🛂 Acting as <strong>{state.target_name || state.target_sub.slice(0, 8)}</strong>{state.target_email ? <span style={{ opacity: 0.8, fontWeight: 400 }}> ({state.target_email})</span> : null} — read-only</span>
+          <span style={{ fontFamily: "monospace", background: "rgba(0,0,0,0.35)", padding: "2px 8px", borderRadius: 4 }}>
+            {mm}:{String(ss).padStart(2, "0")} left
+          </span>
+          <button
+            type="button"
+            onClick={onExit}
+            style={{
+              background: "rgba(0,0,0,0.45)", color: "#fff",
+              border: "1px solid rgba(255,255,255,0.6)", borderRadius: 4,
+              padding: "3px 12px", fontSize: 11, fontWeight: 700,
+              cursor: "pointer",
+            }}>
+            Exit
+          </button>
+        </div>
+      );
+    }
+
     function MultiLaneControl({ multiLaneMode, setMultiLaneMode, manualLanesPace, setManualLanesPace, lanePlansForTarget, generateForPlanId }) {
       const currentPlan = (lanePlansForTarget || []).find(p => p.id === generateForPlanId) || null;
       const planLanes = currentPlan && currentPlan.plan_data && Array.isArray(currentPlan.plan_data.lanes)
@@ -18334,7 +18504,7 @@
       );
     }
 
-    function AdminView() {
+    function AdminView({ me, onStartImpersonation }) {
       const [tab, setTab] = React.useState("users");
 
       const tabStyle = (active) => ({
@@ -18354,7 +18524,7 @@
             <button onClick={() => setTab("feedback")} style={tabStyle(tab === "feedback")}>Feedback</button>
             <button onClick={() => setTab("audit")}    style={tabStyle(tab === "audit")}>Audit log</button>
           </div>
-          {tab === "users"    && <AdminUsers />}
+          {tab === "users"    && <AdminUsers me={me} onStartImpersonation={onStartImpersonation} />}
           {tab === "invites"  && <AdminInvites />}
           {tab === "feedback" && <AdminFeedback />}
           {tab === "audit"    && <AdminAudit />}
@@ -18518,7 +18688,7 @@
       );
     }
 
-    function AdminUsers() {
+    function AdminUsers({ me, onStartImpersonation }) {
       const [users, setUsers] = React.useState(null);
       const [msg, setMsg]     = React.useState(null);
       const [editing, setEditing] = React.useState(null); // user being edited
@@ -18529,6 +18699,20 @@
       }, []);
       React.useEffect(() => { load(); }, [load]);
 
+      const canImpersonate = !!(me && (me.is_admin || me.support_role));
+
+      const startImpersonate = async (u) => {
+        if (!canImpersonate || !onStartImpersonation) return;
+        if (u.sub === me.sub) { setMsg("Error: cannot impersonate yourself"); return; }
+        if (!confirm(`Start 30-minute impersonation of ${u.display_name || u.email || u.sub.slice(0, 10)}?\n\nRead-only. Every action is audit-logged. The user will NOT be notified.`)) return;
+        try {
+          await onStartImpersonation(u.sub, u.display_name || u.initials || u.email, u.email);
+          setMsg(`Impersonation of ${u.display_name || u.email || u.sub.slice(0, 10)} started.`);
+        } catch (err) {
+          setMsg(`Error starting impersonation: ${err.message}`);
+        }
+      };
+
       const act = async (sub, action, body = null) => {
         setMsg(null);
         let url, method = "POST", payload = null;
@@ -18537,6 +18721,10 @@
         else if (action === "coach-grant" || action === "coach-revoke") {
           url = `/api/admin/users/${encodeURIComponent(sub)}/coach`;
           payload = { granted: action === "coach-grant" };
+        }
+        else if (action === "support-grant" || action === "support-revoke") {
+          url = `/api/admin/users/${encodeURIComponent(sub)}/support-role`;
+          payload = { granted: action === "support-grant" };
         }
         else if (action === "delete") {
           if (!confirm(`Delete user ${sub.slice(0, 10)}…?\n\nThis cascades and wipes all their workouts, favorites, settings, and sessions. Audit events stay (anonymized). NOT REVERSIBLE.`)) return;
@@ -18579,9 +18767,10 @@
                   <td style={{ padding: "8px 6px", textAlign: "right" }}>{u.workout_count}</td>
                   <td style={{ padding: "8px 6px", color: "var(--color-text-muted)" }}>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : "—"}</td>
                   <td style={{ padding: "8px 6px" }}>
-                    {u.is_admin    && <span style={{ background: "var(--color-primary)", color: "var(--color-bg)", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>admin</span>}
-                    {u.is_coach    && <span style={{ background: "var(--color-primary)", color: "var(--color-bg)", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>coach</span>}
-                    {u.is_disabled && <span style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>disabled</span>}
+                    {u.is_admin     && <span style={{ background: "var(--color-primary)", color: "var(--color-bg)", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>admin</span>}
+                    {u.is_coach     && <span style={{ background: "var(--color-primary)", color: "var(--color-bg)", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>coach</span>}
+                    {u.support_role && <span style={{ background: "#7c3aed", color: "#fff", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>support</span>}
+                    {u.is_disabled  && <span style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>disabled</span>}
                   </td>
                   <td style={{ padding: "8px 6px" }}>
                     <button onClick={() => setEditing(u)} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "var(--color-border)", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
@@ -18592,6 +18781,20 @@
                       style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: u.is_coach ? "#1e40af" : "var(--color-border)", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
                       {u.is_coach ? "Un-coach" : "Coach"}
                     </button>
+                    {me?.is_admin && (
+                      <button onClick={() => act(u.sub, u.support_role ? "support-revoke" : "support-grant")}
+                        title="Grants impersonation rights without full admin. Admin-only to toggle."
+                        style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: u.support_role ? "#7c3aed" : "var(--color-border)", border: "none", borderRadius: 4, color: u.support_role ? "#fff" : "#cbd5e1", cursor: "pointer" }}>
+                        {u.support_role ? "Un-support" : "Support"}
+                      </button>
+                    )}
+                    {canImpersonate && u.sub !== me?.sub && (
+                      <button onClick={() => startImpersonate(u)}
+                        title="Start 30-minute read-only impersonation session"
+                        style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "#dc2626", border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                        🛂 Impersonate
+                      </button>
+                    )}
                     <button onClick={() => act(u.sub, u.is_disabled ? "enable" : "disable")} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "var(--color-border)", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
                       {u.is_disabled ? "Enable" : "Disable"}
                     </button>
@@ -19465,6 +19668,85 @@
         if (viewAsRole === "coach") return { ...me, is_admin: false, is_coach: true };
         return me;
       }, [me, viewAsRole]);
+
+      const [showImpersonationModal, setShowImpersonationModal] = useState(false);
+      // v3 impersonation state. Mirrors module-scope `impersonation.active`
+      // for React render purposes. setImpersonation() (module-scope) updates
+      // the fetch-wrapper's view; setImpersonationState here triggers React
+      // re-renders for the banner, write-control gating, etc.
+      const [impersonationState, setImpersonationState] = useState(null);
+      // Keep module-scope mirror in sync with React state.
+      useEffect(() => { setImpersonation(impersonationState); }, [impersonationState]);
+
+      // On mount: try to recover impersonation state across page reload.
+      // GET /api/impersonation/active returns the caller's currently-active
+      // session if any. If found, restore + auto-end on expiry.
+      useEffect(() => {
+        if (!authenticated) return;
+        fetch(`${API_BASE}/impersonation/active`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data && data.active) {
+              // We don't know target name/email from this endpoint; fetch /api/me
+              // (which under the new header will return the target's profile) to
+              // populate the banner label. Temporarily set the module-scope
+              // wrapper so the next /api/me request carries the header.
+              setImpersonation({ target_sub: data.active.target_sub, target_name: "" });
+              fetch(`${API_BASE}/me`, { cache: "no-store" })
+                .then(r => r.ok ? r.json() : null)
+                .then(targetMe => {
+                  setImpersonationState({
+                    target_sub: data.active.target_sub,
+                    target_name: (targetMe && (targetMe.display_name || targetMe.initials || targetMe.email)) || data.active.target_sub.slice(0, 8),
+                    target_email: targetMe && targetMe.email,
+                    expires_at: data.active.expires_at,
+                  });
+                })
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }, [authenticated]);
+
+      // Start an impersonation session. Returns a promise that resolves on
+      // success (with the populated state) or rejects with an error string.
+      const handleStartImpersonation = React.useCallback(async (targetSub, targetName, targetEmail) => {
+        const res = await fetch(`${API_BASE}/impersonation/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          body: JSON.stringify({ target_sub: targetSub }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `start failed (${res.status})`);
+        }
+        const data = await res.json();
+        setImpersonationState({
+          target_sub: data.target_sub,
+          target_name: targetName || data.target_sub.slice(0, 8),
+          target_email: targetEmail || null,
+          expires_at: data.expires_at,
+        });
+        return data;
+      }, []);
+
+      // End the current impersonation session. Safe to call even if no
+      // session is active (server returns ended: 0).
+      const handleEndImpersonation = React.useCallback(async () => {
+        try {
+          await fetch(`${API_BASE}/impersonation/end`, {
+            method: "POST",
+            headers: { ...csrfHeaders() },
+          });
+        } catch (_) { /* swallow — clear local state anyway */ }
+        setImpersonationState(null);
+        setImpersonation(null);
+        // Force a reload-ish behavior so any cached data from the target's
+        // perspective gets re-fetched as the admin. Simplest: hard reload.
+        // (Alternative: re-fetch /api/me + invalidate all caches. Reload
+        // is one line and bullet-proof.)
+        if (typeof window !== "undefined") window.location.reload();
+      }, []);
 
       // On mount: check auth status via session cookie (set by /auth/callback)
       useEffect(() => {
@@ -21032,6 +21314,15 @@
 
       return (
         <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, var(--color-bg) 0%, #1e3a5f 50%, var(--color-bg) 100%)" }}>
+          {/* v3 impersonation banner — sticky at top (above view-as banner)
+              when an active impersonation session exists. Persistent and
+              dismiss-resistant on purpose: this is a customer-support session
+              acting as another user, NOT a UI preview. Hard-red background
+              to distinguish from the amber view-as v1 banner. Countdown
+              ticks every 5s. */}
+          {impersonationState && (
+            <ImpersonationBanner state={impersonationState} onExit={handleEndImpersonation} />
+          )}
           {/* View-as banner — sticky at top when admin has flipped into a
               role-override mode. Only renders to actual admins (real me)
               who picked something other than "self". One-click exit. */}
@@ -21189,6 +21480,13 @@
                       </button>
                     );
                   })()}
+                  {(me?.is_admin || me?.support_role) && !impersonationState && (
+                    <button onClick={() => setShowImpersonationModal(true)}
+                      title="Start impersonation (read-only customer-support session)"
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #dc2626", background: "transparent", color: "#fca5a5", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      🛂
+                    </button>
+                  )}
                   <button onClick={() => setShowProfile(true)} title="Account (also: Send feedback, Sign out)"
                     data-tour="step-swimmer-level"
                     style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text-dim)", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
@@ -21206,7 +21504,7 @@
 
           <div style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
 
-            {view === "admin"    && <AdminView />}
+            {view === "admin"    && <AdminView me={me} onStartImpersonation={handleStartImpersonation} />}
             {view === "teams"    && <TeamsView />}
             {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} />}
             {view === "week"     && (
@@ -22215,6 +22513,13 @@
           )}
           {showFeedback && (
             <FeedbackModal onClose={() => setShowFeedback(false)} />
+          )}
+          {showImpersonationModal && (
+            <ImpersonationStartModal
+              me={me}
+              onClose={() => setShowImpersonationModal(false)}
+              onStartImpersonation={handleStartImpersonation}
+            />
           )}
           {showIntentParser && (
             <IntentParserModal
