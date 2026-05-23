@@ -429,7 +429,7 @@ export async function dbListSessions(userSub) {
 // issues never affect user-facing requests. The function logs failures (DB
 // down, JSON.stringify on a circular `details` object, etc.) and resolves.
 // Pass `details` as a plain object; it'll be JSON-stringified.
-export async function dbAuditEvent({ userSub = null, eventType, ip = null, userAgent = null, details = null }) {
+export async function dbAuditEvent({ userSub = null, eventType, ip = null, userAgent = null, details = null, impersonatorSub = null }) {
   if (!pool) return;
   try {
     let detailsJson = null;
@@ -441,9 +441,15 @@ export async function dbAuditEvent({ userSub = null, eventType, ip = null, userA
         detailsJson = JSON.stringify({ __audit_error: "details_serialization_failed" });
       }
     }
+    // v3 impersonation (2026-05-22): when the request is acting through
+    // an active impersonation session, impersonatorSub carries the admin
+    // who initiated. user_sub still records the TARGET — so a normal
+    // audit query for "what happened to user X" surfaces impersonated
+    // events too, while filtering by impersonator_sub answers "what did
+    // admin A do while impersonating".
     await pool.query(
-      "INSERT INTO `audit_events` (`user_sub`, `event_type`, `ip`, `user_agent`, `details`) VALUES (?, ?, ?, ?, ?)",
-      [userSub, eventType, ip, userAgent ? String(userAgent).slice(0, 255) : null, detailsJson]
+      "INSERT INTO `audit_events` (`user_sub`, `event_type`, `ip`, `user_agent`, `details`, `impersonator_sub`) VALUES (?, ?, ?, ?, ?, ?)",
+      [userSub, eventType, ip, userAgent ? String(userAgent).slice(0, 255) : null, detailsJson, impersonatorSub]
     );
   } catch (err) {
     console.warn("[audit] insert failed:", err.message);
@@ -517,6 +523,14 @@ export async function dbIsUser(sub) {
   return rows.length > 0;
 }
 
+// v3 impersonation — grants impersonation rights without full admin.
+// is_admin OR support_role both qualify (checked at the route layer).
+export async function dbIsSupportRole(sub) {
+  if (!sub) return false;
+  const rows = await pool.query("SELECT `support_role` FROM `users` WHERE `sub` = ? LIMIT 1", [sub]);
+  return rows.length > 0 && (rows[0].support_role === 1 || rows[0].support_role === true);
+}
+
 export async function dbIsAdmin(sub) {
   if (!sub) return false;
   const rows = await pool.query(
@@ -586,9 +600,98 @@ export async function dbAdminSetUserFlag(sub, field, value) {
   // for the in-app catalog (coach access tier). is_admin already implies
   // coach via dbIsCoach, so explicit coach toggle is for non-admin users
   // who should be able to browse the catalog.
-  if (!["is_disabled", "is_admin", "is_coach"].includes(field)) return { ok: false, reason: "bad_field" };
+  // support_role added 2026-05-22 for view-as v3 impersonation (per
+  // VIEW_AS_V3_SCOPE.md). Grants the right to start an impersonation
+  // session without needing full admin privileges. Server route that
+  // calls this must require is_admin (so support_role can't elevate).
+  if (!["is_disabled", "is_admin", "is_coach", "support_role"].includes(field)) return { ok: false, reason: "bad_field" };
   await pool.query(`UPDATE \`users\` SET \`${field}\` = ? WHERE \`sub\` = ?`, [value ? 1 : 0, sub]);
   return { ok: true };
+}
+
+// ─── v3 impersonation (view-as v3) ──────────────────────────────────────────
+// Customer-support feature per VIEW_AS_V3_SCOPE.md. Header-based: admin
+// starts session, every API call sends X-Impersonate-Sub, server middleware
+// validates against an active row in impersonation_sessions and rewrites
+// req.userSub. Read-only enforced server-side.
+
+const IMPERSONATION_CAP_MIN = 30; // hard cap per scope §1
+
+// Start a new impersonation session for an admin acting as a target user.
+// Idempotently ends any prior active session for this admin first — one
+// admin can have AT MOST one active session at a time. Returns the new row.
+export async function dbStartImpersonation(adminSub, targetSub) {
+  if (!adminSub || !targetSub) return { ok: false, reason: "missing_sub" };
+  if (adminSub === targetSub) return { ok: false, reason: "self_impersonation_forbidden" };
+  // End any prior active session for this admin (one-at-a-time invariant).
+  await pool.query(
+    "UPDATE `impersonation_sessions` SET `ended_at` = NOW(), `end_reason` = 'admin_revoked' " +
+    "WHERE `admin_sub` = ? AND `ended_at` IS NULL",
+    [adminSub]
+  );
+  // Confirm target exists (defense — caller should already have validated).
+  const targetRows = await pool.query("SELECT 1 FROM `users` WHERE `sub` = ? LIMIT 1", [targetSub]);
+  if (!targetRows.length) return { ok: false, reason: "target_not_found" };
+  // Insert new session.
+  const result = await pool.query(
+    "INSERT INTO `impersonation_sessions` (`admin_sub`, `target_sub`, `expires_at`) " +
+    `VALUES (?, ?, NOW() + INTERVAL ${IMPERSONATION_CAP_MIN} MINUTE)`,
+    [adminSub, targetSub]
+  );
+  // Read back to get authoritative timestamps.
+  const rows = await pool.query(
+    "SELECT `id`, `admin_sub`, `target_sub`, `started_at`, `expires_at` " +
+    "FROM `impersonation_sessions` WHERE `id` = ?",
+    [result.insertId]
+  );
+  if (!rows.length) return { ok: false, reason: "insert_readback_failed" };
+  return { ok: true, session: rows[0] };
+}
+
+// End the admin's active impersonation session, if any. Idempotent.
+// reason ∈ "exit" | "expired" | "admin_revoked". Returns count ended.
+export async function dbEndImpersonation(adminSub, reason = "exit") {
+  if (!adminSub) return { ok: false, reason: "missing_sub", ended: 0 };
+  const valid = ["exit", "expired", "admin_revoked"];
+  if (!valid.includes(reason)) reason = "exit";
+  const result = await pool.query(
+    "UPDATE `impersonation_sessions` SET `ended_at` = NOW(), `end_reason` = ? " +
+    "WHERE `admin_sub` = ? AND `ended_at` IS NULL",
+    [reason, adminSub]
+  );
+  return { ok: true, ended: Number(result.affectedRows || 0) };
+}
+
+// Return the admin's currently-active impersonation session, or null.
+// "Active" = ended_at IS NULL AND expires_at > NOW().
+// Also lazily marks any expired-but-not-yet-ended row as ended (cleanup).
+export async function dbGetActiveImpersonation(adminSub) {
+  if (!adminSub) return null;
+  // Lazy expiry cleanup: end any expired sessions for this admin.
+  await pool.query(
+    "UPDATE `impersonation_sessions` SET `ended_at` = `expires_at`, `end_reason` = 'expired' " +
+    "WHERE `admin_sub` = ? AND `ended_at` IS NULL AND `expires_at` <= NOW()",
+    [adminSub]
+  );
+  const rows = await pool.query(
+    "SELECT `id`, `admin_sub`, `target_sub`, `started_at`, `expires_at` " +
+    "FROM `impersonation_sessions` " +
+    "WHERE `admin_sub` = ? AND `ended_at` IS NULL " +
+    "ORDER BY `id` DESC LIMIT 1",
+    [adminSub]
+  );
+  return rows[0] || null;
+}
+
+// Validate that the admin's current impersonation session matches the
+// header's claimed target_sub. Called by auth middleware on every request
+// that carries X-Impersonate-Sub. Returns true iff the session exists,
+// matches the header, and hasn't expired.
+export async function dbValidateImpersonationHeader(adminSub, claimedTargetSub) {
+  if (!adminSub || !claimedTargetSub) return false;
+  const active = await dbGetActiveImpersonation(adminSub);
+  if (!active) return false;
+  return active.target_sub === claimedTargetSub;
 }
 
 // Admin edits to a user's display fields. Only allows email, initials, display_name.
@@ -719,7 +822,7 @@ export async function dbAdminListAuditEvents({ limit = 100, offset = 0, eventTyp
   const wh = where.length ? `WHERE ${where.join(" AND ")}` : "";
   args.push(Number(limit), Number(offset));
   const rows = await pool.query(
-    `SELECT id, user_sub, event_type, ip, user_agent, details, created_at
+    `SELECT id, user_sub, event_type, ip, user_agent, details, created_at, impersonator_sub
        FROM audit_events ${wh}
        ORDER BY id DESC
        LIMIT ? OFFSET ?`,
@@ -729,6 +832,7 @@ export async function dbAdminListAuditEvents({ limit = 100, offset = 0, eventTyp
     id: Number(r.id), user_sub: r.user_sub, event_type: r.event_type,
     ip: r.ip, user_agent: r.user_agent,
     details: r.details, created_at: r.created_at,
+    impersonator_sub: r.impersonator_sub || null,
   }));
 }
 

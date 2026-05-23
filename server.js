@@ -63,9 +63,10 @@ import {
   dbGetEffectiveDisfavorites,
   dbGetEffectiveFavorites,
   dbGetCoachImpact,
+  dbStartImpersonation, dbEndImpersonation, dbGetActiveImpersonation, dbValidateImpersonationHeader,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
-  dbIsUser, dbIsAdmin, dbIsCoach, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
+  dbIsUser, dbIsAdmin, dbIsCoach, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
   dbAdminListAuditEvents,
@@ -290,6 +291,53 @@ async function requireAuth(req, res, next) {
 
   req.userSub    = sub;
   req.sessionId  = session.id;
+
+  // v3 impersonation (2026-05-22 per VIEW_AS_V3_SCOPE.md). If the request
+  // carries X-Impersonate-Sub, validate against an active row in
+  // impersonation_sessions. On success: rewrite req.userSub to the target
+  // and stash the real admin sub in req.impersonatorSub. Downstream code
+  // sees the target; audit logger picks up impersonator_sub. On failure
+  // (no active session, target mismatch, or expired): 401 with a reason
+  // the client can read to drop its local impersonation state.
+  //
+  // CENTRAL WRITE BLOCK: when impersonation is active, blanket-block any
+  // POST/PUT/PATCH/DELETE method except the explicit exit route. Safer
+  // than per-route middleware (one place to audit, no chance of missing
+  // a route). Allowlist exactly one POST: /api/impersonation/end.
+  const impersonateHeader = req.get("X-Impersonate-Sub");
+  if (impersonateHeader) {
+    try {
+      const valid = await dbValidateImpersonationHeader(sub, impersonateHeader);
+      if (!valid) {
+        return res.status(401).json({ error: "impersonation_session_invalid", reason: "no active session matches the X-Impersonate-Sub header — start a new session" });
+      }
+      req.impersonatorSub = sub;       // the real admin
+      req.userSub         = impersonateHeader; // the target (rewritten)
+      // Read-only enforcement.
+      const isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+      const isAllowlistedWrite = req.method === "POST" && req.path === "/api/impersonation/end";
+      if (isWrite && !isAllowlistedWrite) {
+        return res.status(403).json({
+          error: "impersonation_is_read_only",
+          reason: "Writes are blocked while impersonating. Exit impersonation (POST /api/impersonation/end) to make changes.",
+        });
+      }
+      // Per-spec §1: every API call during impersonation is audit-logged.
+      // Fire-and-forget. The start/end events also live in the audit log
+      // (richer details); these per-request rows give forensic traceability
+      // for "what did the admin look at while impersonating".
+      dbAuditEvent({
+        userSub:         req.userSub,           // target
+        eventType:       "impersonation.access",
+        ...reqMeta(req),
+        details:         { path: req.path, method: req.method },
+        impersonatorSub: req.impersonatorSub,
+      });
+    } catch (err) {
+      console.warn("[impersonation] validate failed:", err.message);
+      return res.status(503).json({ error: "auth backend unavailable" });
+    }
+  }
   next();
 }
 
@@ -593,6 +641,107 @@ app.delete("/api/admin/users/:sub", checkOrigin, requireAuth, requireAdmin, requ
     const r = await dbAdminDeleteUser(req.params.sub);
     dbAuditEvent({ userSub: req.userSub, eventType: "admin.user.delete", ...reqMeta(req), details: { target_sub: req.params.sub, affected: r.affected } });
     res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// v3 impersonation — grant/revoke support_role on a user.
+// Admin-only (support_role can NOT elevate itself or other users — only
+// is_admin can grant). This is a deliberate constraint: support_role lets
+// someone DO support work, but only admins decide WHO is support.
+app.post("/api/admin/users/:sub/support-role", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const granted = !!(req.body && req.body.granted);
+    const r = await dbAdminSetUserFlag(req.params.sub, "support_role", granted);
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       granted ? "admin.user.support_role.grant" : "admin.user.support_role.revoke",
+      ...reqMeta(req),
+      details:         { target_sub: req.params.sub },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// v3 impersonation routes. Caller must be admin OR support_role.
+// Start a new session (auto-ends any prior active session for this admin).
+app.post("/api/impersonation/start", checkOrigin, requireAuth, requireCsrf, async (req, res) => {
+  try {
+    // Block impersonation FROM within an impersonation session.
+    if (req.impersonatorSub) {
+      return res.status(403).json({ error: "nested_impersonation_forbidden" });
+    }
+    // Authorize: admin OR support_role.
+    const [isAdmin, isSupport] = await Promise.all([
+      dbIsAdmin(req.userSub),
+      dbIsSupportRole(req.userSub),
+    ]);
+    if (!isAdmin && !isSupport) {
+      return res.status(403).json({ error: "not authorized to impersonate" });
+    }
+    const { target_sub } = req.body || {};
+    if (!target_sub || typeof target_sub !== "string") {
+      return res.status(400).json({ error: "target_sub required" });
+    }
+    const r = await dbStartImpersonation(req.userSub, target_sub);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   target_sub,      // the impersonated user (so per-user audit query surfaces it)
+      eventType: "impersonation.start",
+      ...reqMeta(req),
+      details:   { session_id: Number(r.session.id), expires_at: r.session.expires_at },
+      impersonatorSub: req.userSub,
+    });
+    res.json({
+      ok: true,
+      session_id: Number(r.session.id),
+      target_sub: r.session.target_sub,
+      started_at: r.session.started_at,
+      expires_at: r.session.expires_at,
+    });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// End the caller's active impersonation session. This is a write-method
+// route but does NOT use requireWritable — it's the mechanism to exit.
+// req.userSub at this point is the target (if header was sent) OR the
+// admin (if no header). Either way, dbEndImpersonation needs the ADMIN's
+// sub — derive from impersonatorSub if set, else from userSub.
+app.post("/api/impersonation/end", checkOrigin, requireAuth, requireCsrf, async (req, res) => {
+  try {
+    const adminSub = req.impersonatorSub || req.userSub;
+    const r = await dbEndImpersonation(adminSub, "exit");
+    if (r.ended > 0) {
+      dbAuditEvent({
+        userSub:         req.userSub,    // target (or admin if no session was active)
+        eventType:       "impersonation.end",
+        ...reqMeta(req),
+        details:         { ended_count: r.ended, reason: "exit" },
+        impersonatorSub: req.impersonatorSub || null,
+      });
+    }
+    res.json({ ok: true, ended: r.ended });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Returns the caller's currently-active impersonation session (if any).
+// Client polls this on mount to recover state across page reloads.
+// Note: if the request itself comes WITH a valid X-Impersonate-Sub header,
+// req.userSub is already the target — but we want the ADMIN's session, so
+// derive from impersonatorSub.
+app.get("/api/impersonation/active", requireAuth, async (req, res) => {
+  try {
+    const adminSub = req.impersonatorSub || req.userSub;
+    const active = await dbGetActiveImpersonation(adminSub);
+    if (!active) return res.json({ active: null });
+    res.json({
+      active: {
+        session_id: Number(active.id),
+        target_sub: active.target_sub,
+        started_at: active.started_at,
+        expires_at: active.expires_at,
+      },
+    });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
