@@ -26,6 +26,7 @@ _Nothing in progress as of 2026-05-23._
 
 ## Bigger threads (need a planning session)
 
+- **Reporting engine v1** — spec locked 2026-05-23 in repo `REPORTING_SCOPE.md`. 6 reports across 3 audiences (coach-self / solo / admin). Bundles lightweight default-present attendance (migration 029 + "Mark practice done" modal) + PDF/markdown export. Cross-coach-within-team deferred to v2; head-coach view also deferred. ~24-34h across 6 phases. Trigger: first paying coach asking "how is my group doing." Source: [[swim-generator-reporting-scope]]
 - **Pricing implementation** — spec locked in repo `PRICING.md`. Four-tier Patreon (Free / Supporter $3 / Coach $10 / Program $25). Coaches pay, swimmers free. Trigger: first paying pilot. Source: [[swim-generator-pricing-direction]]
 - **Sprint/fly main templates for large budgets** — residual fallback after slice-1 (~4.4% overall) is concentrated in sprint mains ≥1200yd and fly mains ≥1000yd. Both fail validator due to "no rep > 100yd" + budget packing. Real coaches may not program these (so current behavior could be correct). Defer until coach pilot reports a problem. Source: [[swim-generator-fallback-tuning-drill-v1]]
 
