@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-22** (post view-as-v3-client deploy)
+Last refreshed: **2026-05-23** (post impersonation manual-docs deploy)
 
 ## How this file works
 
@@ -18,11 +18,10 @@ Memos in `/Users/cassidy/Library/Application Support/Claude/.../memory/` are the
 
 ## Now
 
-_Nothing in progress as of 2026-05-22._
+_Nothing in progress as of 2026-05-23._
 
 ## Next (small, ready)
 
-- **Manual docs section for v3 impersonation** — Phase A scope §8 deferred this; the feature is live end-to-end but the user manual doesn't mention it. Add new section under Admin docs in `public/manual.html` between "Audit log" and "Teams (coach access)". Covers: what it is, who gets the right, 30-min cap, read-only, audit trail, no-notification policy. ~30min. Source: [[swim-generator-view-as-v3-client]] §Pending
 - **Run-screen UI cleanup** — captured 2026-05-22 (Cap'n flagged that this fell off the list). Specific scope TBD; when picking this up, start by opening Run mode on a real workout and listing the rough edges. Likely candidates worth checking: rest-timer prominence, set navigation flow, landscape-mode behavior, finish-screen tightness, audio-cue toggle discoverability. Confirm specifics with Cap'n before starting work.
 
 ## Bigger threads (need a planning session)
@@ -53,6 +52,7 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-23 | `manual-impersonation-docs` | Manual: new Impersonation section under Admin docs + audit-log event types updated |
 | 2026-05-22 | `view-as-v3-client` | v3 Phase B: impersonation client (fetch wrapper, banner, modal, Admin→Users buttons) — feature complete end-to-end |
 | 2026-05-22 | `view-as-v3-server-only` | v3 Phase A: impersonation server-side (header auth, support_role, read-only, audit, 30-min cap) |
 | 2026-05-22 | `fallback-tuning-drill-v1` | Engine fallback 16.2%→4.4%: drill_progression now covers distance/sprint/endurance/mixed |
