@@ -18826,6 +18826,27 @@
                     {u.is_disabled  && <span style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>disabled</span>}
                   </td>
                   <td style={{ padding: "8px 6px" }}>
+                    {/* Copy-sub button — primary use: grabbing your own sub
+                        for ADMIN_SUBS env-var config. Falls back to a
+                        prompt() when navigator.clipboard isn't available
+                        (HTTP, old browsers, denied permission). */}
+                    <button
+                      onClick={() => {
+                        const sub = u.sub;
+                        const fallback = () => window.prompt("Copy this sub:", sub);
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(sub).then(
+                            () => setMsg(`copied ${sub.slice(0, 10)}…`),
+                            () => fallback(),
+                          );
+                        } else {
+                          fallback();
+                        }
+                      }}
+                      title={`Copy full sub: ${u.sub}`}
+                      style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "var(--color-border)", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer", fontFamily: "monospace" }}>
+                      📋 sub
+                    </button>
                     <button onClick={() => setEditing(u)} style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: "var(--color-border)", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
                       Edit
                     </button>
