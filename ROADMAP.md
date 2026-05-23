@@ -22,7 +22,7 @@ _Nothing in progress as of 2026-05-22._
 
 ## Next (small, ready)
 
-- **Add `data-tour` attributes to anchor targets in `public/index.html`** — preparation for any future in-app tour build. The solo onboarding training package's `in_app_tour_spec.md` defines 9 anchor targets (pace input, type picker, equipment checkboxes, yardage slider, Generate button, workout view, regen button, Print/Run buttons, post-swim log). Without stable `data-tour` IDs, CSS selectors will rot as the single-file React app evolves. Pure additive change — markup only, no logic. ~30min. Source: [[swim-generator-training-package]] (re-generated 2026-05-22), `TRAINING/solo/in_app_tour_spec.md`.
+- **Run-screen UI cleanup** — captured 2026-05-22 (Cap'n flagged that this fell off the list). Specific scope TBD; when picking this up, start by opening Run mode on a real workout and listing the rough edges. Likely candidates worth checking: rest-timer prominence, set navigation flow, landscape-mode behavior, finish-screen tightness, audio-cue toggle discoverability. Confirm specifics with Cap'n before starting work.
 
 ## Bigger threads (need a planning session)
 

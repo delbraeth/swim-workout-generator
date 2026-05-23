@@ -9888,7 +9888,7 @@
                         activeColor: "#ef4444" },
                     ];
                 return (
-                  <div className="screen-only" style={{
+                  <div className="screen-only" data-tour="step-favorite-toggle" style={{
                     display: "inline-flex", gap: 2, borderRadius: 6,
                     background: btnBg, padding: 2, border: `1px solid ${btnBorder}`,
                   }}>
@@ -10196,6 +10196,7 @@
                 <input
                   type="text"
                   value={paceInput}
+                  data-tour="step-pace-input"
                   onChange={e => { setActivePreset(null); onPaceChange && onPaceChange(e.target.value); }}
                   placeholder="M:SS"
                   style={{ width: 52, fontFamily: "monospace", fontSize: 13, padding: "4px 7px", borderRadius: 6,
@@ -21189,6 +21190,7 @@
                     );
                   })()}
                   <button onClick={() => setShowProfile(true)} title="Account (also: Send feedback, Sign out)"
+                    data-tour="step-swimmer-level"
                     style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text-dim)", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
                     👤
                   </button>
@@ -21310,7 +21312,7 @@
                 (REBRAND_SCOPE §8.3). */}
             <div className="screen-only pool-mode-row" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Pool</span>
-              <div className="pool-mode-buttons" style={{ display: "flex", background: "var(--color-bg)", borderRadius: 8, border: "1px solid var(--color-border)", overflow: "hidden" }}>
+              <div className="pool-mode-buttons" data-tour="step-pool-mode" style={{ display: "flex", background: "var(--color-bg)", borderRadius: 8, border: "1px solid var(--color-border)", overflow: "hidden" }}>
                 {[["25y","SCY"],["25m","SCM"],["50m","LCM"]].map(([mode, label]) => (
                   <button key={mode} onClick={() => handlePoolModeChange(mode)}
                     style={{
@@ -21435,7 +21437,7 @@
             <p className="screen-only" style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
               Select Workout Type
             </p>
-            <div className="screen-only" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+            <div className="screen-only" data-tour="step-type-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
               {WORKOUT_TYPES.map(t => {
                 const isSel = selectedType === t.id;
                 const isHov = hover === t.id;
@@ -21465,10 +21467,10 @@
             <div className="screen-only">
 
               {/* Equipment checkboxes */}
-              <EquipmentPicker equipment={equipment} onChange={handleEquipChange} />
+              <div data-tour="step-equipment"><EquipmentPicker equipment={equipment} onChange={handleEquipChange} /></div>
 
               {/* Max Yardage / Distance Slider */}
-              <YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} />
+              <div data-tour="step-yardage-slider"><YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} /></div>
 
               {/* v2.0 — Multi-lane multi-pace generate. Coach-only. When ON, the
                   picker filters options that fit ALL lane paces and the generate
@@ -21638,6 +21640,7 @@
               <button
                 onClick={handleGenerate}
                 disabled={!canGenerate}
+                data-tour="step-generate-button"
                 style={{
                   width: "100%", padding: "14px 0", borderRadius: 12, border: "none",
                   fontWeight: 700, fontSize: 15, cursor: canGenerate ? "pointer" : "not-allowed",
@@ -21689,7 +21692,7 @@
             {workout && (
               <div>
                 {/* Summary bar (screen) — green-bordered when recovery day */}
-                <div className="screen-only" style={{
+                <div className="screen-only" data-tour="step-celebrate" style={{
                   background: "var(--color-card)",
                   border: `${workout.recovery ? 2 : 1}px solid ${workout.recovery ? "var(--color-positive)" : "var(--color-border)"}`,
                   borderRadius: 12, padding: 20, marginBottom: 16,
