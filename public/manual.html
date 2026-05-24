@@ -945,6 +945,16 @@
         <div class="callout-icon">📅</div>
         <div class="callout-body"><strong>Completion linking.</strong> When you run a scheduled workout and log the completion, the schedule row gets stamped with a ✓ and links to the history entry. The original schedule row stays in place as the planning record; the history entry is the actual swim.</div>
       </div>
+
+      <h3>📋 Mark practice done (coach attendance)</h3>
+      <p>Every payload-mode row (one that has a generated workout, not just an intent) shows a <strong>📋 Mark done</strong> button. This is a coach-side action that records who actually attended the practice — separate from "did the workout get swum?" linking via Run mode.</p>
+      <p>Tap <strong>📋 Mark done</strong> → a modal opens with the group roster as it existed on the scheduled date (swimmers who joined later don't appear; swimmers who left before then do). Everyone is pre-checked as <em>present</em>. Uncheck any absences and tap <strong>Mark done ✓</strong>. The row's button flips to <strong>✓ Attendance</strong> (green) and you can re-open the modal anytime to edit who was there.</p>
+      <p>Workouts that aren't tied to a group (your own solo schedule rows) still get the button — saving just stamps the practice as done, with no roster checklist.</p>
+      <p><strong>Who can mark attendance:</strong> the workout's owner (the coach who scheduled it) <em>or</em> any active coach in the workout's group (primary or assistant). Assistant coaches running practice can record attendance even if the head coach scheduled the workout.</p>
+      <div class="callout note">
+        <div class="callout-icon">📊</div>
+        <div class="callout-body"><strong>Why this matters.</strong> Attendance unlocks accurate reporting — once Reporting v1 ships, the Schedule Adherence report (R2) shows what % of programmed work was actually swum, not just what % was generated. Without attendance, reports only know about programming, not execution.</div>
+      </div>
     </section>
 
     <!-- ══ SCHEDULE FOR DAY ══ -->

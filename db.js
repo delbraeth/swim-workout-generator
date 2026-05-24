@@ -3325,6 +3325,10 @@ function rowToScheduledWorkout(r) {
     intent_params,
     mode:                  (intent_params && !payload) ? "intent" : "payload",  // derived
     completed_workout_id:  r.completed_workout_id,
+    // Reporting Phase A — practice completion stamping (migration 029).
+    // completed_at NULL = still scheduled or skipped; non-null = marked done.
+    completed_at:          dtToIso(r.completed_at),
+    completed_by_sub:      r.completed_by_sub || null,
     notes:                 r.notes || null,
     created_at:            dtToIso(r.created_at),
     updated_at:            dtToIso(r.updated_at),
@@ -3549,6 +3553,172 @@ export async function dbLinkCompletedToSchedule({ scheduledId, callerSub, workou
     [workoutId, Number(scheduledId)]
   );
   return { ok: true, linked: true };
+}
+
+// ── Practice attendance (Reporting v1 Phase A — migration 029) ───────
+// Spec: REPORTING_SCOPE.md §3. Lightweight default-present model. No-roster
+// cases (solo / masters with no group) still stamp completed_at on the
+// schedule row but write no attendance rows.
+
+// Mark a scheduled workout as completed and upsert the attendance roster
+// in one transaction. attendance is an array of:
+//   { swimmer_sub OR managed_id, present (bool), notes (string|null) }
+// Caller is the coach who owns the scheduled workout (authz checked at
+// route level). Same row may already exist (re-edit) — we UPSERT.
+export async function dbCompleteScheduledWorkout({ scheduledId, callerSub, completedAt = null, attendance = [] }) {
+  if (!scheduledId || !callerSub) return { ok: false, reason: "missing_args" };
+  // Validate authz: owner OR any active coach in the workout's associated
+  // group. Group association lives in intent_params.group_id or
+  // payload.group_id (set by Phase 2b coach-fanout). Owner check is fast;
+  // group-coach check requires JSON parse + an extra query — only done
+  // if caller isn't the owner.
+  const cur = await pool.query(
+    "SELECT `user_sub`, `intent_params`, `payload` FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
+    [Number(scheduledId)]
+  );
+  if (!cur[0]) return { ok: false, reason: "schedule_not_found" };
+  if (cur[0].user_sub !== callerSub) {
+    // Try the looser group-coach path.
+    let groupId = null;
+    for (const field of ["intent_params", "payload"]) {
+      let v = cur[0][field];
+      if (typeof v === "string") { try { v = JSON.parse(v); } catch (_) { v = null; } }
+      if (!v || typeof v !== "object") continue;
+      // Direct `.group_id` (set on intent_params from Phase 2b). Or the
+      // nested `.assignment_target.group_id` (set on payload when a coach
+      // commits a group workout via the log-workout fanout path).
+      if (typeof v.group_id === "string" && v.group_id.startsWith("gr_")) {
+        groupId = v.group_id; break;
+      }
+      if (v.assignment_target && typeof v.assignment_target.group_id === "string" && v.assignment_target.group_id.startsWith("gr_")) {
+        groupId = v.assignment_target.group_id; break;
+      }
+    }
+    if (!groupId) return { ok: false, reason: "not_owner" };
+    const gc = await pool.query(
+      "SELECT 1 FROM `group_coaches` WHERE `group_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
+      [groupId, callerSub]
+    );
+    if (!gc[0]) return { ok: false, reason: "not_owner_not_coach" };
+  }
+  // completedAt defaults to NOW if not provided. Allow backdating to any
+  // past datetime — server doesn't bound this; route layer can clamp.
+  const stampedAt = completedAt || new Date();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // 1. Stamp completion on the schedule row.
+    await conn.query(
+      "UPDATE `scheduled_workouts` SET `completed_at` = ?, `completed_by_sub` = ? WHERE `id` = ?",
+      [stampedAt, callerSub, Number(scheduledId)]
+    );
+    // 2. Upsert attendance rows. INSERT...ON DUPLICATE KEY UPDATE keys on
+    //    the (scheduled_workout_id, swimmer_sub) or (..., managed_id) unique
+    //    indexes from migration 029. Skip rows that lack both targets.
+    for (const a of attendance) {
+      if (!a || (a.swimmer_sub == null && a.managed_id == null)) continue;
+      if (a.swimmer_sub != null && a.managed_id != null) continue;  // XOR
+      const present = a.present !== false;  // default true
+      const notes   = a.notes && String(a.notes).length <= 500 ? String(a.notes) : null;
+      if (a.swimmer_sub) {
+        await conn.query(
+          "INSERT INTO `practice_attendance` " +
+          "(`scheduled_workout_id`, `swimmer_sub`, `present`, `notes`, `recorded_by_sub`) " +
+          "VALUES (?, ?, ?, ?, ?) " +
+          "ON DUPLICATE KEY UPDATE `present` = VALUES(`present`), `notes` = VALUES(`notes`), " +
+          "  `recorded_by_sub` = VALUES(`recorded_by_sub`), `recorded_at` = CURRENT_TIMESTAMP",
+          [Number(scheduledId), String(a.swimmer_sub), present ? 1 : 0, notes, callerSub]
+        );
+      } else {
+        await conn.query(
+          "INSERT INTO `practice_attendance` " +
+          "(`scheduled_workout_id`, `managed_id`, `present`, `notes`, `recorded_by_sub`) " +
+          "VALUES (?, ?, ?, ?, ?) " +
+          "ON DUPLICATE KEY UPDATE `present` = VALUES(`present`), `notes` = VALUES(`notes`), " +
+          "  `recorded_by_sub` = VALUES(`recorded_by_sub`), `recorded_at` = CURRENT_TIMESTAMP",
+          [Number(scheduledId), Number(a.managed_id), present ? 1 : 0, notes, callerSub]
+        );
+      }
+    }
+    await conn.commit();
+    return { ok: true, completed_at: stampedAt, attendance_count: attendance.length };
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) {}
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+// Read attendance rows for a scheduled workout — used to re-render the
+// "Edit attendance" modal after first save. Returns one row per recorded
+// swimmer; rows for swimmers not in the roster anymore are still returned
+// (caller is expected to reconcile against the current roster).
+export async function dbGetPracticeAttendance(scheduledId) {
+  if (!scheduledId) return [];
+  const rows = await pool.query(
+    "SELECT `id`, `swimmer_sub`, `managed_id`, `present`, `notes`, " +
+    "       `recorded_by_sub`, `recorded_at` " +
+    "FROM `practice_attendance` " +
+    "WHERE `scheduled_workout_id` = ? " +
+    "ORDER BY `id` ASC",
+    [Number(scheduledId)]
+  );
+  return rows.map(r => ({
+    id:               Number(r.id),
+    swimmer_sub:      r.swimmer_sub,
+    managed_id:       r.managed_id != null ? Number(r.managed_id) : null,
+    present:          !!r.present,
+    notes:            r.notes || null,
+    recorded_by_sub:  r.recorded_by_sub,
+    recorded_at:      dtToIso(r.recorded_at),
+  }));
+}
+
+// Lightweight check: is this sub an ACTIVE coach (primary or assistant) of
+// this group? Used by routes that need the looser "owner or coach" authz
+// for practice attendance + future reporting endpoints.
+export async function dbIsActiveGroupCoach(groupId, coachSub) {
+  if (!groupId || !coachSub) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `group_coaches` WHERE `group_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
+    [groupId, coachSub]
+  );
+  return !!rows[0];
+}
+
+// Point-in-time roster for a group on a specific YYYY-MM-DD. Used by the
+// "Mark practice done" modal to pre-render the roster as it existed on the
+// scheduled date (not today's roster — a swimmer who joined later shouldn't
+// appear retroactively in an earlier workout's attendance). Filter:
+//   joined_at <= scheduledDate AND (left_at IS NULL OR left_at > scheduledDate)
+// Mirrors dbListGroupMembers shape so the UI consumer is consistent.
+export async function dbGetGroupRosterAsOf(groupId, scheduledDate) {
+  if (!groupId || !isYmd(scheduledDate)) return [];
+  // Boundary: treat scheduledDate as end-of-day for the join check, so a
+  // swimmer who joined ON the scheduled date counts as present.
+  const eod = scheduledDate + " 23:59:59";
+  const rows = await pool.query(
+    "SELECT gm.`id`, gm.`member_swimmer_sub`, gm.`member_managed_id`, gm.`role`, " +
+    "       gm.`joined_at`, gm.`left_at`, " +
+    "       COALESCE(m.`display_name`, u.`display_name`) AS display_name, " +
+    "       COALESCE(m.`initials`, u.`initials`)         AS initials " +
+    "FROM `group_members` gm " +
+    "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
+    "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
+    "WHERE gm.`group_id` = ? AND gm.`joined_at` <= ? AND (gm.`left_at` IS NULL OR gm.`left_at` > ?) " +
+    "ORDER BY display_name ASC",
+    [groupId, eod, eod]
+  );
+  return rows.map(r => ({
+    id:                  Number(r.id),
+    member_swimmer_sub:  r.member_swimmer_sub,
+    member_managed_id:   r.member_managed_id != null ? Number(r.member_managed_id) : null,
+    role:                r.role,
+    joined_at:           dtToIso(r.joined_at),
+    display_name:        r.display_name,
+    initials:            r.initials,
+  }));
 }
 
 // ── Lane plans (Stage 3 / R-E) ────────────────────────────────────────

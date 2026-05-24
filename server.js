@@ -99,6 +99,8 @@ import {
   dbCreateBenchmark, dbListBenchmarks, dbGetLatestAerobicBenchmark, dbDeleteBenchmark,
   dbCreateScheduledWorkout, dbGetScheduledWorkout, dbListScheduledWorkouts,
   dbUpdateScheduledWorkout, dbDeleteScheduledWorkout, dbLinkCompletedToSchedule,
+  dbCompleteScheduledWorkout, dbGetPracticeAttendance, dbGetGroupRosterAsOf,
+  dbIsActiveGroupCoach,
   dbRepeatWeek,
 } from "./db.js";
 
@@ -2681,6 +2683,105 @@ app.delete("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf,
       eventType: "scheduled_workout.delete",
       ...reqMeta(req),
       details:   { scheduled_id: Number(req.params.id) },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Practice attendance (Reporting v1 Phase A) ─────────────────────
+// Spec: REPORTING_SCOPE.md §3-4. The /attendance-context GET bundles
+// everything the "Mark practice done" modal needs in one call:
+//   * Point-in-time roster (group_members as of scheduled_date)
+//   * Any existing attendance rows (for the Edit case)
+//   * Completion stamp (completed_at, completed_by_sub)
+// The /complete POST records attendance + stamps completion atomically.
+//
+// Authz for both: owner OR any active coach in the workout's group
+// (group_id stored in intent_params or payload from Phase 2b fanout).
+// Same check used in dbCompleteScheduledWorkout; we re-inline it here for
+// the GET path since the DB helper doesn't expose it separately.
+// Shared authz: caller is owner of scheduled workout OR active coach of
+// the group it's tied to. group_id is parsed from intent_params or payload.
+async function _checkScheduledWorkoutCoachAccess(sw, callerSub) {
+  if (!sw) return { ok: false, reason: "not_found" };
+  if (sw.user_sub === callerSub) return { ok: true };
+  let groupId = null;
+  for (const v of [sw.intent_params, sw.payload]) {
+    if (!v || typeof v !== "object") continue;
+    if (typeof v.group_id === "string" && v.group_id.startsWith("gr_")) {
+      groupId = v.group_id; break;
+    }
+    // Phase 2b coach-fanout stashes the group under payload.assignment_target.
+    if (v.assignment_target && typeof v.assignment_target.group_id === "string" && v.assignment_target.group_id.startsWith("gr_")) {
+      groupId = v.assignment_target.group_id; break;
+    }
+  }
+  if (!groupId) return { ok: false, reason: "not_owner" };
+  if (!(await dbIsActiveGroupCoach(groupId, callerSub))) {
+    return { ok: false, reason: "not_owner_not_coach" };
+  }
+  return { ok: true };
+}
+
+app.get("/api/scheduled-workouts/:id/attendance-context", requireAuth, async (req, res) => {
+  try {
+    const sw = await dbGetScheduledWorkout(req.params.id);
+    if (!sw) return res.status(404).json({ error: "not_found" });
+    const authz = await _checkScheduledWorkoutCoachAccess(sw, req.userSub);
+    if (!authz.ok) return res.status(403).json({ error: authz.reason });
+    // Roster: only populated if the workout is tied to a group.
+    let roster = [];
+    let groupId = null;
+    for (const v of [sw.intent_params, sw.payload]) {
+      if (v && typeof v === "object" && typeof v.group_id === "string" && v.group_id.startsWith("gr_")) {
+        groupId = v.group_id; break;
+      }
+    }
+    if (groupId) {
+      roster = await dbGetGroupRosterAsOf(groupId, sw.scheduled_date);
+    }
+    const attendance = await dbGetPracticeAttendance(req.params.id);
+    res.json({
+      scheduled_id:     Number(req.params.id),
+      group_id:         groupId,
+      scheduled_date:   sw.scheduled_date,
+      completed_at:     sw.completed_at,
+      completed_by_sub: sw.completed_by_sub,
+      roster, attendance,
+    });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/scheduled-workouts/:id/complete", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    // Body shape: { completed_at?: ISO string, attendance: [{ swimmer_sub|managed_id, present, notes? }] }
+    const body = req.body || {};
+    if (body.attendance != null && !Array.isArray(body.attendance)) {
+      return res.status(400).json({ error: "attendance must be array" });
+    }
+    let completedAt = null;
+    if (body.completed_at) {
+      const d = new Date(body.completed_at);
+      if (isNaN(d.getTime())) return res.status(400).json({ error: "completed_at not parseable" });
+      completedAt = d;
+    }
+    const r = await dbCompleteScheduledWorkout({
+      scheduledId: Number(req.params.id),
+      callerSub:   req.userSub,
+      completedAt,
+      attendance:  body.attendance || [],
+    });
+    if (!r.ok) {
+      const status = r.reason === "schedule_not_found" ? 404
+                   : r.reason === "not_owner" || r.reason === "not_owner_not_coach" ? 403
+                   : 400;
+      return res.status(status).json({ error: r.reason });
+    }
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "practice.completed",
+      ...reqMeta(req),
+      details:   { scheduled_id: Number(req.params.id), attendance_count: r.attendance_count },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
