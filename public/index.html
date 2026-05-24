@@ -20061,7 +20061,7 @@
         }
       };
 
-      const fieldStyle = { padding: "6px 8px", border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 13, background: "var(--color-card)", color: "var(--color-text)" };
+      const fieldStyle = { padding: "6px 8px", border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", minWidth: 0, boxSizing: "border-box" };
       const labelStyle = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--color-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 };
 
       return (
@@ -20198,9 +20198,9 @@
                   <input value={s.interval} onChange={(e) => updateSet(i, { interval: e.target.value })} placeholder="On 2:00" style={fieldStyle} />
                   <input value={s.focus || ""} onChange={(e) => updateSet(i, { focus: e.target.value })} placeholder="Focus (optional)" style={fieldStyle} maxLength={240} />
                   <select value={s.eq || ""} onChange={(e) => updateSet(i, { eq: e.target.value || null })} style={fieldStyle} title="Equipment required for this set">
-                    <option value="">(no eq)</option>
-                    <option value="kick">kick (board)</option>
-                    <option value="pull">pull (buoy)</option>
+                    <option value="">— eq —</option>
+                    <option value="kick">kick</option>
+                    <option value="pull">pull</option>
                     <option value="snorkel">snorkel</option>
                     <option value="fins">fins</option>
                     <option value="underkick">underkick</option>
