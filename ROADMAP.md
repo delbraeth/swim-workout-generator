@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-25** (UGC v2 Phase D shipped: team sharing + 👥 TEAM badge; Phase E public + moderation next)
+Last refreshed: **2026-05-25** (UGC v2 Phase E shipped: public submission + admin moderation queue + 🌐 PUBLIC badge; Phase F Graduate-to-JS tool next)
 
 ## How this file works
 
@@ -22,8 +22,9 @@ Memos in `/Users/cassidy/Library/Application Support/Claude/.../memory/` are the
   - **Phase A** ✅ SHIPPED 2026-05-25. Migration 031 applied in prod, verified via DESCRIBE/SHOW INDEX. Source: [[swim-generator-ugc-v2-phase-a]]
   - **Phase B** ✅ SHIPPED 2026-05-25. GET /api/bank/my-overlay + dbGetUgcOverlay (visibility-scoped) + client fetch + picker/catalog merge. Source: [[swim-generator-ugc-v2-phase-b]]
   - **Phase C** ✅ SHIPPED 2026-05-25. Full UGC authoring UI (private-only). Source: [[swim-generator-ugc-v2-phase-c]]
-  - **Phase D** ✅ SHIPPED 2026-05-25. Team sharing: dbSetUgcOptionTeamShares + dbSetUgcOptionVisibility + extend create/update for visibility='team' + team_ids. New POST /api/bank-options/:id/visibility route. UgcFormModal gets visibility radio + team multi-select (loads /api/teams on open). 👥 TEAM badge variant when set sourced from another coach's team-share (overlay walker now builds Map with _is_own + _visibility metadata instead of bare Set). Source: [[swim-generator-ugc-v2-phase-d]]
-  - **Phases E-G** — public + admin moderation → Graduate-to-JS tool → smoke + tag.
+  - **Phase D** ✅ SHIPPED 2026-05-25. Team sharing + 👥 TEAM badge. Source: [[swim-generator-ugc-v2-phase-d]]
+  - **Phase E** ✅ SHIPPED 2026-05-25. Public submission + admin moderation: dbListPendingUgc + dbReviewUgcOption + dbGetLatestUgcReview; public→pending coercion in create/update; GET /api/admin/pending-ugc + POST /api/admin/pending-ugc/:id/review + GET /api/bank-options/:id/latest-review; UgcFormModal 🌐 Public radio with explainer; MySetsView shows ⏳ pending / ❌ rejected (reason tooltip); new AdminView "Pending UGC" tab with preview + ✅ approve / ❌ reject (reason required). 🌐 PUBLIC badge activates as public rows arrive. Source: [[swim-generator-ugc-v2-phase-e]]
+  - **Phases F-G** — Graduate-to-JS tool → smoke + tag.
 
 ## Next (small, ready)
 
@@ -63,6 +64,7 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-25 | (no tag) | UGC v2 Phase E: public submission + admin moderation. db.js — dbListPendingUgc (FIFO pending queue with author info), dbReviewUgcOption (atomic insert review + visibility flip), dbGetLatestUgcReview (rejection-reason lookup); validateUgcPayload allowVisibility extended to ['private','team','public']; create/update coerce author 'public' → 'pending'; dbListUgcOptionsByAuthor extended with LEFT JOIN bank_option_reviews to include latest_review_reason on rejected rows (no N+1). server.js — 3 new routes: GET /api/admin/pending-ugc (admin), POST /api/admin/pending-ugc/:id/review (admin + CSRF + reason-required-on-reject), GET /api/bank-options/:id/latest-review (author or admin). Audit event ugc.option.review. Client — UgcFormModal: 🌐 Public radio with "needs admin review" explainer; MySetsView visibility column gets ⏳ pending and ❌ rejected variants (reason in tooltip); new AdminPendingUgc tab (preview + approve/reject + reason textarea) in AdminView. 🌐 PUBLIC badge variant in WorkoutBlock (wired in Phase D) activates as public rows arrive. |
 | 2026-05-25 | (no tag) | UGC v2 Phase D: team sharing. db.js — dbSetUgcOptionTeamShares (with coach-of-team validation) + dbSetUgcOptionVisibility helper; extend dbCreateUgcOption/dbUpdateUgcOption to write bank_option_team_shares atomically when visibility='team'; dbGetUgcOption returns team_ids array. server.js — POST/PATCH /api/bank-options no longer force private; new POST /api/bank-options/:id/visibility for standalone visibility flips. Client — UgcFormModal: visibility radio (📝 Private / 👥 Team-shared) with team multi-select that loads from /api/teams. WorkoutBlock badge upgraded from set-id Set to set-id→{_is_own,_visibility} Map so team-shared options render with 👥 TEAM badge instead of 📝 UGC. 🌐 PUBLIC variant pre-wired (silent until Phase E ships public visibility). |
 | 2026-05-25 | (no tag) | UGC v2 Phase C: full authoring UI. Server-side: 5 routes (list/get/create/update/delete /api/bank-options) + 5 db helpers with quota + validation + edit-reverts-public + frozen-when-promoted. Client-side: 📝 My Sets entry in coach menu, MySetsView (list + edit + delete), UgcFormModal (section/type/stroke/pool_mode/label/repeating set rows), 📥 snapshot button on WorkoutBlock that pre-fills the same modal from any block, 📝 UGC badge in WorkoutBlock header when block sourced from overlay. Visibility forced to 'private' Phase C (team in D, public in E). Manual updated (What's Coming → "In progress"). First user-visible UGC surface. |
 | 2026-05-25 | (no tag) | UGC v2 Phase B (server-side checkpoint): db.js 5 author helpers + 5 /api/bank-options routes (private-only Phase C scope). |

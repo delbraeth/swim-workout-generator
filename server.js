@@ -65,6 +65,7 @@ import {
   dbGetUgcOverlay,
   dbCreateUgcOption, dbGetUgcOption, dbListUgcOptionsByAuthor, dbUpdateUgcOption, dbDeleteUgcOption,
   dbSetUgcOptionVisibility,
+  dbListPendingUgc, dbReviewUgcOption, dbGetLatestUgcReview,
   dbGetCoachImpact,
   dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog, dbGetProgramRecap,
   dbGetPlatformHealth, dbGetCurationSupport,
@@ -1696,6 +1697,54 @@ app.post("/api/bank-options/:id/visibility", checkOrigin, requireAuth, requireCo
     else if (msg.startsWith("not_authorized")) status = 403;
     else if (msg.startsWith("frozen:")) status = 409;
     else if (/required|bad |team_ids/.test(msg)) status = 400;
+    res.status(status).json({ error: msg });
+  }
+});
+
+// Latest review for a UGC option. Author-only (used by MySetsView to
+// show rejection reason on rejected rows). Admin can also fetch.
+app.get("/api/bank-options/:id/latest-review", requireAuth, async (req, res) => {
+  try {
+    const opt = await dbGetUgcOption(req.params.id);
+    if (!opt) return res.status(404).json({ error: "not_found" });
+    const isOwn   = opt.author_sub === req.userSub;
+    const isAdmin = await dbIsAdmin(req.userSub);
+    if (!isOwn && !isAdmin) return res.status(403).json({ error: "not_authorized" });
+    const review = await dbGetLatestUgcReview(req.params.id);
+    res.json({ review });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Phase E — admin moderation queue.
+// GET /api/admin/pending-ugc — paginated list of visibility='pending' rows.
+app.get("/api/admin/pending-ugc", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const limit  = Math.min(500, Math.max(1, parseInt(req.query.limit  || "100", 10)));
+    const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
+    res.json(await dbListPendingUgc({ limit, offset }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Approve or reject a pending UGC option. Body: { decision, reason? }.
+// reason required on reject; ignored on approve. Stamps bank_option_reviews +
+// flips visibility to 'public' or 'rejected' atomically.
+app.post("/api/admin/pending-ugc/:id/review", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const { decision, reason = null } = req.body || {};
+    const r = await dbReviewUgcOption(req.userSub, req.params.id, { decision, reason });
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       "ugc.option.review",
+      ...reqMeta(req),
+      details:         { option_id: req.params.id, decision, has_reason: !!reason },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json(r);
+  } catch (err) {
+    const msg = err.message || String(err);
+    let status = 500;
+    if (msg === "not_found")       status = 404;
+    else if (/required|bad |decision|reject requires/.test(msg)) status = 400;
     res.status(status).json({ error: msg });
   }
 });

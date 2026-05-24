@@ -1508,7 +1508,7 @@ function genUgcSetId() {
 
 // Validate & normalize a UGC payload (option + sets). Throws on bad input.
 // Returns a clean object ready for INSERT.
-function validateUgcPayload(payload, { allowVisibility = ["private", "team"] } = {}) {
+function validateUgcPayload(payload, { allowVisibility = ["private", "team", "public"] } = {}) {
   if (!payload || typeof payload !== "object") throw new Error("payload required");
   const { section, type_id, stroke_id, pool_mode, label, total_yards, type_affinity, visibility, sets, team_ids } = payload;
   if (!UGC_SECTIONS.has(section))   throw new Error("bad section");
@@ -1644,6 +1644,9 @@ export async function dbCreateUgcOption(authorSub, payload) {
     }
   }
   const optionId = genUgcOptionId();
+  // Author-requested 'public' is coerced to 'pending' until admin
+  // approves (Phase E moderation flow). Mirrors dbSetUgcOptionVisibility.
+  const storedVisibility = clean.visibility === "public" ? "pending" : clean.visibility;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1653,7 +1656,7 @@ export async function dbCreateUgcOption(authorSub, payload) {
       " `total_yards`, `type_affinity`, `author_sub`, `visibility`) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [optionId, clean.section, clean.type_id, clean.stroke_id, clean.pool_mode,
-       clean.label, clean.total_yards, clean.type_affinity, authorSub, clean.visibility]
+       clean.label, clean.total_yards, clean.type_affinity, authorSub, storedVisibility]
     );
     for (const [i, s] of clean.sets.entries()) {
       await conn.query(
@@ -1672,7 +1675,7 @@ export async function dbCreateUgcOption(authorSub, payload) {
       }
     }
     await conn.commit();
-    return { ok: true, id: optionId };
+    return { ok: true, id: optionId, visibility: storedVisibility };
   } catch (err) {
     try { await conn.rollback(); } catch (_) {}
     throw err;
@@ -1743,29 +1746,37 @@ export async function dbGetUgcOption(optionId) {
 
 // List all UGC options authored by caller. Used by the "My Sets" page.
 // Returns lightweight rows (no sets) ordered by updated_at DESC.
+// Includes latest_review_reason for rejected rows so MySetsView can
+// surface the rejection reason without N+1 fetches.
 export async function dbListUgcOptionsByAuthor(authorSub) {
   if (!authorSub) return [];
   const rows = await pool.query(
-    "SELECT `id`, `section`, `type_id`, `stroke_id`, `pool_mode`, `label`, " +
-    "       `total_yards`, `visibility`, `created_at`, `updated_at`, " +
-    "       `version`, `promoted_at` " +
-    "FROM `bank_options` WHERE `author_sub` = ? " +
-    "ORDER BY `updated_at` DESC",
+    "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, bo.`pool_mode`, bo.`label`, " +
+    "       bo.`total_yards`, bo.`visibility`, bo.`created_at`, bo.`updated_at`, " +
+    "       bo.`version`, bo.`promoted_at`, " +
+    // Latest review reason for rejected rows. NULL when no reviews exist
+    // or row isn't rejected. Subquery picks the most recent review row.
+    "       (SELECT `reason` FROM `bank_option_reviews` r " +
+    "         WHERE r.`option_id` = bo.`id` AND bo.`visibility` = 'rejected' " +
+    "         ORDER BY r.`reviewed_at` DESC LIMIT 1) AS latest_review_reason " +
+    "FROM `bank_options` bo WHERE bo.`author_sub` = ? " +
+    "ORDER BY bo.`updated_at` DESC",
     [authorSub]
   );
   return rows.map(r => ({
-    id:          r.id,
-    section:     r.section,
-    type_id:     r.type_id,
-    stroke_id:   r.stroke_id,
-    pool_mode:   r.pool_mode,
-    label:       r.label,
-    total_yards: r.total_yards,
-    visibility:  r.visibility,
-    created_at:  r.created_at,
-    updated_at:  r.updated_at,
-    version:     r.version,
-    promoted_at: r.promoted_at,
+    id:                    r.id,
+    section:               r.section,
+    type_id:               r.type_id,
+    stroke_id:             r.stroke_id,
+    pool_mode:             r.pool_mode,
+    label:                 r.label,
+    total_yards:           r.total_yards,
+    visibility:            r.visibility,
+    created_at:            r.created_at,
+    updated_at:            r.updated_at,
+    version:               r.version,
+    promoted_at:           r.promoted_at,
+    latest_review_reason:  r.latest_review_reason || null,
   }));
 }
 
@@ -1784,9 +1795,13 @@ export async function dbUpdateUgcOption(authorSub, optionId, payload) {
   // If current was public and the edit is anything other than private,
   // it gets flipped to pending per §6.
   const clean = validateUgcPayload(payload, { allowVisibility: ["private", "team", "public", "pending"] });
+  // Any author request for 'public' goes to 'pending' moderation queue,
+  // regardless of current visibility. This handles both the
+  // edit-reverts-public-approval case (current=public + new=public) and
+  // the fresh-submission case (current=private + new=public).
   let newVisibility = clean.visibility;
-  if (current.visibility === "public" && newVisibility === "public") {
-    newVisibility = "pending";  // edit-reverts-public-approval
+  if (newVisibility === "public") {
+    newVisibility = "pending";
   }
   // Coach-of-team pre-check before transaction (fail fast).
   if (newVisibility === "team") {
@@ -1836,6 +1851,90 @@ export async function dbUpdateUgcOption(authorSub, optionId, payload) {
   } finally {
     conn.release();
   }
+}
+
+// List rows pending admin moderation (visibility='pending'). Phase E
+// admin "Pending UGC" queue. Returns lightweight rows + author display
+// name/initials/email for the queue listing.
+export async function dbListPendingUgc({ limit = 100, offset = 0 } = {}) {
+  const rows = await pool.query(
+    "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, bo.`pool_mode`, " +
+    "       bo.`label`, bo.`total_yards`, bo.`author_sub`, bo.`created_at`, bo.`updated_at`, " +
+    "       u.`display_name` AS author_name, u.`initials` AS author_initials, u.`email` AS author_email " +
+    "FROM `bank_options` bo " +
+    "LEFT JOIN `users` u ON u.`sub` = bo.`author_sub` " +
+    "WHERE bo.`visibility` = 'pending' " +
+    "ORDER BY bo.`updated_at` ASC " +  // FIFO: oldest pending reviewed first
+    "LIMIT ? OFFSET ?",
+    [Math.min(500, Math.max(1, limit)), Math.max(0, offset)]
+  );
+  return rows.map(r => ({
+    id:               r.id,
+    section:          r.section,
+    type_id:          r.type_id,
+    stroke_id:        r.stroke_id,
+    pool_mode:        r.pool_mode,
+    label:            r.label,
+    total_yards:      r.total_yards,
+    author_sub:       r.author_sub,
+    author_name:      r.author_name,
+    author_initials:  r.author_initials,
+    author_email:     r.author_email,
+    created_at:       r.created_at,
+    updated_at:       r.updated_at,
+  }));
+}
+
+// Admin reviews a pending UGC option. INSERTs bank_option_reviews row +
+// flips visibility to 'public' (approve) or 'rejected' (reject) atomically.
+export async function dbReviewUgcOption(reviewerSub, optionId, { decision, reason = null }) {
+  if (!reviewerSub || !optionId) throw new Error("reviewerSub + optionId required");
+  if (decision !== "approve" && decision !== "reject") {
+    throw new Error("decision must be 'approve' or 'reject'");
+  }
+  if (decision === "reject" && (!reason || typeof reason !== "string" || !reason.trim())) {
+    throw new Error("reject requires a reason");
+  }
+  const current = await dbGetUgcOption(optionId);
+  if (!current) throw new Error("not_found");
+  if (current.visibility !== "pending") {
+    throw new Error(`bad state: option is ${current.visibility}, not pending`);
+  }
+  const newVisibility = decision === "approve" ? "public" : "rejected";
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "INSERT INTO `bank_option_reviews` (`option_id`, `reviewer_sub`, `decision`, `reason`) " +
+      "VALUES (?, ?, ?, ?)",
+      [optionId, reviewerSub, decision, decision === "reject" ? reason.trim() : null]
+    );
+    await conn.query(
+      "UPDATE `bank_options` SET `visibility` = ? WHERE `id` = ?",
+      [newVisibility, optionId]
+    );
+    await conn.commit();
+    return { ok: true, id: optionId, visibility: newVisibility, decision };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+// Fetch the latest review row for an option (used by MySetsView to
+// show the rejection reason on rejected rows). Returns null when no
+// reviews exist.
+export async function dbGetLatestUgcReview(optionId) {
+  if (!optionId) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `option_id`, `reviewer_sub`, `decision`, `reason`, `reviewed_at` " +
+    "FROM `bank_option_reviews` WHERE `option_id` = ? " +
+    "ORDER BY `reviewed_at` DESC LIMIT 1",
+    [optionId]
+  );
+  return rows[0] || null;
 }
 
 // Standalone visibility-change endpoint helper. Lighter than dbUpdate
