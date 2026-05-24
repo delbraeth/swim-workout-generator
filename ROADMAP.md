@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-25** (UGC v2 Phase B shipped: overlay endpoint + dbGetUgcOverlay + client merge; Phase C authoring UI next)
+Last refreshed: **2026-05-25** (UGC v2 Phase D shipped: team sharing + 👥 TEAM badge; Phase E public + moderation next)
 
 ## How this file works
 
@@ -20,9 +20,10 @@ Memos in `/Users/cassidy/Library/Application Support/Claude/.../memory/` are the
 
 - **Coach-authored workout sets (UGC v1)** — scope re-architected + build approved 2026-05-25 per direct tester request. Architecture: **JS is canonical forever**; DB holds UGC rows only (`bank_options.author_sub IS NOT NULL`); UGC graduates into JS via a per-option admin tool that auto-edits `public/index.html` with snippet fallback. After graduation, DB row stays with `promoted_at` timestamp (soft delete from overlay). Picker reads JS constants + per-session UGC overlay (`/api/bank/my-overlay`). Visibility tiers: private / team-I-pick / public-with-admin-moderation. Spec: `UGC_COACH_SETS_SCOPE.md`. **Phases A-G, ~29-40h.** Source: [[swim-generator-ugc-coach-sets-scope]]
   - **Phase A** ✅ SHIPPED 2026-05-25. Migration 031 applied in prod, verified via DESCRIBE/SHOW INDEX. Source: [[swim-generator-ugc-v2-phase-a]]
-  - **Phase B** ✅ SHIPPED 2026-05-25. GET /api/bank/my-overlay + dbGetUgcOverlay (visibility-scoped) + client fetch + picker/catalog merge. Wired but empty (no UGC rows exist yet). Source: [[swim-generator-ugc-v2-phase-b]]
-  - **Phase C** — NEXT (~6-8h): authoring UI (form + snapshot 📥 button), private-visibility only. First user-visible UGC surface.
-  - **Phases D-G** — team sharing → public + moderation → Graduate-to-JS tool → smoke + tag.
+  - **Phase B** ✅ SHIPPED 2026-05-25. GET /api/bank/my-overlay + dbGetUgcOverlay (visibility-scoped) + client fetch + picker/catalog merge. Source: [[swim-generator-ugc-v2-phase-b]]
+  - **Phase C** ✅ SHIPPED 2026-05-25. Full UGC authoring UI (private-only). Source: [[swim-generator-ugc-v2-phase-c]]
+  - **Phase D** ✅ SHIPPED 2026-05-25. Team sharing: dbSetUgcOptionTeamShares + dbSetUgcOptionVisibility + extend create/update for visibility='team' + team_ids. New POST /api/bank-options/:id/visibility route. UgcFormModal gets visibility radio + team multi-select (loads /api/teams on open). 👥 TEAM badge variant when set sourced from another coach's team-share (overlay walker now builds Map with _is_own + _visibility metadata instead of bare Set). Source: [[swim-generator-ugc-v2-phase-d]]
+  - **Phases E-G** — public + admin moderation → Graduate-to-JS tool → smoke + tag.
 
 ## Next (small, ready)
 
@@ -62,6 +63,9 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-25 | (no tag) | UGC v2 Phase D: team sharing. db.js — dbSetUgcOptionTeamShares (with coach-of-team validation) + dbSetUgcOptionVisibility helper; extend dbCreateUgcOption/dbUpdateUgcOption to write bank_option_team_shares atomically when visibility='team'; dbGetUgcOption returns team_ids array. server.js — POST/PATCH /api/bank-options no longer force private; new POST /api/bank-options/:id/visibility for standalone visibility flips. Client — UgcFormModal: visibility radio (📝 Private / 👥 Team-shared) with team multi-select that loads from /api/teams. WorkoutBlock badge upgraded from set-id Set to set-id→{_is_own,_visibility} Map so team-shared options render with 👥 TEAM badge instead of 📝 UGC. 🌐 PUBLIC variant pre-wired (silent until Phase E ships public visibility). |
+| 2026-05-25 | (no tag) | UGC v2 Phase C: full authoring UI. Server-side: 5 routes (list/get/create/update/delete /api/bank-options) + 5 db helpers with quota + validation + edit-reverts-public + frozen-when-promoted. Client-side: 📝 My Sets entry in coach menu, MySetsView (list + edit + delete), UgcFormModal (section/type/stroke/pool_mode/label/repeating set rows), 📥 snapshot button on WorkoutBlock that pre-fills the same modal from any block, 📝 UGC badge in WorkoutBlock header when block sourced from overlay. Visibility forced to 'private' Phase C (team in D, public in E). Manual updated (What's Coming → "In progress"). First user-visible UGC surface. |
+| 2026-05-25 | (no tag) | UGC v2 Phase B (server-side checkpoint): db.js 5 author helpers + 5 /api/bank-options routes (private-only Phase C scope). |
 | 2026-05-25 | (no tag) | UGC v2 Phase B: GET /api/bank/my-overlay endpoint + dbGetUgcOverlay helper (visibility-scoped: own + admin-approved public + team-shared via team_coaches OR group_members→groups.team_id; excludes promoted_at). Client fetch on mount + 5-min poll. Picker (getBankOptions) + catalog (getCatalogList) merge — exact pool mode only. Wired but empty until Phase C populates rows. No user-visible change yet. |
 | 2026-05-25 | (no tag) | UGC v2 Phase A: migration 031 corrects migration 030's wrong-architecture schema in prod. bank_options.author_sub NOT NULL, drop in_export, add promoted_at + promoted_by_sub, swap export-index for overlay-index. Idempotent (re-runnable). Tables empty; no client behavior change. |
 | 2026-05-25 | (no tag) | UGC architecture course-correction: scope rewritten with JS-canonical / DB-UGC-only / soft-delete graduation model. Removed obsolete code from yesterday's wrong-architecture build: tools/sync_bank.mjs --import, tools/bank_importer.mjs, POST /api/admin/run-bank-import route. Migration 030's empty tables stay (no destructive change); migration 031 will correct the schema during Phase A of the corrected build. Build approved per direct tester request. |

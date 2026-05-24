@@ -64,6 +64,7 @@ import {
   dbGetEffectiveFavorites,
   dbGetUgcOverlay,
   dbCreateUgcOption, dbGetUgcOption, dbListUgcOptionsByAuthor, dbUpdateUgcOption, dbDeleteUgcOption,
+  dbSetUgcOptionVisibility,
   dbGetCoachImpact,
   dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog, dbGetProgramRecap,
   dbGetPlatformHealth, dbGetCurationSupport,
@@ -1620,38 +1621,45 @@ app.get("/api/bank-options/:id", requireAuth, async (req, res) => {
 });
 
 // Create a new UGC option. Body: full payload per validateUgcPayload.
-// Visibility forced to 'private' in Phase C regardless of what's sent.
+// Phase D: accepts visibility ∈ {private, team} + team_ids when team.
+// Public (Phase E) still rejected at validation layer.
 app.post("/api/bank-options", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
   try {
-    const payload = { ...(req.body || {}), visibility: "private" };  // Phase C: private only
-    const r = await dbCreateUgcOption(req.userSub, payload);
+    const r = await dbCreateUgcOption(req.userSub, req.body || {});
     dbAuditEvent({
       userSub:         req.userSub,
       eventType:       "ugc.option.create",
       ...reqMeta(req),
-      details:         { option_id: r.id, section: payload.section, pool_mode: payload.pool_mode },
+      details:         {
+        option_id:  r.id,
+        section:    (req.body && req.body.section)    || null,
+        pool_mode:  (req.body && req.body.pool_mode)  || null,
+        visibility: (req.body && req.body.visibility) || "private",
+        team_count: Array.isArray(req.body && req.body.team_ids) ? req.body.team_ids.length : 0,
+      },
       impersonatorSub: req.impersonatorSub || null,
     });
     res.json(r);
   } catch (err) {
     // Validation errors come from validateUgcPayload — surface as 400.
     const msg = err.message || String(err);
-    const status = /required|bad |out of range|chars|drift|max |UGC quota/.test(msg) ? 400 : 500;
+    let status = 500;
+    if (msg.startsWith("not_authorized")) status = 403;
+    else if (/required|bad |out of range|chars|drift|max |UGC quota|visibility/.test(msg)) status = 400;
     res.status(status).json({ error: msg });
   }
 });
 
 // Update an existing UGC option. Body: full payload (validateUgcPayload).
-// Phase C: visibility forced to 'private' (no team/public flow yet).
+// Phase D: accepts visibility ∈ {private, team} + team_ids when team.
 app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
   try {
-    const payload = { ...(req.body || {}), visibility: "private" };
-    const r = await dbUpdateUgcOption(req.userSub, req.params.id, payload);
+    const r = await dbUpdateUgcOption(req.userSub, req.params.id, req.body || {});
     dbAuditEvent({
       userSub:         req.userSub,
       eventType:       "ugc.option.update",
       ...reqMeta(req),
-      details:         { option_id: req.params.id },
+      details:         { option_id: req.params.id, visibility: r.visibility },
       impersonatorSub: req.impersonatorSub || null,
     });
     res.json(r);
@@ -1659,9 +1667,35 @@ app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requi
     const msg = err.message || String(err);
     let status = 500;
     if (msg === "not_found")       status = 404;
-    else if (msg === "not_authorized") status = 403;
+    else if (msg.startsWith("not_authorized")) status = 403;
     else if (msg.startsWith("frozen:")) status = 409;
     else if (/required|bad |out of range|chars|drift|max |visibility/.test(msg)) status = 400;
+    res.status(status).json({ error: msg });
+  }
+});
+
+// Standalone visibility change. Body: { visibility, team_ids? }.
+// Lighter than PATCH (no set rewrite, no version bump). Used by the
+// MySetsView "Change visibility" quick-action.
+app.post("/api/bank-options/:id/visibility", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+  try {
+    const { visibility, team_ids = [] } = req.body || {};
+    const r = await dbSetUgcOptionVisibility(req.userSub, req.params.id, { visibility, team_ids });
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       "ugc.option.visibility",
+      ...reqMeta(req),
+      details:         { option_id: req.params.id, visibility: r.visibility, team_count: Array.isArray(team_ids) ? team_ids.length : 0 },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json(r);
+  } catch (err) {
+    const msg = err.message || String(err);
+    let status = 500;
+    if (msg === "not_found")       status = 404;
+    else if (msg.startsWith("not_authorized")) status = 403;
+    else if (msg.startsWith("frozen:")) status = 409;
+    else if (/required|bad |team_ids/.test(msg)) status = 400;
     res.status(status).json({ error: msg });
   }
 });

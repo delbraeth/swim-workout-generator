@@ -1508,9 +1508,9 @@ function genUgcSetId() {
 
 // Validate & normalize a UGC payload (option + sets). Throws on bad input.
 // Returns a clean object ready for INSERT.
-function validateUgcPayload(payload, { allowVisibility = ["private"] } = {}) {
+function validateUgcPayload(payload, { allowVisibility = ["private", "team"] } = {}) {
   if (!payload || typeof payload !== "object") throw new Error("payload required");
-  const { section, type_id, stroke_id, pool_mode, label, total_yards, type_affinity, visibility, sets } = payload;
+  const { section, type_id, stroke_id, pool_mode, label, total_yards, type_affinity, visibility, sets, team_ids } = payload;
   if (!UGC_SECTIONS.has(section))   throw new Error("bad section");
   if (!UGC_POOL_MODES.has(pool_mode)) throw new Error("bad pool_mode");
   // type_id / stroke_id only relevant for drill/main; both nullable for warmup/cooldown
@@ -1527,6 +1527,19 @@ function validateUgcPayload(payload, { allowVisibility = ["private"] } = {}) {
   }
   const v = visibility || "private";
   if (!allowVisibility.includes(v)) throw new Error(`visibility must be one of: ${allowVisibility.join(", ")}`);
+  // team visibility requires a non-empty team_ids array. Other visibilities
+  // ignore team_ids (the helper that writes shares clears the table anyway).
+  let cleanTeamIds = [];
+  if (v === "team") {
+    if (!Array.isArray(team_ids) || team_ids.length === 0) {
+      throw new Error("team visibility requires team_ids");
+    }
+    for (const id of team_ids) {
+      if (typeof id !== "string" || !id.trim()) throw new Error("bad team_id in team_ids");
+      cleanTeamIds.push(id.trim());
+    }
+    cleanTeamIds = Array.from(new Set(cleanTeamIds));  // dedup
+  }
   if (!Array.isArray(sets) || sets.length === 0) throw new Error("at least 1 set required");
   if (sets.length > 24) throw new Error("max 24 sets per option");
   let computedTotal = 0;
@@ -1563,8 +1576,44 @@ function validateUgcPayload(payload, { allowVisibility = ["private"] } = {}) {
     total_yards,
     type_affinity: type_affinity ? JSON.stringify(type_affinity) : null,
     visibility:    v,
+    team_ids:      cleanTeamIds,
     sets:          cleanSets,
   };
+}
+
+// Replace the team-share rows for a UGC option. Validates that the caller
+// coaches every listed team (via dbGetTeamRole). Pass `conn` to participate
+// in an existing transaction (used by dbCreateUgcOption / dbUpdateUgcOption);
+// omit to run as a standalone transaction.
+export async function dbSetUgcOptionTeamShares(authorSub, optionId, teamIds, conn = null) {
+  if (!authorSub || !optionId) throw new Error("authorSub + optionId required");
+  if (!Array.isArray(teamIds)) throw new Error("teamIds must be array");
+  // Coach-of-team check: caller must have a non-removed role on every team.
+  for (const tid of teamIds) {
+    const role = await dbGetTeamRole(tid, authorSub);
+    if (!role) throw new Error(`not_authorized: caller does not coach team ${tid}`);
+  }
+  const standalone = !conn;
+  const c = conn || await pool.getConnection();
+  try {
+    if (standalone) await c.beginTransaction();
+    // Clear existing shares + reinsert. With ~tens of teams per option
+    // max, this is cheaper than diffing for inserts/deletes.
+    await c.query("DELETE FROM `bank_option_team_shares` WHERE `option_id` = ?", [optionId]);
+    for (const tid of teamIds) {
+      await c.query(
+        "INSERT INTO `bank_option_team_shares` (`option_id`, `team_id`) VALUES (?, ?)",
+        [optionId, tid]
+      );
+    }
+    if (standalone) await c.commit();
+    return { ok: true, count: teamIds.length };
+  } catch (err) {
+    if (standalone) { try { await c.rollback(); } catch (_) {} }
+    throw err;
+  } finally {
+    if (standalone) c.release();
+  }
 }
 
 // Count caller's unpromoted UGC options (for quota check).
@@ -1578,12 +1627,21 @@ async function dbCountAuthorUgc(authorSub) {
 }
 
 // INSERT new UGC option + its sets in a transaction. Returns the new option_id.
+// When visibility='team', also writes the bank_option_team_shares rows in
+// the same transaction (with coach-of-team validation).
 export async function dbCreateUgcOption(authorSub, payload) {
   if (!authorSub) throw new Error("authorSub required");
   const clean = validateUgcPayload(payload);  // throws on bad input
   const count = await dbCountAuthorUgc(authorSub);
   if (count >= UGC_QUOTA_PER_COACH) {
     throw new Error(`UGC quota reached (${UGC_QUOTA_PER_COACH} unpromoted options). Delete or get an option graduated before adding more.`);
+  }
+  // Coach-of-team pre-check before opening the transaction so we fail fast.
+  if (clean.visibility === "team") {
+    for (const tid of clean.team_ids) {
+      const role = await dbGetTeamRole(tid, authorSub);
+      if (!role) throw new Error(`not_authorized: caller does not coach team ${tid}`);
+    }
   }
   const optionId = genUgcOptionId();
   const conn = await pool.getConnection();
@@ -1604,6 +1662,14 @@ export async function dbCreateUgcOption(authorSub, payload) {
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [genUgcSetId(), optionId, i, s.reps, s.dist, s.desc, s.interval, s.focus, s.stroke, s.eq]
       );
+    }
+    if (clean.visibility === "team" && clean.team_ids.length > 0) {
+      for (const tid of clean.team_ids) {
+        await conn.query(
+          "INSERT INTO `bank_option_team_shares` (`option_id`, `team_id`) VALUES (?, ?)",
+          [optionId, tid]
+        );
+      }
     }
     await conn.commit();
     return { ok: true, id: optionId };
@@ -1634,6 +1700,10 @@ export async function dbGetUgcOption(optionId) {
     "FROM `bank_sets` WHERE `option_id` = ? ORDER BY `seq`",
     [optionId]
   );
+  const teamShareRows = await pool.query(
+    "SELECT `team_id` FROM `bank_option_team_shares` WHERE `option_id` = ?",
+    [optionId]
+  );
   let typeAffinity = null;
   if (r.type_affinity) {
     try {
@@ -1656,6 +1726,7 @@ export async function dbGetUgcOption(optionId) {
     version:         r.version,
     promoted_at:     r.promoted_at,
     promoted_by_sub: r.promoted_by_sub,
+    team_ids:        teamShareRows.map(t => t.team_id),
     sets:            setRows.map(s => ({
       id:       s.id,
       seq:      s.seq,
@@ -1717,6 +1788,13 @@ export async function dbUpdateUgcOption(authorSub, optionId, payload) {
   if (current.visibility === "public" && newVisibility === "public") {
     newVisibility = "pending";  // edit-reverts-public-approval
   }
+  // Coach-of-team pre-check before transaction (fail fast).
+  if (newVisibility === "team") {
+    for (const tid of clean.team_ids) {
+      const role = await dbGetTeamRole(tid, authorSub);
+      if (!role) throw new Error(`not_authorized: caller does not coach team ${tid}`);
+    }
+  }
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1739,8 +1817,69 @@ export async function dbUpdateUgcOption(authorSub, optionId, payload) {
         [genUgcSetId(), optionId, i, s.reps, s.dist, s.desc, s.interval, s.focus, s.stroke, s.eq]
       );
     }
+    // Replace team-share rows. Always clear; reinsert only if visibility='team'.
+    // Switching away from team visibility (or to private) deletes all shares.
+    await conn.query("DELETE FROM `bank_option_team_shares` WHERE `option_id` = ?", [optionId]);
+    if (newVisibility === "team") {
+      for (const tid of clean.team_ids) {
+        await conn.query(
+          "INSERT INTO `bank_option_team_shares` (`option_id`, `team_id`) VALUES (?, ?)",
+          [optionId, tid]
+        );
+      }
+    }
     await conn.commit();
     return { ok: true, id: optionId, visibility: newVisibility, reverted_to_pending: newVisibility === "pending" && clean.visibility === "public" };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+// Standalone visibility-change endpoint helper. Lighter than dbUpdate
+// (no set rewrite, no version bump). Body: { visibility, team_ids? }.
+export async function dbSetUgcOptionVisibility(authorSub, optionId, { visibility, team_ids = [] }) {
+  if (!authorSub || !optionId) throw new Error("authorSub + optionId required");
+  const current = await dbGetUgcOption(optionId);
+  if (!current) throw new Error("not_found");
+  if (current.author_sub !== authorSub) throw new Error("not_authorized");
+  if (current.promoted_at) throw new Error("frozen: row has been promoted to JS");
+  const allowed = ["private", "team", "public", "pending"];
+  if (!allowed.includes(visibility)) throw new Error("bad visibility");
+  // Public submission flips to pending until admin moderation. Phase E
+  // will add the admin queue; for now this just records intent.
+  let newVisibility = visibility;
+  if (visibility === "public") newVisibility = "pending";
+  // team requires non-empty team_ids + coach-of-team for each.
+  if (newVisibility === "team") {
+    if (!Array.isArray(team_ids) || team_ids.length === 0) {
+      throw new Error("team visibility requires team_ids");
+    }
+    for (const tid of team_ids) {
+      const role = await dbGetTeamRole(tid, authorSub);
+      if (!role) throw new Error(`not_authorized: caller does not coach team ${tid}`);
+    }
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "UPDATE `bank_options` SET `visibility` = ? WHERE `id` = ?",
+      [newVisibility, optionId]
+    );
+    await conn.query("DELETE FROM `bank_option_team_shares` WHERE `option_id` = ?", [optionId]);
+    if (newVisibility === "team") {
+      for (const tid of team_ids) {
+        await conn.query(
+          "INSERT INTO `bank_option_team_shares` (`option_id`, `team_id`) VALUES (?, ?)",
+          [optionId, tid]
+        );
+      }
+    }
+    await conn.commit();
+    return { ok: true, id: optionId, visibility: newVisibility };
   } catch (err) {
     try { await conn.rollback(); } catch (_) {}
     throw err;

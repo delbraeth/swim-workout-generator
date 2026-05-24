@@ -9878,7 +9878,21 @@
       );
     }
 
-    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, isEngineFavorited, onToggleEngineFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange, favoriteSets, disfavorSets, onCycleSetStatus }) {
+    function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, isEngineFavorited, onToggleEngineFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange, favoriteSets, disfavorSets, onCycleSetStatus, isCoach = false, onSnapshot = null, ugcSetIdMeta = null }) {
+      // UGC Phase C/D — derive whether this block was sourced from a UGC
+      // overlay option, and which variant of the badge to show.
+      // Look up the first matching set's metadata (all sets in an overlay
+      // option share the same _is_own/_visibility so any hit answers it).
+      let ugcMeta = null;
+      if (ugcSetIdMeta && block && Array.isArray(block.sets)) {
+        for (const s of block.sets) {
+          if (s && s.id && ugcSetIdMeta.has(s.id)) {
+            ugcMeta = ugcSetIdMeta.get(s.id);
+            break;
+          }
+        }
+      }
+      const isUgcBlock = !!ugcMeta;
       const s = SECTION_STYLES[block.section];
       // Light header text (e.g. main set on dark slate) → use white-tinted button.
       // Dark header text → use dark-tinted button.
@@ -9911,6 +9925,37 @@
                   ⚡ ENGINE
                 </span>
               )}
+              {/* UGC Phase C/D — badge when block came from the UGC overlay.
+                  Three variants based on ugcMeta (set in App-level walker):
+                    📝 = your own (any visibility)
+                    👥 = team-shared from another coach (Phase D)
+                    🌐 = admin-approved public (Phase E — wired but quiet
+                         until visibility='public' rows exist) */}
+              {isUgcBlock && (() => {
+                let icon, label, title;
+                if (ugcMeta._is_own) {
+                  icon = "📝"; label = "UGC"; title = "Your own UGC bank option (📝 My Sets)";
+                } else if (ugcMeta._visibility === "team") {
+                  icon = "👥"; label = "TEAM";  title = "Team-shared UGC from another coach on your team";
+                } else if (ugcMeta._visibility === "public") {
+                  icon = "🌐"; label = "PUBLIC"; title = "Public UGC option (admin-approved)";
+                } else {
+                  icon = "📝"; label = "UGC"; title = "UGC bank option";
+                }
+                return (
+                  <span title={title}
+                    style={{
+                      display: "inline-flex", alignItems: "center",
+                      padding: "1px 7px", borderRadius: 999,
+                      background: "rgba(59,130,246,0.18)",
+                      border: "1px solid var(--color-primary)",
+                      color: isDarkHeader ? "var(--color-primary)" : "#1e40af",
+                      fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                    }}>
+                    {icon} {label}
+                  </span>
+                );
+              })()}
               <span className="screen-only"
                 title={`Effort zone: ${blockZone.label}`}
                 style={{
@@ -10070,6 +10115,23 @@
                   </div>
                 );
               })()}
+              {/* UGC Phase C — coach-only 📥 snapshot. Pre-fills the
+                  UGC form with this block's section/label/sets so the
+                  coach can save it to their own bank. */}
+              {isCoach && onSnapshot && block.sets && block.sets.length > 0 && (
+                <button
+                  type="button"
+                  className="screen-only"
+                  onClick={() => onSnapshot(block)}
+                  title="Save this set to your bank (📝 My Sets)"
+                  style={{
+                    background: btnBg, border: `1px solid ${btnBorder}`,
+                    color: s.headerText, fontSize: 14, lineHeight: 1,
+                    cursor: "pointer", padding: "4px 7px", borderRadius: 6,
+                  }}>
+                  📥
+                </button>
+              )}
               {onTogglePin && (
                 <button
                   type="button"
@@ -19716,6 +19778,402 @@
       );
     }
 
+    // ─── My Sets (UGC authoring, Phase C) ────────────────────────────────
+    // List + create + edit + delete coach-authored UGC bank options.
+    // Phase C scope: visibility forced to 'private' server-side.
+    // Spec: UGC_COACH_SETS_SCOPE.md §3.A + §3.C.
+    function MySetsView({ onChanged }) {
+      const [rows, setRows] = React.useState([]);
+      const [loading, setLoading] = React.useState(true);
+      const [err, setErr] = React.useState(null);
+      const [formState, setFormState] = React.useState(null); // null | { mode: 'create' } | { mode: 'edit', option }
+      const [deleting, setDeleting] = React.useState(null);
+
+      const reload = React.useCallback(() => {
+        setLoading(true);
+        fetch(`${API_BASE}/bank-options/mine`, { cache: "no-store", credentials: "include" })
+          .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+          .then(data => {
+            setRows(Array.isArray(data) ? data : []);
+            setErr(null);
+          })
+          .catch(e => setErr(e.message || String(e)))
+          .finally(() => setLoading(false));
+      }, []);
+      React.useEffect(() => { reload(); }, [reload]);
+
+      const handleSaved = () => {
+        setFormState(null);
+        reload();
+        if (onChanged) onChanged();  // refresh the App's overlay state
+      };
+
+      const handleDelete = async (option) => {
+        if (!window.confirm(`Delete "${option.label}"? This cannot be undone.`)) return;
+        setDeleting(option.id);
+        try {
+          const csrf = (await (await fetch('/api/auth/csrf')).json()).token;
+          const r = await fetch(`${API_BASE}/bank-options/${option.id}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-Token': csrf },
+            credentials: 'include',
+          });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+          reload();
+          if (onChanged) onChanged();
+        } catch (e) {
+          window.alert(`Delete failed: ${e.message || String(e)}`);
+        } finally {
+          setDeleting(null);
+        }
+      };
+
+      const handleEdit = async (option) => {
+        // Fetch full option (with sets) before opening the form.
+        try {
+          const r = await fetch(`${API_BASE}/bank-options/${option.id}`, { credentials: 'include' });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const full = await r.json();
+          setFormState({ mode: 'edit', option: full });
+        } catch (e) {
+          window.alert(`Load failed: ${e.message || String(e)}`);
+        }
+      };
+
+      const fmtDate = (d) => {
+        if (!d) return "—";
+        const dt = new Date(d);
+        return dt.toLocaleDateString() + " " + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      };
+
+      return (
+        <div style={{ padding: "16px 12px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <h2 style={{ margin: 0, fontSize: 18 }}>📝 My Sets</h2>
+            <button
+              onClick={() => setFormState({ mode: 'create' })}
+              style={{
+                padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)",
+                background: "var(--color-primary)", color: "white", fontWeight: 600, cursor: "pointer",
+              }}
+            >+ New set</button>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 0, marginBottom: 16 }}>
+            Author your own bank options. Currently private (only you see them in your picker).
+            Team-sharing + public submission are coming in later phases.
+          </p>
+          {err && (
+            <div style={{ padding: 8, marginBottom: 8, background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: 4, color: "#ef4444", fontSize: 13 }}>
+              {err}
+            </div>
+          )}
+          {loading && <p style={{ color: "var(--color-muted)" }}>Loading…</p>}
+          {!loading && rows.length === 0 && (
+            <div style={{ padding: 24, textAlign: "center", color: "var(--color-muted)", border: "1px dashed var(--color-border)", borderRadius: 8 }}>
+              <p style={{ margin: 0 }}>No UGC sets yet. Tap <strong>+ New set</strong> to author your first one,</p>
+              <p style={{ margin: "4px 0 0 0" }}>or use the 📥 snapshot button on a generated workout block.</p>
+            </div>
+          )}
+          {!loading && rows.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--color-border)", textAlign: "left" }}>
+                  <th style={{ padding: "6px 4px" }}>Label</th>
+                  <th style={{ padding: "6px 4px" }}>Section</th>
+                  <th style={{ padding: "6px 4px" }}>Pool</th>
+                  <th style={{ padding: "6px 4px" }}>Type/Stroke</th>
+                  <th style={{ padding: "6px 4px", textAlign: "right" }}>Yards</th>
+                  <th style={{ padding: "6px 4px" }}>Visibility</th>
+                  <th style={{ padding: "6px 4px" }}>Updated</th>
+                  <th style={{ padding: "6px 4px", textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                    <td style={{ padding: "6px 4px", fontWeight: 500 }}>{r.label}</td>
+                    <td style={{ padding: "6px 4px" }}>{r.section}</td>
+                    <td style={{ padding: "6px 4px" }}>{r.pool_mode}</td>
+                    <td style={{ padding: "6px 4px" }}>{r.type_id || r.stroke_id || "—"}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right" }}>{r.total_yards}</td>
+                    <td style={{ padding: "6px 4px" }}>
+                      {r.promoted_at
+                        ? <span title={`Promoted at ${fmtDate(r.promoted_at)}`} style={{ color: "var(--color-success, #10b981)" }}>✅ promoted</span>
+                        : <span>{r.visibility}</span>}
+                    </td>
+                    <td style={{ padding: "6px 4px", color: "var(--color-muted)" }}>{fmtDate(r.updated_at)}</td>
+                    <td style={{ padding: "6px 4px", textAlign: "right" }}>
+                      {!r.promoted_at && (
+                        <>
+                          <button
+                            onClick={() => handleEdit(r)}
+                            style={{ marginRight: 4, padding: "4px 8px", border: "1px solid var(--color-border)", background: "transparent", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
+                          >Edit</button>
+                          <button
+                            disabled={deleting === r.id}
+                            onClick={() => handleDelete(r)}
+                            style={{ padding: "4px 8px", border: "1px solid #ef4444", background: "transparent", color: "#ef4444", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
+                          >{deleting === r.id ? "…" : "Delete"}</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {formState && (
+            <UgcFormModal
+              option={formState.mode === 'edit' ? formState.option : null}
+              onSave={handleSaved}
+              onClose={() => setFormState(null)}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // UGC author/edit form modal. Phase C: visibility forced to private
+    // server-side regardless of selection (no team/public flow yet).
+    // option=null → create; option={...} → edit (with pre-fill).
+    // onSave called after a successful POST/PATCH (parent re-fetches list).
+    function UgcFormModal({ option, onSave, onClose }) {
+      // isEdit only if we have an option WITH a server id. A pre-filled
+      // snapshot from the 📥 button passes a partial option (no id), which
+      // should still be treated as create.
+      const isEdit = !!(option && option.id);
+      const [section, setSection] = React.useState(option?.section || "warmup");
+      const [poolMode, setPoolMode] = React.useState(option?.pool_mode || "25y");
+      const [typeId, setTypeId] = React.useState(option?.type_id || "");
+      const [strokeId, setStrokeId] = React.useState(option?.stroke_id || "");
+      const [label, setLabel] = React.useState(option?.label || "");
+      const [totalYards, setTotalYards] = React.useState(option?.total_yards || 0);
+      const [sets, setSets] = React.useState(option?.sets?.length
+        ? option.sets.map(s => ({ ...s }))
+        : [{ reps: 1, dist: 100, desc: "", interval: "On 2:00", focus: "" }]);
+      // Phase D — visibility + team picker
+      const [visibility, setVisibility] = React.useState(option?.visibility || "private");
+      const [teamIds, setTeamIds] = React.useState(Array.isArray(option?.team_ids) ? [...option.team_ids] : []);
+      const [allTeams, setAllTeams] = React.useState([]);
+      React.useEffect(() => {
+        fetch(`${API_BASE}/teams`, { credentials: "include", cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => { if (Array.isArray(data)) setAllTeams(data); })
+          .catch(() => {});
+      }, []);
+      const [saving, setSaving] = React.useState(false);
+      const [err, setErr] = React.useState(null);
+
+      const needsType = (section === "drill" || section === "main");
+      const computedTotal = sets.reduce((acc, s) => acc + (Number(s.reps) || 0) * (Number(s.dist) || 0), 0);
+
+      // Auto-sync total_yards to the computed total. User can override but
+      // the form recomputes on each set edit to avoid surprises at save.
+      React.useEffect(() => {
+        setTotalYards(computedTotal);
+      }, [computedTotal]);
+
+      const updateSet = (i, patch) => {
+        setSets(prev => prev.map((s, j) => j === i ? { ...s, ...patch } : s));
+      };
+      const addSet = () => {
+        setSets(prev => [...prev, { reps: 1, dist: 100, desc: "", interval: "On 2:00", focus: "" }]);
+      };
+      const removeSet = (i) => {
+        if (sets.length === 1) return;  // keep at least 1
+        setSets(prev => prev.filter((_, j) => j !== i));
+      };
+
+      const handleSubmit = async () => {
+        setErr(null);
+        // Client-side guard: team visibility requires at least one team.
+        if (visibility === "team" && teamIds.length === 0) {
+          setErr("Pick at least one team to share with, or change visibility to Private.");
+          return;
+        }
+        setSaving(true);
+        try {
+          const csrf = (await (await fetch('/api/auth/csrf')).json()).token;
+          const payload = {
+            section, pool_mode: poolMode,
+            type_id:   needsType ? (typeId   || null) : null,
+            stroke_id: needsType ? (strokeId || null) : null,
+            label,
+            total_yards: computedTotal,
+            visibility,
+            team_ids: visibility === "team" ? teamIds : [],
+            sets: sets.map(s => ({
+              reps: Number(s.reps), dist: Number(s.dist),
+              desc: s.desc, interval: s.interval,
+              focus: s.focus || null, stroke: s.stroke || null, eq: s.eq || null,
+            })),
+          };
+          const url = isEdit
+            ? `${API_BASE}/bank-options/${option.id}`
+            : `${API_BASE}/bank-options`;
+          const r = await fetch(url, {
+            method: isEdit ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+          onSave(j);
+        } catch (e) {
+          setErr(e.message || String(e));
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      const fieldStyle = { padding: "6px 8px", border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 13, background: "var(--color-card)" };
+      const labelStyle = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--color-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 };
+
+      return (
+        <div onClick={onClose} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: "var(--color-bg)", color: "var(--color-text)", borderRadius: 8,
+            padding: 20, maxWidth: 720, width: "100%", maxHeight: "90vh", overflow: "auto",
+            border: "1px solid var(--color-border)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>{isEdit ? "Edit set" : "New set"}</h3>
+              <button onClick={onClose} style={{ background: "transparent", border: "none", color: "var(--color-muted)", fontSize: 18, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+              <div>
+                <label style={labelStyle}>Section</label>
+                <select value={section} onChange={(e) => setSection(e.target.value)} style={{ ...fieldStyle, width: "100%" }}>
+                  <option value="warmup">warmup</option>
+                  <option value="drill">drill</option>
+                  <option value="main">main</option>
+                  <option value="cooldown">cooldown</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Pool mode</label>
+                <select value={poolMode} onChange={(e) => setPoolMode(e.target.value)} style={{ ...fieldStyle, width: "100%" }}>
+                  <option value="25y">25y</option>
+                  <option value="25m">25m</option>
+                  <option value="50m">50m</option>
+                </select>
+              </div>
+              {needsType && (
+                <>
+                  <div>
+                    <label style={labelStyle}>Type</label>
+                    <select value={typeId} onChange={(e) => { setTypeId(e.target.value); if (e.target.value) setStrokeId(""); }} style={{ ...fieldStyle, width: "100%" }}>
+                      <option value="">(none)</option>
+                      <option value="im">im</option>
+                      <option value="distance">distance</option>
+                      <option value="sprint">sprint</option>
+                      <option value="endurance">endurance</option>
+                      <option value="mixed">mixed</option>
+                      <option value="technique">technique</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Stroke</label>
+                    <select value={strokeId} onChange={(e) => { setStrokeId(e.target.value); if (e.target.value) setTypeId(""); }} style={{ ...fieldStyle, width: "100%" }}>
+                      <option value="">(none)</option>
+                      <option value="back">back</option>
+                      <option value="breast">breast</option>
+                      <option value="fly">fly</option>
+                      <option value="free">free</option>
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle}>Label</label>
+              <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120}
+                style={{ ...fieldStyle, width: "100%" }} placeholder="e.g. Build 8×50" />
+            </div>
+            {/* Phase D — visibility + team picker. Public/moderation is
+                Phase E so we don't expose that option yet. */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle}>Visibility</label>
+              <div style={{ display: "flex", gap: 16, alignItems: "center", fontSize: 13 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                  <input type="radio" name="ugc-visibility" checked={visibility === "private"}
+                    onChange={() => setVisibility("private")} /> 📝 Private (only you)
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: allTeams.length === 0 ? "not-allowed" : "pointer", opacity: allTeams.length === 0 ? 0.4 : 1 }}
+                  title={allTeams.length === 0 ? "You need to coach at least one team to share." : ""}>
+                  <input type="radio" name="ugc-visibility" checked={visibility === "team"}
+                    disabled={allTeams.length === 0}
+                    onChange={() => setVisibility("team")} /> 👥 Team-shared
+                </label>
+              </div>
+              {visibility === "team" && (
+                <div style={{ marginTop: 8, padding: 8, border: "1px solid var(--color-border)", borderRadius: 4, background: "var(--color-card)" }}>
+                  <div style={{ ...labelStyle, marginBottom: 6 }}>Share with teams</div>
+                  {allTeams.length === 0 ? (
+                    <p style={{ fontSize: 12, color: "var(--color-muted)", margin: 0 }}>(no teams)</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {allTeams.map(t => (
+                        <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                          <input type="checkbox"
+                            checked={teamIds.includes(t.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setTeamIds(prev => prev.includes(t.id) ? prev : [...prev, t.id]);
+                              else setTeamIds(prev => prev.filter(id => id !== t.id));
+                            }} />
+                          <span>{t.name}</span>
+                          <span style={{ fontSize: 11, color: "var(--color-muted)" }}>· {t.team_type}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {teamIds.length === 0 && allTeams.length > 0 && (
+                    <p style={{ fontSize: 11, color: "#ef4444", margin: "6px 0 0 0" }}>Pick at least one team.</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Sets (total {computedTotal} yd)</label>
+              <button onClick={addSet} style={{ padding: "4px 10px", fontSize: 12, border: "1px solid var(--color-border)", background: "transparent", borderRadius: 4, cursor: "pointer" }}>+ Add row</button>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              {sets.map((s, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 60px 1fr 100px 1fr 30px", gap: 6, marginBottom: 6, alignItems: "start" }}>
+                  <input type="number" min="1" value={s.reps} onChange={(e) => updateSet(i, { reps: e.target.value })} placeholder="reps" style={fieldStyle} />
+                  <input type="number" min="1" value={s.dist} onChange={(e) => updateSet(i, { dist: e.target.value })} placeholder="dist" style={fieldStyle} />
+                  <input value={s.desc} onChange={(e) => updateSet(i, { desc: e.target.value })} placeholder="Description" style={fieldStyle} maxLength={500} />
+                  <input value={s.interval} onChange={(e) => updateSet(i, { interval: e.target.value })} placeholder="On 2:00" style={fieldStyle} />
+                  <input value={s.focus || ""} onChange={(e) => updateSet(i, { focus: e.target.value })} placeholder="Focus (optional)" style={fieldStyle} maxLength={240} />
+                  <button onClick={() => removeSet(i)} disabled={sets.length === 1} style={{ background: "transparent", border: "none", color: sets.length === 1 ? "var(--color-border)" : "#ef4444", cursor: sets.length === 1 ? "default" : "pointer", fontSize: 16 }}>✕</button>
+                </div>
+              ))}
+            </div>
+            {err && (
+              <div style={{ padding: 8, marginBottom: 12, background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: 4, color: "#ef4444", fontSize: 13 }}>
+                {err}
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button onClick={onClose} disabled={saving}
+                style={{ padding: "8px 16px", border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text)", borderRadius: 6, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={handleSubmit} disabled={saving || !label.trim() || sets.length === 0}
+                style={{ padding: "8px 16px", border: "1px solid var(--color-primary)", background: "var(--color-primary)", color: "white", borderRadius: 6, cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1 }}>
+                {saving ? "Saving…" : isEdit ? "Save changes" : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function AdminView({ me, onStartImpersonation }) {
       const [tab, setTab] = React.useState("users");
 
@@ -20875,6 +21333,67 @@
         WARMUP_OPTIONS_50M: [], COOLDOWN_OPTIONS_50M: [], DRILL_OPTIONS_50M: {}, MAIN_OPTIONS_50M: {},
         WARMUP_OPTIONS_SCM: [], COOLDOWN_OPTIONS_SCM: [], DRILL_OPTIONS_SCM: {}, MAIN_OPTIONS_SCM: {},
       }));
+      // UGC Phase C — snapshot button on WorkoutBlock opens UgcFormModal
+      // pre-filled with the block's data. null = closed, object = open
+      // with that pseudo-"option" pre-populated.
+      const [snapshotOption, setSnapshotOption] = useState(null);
+      // Sub IDs used to classify a 'selectedType' value as a TYPE vs STROKE
+      // when building the snapshot pre-fill (drill/main need one of the two).
+      const UGC_TYPE_KEYS_CLIENT   = React.useMemo(() => new Set(["im","distance","sprint","endurance","mixed","technique"]), []);
+      const UGC_STROKE_KEYS_CLIENT = React.useMemo(() => new Set(["back","breast","fly","free"]), []);
+      // Pre-built Map of UGC overlay set IDs → { _is_own, _visibility }
+      // for the badge derivation in WorkoutBlock. Phase D needs the
+      // metadata (not just presence) to pick the right badge variant:
+      //   📝 = your own (any visibility)
+      //   👥 = team-shared from another coach (_visibility === 'team')
+      //   🌐 = admin-approved public from another coach (Phase E)
+      const ugcSetIdMeta = React.useMemo(() => {
+        const out = new Map();
+        if (!ugcOverlay) return out;
+        const walkOptionList = (list) => {
+          if (!Array.isArray(list)) return;
+          for (const opt of list) {
+            if (opt && Array.isArray(opt.sets)) {
+              const meta = {
+                _is_own:     !!opt._is_own,
+                _visibility: opt._visibility || null,
+              };
+              for (const s of opt.sets) if (s && s.id) out.set(s.id, meta);
+            }
+          }
+        };
+        for (const key of Object.keys(ugcOverlay)) {
+          if (key.startsWith("_")) continue;
+          const val = ugcOverlay[key];
+          if (Array.isArray(val)) {
+            walkOptionList(val);
+          } else if (val && typeof val === "object") {
+            for (const subKey of Object.keys(val)) walkOptionList(val[subKey]);
+          }
+        }
+        return out;
+      }, [ugcOverlay]);
+
+      const handleSnapshotBlock = useCallback((block) => {
+        if (!block || !block.sets) return;
+        const needsType = (block.section === "drill" || block.section === "main");
+        const sel       = selectedType || "";
+        const isStroke  = UGC_STROKE_KEYS_CLIENT.has(sel);
+        const isType    = UGC_TYPE_KEYS_CLIENT.has(sel);
+        setSnapshotOption({
+          // No id → UgcFormModal treats this as a "create" with pre-fill.
+          section:     block.section,
+          pool_mode:   poolMode,
+          type_id:     needsType && isType   ? sel : null,
+          stroke_id:   needsType && isStroke ? sel : null,
+          label:       block.label ? `${block.label} (copy)` : "Snapshot",
+          total_yards: block.sets.reduce((acc, s) => acc + (s.reps || 0) * (s.dist || 0), 0),
+          sets:        block.sets.map(s => ({
+            reps: s.reps, dist: s.dist, desc: s.desc, interval: s.interval,
+            focus: s.focus || null, stroke: s.stroke || null, eq: s.eq || null,
+          })),
+        });
+      }, [selectedType, poolMode, UGC_STROKE_KEYS_CLIENT, UGC_TYPE_KEYS_CLIENT]);
       const [goals, setGoals]                     = useState([]);
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
@@ -22862,6 +23381,7 @@
                               { id: "teams",    emoji: "👥", label: "Teams" },
                               { id: "swimmers", emoji: "🏊", label: "Managed swimmers" },
                               { id: "catalog",  emoji: "📚", label: "Catalog" },
+                              { id: "my-sets",  emoji: "📝", label: "My Sets" },
                             ].map(item => {
                               const active = view === item.id;
                               return (
@@ -23032,6 +23552,11 @@
                 disfavorSets={disfavorSets}
                 onCycleSetStatus={authenticated ? handleCycleSetStatus : null}
                 ugcOverlay={ugcOverlay}
+              />
+            )}
+            {view === "my-sets"  && (
+              <MySetsView
+                onChanged={refreshUgcOverlay}
               />
             )}
             {view === "reports"  && (
@@ -23758,6 +24283,9 @@
                     onTogglePin={handleTogglePin}
                     recentMainLabels={recentMainLabels}
                     poolMode={poolMode}
+                    isCoach={!!effectiveMe?.is_coach}
+                    onSnapshot={authenticated ? handleSnapshotBlock : null}
+                    ugcSetIdMeta={ugcSetIdMeta}
                     sectionSource={sectionSources[block.section] || "bank"}
                     onSectionSourceChange={(newSource) => {
                       setSectionSources(prev => {
@@ -23984,6 +24512,16 @@
             <IntentParserModal
               onClose={() => setShowIntentParser(false)}
               onApply={handleApplyIntent}
+            />
+          )}
+          {/* UGC Phase C — snapshot-from-WorkoutBlock opens the same
+              UgcFormModal used by My Sets, pre-filled with block data.
+              No id on the pre-fill → modal treats as create. */}
+          {snapshotOption && (
+            <UgcFormModal
+              option={snapshotOption}
+              onSave={() => { setSnapshotOption(null); refreshUgcOverlay(); }}
+              onClose={() => setSnapshotOption(null)}
             />
           )}
           {/* N6 — Multi-pace export. Modal first; on Preview, modal closes
