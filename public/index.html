@@ -22419,8 +22419,14 @@
           {/* Header */}
           <div className="screen-only" style={{ background: "var(--color-bg)", borderBottom: "1px solid #1e40af", boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
             <div style={{ maxWidth: 940, margin: "0 auto", padding: "20px 24px", display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <h1 style={{ fontFamily: '"Inter Tight", Inter, sans-serif', fontSize: 28, fontWeight: 800, color: "var(--color-text)", margin: 0, letterSpacing: "-0.02em" }}>SetForge</h1>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+                {/* SetForge logo. /icons/icon-192.png is served via the
+                    public/icons/ static folder. 36px target gives a crisp
+                    render on standard DPI; the 192px source covers 2x. */}
+                <img src="/icons/icon-192.png" alt="SetForge" width="36" height="36"
+                  style={{ display: "block", borderRadius: 6, flexShrink: 0 }} />
+                <div>
+                  <h1 style={{ fontFamily: '"Inter Tight", Inter, sans-serif', fontSize: 28, fontWeight: 800, color: "var(--color-text)", margin: 0, letterSpacing: "-0.02em" }}>SetForge</h1>
                 <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "2px 0 0" }}>
                   {personalFirstName
                     ? (view === "history" ? `${personalFirstName}'s history` :
@@ -22428,6 +22434,7 @@
                        `${personalFirstName}'s workouts`)
                     : "Personalized workouts + week planning for swimmers and coaches"}
                 </p>
+                </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -23771,7 +23778,7 @@
             color: "var(--color-border-strong)", fontSize: 11, fontFamily: "system-ui, -apple-system, sans-serif",
             borderTop: "1px solid var(--color-card)", marginTop: 40,
           }}>
-            © 2026 Patrick Cassidy · All rights reserved.
+            © 2026 Competition Aquatics, LLC · All rights reserved.
           </footer>
         </div>
       );

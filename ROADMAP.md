@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-23** (post Reporting Phase D deploy)
+Last refreshed: **2026-05-23** (post branding polish deploy)
 
 ## How this file works
 
@@ -23,9 +23,6 @@ _Nothing in progress as of 2026-05-23._
 ## Next (small, ready)
 
 - **Reporting Phase E — PDF + markdown export renderers** — last functional phase of Reporting v1. Add export buttons per tab (or per-report); PDF via existing print-view pattern (see MultiPacePrintView); markdown via plain server-side template. Solo users get a one-page "weekly recap" PDF + paste-into-email markdown; coach reports likewise. Single shared renderer per report. ~4-6h. Spec: `REPORTING_SCOPE.md` §6 + §7. Source: [[swim-generator-reporting-scope]]
-- **Branding polish bundle** — captured 2026-05-23. Two small UI tweaks:
-  - (a) Change copyright text from "© 2026 Patrick Cassidy · All rights reserved." to **"© 2026 Competition Aquatics, LLC · All rights reserved."** Affects 4 files: `public/index.html` (footer ~line 23398), `public/manual.html` (~line 1868), `public/privacy.html` (~line 194), `public/terms.html` (~line 175). Pure string change.
-  - (b) Add SetForge **logo to the left of the "SetForge" wordmark** in the header (and other places it makes sense — manual masthead, sign-in screen). Source assets live in `/png/` at the repo root: `icon-192.png` is the most likely fit; `icon-512.png` if higher DPI matters. Need to confirm `/png/` is served by the express static handler before linking. ~30-45min total.
 
 ## Bigger threads (need a planning session)
 
@@ -72,6 +69,7 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-23 | `branding-polish-v1` | Copyright text → "© 2026 Competition Aquatics, LLC · All rights reserved." in 4 files (index, manual, privacy, terms). SetForge logo added to left of wordmark in app header + manual masthead via existing `/icons/icon-192.png` (no static-serving config change needed; `/png/` repo-root folder was the staging copy). |
 | 2026-05-23 | `reporting-phase-d` | Reporting v1 Phase D: R5 Platform Health + R6 Curation & Support (admin-only tabs). Weekly bar-fill tables for workouts-per-week + engine fallback trend. Feature adoption %, active-coach 7/14/30d counts. Per-team propagating disfavor counts (simplified proxy), impersonation activity by actor, per-team audit_events rollup. |
 | 2026-05-23 | `reporting-phase-c` | Reporting v1 Phase C: R4 Program Recap (solo/masters). Reports promoted out of coach dropdown to top-nav (📊 button); coaches see 4 tabs, solo users see only Program Recap. R4 adds template usage counts + multi-lane fit success rate + 30-day sliding-window stroke-gap detector. |
 | 2026-05-23 | `reporting-phase-b` | Reporting v1 Phase B: 3 coach reports (R1 Programming Mix · R2 Schedule Adherence · R3 Curation Log). New 📊 Reports view in coach dropdown with range + group filters. Numbers + tables (charts deferred). 3 db.js helpers + 3 GET routes + ReportsView component + R1/R2/R3 tab renderers. |
