@@ -425,31 +425,46 @@ def main():
     family_examples = defaultdict(list)
     type_x_family = defaultdict(lambda: defaultdict(int))
 
+    # Phase H Stage 2: banks are flat arrays with types[]/strokes[] tags on
+    # each option. For audit grouping we use the first type tag (or first
+    # stroke tag if no type) as the "type_key" — keeps the per-type
+    # distribution roughly stable across the conversion. Falls back to
+    # object-keyed iteration if a pre-Stage-2 snapshot is loaded.
+    def iter_typed(bank):
+        if isinstance(bank, list):
+            for opt in bank:
+                types   = opt.get("types")   or []
+                strokes = opt.get("strokes") or []
+                yield ((types[0] if types else (strokes[0] if strokes else "untagged")), opt)
+        else:
+            for type_key, options in bank.items():
+                for opt in options:
+                    yield (type_key, opt)
+
     for section, bank in sections.items():
-        for type_key, options in bank.items():
-            for opt in options:
-                family, confidence, notes = classify_option(opt)
-                entry = {
+        for type_key, opt in iter_typed(bank):
+            family, confidence, notes = classify_option(opt)
+            entry = {
+                "section": section,
+                "type": type_key,
+                "label": opt.get("label"),
+                "totalYards": opt.get("totalYards"),
+                "rows": len(opt.get("sets", [])),
+                "family": family,
+                "confidence": confidence,
+                "notes": notes,
+            }
+            per_option.append(entry)
+            family_counts[family] += 1
+            family_examples[family].append(
+                {
                     "section": section,
                     "type": type_key,
                     "label": opt.get("label"),
                     "totalYards": opt.get("totalYards"),
-                    "rows": len(opt.get("sets", [])),
-                    "family": family,
-                    "confidence": confidence,
-                    "notes": notes,
                 }
-                per_option.append(entry)
-                family_counts[family] += 1
-                family_examples[family].append(
-                    {
-                        "section": section,
-                        "type": type_key,
-                        "label": opt.get("label"),
-                        "totalYards": opt.get("totalYards"),
-                    }
-                )
-                type_x_family[f"{section}:{type_key}"][family] += 1
+            )
+            type_x_family[f"{section}:{type_key}"][family] += 1
 
     total = len(per_option)
 

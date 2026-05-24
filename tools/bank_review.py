@@ -251,11 +251,24 @@ SECTIONS = [
 ]
 
 def iter_options(bank, kind):
-    """Yield (typeId, opt_idx, option) tuples. typeId is None for flat banks."""
+    """Yield (typeId, opt_idx, option) tuples. typeId is None for flat banks
+    (warmup/cooldown) or for typed banks where the option carries no type/stroke
+    tags. Phase H Stage 2: all banks are flat arrays; for drill/main we derive
+    typeId from the option's types[]/strokes[] tags (first tag wins for display).
+    """
     if isinstance(bank, list):
+        is_typed = (kind in ("drill", "main"))
         for i, opt in enumerate(bank):
-            yield (None, i, opt)
+            if is_typed:
+                types   = opt.get("types")   or []
+                strokes = opt.get("strokes") or []
+                typeId = (types[0] if types else (strokes[0] if strokes else None))
+            else:
+                typeId = None
+            yield (typeId, i, opt)
     else:
+        # Pre-Stage-2 object-keyed shape (kept for compatibility with snapshots
+        # taken from older index.html versions).
         for typeId, opts in bank.items():
             for i, opt in enumerate(opts):
                 yield (typeId, i, opt)
