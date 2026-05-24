@@ -20040,7 +20040,7 @@
         }
       };
 
-      const fieldStyle = { padding: "6px 8px", border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 13, background: "var(--color-card)" };
+      const fieldStyle = { padding: "6px 8px", border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 13, background: "var(--color-card)", color: "var(--color-text)" };
       const labelStyle = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--color-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 };
 
       return (
@@ -20363,7 +20363,7 @@
                           <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-muted)", display: "block", marginBottom: 4 }}>Rejection reason (shown to author)</label>
                           <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={2}
                             placeholder="e.g. Intervals don't match the stroke / set is mis-categorized / etc."
-                            style={{ width: "100%", padding: 6, border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 13, background: "var(--color-bg)" }} />
+                            style={{ width: "100%", padding: 6, border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)" }} />
                           <div style={{ marginTop: 6, display: "flex", gap: 8, justifyContent: "flex-end" }}>
                             <button onClick={() => { setRejectingId(null); setRejectReason(""); }} style={{ padding: "4px 10px", fontSize: 12, border: "1px solid var(--color-border)", background: "transparent", borderRadius: 4, cursor: "pointer" }}>Cancel</button>
                             <button disabled={busyId === r.id || !rejectReason.trim()} onClick={() => submitReview(r.id, "reject", rejectReason.trim())}
@@ -20552,7 +20552,8 @@
                   <li>Check the box + click <strong>Confirm Promoted</strong> below to stamp the DB row. This stops the overlay from returning it — JS becomes the source.</li>
                 </ol>
                 <pre style={{
-                  background: "var(--color-card)", border: "1px solid var(--color-border)",
+                  background: "var(--color-card)", color: "var(--color-text)",
+                  border: "1px solid var(--color-border)",
                   padding: 12, borderRadius: 4, fontSize: 12, fontFamily: "monospace",
                   whiteSpace: "pre", overflowX: "auto", maxHeight: 200, marginBottom: 16,
                 }}>{pack.snippet}</pre>
