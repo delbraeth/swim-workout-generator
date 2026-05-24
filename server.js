@@ -63,6 +63,7 @@ import {
   dbGetEffectiveDisfavorites,
   dbGetEffectiveFavorites,
   dbGetUgcOverlay,
+  dbCreateUgcOption, dbGetUgcOption, dbListUgcOptionsByAuthor, dbUpdateUgcOption, dbDeleteUgcOption,
   dbGetCoachImpact,
   dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog, dbGetProgramRecap,
   dbGetPlatformHealth, dbGetCurationSupport,
@@ -1587,6 +1588,103 @@ app.get("/api/bank/my-overlay", requireAuth, async (req, res) => {
     res.json(await dbGetUgcOverlay(req.userSub));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// UGC bank authoring (Phase C of UGC coach-authored sets).
+// Coach-only. CRUD on the caller's own bank_options + bank_sets rows.
+// Phase C scope: visibility forced to 'private'; team + public flows
+// land in D + E. Edit/delete enforce author_sub = caller at db layer.
+// Spec: UGC_COACH_SETS_SCOPE.md §4 + §5.
+
+// List caller's authored UGC options. Used by the "My Sets" page.
+app.get("/api/bank-options/mine", requireAuth, requireCoach, async (req, res) => {
+  try {
+    res.json(await dbListUgcOptionsByAuthor(req.userSub));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Fetch a single UGC option (with sets). Returns 404 if not found.
+// Phase C: own-only — the edit modal uses this to populate fields.
+// Team/public peek by other callers lands in later phases.
+app.get("/api/bank-options/:id", requireAuth, async (req, res) => {
+  try {
+    const row = await dbGetUgcOption(req.params.id);
+    if (!row) return res.status(404).json({ error: "not_found" });
+    // Phase C: own-only access. Phase D+E broaden via visibility checks.
+    if (row.author_sub !== req.userSub) return res.status(403).json({ error: "not_authorized" });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Create a new UGC option. Body: full payload per validateUgcPayload.
+// Visibility forced to 'private' in Phase C regardless of what's sent.
+app.post("/api/bank-options", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+  try {
+    const payload = { ...(req.body || {}), visibility: "private" };  // Phase C: private only
+    const r = await dbCreateUgcOption(req.userSub, payload);
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       "ugc.option.create",
+      ...reqMeta(req),
+      details:         { option_id: r.id, section: payload.section, pool_mode: payload.pool_mode },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json(r);
+  } catch (err) {
+    // Validation errors come from validateUgcPayload — surface as 400.
+    const msg = err.message || String(err);
+    const status = /required|bad |out of range|chars|drift|max |UGC quota/.test(msg) ? 400 : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+// Update an existing UGC option. Body: full payload (validateUgcPayload).
+// Phase C: visibility forced to 'private' (no team/public flow yet).
+app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+  try {
+    const payload = { ...(req.body || {}), visibility: "private" };
+    const r = await dbUpdateUgcOption(req.userSub, req.params.id, payload);
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       "ugc.option.update",
+      ...reqMeta(req),
+      details:         { option_id: req.params.id },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json(r);
+  } catch (err) {
+    const msg = err.message || String(err);
+    let status = 500;
+    if (msg === "not_found")       status = 404;
+    else if (msg === "not_authorized") status = 403;
+    else if (msg.startsWith("frozen:")) status = 409;
+    else if (/required|bad |out of range|chars|drift|max |visibility/.test(msg)) status = 400;
+    res.status(status).json({ error: msg });
+  }
+});
+
+// Delete (hard) a UGC option. Cascades to bank_sets via FK.
+// Owner-only in Phase C (admin override for frozen rows = future).
+app.delete("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+  try {
+    const r = await dbDeleteUgcOption(req.userSub, req.params.id);
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       "ugc.option.delete",
+      ...reqMeta(req),
+      details:         { option_id: req.params.id, deleted: r.deleted },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json(r);
+  } catch (err) {
+    const msg = err.message || String(err);
+    let status = 500;
+    if (msg === "not_authorized") status = 403;
+    else if (msg.startsWith("frozen:")) status = 409;
+    res.status(status).json({ error: msg });
   }
 });
 

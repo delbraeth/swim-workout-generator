@@ -1481,6 +1481,287 @@ export async function dbGetUgcOverlay(userSub) {
   return overlay;
 }
 
+// ── UGC bank authoring (Phase C of UGC coach-authored sets) ────────────
+// CRUD on bank_options + bank_sets for coach-authored rows. All helpers
+// gate on author_sub = caller for the edit/delete paths so a coach can
+// only touch their own rows (admin override happens at the server layer).
+// Spec: UGC_COACH_SETS_SCOPE.md §4 + §5.
+
+const UGC_SECTIONS    = new Set(["warmup", "drill", "main", "cooldown"]);
+const UGC_POOL_MODES  = new Set(["25y", "25m", "50m"]);
+const UGC_TYPE_KEYS   = new Set(["im", "distance", "sprint", "endurance", "mixed", "technique"]);
+const UGC_STROKE_KEYS = new Set(["back", "breast", "fly", "free"]);
+const UGC_VISIBILITY  = new Set(["private", "team", "public", "pending", "rejected"]);
+const UGC_INTERVAL_RE = /^(On \d+:\d{2}|No interval.*)$/;
+const UGC_QUOTA_PER_COACH = 50;  // counts unpromoted only
+
+function genUgcOptionId() {
+  // mirror sync_bank.mjs convention: o_ + 6 base36 chars
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "o_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+function genUgcSetId() {
+  // mirror tools/assign_set_ids.py: s_ + 6 base36 chars
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "s_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+
+// Validate & normalize a UGC payload (option + sets). Throws on bad input.
+// Returns a clean object ready for INSERT.
+function validateUgcPayload(payload, { allowVisibility = ["private"] } = {}) {
+  if (!payload || typeof payload !== "object") throw new Error("payload required");
+  const { section, type_id, stroke_id, pool_mode, label, total_yards, type_affinity, visibility, sets } = payload;
+  if (!UGC_SECTIONS.has(section))   throw new Error("bad section");
+  if (!UGC_POOL_MODES.has(pool_mode)) throw new Error("bad pool_mode");
+  // type_id / stroke_id only relevant for drill/main; both nullable for warmup/cooldown
+  if (section === "drill" || section === "main") {
+    if (type_id   != null && !UGC_TYPE_KEYS.has(type_id))   throw new Error("bad type_id");
+    if (stroke_id != null && !UGC_STROKE_KEYS.has(stroke_id)) throw new Error("bad stroke_id");
+    if (!type_id && !stroke_id) throw new Error("drill/main require type_id or stroke_id");
+  }
+  if (typeof label !== "string" || !label.trim() || label.length > 120) throw new Error("label 1-120 chars");
+  if (!Number.isInteger(total_yards) || total_yards <= 0 || total_yards > 20000) throw new Error("total_yards out of range");
+  if (type_affinity != null) {
+    if (!Array.isArray(type_affinity)) throw new Error("type_affinity must be array");
+    for (const t of type_affinity) if (typeof t !== "string") throw new Error("type_affinity items must be strings");
+  }
+  const v = visibility || "private";
+  if (!allowVisibility.includes(v)) throw new Error(`visibility must be one of: ${allowVisibility.join(", ")}`);
+  if (!Array.isArray(sets) || sets.length === 0) throw new Error("at least 1 set required");
+  if (sets.length > 24) throw new Error("max 24 sets per option");
+  let computedTotal = 0;
+  const cleanSets = [];
+  for (const [i, s] of sets.entries()) {
+    if (!s || typeof s !== "object") throw new Error(`set ${i}: not an object`);
+    if (!Number.isInteger(s.reps) || s.reps <= 0)  throw new Error(`set ${i}: reps must be positive int`);
+    if (!Number.isInteger(s.dist) || s.dist <= 0)  throw new Error(`set ${i}: dist must be positive int`);
+    if (typeof s.desc !== "string" || !s.desc.trim() || s.desc.length > 500) throw new Error(`set ${i}: desc 1-500 chars`);
+    if (typeof s.interval !== "string" || !UGC_INTERVAL_RE.test(s.interval)) throw new Error(`set ${i}: interval must match "On M:SS" or "No interval..."`);
+    if (s.focus  != null && (typeof s.focus  !== "string" || s.focus.length  > 240)) throw new Error(`set ${i}: focus max 240 chars`);
+    if (s.stroke != null && (typeof s.stroke !== "string" || s.stroke.length > 16))  throw new Error(`set ${i}: stroke max 16 chars`);
+    if (s.eq     != null && (typeof s.eq     !== "string" || s.eq.length     > 16))  throw new Error(`set ${i}: eq max 16 chars`);
+    computedTotal += s.reps * s.dist;
+    cleanSets.push({
+      reps:     s.reps,
+      dist:     s.dist,
+      desc:     s.desc.trim(),
+      interval: s.interval,
+      focus:    s.focus  ? String(s.focus).trim()  : null,
+      stroke:   s.stroke ? String(s.stroke).trim() : null,
+      eq:       s.eq     ? String(s.eq).trim()     : null,
+    });
+  }
+  // Sanity check: author-provided total_yards must be within 10% of computed.
+  const drift = Math.abs(computedTotal - total_yards) / total_yards;
+  if (drift > 0.10) throw new Error(`total_yards (${total_yards}) drifts >10% from computed (${computedTotal})`);
+  return {
+    section,
+    type_id:       section === "warmup" || section === "cooldown" ? null : (type_id   || null),
+    stroke_id:     section === "warmup" || section === "cooldown" ? null : (stroke_id || null),
+    pool_mode,
+    label:         label.trim(),
+    total_yards,
+    type_affinity: type_affinity ? JSON.stringify(type_affinity) : null,
+    visibility:    v,
+    sets:          cleanSets,
+  };
+}
+
+// Count caller's unpromoted UGC options (for quota check).
+async function dbCountAuthorUgc(authorSub) {
+  const rows = await pool.query(
+    "SELECT COUNT(*) AS n FROM `bank_options` " +
+    "WHERE `author_sub` = ? AND `promoted_at` IS NULL",
+    [authorSub]
+  );
+  return Number(rows[0]?.n || 0);
+}
+
+// INSERT new UGC option + its sets in a transaction. Returns the new option_id.
+export async function dbCreateUgcOption(authorSub, payload) {
+  if (!authorSub) throw new Error("authorSub required");
+  const clean = validateUgcPayload(payload);  // throws on bad input
+  const count = await dbCountAuthorUgc(authorSub);
+  if (count >= UGC_QUOTA_PER_COACH) {
+    throw new Error(`UGC quota reached (${UGC_QUOTA_PER_COACH} unpromoted options). Delete or get an option graduated before adding more.`);
+  }
+  const optionId = genUgcOptionId();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "INSERT INTO `bank_options` " +
+      "(`id`, `section`, `type_id`, `stroke_id`, `pool_mode`, `label`, " +
+      " `total_yards`, `type_affinity`, `author_sub`, `visibility`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [optionId, clean.section, clean.type_id, clean.stroke_id, clean.pool_mode,
+       clean.label, clean.total_yards, clean.type_affinity, authorSub, clean.visibility]
+    );
+    for (const [i, s] of clean.sets.entries()) {
+      await conn.query(
+        "INSERT INTO `bank_sets` " +
+        "(`id`, `option_id`, `seq`, `reps`, `dist`, `desc`, `interval`, `focus`, `stroke`, `eq`) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [genUgcSetId(), optionId, i, s.reps, s.dist, s.desc, s.interval, s.focus, s.stroke, s.eq]
+      );
+    }
+    await conn.commit();
+    return { ok: true, id: optionId };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+// Fetch a single UGC option + its sets. Returns null if not found.
+// Does NOT enforce visibility — caller (server route) is responsible
+// for that (e.g., own-only for edit, broader for read).
+export async function dbGetUgcOption(optionId) {
+  if (!optionId) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `section`, `type_id`, `stroke_id`, `pool_mode`, `label`, " +
+    "       `total_yards`, `type_affinity`, `author_sub`, `visibility`, " +
+    "       `created_at`, `updated_at`, `version`, `promoted_at`, `promoted_by_sub` " +
+    "FROM `bank_options` WHERE `id` = ?",
+    [optionId]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  const setRows = await pool.query(
+    "SELECT `id`, `seq`, `reps`, `dist`, `desc`, `interval`, `focus`, `stroke`, `eq` " +
+    "FROM `bank_sets` WHERE `option_id` = ? ORDER BY `seq`",
+    [optionId]
+  );
+  let typeAffinity = null;
+  if (r.type_affinity) {
+    try {
+      typeAffinity = typeof r.type_affinity === "string" ? JSON.parse(r.type_affinity) : r.type_affinity;
+    } catch (_) {}
+  }
+  return {
+    id:              r.id,
+    section:         r.section,
+    type_id:         r.type_id,
+    stroke_id:       r.stroke_id,
+    pool_mode:       r.pool_mode,
+    label:           r.label,
+    total_yards:     r.total_yards,
+    type_affinity:   typeAffinity,
+    author_sub:      r.author_sub,
+    visibility:      r.visibility,
+    created_at:      r.created_at,
+    updated_at:      r.updated_at,
+    version:         r.version,
+    promoted_at:     r.promoted_at,
+    promoted_by_sub: r.promoted_by_sub,
+    sets:            setRows.map(s => ({
+      id:       s.id,
+      seq:      s.seq,
+      reps:     s.reps,
+      dist:     s.dist,
+      desc:     s.desc,
+      interval: s.interval,
+      focus:    s.focus  || null,
+      stroke:   s.stroke || null,
+      eq:       s.eq     || null,
+    })),
+  };
+}
+
+// List all UGC options authored by caller. Used by the "My Sets" page.
+// Returns lightweight rows (no sets) ordered by updated_at DESC.
+export async function dbListUgcOptionsByAuthor(authorSub) {
+  if (!authorSub) return [];
+  const rows = await pool.query(
+    "SELECT `id`, `section`, `type_id`, `stroke_id`, `pool_mode`, `label`, " +
+    "       `total_yards`, `visibility`, `created_at`, `updated_at`, " +
+    "       `version`, `promoted_at` " +
+    "FROM `bank_options` WHERE `author_sub` = ? " +
+    "ORDER BY `updated_at` DESC",
+    [authorSub]
+  );
+  return rows.map(r => ({
+    id:          r.id,
+    section:     r.section,
+    type_id:     r.type_id,
+    stroke_id:   r.stroke_id,
+    pool_mode:   r.pool_mode,
+    label:       r.label,
+    total_yards: r.total_yards,
+    visibility:  r.visibility,
+    created_at:  r.created_at,
+    updated_at:  r.updated_at,
+    version:     r.version,
+    promoted_at: r.promoted_at,
+  }));
+}
+
+// Update a UGC option: replace sets + bump version. Optionally flips
+// visibility back to 'pending' if the row was public (spec §6).
+// Rejects if author_sub !== caller (admin override is in the route layer).
+// Rejects if promoted_at IS NOT NULL (graduated rows are frozen).
+export async function dbUpdateUgcOption(authorSub, optionId, payload) {
+  if (!authorSub || !optionId) throw new Error("authorSub + optionId required");
+  // Fetch current state to enforce ownership + frozen-when-promoted.
+  const current = await dbGetUgcOption(optionId);
+  if (!current) throw new Error("not_found");
+  if (current.author_sub !== authorSub) throw new Error("not_authorized");
+  if (current.promoted_at) throw new Error("frozen: row has been promoted to JS — edit the JS directly");
+  // Allow same visibility as current OR private (downgrade is always fine).
+  // If current was public and the edit is anything other than private,
+  // it gets flipped to pending per §6.
+  const clean = validateUgcPayload(payload, { allowVisibility: ["private", "team", "public", "pending"] });
+  let newVisibility = clean.visibility;
+  if (current.visibility === "public" && newVisibility === "public") {
+    newVisibility = "pending";  // edit-reverts-public-approval
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "UPDATE `bank_options` SET " +
+      "  `section` = ?, `type_id` = ?, `stroke_id` = ?, `pool_mode` = ?, " +
+      "  `label` = ?, `total_yards` = ?, `type_affinity` = ?, `visibility` = ?, " +
+      "  `version` = `version` + 1 " +
+      "WHERE `id` = ?",
+      [clean.section, clean.type_id, clean.stroke_id, clean.pool_mode,
+       clean.label, clean.total_yards, clean.type_affinity, newVisibility, optionId]
+    );
+    // Replace sets: delete then re-insert.
+    await conn.query("DELETE FROM `bank_sets` WHERE `option_id` = ?", [optionId]);
+    for (const [i, s] of clean.sets.entries()) {
+      await conn.query(
+        "INSERT INTO `bank_sets` " +
+        "(`id`, `option_id`, `seq`, `reps`, `dist`, `desc`, `interval`, `focus`, `stroke`, `eq`) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [genUgcSetId(), optionId, i, s.reps, s.dist, s.desc, s.interval, s.focus, s.stroke, s.eq]
+      );
+    }
+    await conn.commit();
+    return { ok: true, id: optionId, visibility: newVisibility, reverted_to_pending: newVisibility === "pending" && clean.visibility === "public" };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+// DELETE a UGC option (and its sets via cascade FK). Owner-only.
+// Promoted rows: refuse unless an admin override is requested at the
+// route layer (this helper enforces author_sub gating).
+export async function dbDeleteUgcOption(authorSub, optionId) {
+  if (!authorSub || !optionId) throw new Error("authorSub + optionId required");
+  const current = await dbGetUgcOption(optionId);
+  if (!current) return { ok: true, deleted: 0 };  // idempotent
+  if (current.author_sub !== authorSub) throw new Error("not_authorized");
+  if (current.promoted_at) throw new Error("frozen: row has been promoted to JS — admin must hard-delete via separate path");
+  const r = await pool.query("DELETE FROM `bank_options` WHERE `id` = ?", [optionId]);
+  return { ok: true, deleted: Number(r.affectedRows || 0) };
+}
+
 // ── Goals ────────────────────────────────────────────────────────────
 // Metric set is fixed; period_start/end are NULL for recurring goals
 // (the only kind exposed by the UI in MVP). Multiple historical rows
