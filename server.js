@@ -827,6 +827,42 @@ app.get("/api/admin/audit-events", requireAuth, requireAdmin, async (req, res) =
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// UGC Phase A — one-shot bank backfill from JS constants → DB rows.
+// Triggered manually by admin when laptop→prod-DB path is blocked
+// (Spaceship IP allowlist refused the CLI connection on 2026-05-24).
+// Idempotent on set IDs: re-runnable, only inserts options whose sets
+// aren't already in DB. ?dry=1 to preview without writing.
+// Spec: UGC_COACH_SETS_SCOPE.md §2.
+app.post("/api/admin/run-bank-import", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const dryRun = req.query.dry === "1" || req.query.dry === "true";
+    const { importBank } = await import("./tools/bank_importer.mjs");
+    const htmlPath = path.join(__dirname, "public", "index.html");
+    // Collect log lines so the HTTP response carries the same trace the
+    // CLI would print. Tee to stdout too for Hyperlift logs.
+    const logLines = [];
+    const log = (line) => { logLines.push(line); console.log("[bank-import]", line); };
+    const result = await importBank({ pool, htmlPath, dryRun, log });
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       dryRun ? "admin.bank_import.dry_run" : "admin.bank_import.apply",
+      ...reqMeta(req),
+      details:         {
+        totalOptions:    result.totalOptions,
+        totalSets:       result.totalSets,
+        insertedOptions: result.insertedOptions,
+        insertedSets:    result.insertedSets,
+        skippedOptions:  result.skippedOptions,
+      },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json({ ok: true, ...result, log: logLines });
+  } catch (err) {
+    console.error("[bank-import] failed:", err);
+    res.status(500).json({ error: err.message || String(err), stack: err.stack });
+  }
+});
+
 // Native iOS Sign in with Apple — accepts an identityToken from ASAuthorizationAppleIDCredential,
 // verifies it, and returns a session token the app stores in Keychain and sends as Bearer.
 app.post("/api/auth/native", authLimiter, async (req, res) => {
