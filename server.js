@@ -1755,9 +1755,10 @@ app.get("/api/admin/ugc/:id/graduate-snippet", requireAuth, requireAdmin, async 
       ...pack,  // snippet, constantName, subKey, instructions
     });
   } catch (err) {
-    const msg = err.message || String(err);
-    const status = msg.startsWith("multi_tag_not_supported") ? 409 : 500;
-    res.status(status).json({ error: msg });
+    // multi_tag_not_supported was a Stage 1 limitation; canonical bank now
+    // accepts multi-tag so the snippet builder no longer throws that. Any
+    // remaining error is genuine 500.
+    res.status(500).json({ error: err.message || String(err) });
   }
 });
 

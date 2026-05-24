@@ -2044,61 +2044,61 @@ function _renderUgcSetLine(s) {
 // { snippet, constantName, subKey, instructions }. Throws if the
 // (section, pool_mode) tuple can't map to a known constant.
 //
-// Stage 1 limitation: multi-tag UGC (>1 type_ids or >1 stroke_ids) can't
-// graduate yet — the canonical JS bank still uses object-keyed buckets
-// where each option lives in exactly one. Stage 2 (canonical multi-tag
-// refactor) lifts this restriction.
+// Post-Phase-H Stage 2: canonical JS bank is FLAT arrays with types[] +
+// strokes[] tags per option. Snippet emits the matching shape and points
+// the admin at the top-level array — no more sub-bucket lookup. Multi-tag
+// UGC options graduate cleanly (their full tag arrays land in the snippet).
+// `subKey` is kept in the return shape for back-compat with callers (it's
+// always null now; clients should ignore it).
 export function buildUgcGraduateSnippet(option) {
   if (!option) throw new Error("option required");
   const constantName = UGC_GRADUATE_CONSTANTS[option.section]?.[option.pool_mode];
   if (!constantName) {
     throw new Error(`no constant for section=${option.section}, pool_mode=${option.pool_mode}`);
   }
-  // drill/main are object-keyed in canonical JS today; sub-key must be
-  // a SINGLE type_id or stroke_id during Stage 1.
-  const needsSubKey = (option.section === "drill" || option.section === "main");
-  if (needsSubKey) {
-    const tCount = Array.isArray(option.type_ids)   ? option.type_ids.length   : (option.type_id   ? 1 : 0);
-    const sCount = Array.isArray(option.stroke_ids) ? option.stroke_ids.length : (option.stroke_id ? 1 : 0);
-    if (tCount + sCount > 1) {
-      throw new Error("multi_tag_not_supported: this UGC option declares multiple type/stroke buckets; canonical JS bank still requires single-bucket. Either edit the option to single-tag first, or wait for canonical multi-tag (Phase H Stage 2).");
-    }
-  }
-  const subKey = needsSubKey
-    ? ((Array.isArray(option.type_ids)   && option.type_ids[0])   ||
-       (Array.isArray(option.stroke_ids) && option.stroke_ids[0]) ||
-       option.type_id || option.stroke_id || null)
-    : null;
-  if (needsSubKey && !subKey) {
-    throw new Error(`${option.section} option needs type_id or stroke_id`);
+
+  const isTyped = (option.section === "drill" || option.section === "main");
+  // Resolve tag arrays. UGC author payload uses snake_case (type_ids /
+  // stroke_ids); fall back to wrapping legacy singletons if arrays absent.
+  const typeIds = Array.isArray(option.type_ids)
+    ? option.type_ids
+    : (option.type_id ? [option.type_id] : []);
+  const strokeIds = Array.isArray(option.stroke_ids)
+    ? option.stroke_ids
+    : (option.stroke_id ? [option.stroke_id] : []);
+  if (isTyped && typeIds.length === 0 && strokeIds.length === 0) {
+    throw new Error(`${option.section} option needs at least one type or stroke tag`);
   }
 
-  // Render the option literal. Indentation matches the existing bank
-  // (8 spaces leading for the option line inside a flat array; 10 for
-  // set lines inside the sets array). The admin pastes verbatim.
+  // Render the option literal. Indentation matches the converted bank
+  // produced by tools/convert_canonical_bank.mjs: 6 spaces for the option
+  // line inside a flat array, 10 for set lines inside the sets array.
+  // The admin pastes verbatim just before the closing `]` of the constant.
   const lines = [];
-  // Header: open + label + totalYards + (typeAffinity?) + sets[
   const headerParts = [];
   headerParts.push(`label: ${JSON.stringify(option.label)}`);
   if (Array.isArray(option.type_affinity) && option.type_affinity.length > 0) {
     headerParts.push(`typeAffinity: ${JSON.stringify(option.type_affinity)}`);
   }
   headerParts.push(`totalYards: ${option.total_yards}`);
-  lines.push(`        { ${headerParts.join(", ")}, sets: [`);
+  // Tags: both arrays always present (matches Stage 2 conversion output).
+  headerParts.push(`types: ${JSON.stringify(typeIds)}`);
+  headerParts.push(`strokes: ${JSON.stringify(strokeIds)}`);
+  lines.push(`      { ${headerParts.join(", ")}, sets: [`);
   for (const s of (option.sets || [])) {
-    lines.push(`            ${_renderUgcSetLine(s)},`);
+    lines.push(`          ${_renderUgcSetLine(s)},`);
   }
-  lines.push(`          ]},`);
+  lines.push(`        ]},`);
   const snippet = lines.join("\n");
 
-  const target = needsSubKey
-    ? `${constantName}[${JSON.stringify(subKey)}]`
-    : constantName;
   const instructions =
-    `In public/index.html, find ${target} and paste this option just before ` +
-    `the closing \`]\` of that ${needsSubKey ? "sub-array" : "constant"}.`;
+    `In public/index.html, find \`const ${constantName} = [\` and paste this ` +
+    `option just before the closing \`]\` of that flat array. The new option ` +
+    `inherits multi-tag membership from its types/strokes arrays — no sub-bucket lookup needed.`;
 
-  return { snippet, constantName, subKey, instructions };
+  // subKey stays in the return shape for back-compat with existing callers;
+  // it's always null now (no sub-buckets in the flat-array canonical bank).
+  return { snippet, constantName, subKey: null, instructions };
 }
 
 // Phase F — list public UGC options eligible for graduation into JS.
