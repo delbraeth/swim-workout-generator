@@ -19997,6 +19997,16 @@
         setSets(prev => prev.filter((_, j) => j !== i));
       };
 
+      // Interval normalizer: server requires `On M:SS` or `No interval...`.
+      // Forgive common shapes: bare `1:30` → `On 1:30`; bare `none` → `No interval`.
+      const normalizeInterval = (raw) => {
+        const s = String(raw || "").trim();
+        if (!s) return s;
+        if (/^\d+:\d{2}$/.test(s)) return `On ${s}`;
+        if (/^on \d+:\d{2}$/i.test(s)) return `On ${s.replace(/^on\s+/i, "")}`;  // case-fix
+        if (/^(none|no interval)$/i.test(s)) return "No interval";
+        return s;  // pass through; server validation will surface if still bad
+      };
       const handleSubmit = async () => {
         setErr(null);
         // Client-side guard: team visibility requires at least one team.
@@ -20017,7 +20027,7 @@
             team_ids: visibility === "team" ? teamIds : [],
             sets: sets.map(s => ({
               reps: Number(s.reps), dist: Number(s.dist),
-              desc: s.desc, interval: s.interval,
+              desc: s.desc, interval: normalizeInterval(s.interval),
               focus: s.focus || null, stroke: s.stroke || null, eq: s.eq || null,
             })),
           };
@@ -20163,6 +20173,9 @@
               <label style={{ ...labelStyle, marginBottom: 0 }}>Sets (total {computedTotal} yd)</label>
               <button onClick={addSet} style={{ padding: "4px 10px", fontSize: 12, border: "1px solid var(--color-border)", background: "transparent", borderRadius: 4, cursor: "pointer" }}>+ Add row</button>
             </div>
+            <p style={{ fontSize: 11, color: "var(--color-muted)", margin: "0 0 6px 0" }}>
+              Interval format: <code>On 1:30</code> (we'll add "On" if you skip it) or <code>No interval</code> for untimed sets.
+            </p>
             <div style={{ marginBottom: 16 }}>
               {sets.map((s, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 60px 1fr 100px 1fr 30px", gap: 6, marginBottom: 6, alignItems: "start" }}>
