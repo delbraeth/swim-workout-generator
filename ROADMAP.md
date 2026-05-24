@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-23** (post Reporting Phase E deploy)
+Last refreshed: **2026-05-23** (post Reporting v1 COMPLETE — Phase F closure)
 
 ## How this file works
 
@@ -22,17 +22,11 @@ _Nothing in progress as of 2026-05-23._
 
 ## Next (small, ready)
 
-- **Reporting Phase F — Smoke + manual sweep + final tag** — final phase of Reporting v1. End-to-end manual exercise of all 6 reports under different role contexts (solo / coach / admin) + a sweep of the Reports section in the manual to make sure nothing is stale + tag `reporting-v1-complete`. ~2-3h. Spec: `REPORTING_SCOPE.md` §7. Source: [[swim-generator-reporting-scope]]
+_Empty. Pick from Bigger threads or wait for a new rough edge._
 
 ## Bigger threads (need a planning session)
 
-- **Reporting engine v1** (in flight) — spec locked 2026-05-23 in repo `REPORTING_SCOPE.md`. 6 reports across 3 audiences (coach-self / solo / admin). Cross-coach-within-team and head-coach view deferred to v2.
-  - **Phase A** — Attendance (migration 029 + "Mark practice done" modal) — ✅ shipped 2026-05-23 (`reporting-phase-a`)
-  - **Phase B** — Coach reports R1-R3 (Programming Mix / Schedule Adherence / Curation Log) — ✅ shipped 2026-05-23 (`reporting-phase-b`)
-  - **Phase C** — Solo/Masters R4 (Program Recap) — ✅ shipped 2026-05-23 (`reporting-phase-c`). Also promoted Reports out of coach dropdown to top-nav.
-  - **Phase D** — Admin R5-R6 (Platform Health, Curation & Support) — ✅ shipped 2026-05-23 (`reporting-phase-d`). R6 curation health uses simplified "count propagating disfavor items" proxy; true >30% bank-reduction calc deferred.
-  - **Phase E** — PDF + markdown export renderers — ✅ shipped 2026-05-23 (`reporting-phase-e`). HTML+print-CSS PDF for R1-R4 (R5/R6 admin-internal, skipped); markdown for all 6 reports via shared `reportToMarkdown` helper.
-  - **Phase F** — Smoke + manual sweep + tag — see Next (~2-3h)
+- **Reporting engine v1** — ✅ COMPLETE 2026-05-23. All 6 phases (A-F) shipped in one day. 6 reports across 3 audiences (coach-self / solo / admin) + Print/PDF + Markdown export. Tag `reporting-v1-complete` after Cap'n's live-exercise pass. v1.1 deferred punch list (charts, true bank-reduction calc, R5/R6 PDF, etc.) lives in [[swim-generator-reporting-v1-complete]]. Source: [[swim-generator-reporting-scope]]
 - **Pricing implementation** — spec locked in repo `PRICING.md`. Four-tier Patreon (Free / Supporter $3 / Coach $10 / Program $25). Coaches pay, swimmers free. Trigger: first paying pilot. Source: [[swim-generator-pricing-direction]]
 - **Sprint/fly main templates for large budgets** — residual fallback after slice-1 (~4.4% overall) is concentrated in sprint mains ≥1200yd and fly mains ≥1000yd. Both fail validator due to "no rep > 100yd" + budget packing. Real coaches may not program these (so current behavior could be correct). Defer until coach pilot reports a problem. Source: [[swim-generator-fallback-tuning-drill-v1]]
 - **Coach-authored workout sets (UGC into engine)** — captured 2026-05-23. NEEDS A SCOPE SESSION. Cap'n wants a workflow where coaches create / generate / suggest workouts in a format the engine can ingest as picker candidates (alongside today's hardcoded bank + engine templates). Two interlocking dimensions:
@@ -70,6 +64,7 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-23 | `reporting-v1-complete` (pending) | Reporting v1 Phase F: static audit clean (all 6 routes wired, 6/6 tab IDs consistent, no orphans, no TODOs). Manual swept: Reports section accurate, "no export" caveat removed, What's Coming updated to reflect Reporting complete. Consolidated memory checkpoint written. Tag pending Cap'n's live-exercise pass. |
 | 2026-05-23 | `reporting-phase-e` | Reporting v1 Phase E: 📄 Print / PDF + 📋 Markdown export buttons. ReportPrintView component (overlay + body-class scope + auto-window.print, mirroring MultiPacePrintView pattern). Per-report print layouts for R1-R4. Shared `reportToMarkdown` helper for all 6 reports. Manual updated; "no export" caveat removed. |
 | 2026-05-23 | `branding-polish-v1` | Copyright text → "© 2026 Competition Aquatics, LLC · All rights reserved." in 4 files (index, manual, privacy, terms). SetForge logo added to left of wordmark in app header + manual masthead via existing `/icons/icon-192.png` (no static-serving config change needed; `/png/` repo-root folder was the staging copy). |
 | 2026-05-23 | `reporting-phase-d` | Reporting v1 Phase D: R5 Platform Health + R6 Curation & Support (admin-only tabs). Weekly bar-fill tables for workouts-per-week + engine fallback trend. Feature adoption %, active-coach 7/14/30d counts. Per-team propagating disfavor counts (simplified proxy), impersonation activity by actor, per-team audit_events rollup. |
