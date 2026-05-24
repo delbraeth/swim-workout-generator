@@ -296,12 +296,17 @@
       .multipace-matrix-row { page-break-inside: avoid !important; break-inside: avoid !important; }
       .multipace-block { page-break-inside: avoid !important; break-inside: avoid !important; }
       .multipace-overlay { position: static !important; overflow: visible !important; }
+      /* Phase E — Reports print overlay. Same scope-isolation pattern. */
+      body.reports-print-active > *:not(.reports-print-overlay) { display: none !important; }
+      .reports-print-overlay { position: static !important; overflow: visible !important; }
     }
 
     /* N6 — Multi-pace overlay on screen: the .multipace-overlay element is
        position:fixed inset:0 so it visually covers everything. We also
        suppress body scroll so wheel/scroll doesn't leak through. */
     body.multipace-active { overflow: hidden !important; }
+    /* Phase E — Reports print overlay (same screen-side behavior). */
+    body.reports-print-active { overflow: hidden !important; }
   </style>
 </head>
 <body>
@@ -16071,6 +16076,153 @@
     // ✎ Edit (loads back into generator), 🗐 Copy to (date picker), 🗑 Delete.
     // Completed rows show a green ✓ + workout link.
     // ═══════════════════════════════════════════════════════════════
+    //  REPORT PRINT VIEW — Reporting v1 Phase E
+    //  Mirror of MultiPacePrintView pattern: overlay, body class for
+    //  CSS scoping, auto-print on mount, Close button to exit.
+    //  Per-report layouts (R1-R4); R5/R6 share-out has no use case so
+    //  export buttons hidden for those tabs.
+    // ═══════════════════════════════════════════════════════════════
+    function ReportPrintView({ tab, data, rangeLabel, onClose }) {
+      React.useEffect(() => {
+        document.body.classList.add("reports-print-active");
+        const t = setTimeout(() => { try { window.print(); } catch (_) {} }, 250);
+        return () => {
+          document.body.classList.remove("reports-print-active");
+          clearTimeout(t);
+        };
+      }, []);
+
+      const pageStyle = { position: "fixed", inset: 0, zIndex: 10000, background: "#fff", color: "#000", padding: "0.5in", overflow: "auto", fontFamily: "Georgia, 'Times New Roman', serif" };
+      const headerStyle = { borderBottom: "2pt solid #000", paddingBottom: 8, marginBottom: 12 };
+      const titleStyle = { fontSize: "20pt", fontWeight: 700, margin: 0 };
+      const subStyle = { fontSize: "10pt", fontStyle: "italic", marginTop: 4, color: "#444" };
+      const sectionHead = { fontSize: "13pt", fontWeight: 700, borderBottom: "1pt solid #888", paddingBottom: 4, margin: "16px 0 8px" };
+      const tableStyle = { width: "100%", borderCollapse: "collapse", fontSize: "10pt" };
+      const cellStyle = { padding: "4px 8px", borderBottom: "1px solid #ddd" };
+
+      const fmt = (n) => Number(n || 0).toLocaleString();
+      const pct = (n) => Math.round(Number(n || 0));
+
+      const titleFor = {
+        "programming-mix":    "Programming Mix",
+        "schedule-adherence": "Schedule Adherence",
+        "curation-log":       "Curation Log",
+        "program-recap":      "Program Recap",
+      }[tab] || "Report";
+
+      // Per-tab body builders. Each returns JSX for the printed page.
+      const renderBody = () => {
+        if (tab === "programming-mix") {
+          const typeRows = Object.entries(data.yardsByType || {}).sort((a, b) => b[1] - a[1]);
+          const strokeRows = Object.entries(data.yardsByStroke || {}).sort((a, b) => b[1] - a[1]);
+          const sectionRows = Object.entries(data.sectionYards || {}).sort((a, b) => b[1] - a[1]);
+          const srcTotal = Object.values(data.sourceCounts || {}).reduce((s, n) => s + n, 0);
+          const RowTable = ({ rows, title }) => (
+            <>
+              <div style={sectionHead}>{title}</div>
+              <table style={tableStyle}><tbody>
+                {rows.map(([k, v]) => <tr key={k}><td style={cellStyle}>{k}</td><td style={{ ...cellStyle, textAlign: "right" }}>{fmt(v)}</td></tr>)}
+              </tbody></table>
+            </>
+          );
+          return <>
+            <div style={sectionHead}>Summary</div>
+            <table style={tableStyle}><tbody>
+              <tr><td style={cellStyle}>Total yards</td><td style={{ ...cellStyle, textAlign: "right" }}>{fmt(data.totalYards)}</td></tr>
+              <tr><td style={cellStyle}>Workouts</td><td style={{ ...cellStyle, textAlign: "right" }}>{data.workoutCount}</td></tr>
+              <tr><td style={cellStyle}>Distinct bank labels</td><td style={{ ...cellStyle, textAlign: "right" }}>{(data.bankLabels || []).length}</td></tr>
+              <tr><td style={cellStyle}>Source mix</td><td style={{ ...cellStyle, textAlign: "right" }}>Bank {pct((data.sourceCounts?.bank || 0) / Math.max(1, srcTotal) * 100)}% · Engine {pct((data.sourceCounts?.engine || 0) / Math.max(1, srcTotal) * 100)}% · Mix {pct((data.sourceCounts?.mix || 0) / Math.max(1, srcTotal) * 100)}%</td></tr>
+            </tbody></table>
+            <RowTable rows={typeRows} title="Yards by type" />
+            <RowTable rows={strokeRows} title="Yards by stroke" />
+            <RowTable rows={sectionRows} title="Yards by section" />
+          </>;
+        }
+        if (tab === "schedule-adherence") {
+          return <>
+            <div style={sectionHead}>Schedule completion</div>
+            <table style={tableStyle}><tbody>
+              <tr><td style={cellStyle}>Scheduled practices</td><td style={{ ...cellStyle, textAlign: "right" }}>{data.scheduledCount}</td></tr>
+              <tr><td style={cellStyle}>Completed</td><td style={{ ...cellStyle, textAlign: "right" }}>{data.completedCount} ({pct(data.completionPct)}%)</td></tr>
+              <tr><td style={cellStyle}>With attendance recorded</td><td style={{ ...cellStyle, textAlign: "right" }}>{data.withAttendance}</td></tr>
+              <tr><td style={cellStyle}>Without attendance</td><td style={{ ...cellStyle, textAlign: "right" }}>{data.withoutAttendance}</td></tr>
+              <tr><td style={cellStyle}>Avg attendance per practice</td><td style={{ ...cellStyle, textAlign: "right" }}>{pct(data.avgAttendancePct)}%</td></tr>
+            </tbody></table>
+            {data.rosterTrend && <>
+              <div style={sectionHead}>Roster trend</div>
+              <table style={tableStyle}><tbody>
+                <tr><td style={cellStyle}>Joined</td><td style={{ ...cellStyle, textAlign: "right" }}>+{data.rosterTrend.added}</td></tr>
+                <tr><td style={cellStyle}>Left</td><td style={{ ...cellStyle, textAlign: "right" }}>−{data.rosterTrend.removed}</td></tr>
+              </tbody></table>
+            </>}
+          </>;
+        }
+        if (tab === "curation-log") {
+          const Section = ({ title, favs, dis, fmtItem }) => <>
+            <div style={sectionHead}>{title}</div>
+            <table style={tableStyle}>
+              <thead><tr><th style={{ ...cellStyle, textAlign: "left", fontWeight: 700 }}>★ Favorites ({favs.length})</th><th style={{ ...cellStyle, textAlign: "left", fontWeight: 700 }}>👎 Disfavorites ({dis.length})</th></tr></thead>
+              <tbody>
+                {Array.from({ length: Math.max(favs.length, dis.length) }).map((_, i) => (
+                  <tr key={i}><td style={cellStyle}>{favs[i] ? fmtItem(favs[i]) : ""}</td><td style={cellStyle}>{dis[i] ? fmtItem(dis[i]) : ""}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </>;
+          return <>
+            <Section title="Bank labels" favs={data.bankLabels?.favorites || []} dis={data.bankLabels?.disfavorites || []} fmtItem={x => x.label} />
+            <Section title="Sets" favs={data.sets?.favorites || []} dis={data.sets?.disfavorites || []} fmtItem={x => setIdToName(x.set_id)} />
+            <Section title="Engine tuples (current state)" favs={data.engine?.favorites || []} dis={data.engine?.disfavorites || []} fmtItem={x => `${x.template_id} · ${x.stroke}`} />
+          </>;
+        }
+        if (tab === "program-recap") {
+          const typeRows = Object.entries(data.yardsByType || {}).sort((a, b) => b[1] - a[1]);
+          const strokeRows = Object.entries(data.yardsByStroke || {}).sort((a, b) => b[1] - a[1]);
+          return <>
+            <div style={sectionHead}>Summary</div>
+            <table style={tableStyle}><tbody>
+              <tr><td style={cellStyle}>Total yards</td><td style={{ ...cellStyle, textAlign: "right" }}>{fmt(data.totalYards)}</td></tr>
+              <tr><td style={cellStyle}>Workouts</td><td style={{ ...cellStyle, textAlign: "right" }}>{data.workoutCount}</td></tr>
+              {data.multiLane?.generated > 0 && <tr><td style={cellStyle}>Multi-lane fit rate</td><td style={{ ...cellStyle, textAlign: "right" }}>{pct(data.multiLane.successPct)}% ({data.multiLane.withoutFallback}/{data.multiLane.generated})</td></tr>}
+            </tbody></table>
+            <div style={sectionHead}>Yards by type</div>
+            <table style={tableStyle}><tbody>
+              {typeRows.map(([k, v]) => <tr key={k}><td style={cellStyle}>{k}</td><td style={{ ...cellStyle, textAlign: "right" }}>{fmt(v)}</td></tr>)}
+            </tbody></table>
+            <div style={sectionHead}>Yards by stroke</div>
+            <table style={tableStyle}><tbody>
+              {strokeRows.map(([k, v]) => <tr key={k}><td style={cellStyle}>{k}</td><td style={{ ...cellStyle, textAlign: "right" }}>{fmt(v)}</td></tr>)}
+            </tbody></table>
+            {(data.strokeGaps || []).length > 0 && <>
+              <div style={sectionHead}>Stroke gaps (30-day windows)</div>
+              <table style={tableStyle}><tbody>
+                {data.strokeGaps.map((g, i) => <tr key={i}><td style={cellStyle}>{g.windowStart} → {g.windowEnd}</td><td style={cellStyle}>Missing: {g.missingStrokes.join(", ")}</td></tr>)}
+              </tbody></table>
+            </>}
+          </>;
+        }
+        return <div>Export not available for this report.</div>;
+      };
+
+      return (
+        <div className="reports-print-overlay" style={pageStyle}>
+          <button className="screen-only" onClick={onClose}
+            style={{ position: "absolute", top: 12, right: 14, padding: "6px 12px", borderRadius: 6, border: "1px solid #888", background: "#f5f5f5", color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", zIndex: 10001 }}>
+            ✕ Close print view
+          </button>
+          <div style={headerStyle}>
+            <div style={titleStyle}>SetForge · {titleFor}</div>
+            <div style={subStyle}>{rangeLabel} · generated {new Date().toLocaleDateString()}</div>
+          </div>
+          {renderBody()}
+          <div style={{ marginTop: 24, paddingTop: 8, borderTop: "1pt solid #888", fontSize: "9pt", color: "#666", textAlign: "center" }}>
+            © 2026 Competition Aquatics, LLC · setforge.io
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  REPORTS VIEW — Reporting v1 Phase B (R1-R3 coach reports)
     //  Spec: REPORTING_SCOPE.md §2 + §5. Self-only (gated to current
     //  coach via server). Numbers + tables only — no charts in v1
@@ -16083,6 +16235,90 @@
       { id: "season-to-date",  label: "Season-to-date" },
     ];
 
+    // Build a markdown export for any tab. Walks the report JSON and emits
+    // headers + tables. Single shared helper — markdown is naturally flexible
+    // enough that per-report templates aren't worth the maintenance.
+    function reportToMarkdown(tab, data) {
+      const lines = [];
+      const fmt = (n) => Number(n || 0).toLocaleString();
+      const pct = (n) => Math.round(Number(n || 0));
+      const titleFor = {
+        "programming-mix":    "Programming Mix",
+        "schedule-adherence": "Schedule Adherence",
+        "curation-log":       "Curation Log",
+        "program-recap":      "Program Recap",
+        "platform-health":    "Platform Health",
+        "curation-support":   "Curation & Support",
+      }[tab] || "Report";
+      lines.push(`# SetForge · ${titleFor}`);
+      lines.push(`*Range: ${data.startYmd} → ${data.endYmd} · generated ${new Date().toISOString().slice(0, 10)}*`);
+      lines.push("");
+      const table = (rows, headers) => {
+        if (!rows.length) return ["_(no data)_", ""];
+        const out = [`| ${headers.join(" | ")} |`, `| ${headers.map(() => "---").join(" | ")} |`];
+        rows.forEach(r => out.push(`| ${r.join(" | ")} |`));
+        out.push("");
+        return out;
+      };
+      if (tab === "programming-mix") {
+        lines.push("## Summary", "", `- **Total yards:** ${fmt(data.totalYards)}`, `- **Workouts:** ${data.workoutCount}`, `- **Distinct bank labels:** ${(data.bankLabels || []).length}`, "");
+        const srcTotal = Object.values(data.sourceCounts || {}).reduce((s, n) => s + n, 0);
+        lines.push(`- **Source mix:** Bank ${pct((data.sourceCounts?.bank || 0) / Math.max(1, srcTotal) * 100)}% · Engine ${pct((data.sourceCounts?.engine || 0) / Math.max(1, srcTotal) * 100)}% · Mix ${pct((data.sourceCounts?.mix || 0) / Math.max(1, srcTotal) * 100)}%`, "");
+        lines.push("## Yards by type", "");
+        lines.push(...table(Object.entries(data.yardsByType || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, fmt(v)]), ["Type", "Yards"]));
+        lines.push("## Yards by stroke", "");
+        lines.push(...table(Object.entries(data.yardsByStroke || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, fmt(v)]), ["Stroke", "Yards"]));
+        lines.push("## Yards by section", "");
+        lines.push(...table(Object.entries(data.sectionYards || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, fmt(v)]), ["Section", "Yards"]));
+      } else if (tab === "schedule-adherence") {
+        lines.push("## Schedule completion", "", `- **Scheduled:** ${data.scheduledCount}`, `- **Completed:** ${data.completedCount} (${pct(data.completionPct)}%)`, `- **With attendance:** ${data.withAttendance}`, `- **Without attendance:** ${data.withoutAttendance}`, `- **Avg attendance per practice:** ${pct(data.avgAttendancePct)}%`, "");
+        if (data.rosterTrend) lines.push("## Roster trend", "", `- **Joined:** +${data.rosterTrend.added}`, `- **Left:** −${data.rosterTrend.removed}`, "");
+      } else if (tab === "curation-log") {
+        const section = (title, favs, dis, fmtItem) => {
+          lines.push(`## ${title}`, "", `### ★ Favorites (${favs.length})`, "");
+          if (!favs.length) lines.push("_(none in range)_", "");
+          else favs.forEach(f => lines.push(`- ${fmtItem(f)}`));
+          lines.push("", `### 👎 Disfavorites (${dis.length})`, "");
+          if (!dis.length) lines.push("_(none in range)_", "");
+          else dis.forEach(d => lines.push(`- ${fmtItem(d)}`));
+          lines.push("");
+        };
+        section("Bank labels", data.bankLabels?.favorites || [], data.bankLabels?.disfavorites || [], x => x.label);
+        section("Sets", data.sets?.favorites || [], data.sets?.disfavorites || [], x => setIdToName(x.set_id));
+        section("Engine tuples (current state)", data.engine?.favorites || [], data.engine?.disfavorites || [], x => `\`${x.template_id}\` · ${x.stroke}`);
+      } else if (tab === "program-recap") {
+        lines.push("## Summary", "", `- **Total yards:** ${fmt(data.totalYards)}`, `- **Workouts:** ${data.workoutCount}`);
+        if (data.multiLane?.generated > 0) lines.push(`- **Multi-lane fit rate:** ${pct(data.multiLane.successPct)}% (${data.multiLane.withoutFallback}/${data.multiLane.generated})`);
+        lines.push("");
+        lines.push("## Yards by type", "");
+        lines.push(...table(Object.entries(data.yardsByType || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, fmt(v)]), ["Type", "Yards"]));
+        lines.push("## Yards by stroke", "");
+        lines.push(...table(Object.entries(data.yardsByStroke || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, fmt(v)]), ["Stroke", "Yards"]));
+        if ((data.strokeGaps || []).length > 0) {
+          lines.push("## Stroke gaps (30-day windows)", "");
+          lines.push(...table(data.strokeGaps.map(g => [`${g.windowStart} → ${g.windowEnd}`, g.missingStrokes.join(", ")]), ["Window", "Missing"]));
+        }
+      } else if (tab === "platform-health") {
+        const ac = data.activeCoaches || {}; const fa = data.featureAdoption || {};
+        lines.push("## Active coaches", "", `- **7 day:** ${ac.d7}`, `- **14 day:** ${ac.d14}`, `- **30 day:** ${ac.d30}`, "");
+        lines.push("## Feature adoption", "", `- **Engine:** ${pct(fa.enginePct)}%`, `- **Mix:** ${pct(fa.mixPct)}%`, `- **Multi-lane:** ${pct(fa.multiLanePct)}%`, `- **Fallback rate:** ${pct(fa.fallbackPct)}%`, `- **Users with favs/disfavs:** ${fa.usersWithFavs}/${fa.usersWithDis} of ${fa.totalUsers}`, "");
+        if ((data.weeklyByTeam || []).length) {
+          lines.push("## Workouts per week", "");
+          lines.push(...table(data.weeklyByTeam.map(w => [`Week of ${w.weekStart}`, fmt(w.total)]), ["Week", "Workouts"]));
+        }
+      } else if (tab === "curation-support") {
+        if ((data.curationByTeam || []).length) {
+          lines.push("## Propagating disfavor by team", "");
+          lines.push(...table(data.curationByTeam.map(t => [t.team_name, t.coach_count, t.label_count, t.set_count, t.engine_count, t.total_propagating]), ["Team", "Coaches", "Labels", "Sets", "Engine", "Total"]));
+        }
+        if ((data.impersonationByActor || []).length) {
+          lines.push("## Impersonation activity", "");
+          lines.push(...table(data.impersonationByActor.map(a => [a.admin_sub.slice(0, 20), a.sessions, a.avg_minutes, a.distinct_targets]), ["Admin sub", "Sessions", "Avg min", "Distinct targets"]));
+        }
+      }
+      return lines.join("\n");
+    }
+
     function ReportsView({ isCoach = false, isAdmin = false }) {
       // Non-coaches land on Program Recap (R4) — the only tab they can see.
       // Coaches default to Programming Mix (R1) as before. Admin gets two
@@ -16094,6 +16330,10 @@
       const [data, setData] = React.useState(null);
       const [err, setErr] = React.useState(null);
       const [loading, setLoading] = React.useState(false);
+      // Phase E — print-view overlay state. null = not printing. Holds the
+      // tab + data snapshot at the moment Print was clicked so the overlay
+      // renders the same data even if filters change.
+      const [printingData, setPrintingData] = React.useState(null);
 
       // Load coach's groups for the filter dropdown (coach-only endpoint).
       React.useEffect(() => {
@@ -16179,6 +16419,33 @@
                 {data.startYmd} → {data.endYmd}
               </span>
             )}
+            {/* Phase E export buttons. PDF print disabled for R5/R6 (admin-
+                internal — no share use case). Markdown available for all. */}
+            {data && (
+              <div style={{ display: "flex", gap: 6 }}>
+                {["programming-mix", "schedule-adherence", "curation-log", "program-recap"].includes(tab) && (
+                  <button onClick={() => setPrintingData({ tab, data })}
+                    title="Open a print-friendly view, then use your browser's print dialog to save as PDF"
+                    style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    📄 Print / PDF
+                  </button>
+                )}
+                <button onClick={() => {
+                  const md = reportToMarkdown(tab, data);
+                  const filename = `setforge-${tab}-${data.startYmd}-to-${data.endYmd}.md`;
+                  const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = filename;
+                  document.body.appendChild(a); a.click();
+                  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+                }}
+                  title="Download a markdown file (paste into email, Slack, Notion, etc.)"
+                  style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-border-strong)", background: "transparent", color: "var(--color-text-dim)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                  📋 Markdown
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Tab nav */}
@@ -16207,6 +16474,17 @@
           {!loading && !err && data && tab === "program-recap"      && <R4ProgramRecapTab data={data} />}
           {!loading && !err && data && tab === "platform-health"    && <R5PlatformHealthTab data={data} />}
           {!loading && !err && data && tab === "curation-support"   && <R6CurationSupportTab data={data} />}
+
+          {/* Phase E print overlay. Mounted at the ReportsView root so
+              the body class scoping works correctly. */}
+          {printingData && (
+            <ReportPrintView
+              tab={printingData.tab}
+              data={printingData.data}
+              rangeLabel={`${printingData.data.startYmd} → ${printingData.data.endYmd}${printingData.data.groupId ? ` · group ${printingData.data.groupId}` : ""}`}
+              onClose={() => setPrintingData(null)}
+            />
+          )}
         </div>
       );
     }

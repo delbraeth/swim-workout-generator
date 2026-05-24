@@ -1733,12 +1733,18 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>🛡 Curation &amp; Support Activity (R6, admin only)</h3>
       <p>Three sections. <strong>Propagating disfavor by team:</strong> per-team table showing how many disfavor items (labels + sets + engine tuples) the team's coaches collectively propagate to their swimmers — totals above 30 are flagged amber as a "this team is heavily curating" signal. (This is a simplified proxy; the true {">"} 30% effective-bank-reduction calculation is on the backlog.) <strong>Impersonation activity:</strong> per support actor, sessions count + average session minutes + distinct targets in range. Useful for review of support-session hygiene. <strong>Audit events per team:</strong> per-team rollup chips showing event_type ×count — quick scan for which teams are generating CSRF rejects, rate-limit hits, etc.</p>
 
+      <h3>📄 Export (Print/PDF · Markdown)</h3>
+      <p>Coach reports R1-R3 and the solo Program Recap (R4) have export buttons next to the range filter. Two formats:</p>
+      <ul>
+        <li><strong>📄 Print / PDF</strong> — opens a print-friendly view in the same window with a print dialog. Use your browser's "Save as PDF" option in the print dialog to get a one-file PDF. The print view strips the chrome and renders just the report content with simple typography that works well on paper.</li>
+        <li><strong>📋 Markdown</strong> — downloads a <code>.md</code> file you can paste into email, Slack, Notion, etc. Markdown export is available for all 6 reports (including admin Platform Health and Curation &amp; Support — useful for issue threads or status updates).</li>
+      </ul>
+      <p>Admin reports (R5/R6) don't have a Print/PDF button — they're internal-use dashboards with no external-share use case. Markdown still works for them if you need to paste numbers into an internal doc.</p>
+
       <h3>What Reports v1 does NOT do</h3>
       <ul>
         <li>No charts (stacked bars, pies, heatmaps) — numbers and tables only in v1. Charts deferred to a later phase.</li>
-        <li>No export (PDF / markdown) yet — that's Phase E of the reporting roadmap.</li>
         <li>No cross-coach comparison ("how does my Coach A compare to my Coach B"). Head-coach oversight is a v2 feature.</li>
-        <li>No swimmer-facing reports. R4 (Program Recap for solo/masters) is its own future phase.</li>
       </ul>
     </section>
 
