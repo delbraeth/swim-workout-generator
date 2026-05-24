@@ -1616,8 +1616,15 @@ app.get("/api/bank-options/:id", requireAuth, async (req, res) => {
   try {
     const row = await dbGetUgcOption(req.params.id);
     if (!row) return res.status(404).json({ error: "not_found" });
-    // Phase C: own-only access. Phase D+E broaden via visibility checks.
-    if (row.author_sub !== req.userSub) return res.status(403).json({ error: "not_authorized" });
+    // Author can always read their own row. Admin can read any row (needed
+    // for Phase E AdminPendingUgc preview + Phase F AdminPublicUgc Graduate
+    // preview). Non-author non-admin readers get the option via the overlay
+    // endpoint instead — they don't need direct row access.
+    const isAuthor = row.author_sub === req.userSub;
+    if (!isAuthor) {
+      const isAdmin = await dbIsAdmin(req.userSub);
+      if (!isAdmin) return res.status(403).json({ error: "not_authorized" });
+    }
     res.json(row);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
