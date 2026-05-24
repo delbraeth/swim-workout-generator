@@ -6639,6 +6639,47 @@
     };
 
     // ═══════════════════════════════════════════════════════════════
+    //  SET-ID LOOKUP MAP — set_id → "reps×dist – parent label"
+    //  Built once at script load by walking every *_OPTIONS bank.
+    //  Used by R3 Curation Log to render human-readable set names
+    //  instead of raw "s_xxxxxx" identifiers. Old IDs no longer in
+    //  the bank (e.g., a user favorited a set that's since been
+    //  removed) fall back to the raw ID at the render site.
+    // ═══════════════════════════════════════════════════════════════
+    const SET_ID_NAME_MAP = (() => {
+      const m = new Map();
+      const walkArray = (arr) => {
+        if (!Array.isArray(arr)) return;
+        for (const opt of arr) {
+          if (!opt || !Array.isArray(opt.sets)) continue;
+          for (const s of opt.sets) {
+            if (s && s.id) m.set(s.id, `${s.reps || 1}×${s.dist} – ${opt.label}`);
+          }
+        }
+      };
+      const walkKeyedObject = (obj) => {
+        if (!obj || typeof obj !== "object") return;
+        for (const k of Object.keys(obj)) walkArray(obj[k]);
+      };
+      walkArray(WARMUP_OPTIONS);
+      walkArray(COOLDOWN_OPTIONS);
+      walkKeyedObject(DRILL_OPTIONS);
+      walkKeyedObject(MAIN_OPTIONS);
+      walkArray(WARMUP_OPTIONS_50M);
+      walkArray(COOLDOWN_OPTIONS_50M);
+      walkKeyedObject(DRILL_OPTIONS_50M);
+      walkKeyedObject(MAIN_OPTIONS_50M);
+      walkArray(WARMUP_OPTIONS_SCM);
+      walkArray(COOLDOWN_OPTIONS_SCM);
+      walkKeyedObject(DRILL_OPTIONS_SCM);
+      walkKeyedObject(MAIN_OPTIONS_SCM);
+      return m;
+    })();
+    function setIdToName(setId) {
+      return SET_ID_NAME_MAP.get(setId) || setId;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  BUDGET-AWARE GENERATOR
     //  Filters options so the workout stays within [1900, maxYards]
     // ═══════════════════════════════════════════════════════════════
@@ -16328,11 +16369,20 @@
             />
           </div>
           <div style={sub}>
-            <div style={subTitle}>Set IDs</div>
+            <div style={subTitle}>Sets</div>
             <Section
               favs={data.sets?.favorites || []}
               dis={data.sets?.disfavorites || []}
-              fmtItem={(x) => <><code style={{ fontFamily: "monospace" }}>{x.set_id}</code> <span style={{ color: "var(--color-text-muted)", marginLeft: 6 }}>{fmtTime(x.at)}</span></>}
+              fmtItem={(x) => {
+                const name = setIdToName(x.set_id);
+                const resolved = name !== x.set_id;
+                return <>
+                  {resolved
+                    ? <span>{name} <code style={{ fontFamily: "monospace", fontSize: 10, color: "var(--color-text-muted)" }}>({x.set_id})</code></span>
+                    : <code style={{ fontFamily: "monospace" }} title="Set no longer in current bank">{x.set_id}</code>}
+                  <span style={{ color: "var(--color-text-muted)", marginLeft: 6 }}>{fmtTime(x.at)}</span>
+                </>;
+              }}
             />
           </div>
           <div style={sub}>
