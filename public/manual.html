@@ -293,10 +293,14 @@
     <a href="#catalog">Workout Catalog (coaches)</a>
     <a href="#coach-fanout">Coach: Planning for a Group</a>
     <a href="#coach-propagation">Coach group propagation</a>
+    <a href="#reports">Reports (coaches)</a>
     <a href="#multi-lane-generate">Multi-lane generate</a>
     <a href="#parse-intent">Quick Input (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
     <a href="#tips">Tips &amp; Tricks</a>
+
+    <div class="nav-section">About</div>
+    <a href="#whats-coming">What's Coming</a>
 
     <div class="nav-section">Legal</div>
     <a href="/privacy.html">Privacy Policy</a>
@@ -1842,6 +1846,48 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <hr />
 
       <a href="/" class="hero-back" style="display:inline-flex;">← Back to the app</a>
+    </section>
+
+    <!-- ══ WHAT'S COMING ══ -->
+    <section id="whats-coming">
+      <h2>What's Coming</h2>
+      <p>An honest look at what's in flight, what's planned, and what's been decided against. No dates — items move from one category to another as they actually progress. If something below would change how you use SetForge today, that's the point: tell us via <a href="#feedback">feedback</a> and it'll help prioritize.</p>
+
+      <h3>In progress</h3>
+      <p>Active build right now. You'll see these show up in the app over the coming weeks.</p>
+      <ul>
+        <li><strong>Reporting engine</strong> — coach reports for Programming Mix, Schedule Adherence, and Curation Log are already live (see <a href="#reports">Reports</a>). Still to come: a solo/masters program-recap report, admin platform-health reports, and PDF + markdown export so reports can be shared outside the app.</li>
+      </ul>
+
+      <h3>Planned</h3>
+      <p>Committed work that hasn't started yet. Small enough that it'll ship without much fanfare when it lands.</p>
+      <ul>
+        <li><strong>Branding polish</strong> — SetForge logo in the header next to the wordmark, updated copyright line.</li>
+      </ul>
+
+      <h3>Under consideration</h3>
+      <p>Bigger ideas that need a design pass before any code happens. Each of these has been thought about but not committed. Order doesn't mean priority.</p>
+      <ul>
+        <li><strong>Coach-authored workout sets</strong> — let coaches create or upload their own workouts in a format the generator can use as picker candidates, with controls for who else (private / team / public) gets to use them. Big design question: how it interacts with the existing bank and curation system without coaches accidentally over-influencing their swimmers' picks.</li>
+        <li><strong>Pricing tiers</strong> — Free for swimmers, paid tiers for coaches. The plan is locked in scope but trigger is the first paying coach asking.</li>
+        <li><strong>More sign-in options beyond Apple</strong> — passcode-based (email-delivered one-time codes or similar). Explicitly NOT going to use email + password — your account is OAuth or nothing.</li>
+        <li><strong>Better persona preview for admins</strong> — currently view-as wipes data state and reloads to swap. Next iteration would be smoother and could also include filtered settings (default pace, etc.) so admins can QA the genuine first-time-user experience.</li>
+        <li><strong>Cross-coach reports</strong> — head-coach view that compares assistant coaches' programming patterns. Phase 1 of Reporting is self-only by design; cross-coach is its own thing.</li>
+      </ul>
+
+      <h3>Decided against</h3>
+      <p>So you know what NOT to ask for. These have been seriously considered and explicitly declined.</p>
+      <ul>
+        <li><strong>Email + password sign-in</strong> — never. Passwords are a security and support burden we won't take on. Sign in with Apple covers the same need without storing credentials.</li>
+        <li><strong>iOS native app</strong> — paused, not actively declined, but no new iOS features are planned. The web app on a saved-to-home-screen iPhone covers ~95% of the native experience already.</li>
+        <li><strong>Apple Watch companion</strong> — declined. Pace-clock on a watch face is a different product; SetForge is the generator + history side.</li>
+        <li><strong>In-app editing of the workout bank</strong> — declined. Bank changes flow through code review for quality control; coach curation (favorite / disfavor) is the in-app feedback channel.</li>
+      </ul>
+
+      <div class="callout note">
+        <div class="callout-icon">📝</div>
+        <div class="callout-body"><strong>How this list stays accurate.</strong> SetForge maintains a working roadmap as part of the codebase; the items above are summarized from it. If something feels stale or wrong, send <a href="#feedback">feedback</a> and the maintainer (Cap'n) will reconcile.</div>
+      </div>
     </section>
 
   </main>
