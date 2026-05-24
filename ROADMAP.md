@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-25** (UGC scope re-architected — JS canonical / DB UGC-only / soft-delete graduation; old hybrid-architecture Phase A code removed; build approved per testers)
+Last refreshed: **2026-05-25** (UGC v2 Phase A shipped: migration 031 corrects schema in prod; Phase B overlay endpoint next)
 
 ## How this file works
 
@@ -19,8 +19,9 @@ Memos in `/Users/cassidy/Library/Application Support/Claude/.../memory/` are the
 ## Now
 
 - **Coach-authored workout sets (UGC v1)** — scope re-architected + build approved 2026-05-25 per direct tester request. Architecture: **JS is canonical forever**; DB holds UGC rows only (`bank_options.author_sub IS NOT NULL`); UGC graduates into JS via a per-option admin tool that auto-edits `public/index.html` with snippet fallback. After graduation, DB row stays with `promoted_at` timestamp (soft delete from overlay). Picker reads JS constants + per-session UGC overlay (`/api/bank/my-overlay`). Visibility tiers: private / team-I-pick / public-with-admin-moderation. Spec: `UGC_COACH_SETS_SCOPE.md`. **Phases A-G, ~29-40h.** Source: [[swim-generator-ugc-coach-sets-scope]]
-  - **Phase A** — migration 031 (corrects migration 030 to match new architecture: drop `in_export`, `author_sub NOT NULL`, add `promoted_at` + `promoted_by_sub`, swap export-index for overlay-index). 1-2h.
-  - **Phases B-G** — overlay endpoint → authoring (form + snapshot, private only) → team sharing → public + moderation → Graduate-to-JS tool → smoke + tag.
+  - **Phase A** ✅ SHIPPED 2026-05-25. Migration 031 applied in prod, verified via DESCRIBE/SHOW INDEX. Source: [[swim-generator-ugc-v2-phase-a]]
+  - **Phase B** — NEXT (~3-4h): UGC overlay endpoint `/api/bank/my-overlay` + client merge into picker. Wired but empty until authoring (Phase C) lands.
+  - **Phases C-G** — authoring (form + snapshot, private only) → team sharing → public + moderation → Graduate-to-JS tool → smoke + tag.
 
 ## Next (small, ready)
 
@@ -59,6 +60,7 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-25 | (no tag) | UGC v2 Phase A: migration 031 corrects migration 030's wrong-architecture schema in prod. bank_options.author_sub NOT NULL, drop in_export, add promoted_at + promoted_by_sub, swap export-index for overlay-index. Idempotent (re-runnable). Tables empty; no client behavior change. |
 | 2026-05-25 | (no tag) | UGC architecture course-correction: scope rewritten with JS-canonical / DB-UGC-only / soft-delete graduation model. Removed obsolete code from yesterday's wrong-architecture build: tools/sync_bank.mjs --import, tools/bank_importer.mjs, POST /api/admin/run-bank-import route. Migration 030's empty tables stay (no destructive change); migration 031 will correct the schema during Phase A of the corrected build. Build approved per direct tester request. |
 | 2026-05-24 | `ugc-phase-a` (obsolete, see 2026-05-25) | UGC Phase A under wrong (hybrid DB-canonical) architecture: migration 030 + tools/sync_bank.mjs --import + admin import endpoint. Architecture misread of "have both db and js, then export from db to js" — actual intent was UGC's lifecycle (DB → JS via graduation), not bidirectional sync. Schema tables remain in prod (empty + harmless) for the corrected build to inherit. See [[swim-generator-ugc-phase-a]] warning header. |
 | 2026-05-23 | `reporting-v1-complete` (pending) | Reporting v1 Phase F: static audit clean (all 6 routes wired, 6/6 tab IDs consistent, no orphans, no TODOs). Manual swept: Reports section accurate, "no export" caveat removed, What's Coming updated to reflect Reporting complete. Consolidated memory checkpoint written. Tag pending Cap'n's live-exercise pass. |
