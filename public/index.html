@@ -19824,6 +19824,55 @@
         return me;
       }, [me, viewAsRole]);
 
+      // View-as v2 (2026-05-23): persona simulation. When admin is viewing-as
+      // another role, the read view shows a fresh-new-user empty state AND
+      // writes are blocked. Different from v1 which only hid UI surfaces.
+      // Different from v3 impersonation (server-side, real target user) —
+      // this is pure client-side preview using admin's own session.
+      const isViewingAsOther = !!(me?.is_admin && viewAsRole !== "self");
+      // Ref mirror — write handlers use useCallback with non-view-as deps, so
+      // reading isViewingAsOther directly in the handler closure would stale.
+      // The ref is updated on every render so handlers always see the current
+      // value without forcing a re-memoize across every dep array.
+      const isViewingAsOtherRef = React.useRef(isViewingAsOther);
+      isViewingAsOtherRef.current = isViewingAsOther;
+      const [personaBlockMsg, setPersonaBlockMsg] = useState(null);
+      // Auto-clear the persona-block toast after 2.5s.
+      useEffect(() => {
+        if (!personaBlockMsg) return;
+        const id = setTimeout(() => setPersonaBlockMsg(null), 2500);
+        return () => clearTimeout(id);
+      }, [personaBlockMsg]);
+      // v2 entry/exit handler. On entering view-as, wipe data state for a
+      // fresh-new-user simulation. On exit, force window.location.reload()
+      // to restore admin's real data cleanly — avoids racing N fetch chains.
+      // Brutal but bulletproof for an admin-only QA tool.
+      const prevViewingRef = React.useRef(isViewingAsOther);
+      useEffect(() => {
+        const wasViewing = prevViewingRef.current;
+        prevViewingRef.current = isViewingAsOther;
+        if (!wasViewing && isViewingAsOther) {
+          setHistory([]);
+          setFavorites([]);
+          setDisfavorites([]);
+          setEngineDisfavorites([]);
+          setFavoriteSets(new Set());
+          setDisfavorSets(new Set());
+          setEffectiveDisfavorLabels([]);
+          setEffectiveDisfavorSetIds(new Set());
+          setEffectiveEngineDisfavorites([]);
+          setEffectiveFavoriteLabels([]);
+          setEffectiveFavoriteSetIds(new Set());
+          setEffectiveEngineFavorites([]);
+          setEngineFavorites([]);
+          setGoals([]);
+          setNextEvent(null);
+        } else if (wasViewing && !isViewingAsOther) {
+          // Restore real data cleanly.
+          window.location.reload();
+        }
+      }, [isViewingAsOther]);
+
       const [showImpersonationModal, setShowImpersonationModal] = useState(false);
       // v3 impersonation state. Mirrors module-scope `impersonation.active`
       // for React render purposes. setImpersonation() (module-scope) updates
@@ -20183,6 +20232,7 @@
 
       // Toggle a main-set label in/out of favorites
       const handleToggleFavorite = useCallback(async (label) => {
+        if (isViewingAsOtherRef.current) { setPersonaBlockMsg("Favorites disabled in view-as mode"); return; }
         const isFav = favorites.includes(label);
         // Optimistic update
         setFavorites(prev => isFav ? prev.filter(x => x !== label) : [...prev, label]);
@@ -20216,6 +20266,7 @@
       // /api/settings/extra patch.
       const handleToggleEngineDisfavor = useCallback(async (meta) => {
         if (!meta || !meta.template_id || !meta.stroke) return;
+        if (isViewingAsOtherRef.current) { setPersonaBlockMsg("Engine curation disabled in view-as mode"); return; }
         const key = `${meta.template_id}:${meta.stroke}`;
         const isDis = engineDisfavorites.some(e => `${e.template_id}:${e.stroke}` === key);
         const nextDis = isDis
@@ -20247,6 +20298,7 @@
       // 3× weight in the engine template picker. Mutex with disfavorites.
       const handleToggleEngineFavorite = useCallback(async (meta) => {
         if (!meta || !meta.template_id || !meta.stroke) return;
+        if (isViewingAsOtherRef.current) { setPersonaBlockMsg("Engine curation disabled in view-as mode"); return; }
         const key = `${meta.template_id}:${meta.stroke}`;
         const isFav = engineFavorites.some(e => `${e.template_id}:${e.stroke}` === key);
         const nextFav = isFav
@@ -20278,6 +20330,7 @@
       // side dbAddDisfavorite removes any matching favorite on insert; we
       // reflect that locally for instant UI consistency.
       const handleToggleDisfavorite = useCallback(async (label) => {
+        if (isViewingAsOtherRef.current) { setPersonaBlockMsg("Disfavorites disabled in view-as mode"); return; }
         const isDis = disfavorites.includes(label);
         setDisfavorites(prev => isDis ? prev.filter(x => x !== label) : [...prev, label]);
         if (!isDis) setFavorites(prev => prev.filter(x => x !== label));
@@ -20304,6 +20357,7 @@
       // ("s_xxxxxx") — UI hides the star button on un-IDed sets.
       const handleToggleFavoriteSet = useCallback(async (setId) => {
         if (!setId) return;
+        if (isViewingAsOtherRef.current) { setPersonaBlockMsg("Set favorites disabled in view-as mode"); return; }
         const isFav = favoriteSets.has(setId);
         setFavoriteSets(prev => {
           const next = new Set(prev);
@@ -20346,6 +20400,7 @@
       // (server-side dbAddDisfavorSet already enforces this).
       const handleToggleDisfavorSet = useCallback(async (setId) => {
         if (!setId) return;
+        if (isViewingAsOtherRef.current) { setPersonaBlockMsg("Set disfavorites disabled in view-as mode"); return; }
         const isDis = disfavorSets.has(setId);
         setDisfavorSets(prev => {
           const next = new Set(prev);
@@ -21023,6 +21078,7 @@
       // Save the current workout to history (POST to worker, optimistic local update)
       const handleSave = useCallback(async () => {
         if (!workout || !selectedType) return;
+        if (isViewingAsOtherRef.current) { setPersonaBlockMsg("Save disabled in view-as mode"); return; }
         setSaveStatus("saving"); setSaveError(null);
         // I — if we're editing a scheduled-workout row (loaded via the
         // ✎ Edit action in WeekView), PATCH the schedule row's payload
@@ -21155,6 +21211,7 @@
         if (!sourceWorkout || !sourceWorkout.blocks || !sourceWorkout.type) {
           return { ok: false, error: "missing workout fields" };
         }
+        if (isViewingAsOtherRef.current) { setPersonaBlockMsg("Log disabled in view-as mode"); return { ok: false, error: "view-as preview" }; }
         // R-G: if this run was launched from an assignment ("Run this workout"
         // on AssignedToMeView), write completion back to the assignment row
         // instead of creating a new workout in the swimmer's history. The
@@ -21502,7 +21559,7 @@
               display: "flex", justifyContent: "center", alignItems: "center", gap: 12,
               boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
             }}>
-              <span>👁 Viewing as <strong style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>{viewAsRole}</strong> — coach/admin UI hidden</span>
+              <span>👁 PREVIEW MODE — viewing as <strong style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>{viewAsRole}</strong> · fresh-user view · writes blocked</span>
               <button
                 type="button"
                 onClick={() => setViewAsRole("self")}
@@ -21512,8 +21569,23 @@
                   padding: "3px 12px", fontSize: 11, fontWeight: 700,
                   cursor: "pointer",
                 }}>
-                Exit
+                Exit (reload)
               </button>
+            </div>
+          )}
+          {/* v2 persona-block toast — surfaces a brief reason when a write
+              is intercepted while viewing-as. Auto-clears in 2.5s. */}
+          {personaBlockMsg && (
+            <div className="screen-only" style={{
+              position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)",
+              zIndex: 9050,
+              background: "rgba(30, 41, 59, 0.95)", color: "#fff",
+              padding: "10px 18px", borderRadius: 999,
+              fontSize: 13, fontWeight: 600,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+              border: "1px solid var(--color-warn)",
+            }}>
+              ⚠ {personaBlockMsg}
             </div>
           )}
           {/* Header */}
