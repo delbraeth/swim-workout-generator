@@ -1384,6 +1384,7 @@ export async function dbGetUgcOverlay(userSub) {
   // DISTINCT because a team-shared option could match via multiple paths.
   const optionRows = await pool.query(
     "SELECT DISTINCT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, " +
+    "       bo.`type_ids`, bo.`stroke_ids`, " +
     "       bo.`pool_mode`, bo.`label`, bo.`total_yards`, bo.`type_affinity`, " +
     "       bo.`author_sub`, bo.`visibility` " +
     "FROM `bank_options` bo " +
@@ -1470,11 +1471,28 @@ export async function dbGetUgcOverlay(userSub) {
     if (r.section === "warmup" || r.section === "cooldown") {
       overlay[key].push(option);
     } else {
-      // drill/main are nested by type_id OR stroke_id
-      const subKey = r.type_id || r.stroke_id;
-      if (!subKey) continue;  // shouldn't happen with valid data
-      if (!overlay[key][subKey]) overlay[key][subKey] = [];
-      overlay[key][subKey].push(option);
+      // drill/main: project into EVERY type/stroke bucket the option
+      // declares (multi-tag via type_ids + stroke_ids arrays). Falls
+      // back to singleton type_id / stroke_id when arrays are missing
+      // (pre-migration-032 rows, defensive only). The same option object
+      // reference lives in multiple buckets — picker treats each bucket
+      // independently, but identity is preserved so UI badges work.
+      const parseArr = (val, fallback) => {
+        if (val == null) return fallback;
+        if (Array.isArray(val)) return val;
+        if (typeof val === "string") {
+          try { const j = JSON.parse(val); return Array.isArray(j) ? j : fallback; } catch (_) { return fallback; }
+        }
+        return fallback;
+      };
+      const typeIds   = parseArr(r.type_ids,   r.type_id   ? [r.type_id]   : []);
+      const strokeIds = parseArr(r.stroke_ids, r.stroke_id ? [r.stroke_id] : []);
+      const subKeys = Array.from(new Set([...typeIds, ...strokeIds]));
+      if (subKeys.length === 0) continue;  // shouldn't happen with valid data
+      for (const subKey of subKeys) {
+        if (!overlay[key][subKey]) overlay[key][subKey] = [];
+        overlay[key][subKey].push(option);
+      }
     }
   }
   overlay._meta.rowCount = optionRows.length;
@@ -1510,14 +1528,48 @@ function genUgcSetId() {
 // Returns a clean object ready for INSERT.
 function validateUgcPayload(payload, { allowVisibility = ["private", "team", "public"] } = {}) {
   if (!payload || typeof payload !== "object") throw new Error("payload required");
-  const { section, type_id, stroke_id, pool_mode, label, total_yards, type_affinity, visibility, sets, team_ids } = payload;
+  const { section, type_id, stroke_id, type_ids: rawTypeIds, stroke_ids: rawStrokeIds,
+          pool_mode, label, total_yards, type_affinity, visibility, sets, team_ids } = payload;
+  // Phase H — array-form multi-tag. Singletons (type_id / stroke_id) are
+  // accepted for backward compat and wrapped to length-1 arrays. Array
+  // form is canonical going forward.
+  let cleanTypeIds = [];
+  let cleanStrokeIds = [];
+  if (Array.isArray(rawTypeIds)) {
+    for (const t of rawTypeIds) {
+      if (typeof t !== "string" || !t.trim()) throw new Error("bad type_ids entry");
+      const v = t.trim();
+      if (!UGC_TYPE_KEYS.has(v)) throw new Error(`bad type_id: ${v}`);
+      cleanTypeIds.push(v);
+    }
+    cleanTypeIds = Array.from(new Set(cleanTypeIds));  // dedup
+  } else if (type_id) {
+    if (!UGC_TYPE_KEYS.has(type_id)) throw new Error(`bad type_id: ${type_id}`);
+    cleanTypeIds = [type_id];
+  }
+  if (Array.isArray(rawStrokeIds)) {
+    for (const s of rawStrokeIds) {
+      if (typeof s !== "string" || !s.trim()) throw new Error("bad stroke_ids entry");
+      const v = s.trim();
+      if (!UGC_STROKE_KEYS.has(v)) throw new Error(`bad stroke_id: ${v}`);
+      cleanStrokeIds.push(v);
+    }
+    cleanStrokeIds = Array.from(new Set(cleanStrokeIds));  // dedup
+  } else if (stroke_id) {
+    if (!UGC_STROKE_KEYS.has(stroke_id)) throw new Error(`bad stroke_id: ${stroke_id}`);
+    cleanStrokeIds = [stroke_id];
+  }
   if (!UGC_SECTIONS.has(section))   throw new Error("bad section");
   if (!UGC_POOL_MODES.has(pool_mode)) throw new Error("bad pool_mode");
-  // type_id / stroke_id only relevant for drill/main; both nullable for warmup/cooldown
+  // type_ids / stroke_ids only relevant for drill/main; both empty for warmup/cooldown
   if (section === "drill" || section === "main") {
-    if (type_id   != null && !UGC_TYPE_KEYS.has(type_id))   throw new Error("bad type_id");
-    if (stroke_id != null && !UGC_STROKE_KEYS.has(stroke_id)) throw new Error("bad stroke_id");
-    if (!type_id && !stroke_id) throw new Error("drill/main require type_id or stroke_id");
+    if (cleanTypeIds.length === 0 && cleanStrokeIds.length === 0) {
+      throw new Error("drill/main require at least one type or stroke");
+    }
+  } else {
+    // warmup/cooldown can't carry type/stroke tags — clear if any provided
+    cleanTypeIds = [];
+    cleanStrokeIds = [];
   }
   if (typeof label !== "string" || !label.trim() || label.length > 120) throw new Error("label 1-120 chars");
   if (!Number.isInteger(total_yards) || total_yards <= 0 || total_yards > 20000) throw new Error("total_yards out of range");
@@ -1567,10 +1619,16 @@ function validateUgcPayload(payload, { allowVisibility = ["private", "team", "pu
   // Sanity check: author-provided total_yards must be within 10% of computed.
   const drift = Math.abs(computedTotal - total_yards) / total_yards;
   if (drift > 0.10) throw new Error(`total_yards (${total_yards}) drifts >10% from computed (${computedTotal})`);
+  // Singleton type_id / stroke_id kept in sync with array form for
+  // backward compat with code paths that haven't been switched yet
+  // (snapshot pre-fill, dbGetUgcOverlay fallback during transition).
+  // First-element-of-array becomes the singleton.
   return {
     section,
-    type_id:       section === "warmup" || section === "cooldown" ? null : (type_id   || null),
-    stroke_id:     section === "warmup" || section === "cooldown" ? null : (stroke_id || null),
+    type_id:       cleanTypeIds[0]   || null,
+    stroke_id:     cleanStrokeIds[0] || null,
+    type_ids:      cleanTypeIds,
+    stroke_ids:    cleanStrokeIds,
     pool_mode,
     label:         label.trim(),
     total_yards,
@@ -1652,11 +1710,13 @@ export async function dbCreateUgcOption(authorSub, payload) {
     await conn.beginTransaction();
     await conn.query(
       "INSERT INTO `bank_options` " +
-      "(`id`, `section`, `type_id`, `stroke_id`, `pool_mode`, `label`, " +
+      "(`id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, `pool_mode`, `label`, " +
       " `total_yards`, `type_affinity`, `author_sub`, `visibility`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [optionId, clean.section, clean.type_id, clean.stroke_id, clean.pool_mode,
-       clean.label, clean.total_yards, clean.type_affinity, authorSub, storedVisibility]
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [optionId, clean.section, clean.type_id, clean.stroke_id,
+       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids),
+       clean.pool_mode, clean.label, clean.total_yards, clean.type_affinity,
+       authorSub, storedVisibility]
     );
     for (const [i, s] of clean.sets.entries()) {
       await conn.query(
@@ -1690,7 +1750,8 @@ export async function dbCreateUgcOption(authorSub, payload) {
 export async function dbGetUgcOption(optionId) {
   if (!optionId) return null;
   const rows = await pool.query(
-    "SELECT `id`, `section`, `type_id`, `stroke_id`, `pool_mode`, `label`, " +
+    "SELECT `id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, " +
+    "       `pool_mode`, `label`, " +
     "       `total_yards`, `type_affinity`, `author_sub`, `visibility`, " +
     "       `created_at`, `updated_at`, `version`, `promoted_at`, `promoted_by_sub` " +
     "FROM `bank_options` WHERE `id` = ?",
@@ -1713,11 +1774,24 @@ export async function dbGetUgcOption(optionId) {
       typeAffinity = typeof r.type_affinity === "string" ? JSON.parse(r.type_affinity) : r.type_affinity;
     } catch (_) {}
   }
+  // Parse JSON columns; backward-compat fall back to singleton wrapping.
+  const parseJsonArr = (val, fallback) => {
+    if (val == null) return fallback;
+    if (Array.isArray(val)) return val;
+    if (typeof val === "string") {
+      try { const j = JSON.parse(val); return Array.isArray(j) ? j : fallback; } catch (_) { return fallback; }
+    }
+    return fallback;
+  };
+  const typeIds   = parseJsonArr(r.type_ids,   r.type_id   ? [r.type_id]   : []);
+  const strokeIds = parseJsonArr(r.stroke_ids, r.stroke_id ? [r.stroke_id] : []);
   return {
     id:              r.id,
     section:         r.section,
-    type_id:         r.type_id,
+    type_id:         r.type_id,    // singleton kept for backward-compat
     stroke_id:       r.stroke_id,
+    type_ids:        typeIds,      // array form is canonical going forward
+    stroke_ids:      strokeIds,
     pool_mode:       r.pool_mode,
     label:           r.label,
     total_yards:     r.total_yards,
@@ -1751,7 +1825,8 @@ export async function dbGetUgcOption(optionId) {
 export async function dbListUgcOptionsByAuthor(authorSub) {
   if (!authorSub) return [];
   const rows = await pool.query(
-    "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, bo.`pool_mode`, bo.`label`, " +
+    "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, " +
+    "       bo.`type_ids`, bo.`stroke_ids`, bo.`pool_mode`, bo.`label`, " +
     "       bo.`total_yards`, bo.`visibility`, bo.`created_at`, bo.`updated_at`, " +
     "       bo.`version`, bo.`promoted_at`, " +
     // Latest review reason for rejected rows. NULL when no reviews exist
@@ -1763,11 +1838,21 @@ export async function dbListUgcOptionsByAuthor(authorSub) {
     "ORDER BY bo.`updated_at` DESC",
     [authorSub]
   );
+  const parseArr = (val, fallback) => {
+    if (val == null) return fallback;
+    if (Array.isArray(val)) return val;
+    if (typeof val === "string") {
+      try { const j = JSON.parse(val); return Array.isArray(j) ? j : fallback; } catch (_) { return fallback; }
+    }
+    return fallback;
+  };
   return rows.map(r => ({
     id:                    r.id,
     section:               r.section,
-    type_id:               r.type_id,
+    type_id:               r.type_id,    // singleton kept for compat
     stroke_id:             r.stroke_id,
+    type_ids:              parseArr(r.type_ids,   r.type_id   ? [r.type_id]   : []),
+    stroke_ids:            parseArr(r.stroke_ids, r.stroke_id ? [r.stroke_id] : []),
     pool_mode:             r.pool_mode,
     label:                 r.label,
     total_yards:           r.total_yards,
@@ -1815,12 +1900,15 @@ export async function dbUpdateUgcOption(authorSub, optionId, payload) {
     await conn.beginTransaction();
     await conn.query(
       "UPDATE `bank_options` SET " +
-      "  `section` = ?, `type_id` = ?, `stroke_id` = ?, `pool_mode` = ?, " +
+      "  `section` = ?, `type_id` = ?, `stroke_id` = ?, " +
+      "  `type_ids` = ?, `stroke_ids` = ?, `pool_mode` = ?, " +
       "  `label` = ?, `total_yards` = ?, `type_affinity` = ?, `visibility` = ?, " +
       "  `version` = `version` + 1 " +
       "WHERE `id` = ?",
-      [clean.section, clean.type_id, clean.stroke_id, clean.pool_mode,
-       clean.label, clean.total_yards, clean.type_affinity, newVisibility, optionId]
+      [clean.section, clean.type_id, clean.stroke_id,
+       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids),
+       clean.pool_mode, clean.label, clean.total_yards, clean.type_affinity,
+       newVisibility, optionId]
     );
     // Replace sets: delete then re-insert.
     await conn.query("DELETE FROM `bank_sets` WHERE `option_id` = ?", [optionId]);
@@ -1955,15 +2043,32 @@ function _renderUgcSetLine(s) {
 // Builds the full graduate package for a single UGC option. Returns
 // { snippet, constantName, subKey, instructions }. Throws if the
 // (section, pool_mode) tuple can't map to a known constant.
+//
+// Stage 1 limitation: multi-tag UGC (>1 type_ids or >1 stroke_ids) can't
+// graduate yet — the canonical JS bank still uses object-keyed buckets
+// where each option lives in exactly one. Stage 2 (canonical multi-tag
+// refactor) lifts this restriction.
 export function buildUgcGraduateSnippet(option) {
   if (!option) throw new Error("option required");
   const constantName = UGC_GRADUATE_CONSTANTS[option.section]?.[option.pool_mode];
   if (!constantName) {
     throw new Error(`no constant for section=${option.section}, pool_mode=${option.pool_mode}`);
   }
-  // drill/main are object-keyed; sub-key is type_id OR stroke_id.
+  // drill/main are object-keyed in canonical JS today; sub-key must be
+  // a SINGLE type_id or stroke_id during Stage 1.
   const needsSubKey = (option.section === "drill" || option.section === "main");
-  const subKey = needsSubKey ? (option.type_id || option.stroke_id || null) : null;
+  if (needsSubKey) {
+    const tCount = Array.isArray(option.type_ids)   ? option.type_ids.length   : (option.type_id   ? 1 : 0);
+    const sCount = Array.isArray(option.stroke_ids) ? option.stroke_ids.length : (option.stroke_id ? 1 : 0);
+    if (tCount + sCount > 1) {
+      throw new Error("multi_tag_not_supported: this UGC option declares multiple type/stroke buckets; canonical JS bank still requires single-bucket. Either edit the option to single-tag first, or wait for canonical multi-tag (Phase H Stage 2).");
+    }
+  }
+  const subKey = needsSubKey
+    ? ((Array.isArray(option.type_ids)   && option.type_ids[0])   ||
+       (Array.isArray(option.stroke_ids) && option.stroke_ids[0]) ||
+       option.type_id || option.stroke_id || null)
+    : null;
   if (needsSubKey && !subKey) {
     throw new Error(`${option.section} option needs type_id or stroke_id`);
   }

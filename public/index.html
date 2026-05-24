@@ -19895,7 +19895,7 @@
                     <td style={{ padding: "6px 4px", fontWeight: 500 }}>{r.label}</td>
                     <td style={{ padding: "6px 4px" }}>{r.section}</td>
                     <td style={{ padding: "6px 4px" }}>{r.pool_mode}</td>
-                    <td style={{ padding: "6px 4px" }}>{r.type_id || r.stroke_id || "—"}</td>
+                    <td style={{ padding: "6px 4px" }}>{[...(r.type_ids || []), ...(r.stroke_ids || [])].join(", ") || r.type_id || r.stroke_id || "—"}</td>
                     <td style={{ padding: "6px 4px", textAlign: "right" }}>{r.total_yards}</td>
                     <td style={{ padding: "6px 4px" }}>
                       {r.promoted_at ? (
@@ -19957,8 +19957,20 @@
       const isEdit = !!(option && option.id);
       const [section, setSection] = React.useState(option?.section || "warmup");
       const [poolMode, setPoolMode] = React.useState(option?.pool_mode || "25y");
-      const [typeId, setTypeId] = React.useState(option?.type_id || "");
-      const [strokeId, setStrokeId] = React.useState(option?.stroke_id || "");
+      // Phase H — multi-tag. Type + Stroke are arrays; an option can live
+      // in multiple type/stroke buckets simultaneously. Fall back to
+      // singleton type_id / stroke_id for snapshot pre-fills + edits of
+      // pre-migration rows.
+      const [typeIds, setTypeIds] = React.useState(() => {
+        if (Array.isArray(option?.type_ids)) return [...option.type_ids];
+        if (option?.type_id) return [option.type_id];
+        return [];
+      });
+      const [strokeIds, setStrokeIds] = React.useState(() => {
+        if (Array.isArray(option?.stroke_ids)) return [...option.stroke_ids];
+        if (option?.stroke_id) return [option.stroke_id];
+        return [];
+      });
       const [label, setLabel] = React.useState(option?.label || "");
       const [totalYards, setTotalYards] = React.useState(option?.total_yards || 0);
       const [sets, setSets] = React.useState(option?.sets?.length
@@ -20028,10 +20040,16 @@
         setSaving(true);
         try {
           const csrf = (await (await fetch('/api/auth/csrf')).json()).token;
+          // Client-side guard: drill/main need at least one type or stroke checked.
+          if (needsType && typeIds.length === 0 && strokeIds.length === 0) {
+            setErr("Pick at least one type or stroke for drill/main sections.");
+            setSaving(false);
+            return;
+          }
           const payload = {
             section, pool_mode: poolMode,
-            type_id:   needsType ? (typeId   || null) : null,
-            stroke_id: needsType ? (strokeId || null) : null,
+            type_ids:   needsType ? typeIds   : [],
+            stroke_ids: needsType ? strokeIds : [],
             label,
             total_yards: computedTotal,
             visibility,
@@ -20078,7 +20096,7 @@
               <h3 style={{ margin: 0, fontSize: 16 }}>{isEdit ? "Edit set" : "New set"}</h3>
               <button onClick={onClose} style={{ background: "transparent", border: "none", color: "var(--color-muted)", fontSize: 18, cursor: "pointer" }}>✕</button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
               <div>
                 <label style={labelStyle}>Section</label>
                 <select value={section} onChange={(e) => setSection(e.target.value)} style={{ ...fieldStyle, width: "100%" }}>
@@ -20096,34 +20114,44 @@
                   <option value="50m">50m</option>
                 </select>
               </div>
-              {needsType && (
-                <>
-                  <div>
-                    <label style={labelStyle}>Type</label>
-                    <select value={typeId} onChange={(e) => { setTypeId(e.target.value); if (e.target.value) setStrokeId(""); }} style={{ ...fieldStyle, width: "100%" }}>
-                      <option value="">(none)</option>
-                      <option value="im">im</option>
-                      <option value="distance">distance</option>
-                      <option value="sprint">sprint</option>
-                      <option value="endurance">endurance</option>
-                      <option value="mixed">mixed</option>
-                      <option value="technique">technique</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Stroke</label>
-                    <select value={strokeId} onChange={(e) => { setStrokeId(e.target.value); if (e.target.value) setTypeId(""); }} style={{ ...fieldStyle, width: "100%" }}>
-                      <option value="">(none)</option>
-                      <option value="back">back</option>
-                      <option value="breast">breast</option>
-                      <option value="fly">fly</option>
-                      <option value="free">free</option>
-                      <option value="im">im</option>
-                    </select>
-                  </div>
-                </>
-              )}
             </div>
+            {/* Phase H — multi-tag type + stroke. Check any combination
+                so a single set (e.g. a kick set) can land in distance
+                AND sprint AND endurance buckets without duplication. */}
+            {needsType && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label style={labelStyle}>Type (multi-select)</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 6, border: "1px solid var(--color-border)", borderRadius: 4, background: "var(--color-card)" }}>
+                    {["im","distance","sprint","endurance","mixed","technique"].map(t => (
+                      <label key={t} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12, cursor: "pointer" }}>
+                        <input type="checkbox" checked={typeIds.includes(t)}
+                          onChange={(e) => {
+                            if (e.target.checked) setTypeIds(prev => prev.includes(t) ? prev : [...prev, t]);
+                            else setTypeIds(prev => prev.filter(x => x !== t));
+                          }} />
+                        {t}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Stroke (multi-select)</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 6, border: "1px solid var(--color-border)", borderRadius: 4, background: "var(--color-card)" }}>
+                    {["back","breast","fly","free","im"].map(s => (
+                      <label key={s} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12, cursor: "pointer" }}>
+                        <input type="checkbox" checked={strokeIds.includes(s)}
+                          onChange={(e) => {
+                            if (e.target.checked) setStrokeIds(prev => prev.includes(s) ? prev : [...prev, s]);
+                            else setStrokeIds(prev => prev.filter(x => x !== s));
+                          }} />
+                        {s}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             <div style={{ marginBottom: 12 }}>
               <label style={labelStyle}>Label</label>
               <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120}
@@ -21800,8 +21828,10 @@
           // No id → UgcFormModal treats this as a "create" with pre-fill.
           section:     block.section,
           pool_mode:   poolMode,
-          type_id:     needsType && isType   ? sel : null,
-          stroke_id:   needsType && isStroke ? sel : null,
+          // Phase H — arrays so the snapshot pre-fill seeds the multi-select
+          // checkboxes correctly.
+          type_ids:    needsType && isType   ? [sel] : [],
+          stroke_ids:  needsType && isStroke ? [sel] : [],
           label:       block.label ? `${block.label} (copy)` : "Snapshot",
           total_yards: block.sets.reduce((acc, s) => acc + (s.reps || 0) * (s.dist || 0), 0),
           sets:        block.sets.map(s => ({

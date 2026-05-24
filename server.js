@@ -1754,7 +1754,11 @@ app.get("/api/admin/ugc/:id/graduate-snippet", requireAuth, requireAdmin, async 
       label:       opt.label,
       ...pack,  // snippet, constantName, subKey, instructions
     });
-  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+  } catch (err) {
+    const msg = err.message || String(err);
+    const status = msg.startsWith("multi_tag_not_supported") ? 409 : 500;
+    res.status(status).json({ error: msg });
+  }
 });
 
 // Stamps promoted_at + promoted_by_sub. Admin calls this AFTER pasting
