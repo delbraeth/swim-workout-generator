@@ -3862,6 +3862,105 @@ export async function dbGetScheduleAdherence(userSub, { startYmd, endYmd, groupI
   };
 }
 
+// R4 — Program Recap (Reporting v1 Phase C). Solo/masters report — no
+// group dimension. Uses the same own-workouts-in-range query as R1 but
+// adds template usage counts, multi-lane fit success rate, and a 30-day
+// sliding window check for stroke gaps.
+export async function dbGetProgramRecap(userSub, { startYmd, endYmd } = {}) {
+  const ws = await _getOwnWorkoutsInRange(userSub, startYmd, endYmd, null);
+  const out = {
+    workoutCount:    ws.length,
+    totalYards:      0,
+    yardsByType:     {},
+    yardsByStroke:   {},
+    templateCounts:  {},   // { template_id: N } — engine templates only (bank labels in mostUsedLabels)
+    labelCounts:     {},   // { label: N } — bank labels
+    multiLane: { generated: 0, withoutFallback: 0, successPct: 0 },
+    strokeGaps: [],        // list of {windowStart, windowEnd, missingStrokes: [...]} for 30-day windows
+  };
+  const STROKES_REQUIRED = ["free", "back", "breast", "fly"];
+  // Workouts indexed by date for the sliding-window check below.
+  const wsByDate = [];
+  for (const w of ws) {
+    const yards = Number(w.total_yards) || 0;
+    out.totalYards += yards;
+    if (w.type) out.yardsByType[w.type] = (out.yardsByType[w.type] || 0) + yards;
+    // Track strokes touched by this workout — used for sliding-window gap check.
+    const strokesInWorkout = new Set();
+    const blocks = Array.isArray(w.payload.blocks) ? w.payload.blocks : [];
+    let workoutUsedMultiLane = false;
+    let workoutHadFallback   = false;
+    for (const b of blocks) {
+      const sets = Array.isArray(b.sets) ? b.sets : [];
+      for (const s of sets) {
+        const repYards = (Number(s.reps) || 1) * (Number(s.dist) || 0);
+        if (s.stroke) {
+          out.yardsByStroke[s.stroke] = (out.yardsByStroke[s.stroke] || 0) + repYards;
+          strokesInWorkout.add(s.stroke);
+        }
+      }
+      // Engine block? Capture template_id for usage counts.
+      if (b.__engineMeta && b.__engineMeta.template_id) {
+        const tid = b.__engineMeta.template_id;
+        out.templateCounts[tid] = (out.templateCounts[tid] || 0) + 1;
+      }
+      // Bank block? Capture label.
+      if (!b.__engineMeta && b.label) {
+        out.labelCounts[b.label] = (out.labelCounts[b.label] || 0) + 1;
+      }
+      if (b.__laneFitFallback) workoutHadFallback = true;
+    }
+    if (w.payload.multi_lane && w.payload.multi_lane.enabled) {
+      workoutUsedMultiLane = true;
+      out.multiLane.generated++;
+      if (!workoutHadFallback) out.multiLane.withoutFallback++;
+    }
+    wsByDate.push({ date: w.date_completed, strokes: strokesInWorkout });
+  }
+  out.multiLane.successPct = out.multiLane.generated > 0
+    ? (out.multiLane.withoutFallback / out.multiLane.generated) * 100
+    : 100;  // vacuous true when no multi-lane workouts
+  // 4-stroke balance gap check. Slide a 30-day window through the range
+  // in 7-day steps. For each window, union the strokes touched; report
+  // windows that miss any of free/back/breast/fly.
+  if (isYmd(startYmd) && isYmd(endYmd)) {
+    const startD = new Date(startYmd + "T00:00:00Z");
+    const endD   = new Date(endYmd   + "T00:00:00Z");
+    const ymd    = (d) => d.toISOString().slice(0, 10);
+    const addDays = (d, n) => { const x = new Date(d); x.setUTCDate(x.getUTCDate() + n); return x; };
+    let cursor = new Date(startD);
+    while (cursor <= endD) {
+      const windowEnd   = addDays(cursor, 29);
+      const windowEndYmd = ymd(windowEnd);
+      const windowStartYmd = ymd(cursor);
+      const strokes = new Set();
+      for (const w of wsByDate) {
+        if (!w.date) continue;
+        const d = (typeof w.date === "string") ? w.date : (w.date.toISOString ? w.date.toISOString().slice(0, 10) : null);
+        if (d && d >= windowStartYmd && d <= windowEndYmd) {
+          for (const s of w.strokes) strokes.add(s);
+        }
+      }
+      const missing = STROKES_REQUIRED.filter(s => !strokes.has(s));
+      if (missing.length > 0) {
+        out.strokeGaps.push({ windowStart: windowStartYmd, windowEnd: windowEndYmd, missingStrokes: missing });
+      }
+      cursor = addDays(cursor, 7);
+      if (cursor > endD) break;
+    }
+  }
+  // Sort template + label counts. Cap at top 10 + bottom 10 each for response size.
+  const sortDesc = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
+  out.mostUsedTemplates  = sortDesc(out.templateCounts).slice(0, 10);
+  out.leastUsedTemplates = sortDesc(out.templateCounts).slice(-10).reverse();
+  out.mostUsedLabels     = sortDesc(out.labelCounts).slice(0, 10);
+  out.leastUsedLabels    = sortDesc(out.labelCounts).slice(-10).reverse();
+  // Don't ship the raw count maps to the client — top/bottom slices suffice.
+  delete out.templateCounts;
+  delete out.labelCounts;
+  return out;
+}
+
 // R3 — Curation Log. Bank labels + set IDs + engine tuples the user has
 // touched in the range, with timestamps where available. Engine tuples
 // live in settings.extra JSON without per-item timestamps — included as

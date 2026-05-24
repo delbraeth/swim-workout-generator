@@ -293,7 +293,7 @@
     <a href="#catalog">Workout Catalog (coaches)</a>
     <a href="#coach-fanout">Coach: Planning for a Group</a>
     <a href="#coach-propagation">Coach group propagation</a>
-    <a href="#reports">Reports (coaches)</a>
+    <a href="#reports">Reports</a>
     <a href="#multi-lane-generate">Multi-lane generate</a>
     <a href="#parse-intent">Quick Input (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
@@ -1695,8 +1695,13 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
     <!-- ══ REPORTS ══ -->
     <section id="reports">
-      <h2>📊 Reports (coach access)</h2>
-      <p>Reports lives in the coach dropdown (🔧 in the header) alongside Teams, Managed swimmers, and Catalog. Coach-gated. Self-only — every report shows YOUR data; cross-coach comparison comes in a later phase.</p>
+      <h2>📊 Reports</h2>
+      <p>Reports lives behind the <strong>📊</strong> button in the top nav, visible to all signed-in users. The tabs you see depend on your role:</p>
+      <ul>
+        <li><strong>Coaches</strong> get four tabs: Programming Mix, Schedule Adherence, Curation Log, and Program Recap.</li>
+        <li><strong>Solo / masters swimmers</strong> get one tab: Program Recap (R4 — your own training rollup).</li>
+      </ul>
+      <p>Self-only across the board — every report shows YOUR data; cross-coach comparison comes in a later phase.</p>
 
       <h3>Filters</h3>
       <ul>
@@ -1713,6 +1718,10 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>🎚 Curation Log (R3)</h3>
       <p>Every favorite + disfavorite you've set in the selected range, with timestamps. Three subsections: bank labels, set IDs, engine tuples. Each subsection has a Favorites column and a Disfavorites column. Engine tuples don't have per-item timestamps (they live in your settings JSON as a single list) — that subsection shows current state only.</p>
+
+      <h3>📖 Program Recap (R4)</h3>
+      <p>Available to all users (solo / masters / coaches). Personal training rollup over the selected range — no group dimension. Stat cards: total yards, workout count, multi-lane fit success rate (% of multi-lane workouts that satisfied every lane without falling back), and a count of any 30-day windows where you missed one of the four strokes. Below that, yards-by-type and yards-by-stroke tables (same bar-fill style as R1), and most/least-used bank labels and engine templates so you can see what you lean on vs. what's been gathering dust.</p>
+      <p>The 4-stroke gap detector slides a 30-day window through your range in 7-day steps. Any window missing free / back / breast / fly shows up in the warning table at the bottom — useful for catching "I haven't done breaststroke in over a month" without manually scrolling history.</p>
 
       <h3>What Reports v1 does NOT do</h3>
       <ul>

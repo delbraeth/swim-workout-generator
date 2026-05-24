@@ -63,7 +63,7 @@ import {
   dbGetEffectiveDisfavorites,
   dbGetEffectiveFavorites,
   dbGetCoachImpact,
-  dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog,
+  dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog, dbGetProgramRecap,
   dbStartImpersonation, dbEndImpersonation, dbGetActiveImpersonation, dbValidateImpersonationHeader,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
@@ -1637,6 +1637,17 @@ app.get("/api/reports/curation-log", requireAuth, requireCoach, async (req, res)
   try {
     const { startYmd, endYmd } = _parseReportRange(req.query);
     const data = await dbGetCurationLog(req.userSub, { startYmd, endYmd });
+    res.json({ startYmd, endYmd, ...data });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// R4 — Program Recap. Solo/masters report. Open to any authenticated user
+// (not coach-gated) — solo swimmers are the primary audience. Coaches can
+// also view their own recap.
+app.get("/api/reports/program-recap", requireAuth, async (req, res) => {
+  try {
+    const { startYmd, endYmd } = _parseReportRange(req.query);
+    const data = await dbGetProgramRecap(req.userSub, { startYmd, endYmd });
     res.json({ startYmd, endYmd, ...data });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
