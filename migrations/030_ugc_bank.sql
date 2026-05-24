@@ -76,15 +76,22 @@ CREATE TABLE IF NOT EXISTS `bank_sets` (
 
 -- 3. bank_option_team_shares — many-to-many for "team" visibility tier.
 -- A UGC option shared to multiple teams gets one row per team.
+-- NOTE: team_id has NO FK to teams(id) — matches codebase pattern
+-- (favorites, impersonation, attendance all rely on app-level integrity
+-- for cross-table sub references). Earlier attempt to add the FK hit
+-- errno 150 ("FK incorrectly formed") because teams.id charset/collation
+-- couldn't be matched without reading SHOW CREATE TABLE. App layer
+-- (server.js handlers) enforces team_id validity at insert time.
+-- The bank_sets → bank_options FK is KEPT because both tables live in
+-- this migration and the cascade is structurally essential.
 CREATE TABLE IF NOT EXISTS `bank_option_team_shares` (
   `option_id`       VARCHAR(8)   NOT NULL,
-  `team_id`         VARCHAR(8)   NOT NULL,
+  `team_id`         VARCHAR(16)  NOT NULL,
   `shared_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`option_id`, `team_id`),
+  INDEX `idx_bots_team` (`team_id`),
   CONSTRAINT `fk_bots_option`
-    FOREIGN KEY (`option_id`) REFERENCES `bank_options`(`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_bots_team`
-    FOREIGN KEY (`team_id`)   REFERENCES `teams`(`id`)        ON DELETE CASCADE
+    FOREIGN KEY (`option_id`) REFERENCES `bank_options`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 4. bank_option_reviews — moderation review log for public submissions.
