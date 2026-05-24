@@ -62,6 +62,7 @@ import {
   dbListDisfavorSets, dbAddDisfavorSet, dbRemoveDisfavorSet,
   dbGetEffectiveDisfavorites,
   dbGetEffectiveFavorites,
+  dbGetUgcOverlay,
   dbGetCoachImpact,
   dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog, dbGetProgramRecap,
   dbGetPlatformHealth, dbGetCurationSupport,
@@ -1569,6 +1570,21 @@ app.get("/api/effective-disfavorites", requireAuth, async (req, res) => {
 app.get("/api/effective-favorites", requireAuth, async (req, res) => {
   try {
     res.json(await dbGetEffectiveFavorites(req.userSub));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// UGC bank overlay (Phase B of UGC coach-authored sets).
+// Returns the caller's UGC overlay shaped to match the 12 JS bank
+// constants (WARMUP_OPTIONS, DRILL_OPTIONS, etc) so the client can
+// merge with simple concatenation. Polled every 5 min by the client.
+// Visibility scoping: own + admin-approved public + team-shared where
+// caller is in the team. Promoted rows (in JS now) excluded.
+// Spec: UGC_COACH_SETS_SCOPE.md §4 + §7.
+app.get("/api/bank/my-overlay", requireAuth, async (req, res) => {
+  try {
+    res.json(await dbGetUgcOverlay(req.userSub));
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

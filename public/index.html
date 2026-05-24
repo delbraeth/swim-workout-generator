@@ -7193,6 +7193,7 @@
       disfavorSetIds = null,            // v1.5 — Set<set_id> with 0.25× weight per match (mutex with favoriteSetIds)
       disfavorMode = "downweight",      // v1.8 — "downweight" (0.25×) or "exclude" (hard-exclude, weight 0)
       lanesPaceSecs = null,             // v2.0 — array of lane paces (sec/100). When set, picker filters options that don't fit all lanes (see optionFitsAllLanes). null/empty = single-pace path unchanged.
+      ugcOverlay = null,                // UGC Phase B — caller's UGC overlay (12-key shape); merged into bank picker per exact pool mode.
     } = {}) {
       // v1.8 — Resolve the multiplier once. "exclude" zeros the weight;
       // pickWeighted's existing "all weights zero → uniform fallback" is the
@@ -7204,10 +7205,11 @@
       const isMeters = is25m || is50m;
       // Unit-aware bank lookup. Each call returns options already in the
       // user's pool unit (converted from yd↔m if the fallback crossed banks).
-      const _allWarmupsRaw   = getBankOptions("warmup",   typeId, poolMode);
-      const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode);
-      const _drillListRaw    = getBankOptions("drill",    typeId, poolMode);
-      const _mainListRaw     = getBankOptions("main",     typeId, poolMode);
+      // UGC overlay (Phase B+) is appended in getBankOptions per exact pool mode.
+      const _allWarmupsRaw   = getBankOptions("warmup",   typeId, poolMode, ugcOverlay);
+      const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode, ugcOverlay);
+      const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay);
+      const _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay);
 
       // v2.0 — Multi-lane lane-fit pre-filter. When lanesPaceSecs is non-empty,
       // narrow each pool to options whose intervals fit ALL lanes (rest ∈
@@ -7658,6 +7660,7 @@
       disfavorSetIds = null,         // Gap-1 (2026-05-22) — Set<set_id> with 0.25× weight per match on main section
       disfavorMode = "downweight",   // v1.8 — "downweight" (0.25) or "exclude" (0)
       lanesPaceSecs = null,          // v2.0 — multi-lane fit filter on the section's pool
+      ugcOverlay = null,             // UGC Phase B — caller's UGC overlay merged into bank picker per exact pool mode
     } = {}) {
       // v1.8 — Resolve once for use below.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
@@ -7677,11 +7680,11 @@
       const upper = maxYards - others;
 
       let pool;
-      if (sectionKey === "warmup")        pool = getBankOptions("warmup",   typeId, poolMode);
-      else if (sectionKey === "cooldown") pool = getBankOptions("cooldown", typeId, poolMode);
-      else if (sectionKey === "drill")    pool = getBankOptions("drill",    typeId, poolMode);
+      if (sectionKey === "warmup")        pool = getBankOptions("warmup",   typeId, poolMode, ugcOverlay);
+      else if (sectionKey === "cooldown") pool = getBankOptions("cooldown", typeId, poolMode, ugcOverlay);
+      else if (sectionKey === "drill")    pool = getBankOptions("drill",    typeId, poolMode, ugcOverlay);
       else {
-        let basePool = getBankOptions("main", typeId, poolMode);
+        let basePool = getBankOptions("main", typeId, poolMode, ugcOverlay);
         // C: in recovery mode, only consider easy/aerobic mains, no repeat variants.
         if (recoveryMode) {
           const recoveryMains = basePool.filter(o => {
@@ -9283,7 +9286,7 @@
     // `kind`   — "warmup" | "cooldown" | "drill" | "main"
     // `typeId` — workout type (ignored for flat warmup/cooldown banks)
     // `poolMode` — "25y" | "25m" | "50m"
-    function getBankOptions(kind, typeId, poolMode) {
+    function getBankOptions(kind, typeId, poolMode, ugcOverlay = null) {
       const targetUnit = poolMode === "25y" ? "yd" : "m";
       const byType = (kind === "drill" || kind === "main");
 
@@ -9311,15 +9314,53 @@
       };
       const chain = TABLE[kind][poolMode];
 
+      // Canonical chain — walk fallback list until a non-empty result.
+      let canonical = [];
       for (const [unit, data] of chain) {
         const list = byType
           ? (data[typeId] || data.mixed)
           : data;
         if (list && list.length > 0) {
-          return unit === targetUnit ? list : list.map(o => convertOptionUnits(o, unit, targetUnit));
+          canonical = unit === targetUnit ? list : list.map(o => convertOptionUnits(o, unit, targetUnit));
+          break;
         }
       }
-      return [];
+
+      // UGC overlay — exact-pool-mode only (no cross-unit fallback per
+      // spec §9: per-pool-mode authoring; no auto-translate in v1).
+      const overlayRows = getOverlayRowsForTuple(ugcOverlay, kind, typeId, poolMode);
+      return overlayRows.length > 0 ? canonical.concat(overlayRows) : canonical;
+    }
+
+    // UGC overlay extractor for picker. Returns array of options
+    // matching (kind, typeId, poolMode) exactly from the UGC overlay
+    // object. ugcOverlay shape matches the 12 JS bank constants.
+    // Spec: UGC_COACH_SETS_SCOPE.md §7.
+    function getOverlayRowsForTuple(ugcOverlay, kind, typeId, poolMode) {
+      if (!ugcOverlay) return [];
+      const KEY_MAP = {
+        warmup:   { "25y": "WARMUP_OPTIONS",   "25m": "WARMUP_OPTIONS_SCM",   "50m": "WARMUP_OPTIONS_50M"   },
+        cooldown: { "25y": "COOLDOWN_OPTIONS", "25m": "COOLDOWN_OPTIONS_SCM", "50m": "COOLDOWN_OPTIONS_50M" },
+        drill:    { "25y": "DRILL_OPTIONS",    "25m": "DRILL_OPTIONS_SCM",    "50m": "DRILL_OPTIONS_50M"    },
+        main:     { "25y": "MAIN_OPTIONS",     "25m": "MAIN_OPTIONS_SCM",     "50m": "MAIN_OPTIONS_50M"     },
+      };
+      const key = KEY_MAP[kind] && KEY_MAP[kind][poolMode];
+      if (!key) return [];
+      const data = ugcOverlay[key];
+      if (!data) return [];
+      if (kind === "warmup" || kind === "cooldown") {
+        return Array.isArray(data) ? data : [];
+      }
+      // drill/main — nested by type_id OR stroke_id sub-key
+      if (typeof data !== "object") return [];
+      if (typeId === "all") {
+        const out = [];
+        for (const sub of Object.keys(data)) {
+          if (Array.isArray(data[sub])) out.push(...data[sub]);
+        }
+        return out;
+      }
+      return Array.isArray(data[typeId]) ? data[typeId] : [];
     }
 
     // ─── Catalog data accessor (used by CatalogView) ────────────────────
@@ -9333,7 +9374,7 @@
     //
     // Phase III note: when editable bank lands, this is the right hook
     // to merge in DB overrides (or whatever the writeback mechanism becomes).
-    function getCatalogList(kind, typeId, poolMode) {
+    function getCatalogList(kind, typeId, poolMode, ugcOverlay = null) {
       const BANKS = {
         warmup:   { "25y": WARMUP_OPTIONS,   "25m": WARMUP_OPTIONS_SCM,   "50m": WARMUP_OPTIONS_50M   },
         cooldown: { "25y": COOLDOWN_OPTIONS, "25m": COOLDOWN_OPTIONS_SCM, "50m": COOLDOWN_OPTIONS_50M },
@@ -9341,19 +9382,31 @@
         main:     { "25y": MAIN_OPTIONS,     "25m": MAIN_OPTIONS_SCM,     "50m": MAIN_OPTIONS_50M     },
       };
       const bank = BANKS[kind] && BANKS[kind][poolMode];
-      if (!bank) return [];
       const isFlat = (kind === "warmup" || kind === "cooldown");
-      if (isFlat) {
-        return bank.map((o, i) => ({ ...o, _typeId: null, _idx: i }));
-      }
-      if (typeId === "all") {
-        const out = [];
+      let canonical;
+      if (!bank) {
+        canonical = [];
+      } else if (isFlat) {
+        canonical = bank.map((o, i) => ({ ...o, _typeId: null, _idx: i }));
+      } else if (typeId === "all") {
+        canonical = [];
         for (const t of Object.keys(bank)) {
-          (bank[t] || []).forEach((o, i) => out.push({ ...o, _typeId: t, _idx: i }));
+          (bank[t] || []).forEach((o, i) => canonical.push({ ...o, _typeId: t, _idx: i }));
         }
-        return out;
+      } else {
+        canonical = (bank[typeId] || []).map((o, i) => ({ ...o, _typeId: typeId, _idx: i }));
       }
-      return (bank[typeId] || []).map((o, i) => ({ ...o, _typeId: typeId, _idx: i }));
+      // UGC overlay (Phase B+) — append exact-pool-mode rows that match
+      // the tuple. Already carry _ugc/_author_sub/_visibility metadata
+      // from the server. We add _typeId/_idx to match the catalog shape.
+      const overlayRows = getOverlayRowsForTuple(ugcOverlay, kind, typeId, poolMode);
+      if (!overlayRows.length) return canonical;
+      const overlayShaped = overlayRows.map((o, i) => ({
+        ...o,
+        _typeId: isFlat ? null : (o._typeId || typeId),
+        _idx:    canonical.length + i,
+      }));
+      return canonical.concat(overlayShaped);
     }
 
     // Format a workout as plain text for clipboard sharing.
@@ -19292,7 +19345,7 @@
       );
     }
 
-    function CatalogView({ favorites, onToggleFavorite, favoriteSets, disfavorSets, onCycleSetStatus }) {
+    function CatalogView({ favorites, onToggleFavorite, favoriteSets, disfavorSets, onCycleSetStatus, ugcOverlay }) {
       const [poolMode,    setPoolMode]    = React.useState("25y");
       const [section,     setSection]     = React.useState("main");
       const [typeId,      setTypeId]      = React.useState("all");
@@ -19310,7 +19363,7 @@
       // 1. Get authored options for the selected (section, typeId, poolMode).
       // 2. Filter by search query, equipment, zone — combined with AND.
       const filtered = React.useMemo(() => {
-        const list = getCatalogList(section, isTyped ? typeId : null, poolMode);
+        const list = getCatalogList(section, isTyped ? typeId : null, poolMode, ugcOverlay);
         const q = searchQuery.trim().toLowerCase();
         return list.filter(opt => {
           // Label search
@@ -20813,6 +20866,15 @@
       // audit panel can list user's own without coach contributions).
       // Lives in settings.extra.engine_favorites, loaded on mount.
       const [engineFavorites, setEngineFavorites]               = useState([]);
+      // UGC Phase B — bank overlay. Mirrors the 12 JS bank constants;
+      // populated by /api/bank/my-overlay (own + team-shared + public
+      // UGC, excluding promoted_at). Picker merges with simple concat
+      // per constant. Empty 12-key shape until authoring lands (Phase C).
+      const [ugcOverlay, setUgcOverlay] = useState(() => ({
+        WARMUP_OPTIONS: [], COOLDOWN_OPTIONS: [], DRILL_OPTIONS: {}, MAIN_OPTIONS: {},
+        WARMUP_OPTIONS_50M: [], COOLDOWN_OPTIONS_50M: [], DRILL_OPTIONS_50M: {}, MAIN_OPTIONS_50M: {},
+        WARMUP_OPTIONS_SCM: [], COOLDOWN_OPTIONS_SCM: [], DRILL_OPTIONS_SCM: {}, MAIN_OPTIONS_SCM: {},
+      }));
       const [goals, setGoals]                     = useState([]);
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
@@ -21178,6 +21240,27 @@
         const id = setInterval(refreshEffectiveFavorites, 5 * 60 * 1000);
         return () => clearInterval(id);
       }, [refreshEffectiveFavorites]);
+
+      // UGC Phase B — pull the UGC bank overlay on mount + 5-min poll.
+      // Empty 12-key shape arrives as { WARMUP_OPTIONS: [], DRILL_OPTIONS: {}, ... }
+      // until Phase C+ populates rows. Picker merges via getBankOptions concat.
+      const refreshUgcOverlay = useCallback(() => {
+        return fetch(`${API_BASE}/bank/my-overlay`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (!data || typeof data !== "object") return;
+            // Validate shape minimally — must have at least one of the
+            // expected keys to avoid clobbering state with garbage.
+            if (!("WARMUP_OPTIONS" in data)) return;
+            setUgcOverlay(data);
+          })
+          .catch(() => {});
+      }, []);
+      useEffect(() => { refreshUgcOverlay(); }, [refreshUgcOverlay]);
+      useEffect(() => {
+        const id = setInterval(refreshUgcOverlay, 5 * 60 * 1000);
+        return () => clearInterval(id);
+      }, [refreshUgcOverlay]);
 
       // On mount: fetch goals (recurring targets for stats progress bars)
       const refreshGoals = useCallback(() => {
@@ -21912,6 +21995,7 @@
           disfavorSetIds: new Set([...disfavorSets, ...effectiveDisfavorSetIds]),
           disfavorMode,                                                         // v1.8 — downweight or exclude
           lanesPaceSecs: useMultiLane ? lanesPaceSecs : null,                   // v2.0 — multi-lane fit filter
+          ugcOverlay,                                                           // UGC Phase B — bank overlay merged in getBankOptions
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -22075,6 +22159,7 @@
             return out;
           })(),
           disfavorMode,                                                         // v1.8
+          ugcOverlay,                                                           // UGC Phase B — overlay merged into bank picker
         });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -22946,6 +23031,7 @@
                 favoriteSets={favoriteSets}
                 disfavorSets={disfavorSets}
                 onCycleSetStatus={authenticated ? handleCycleSetStatus : null}
+                ugcOverlay={ugcOverlay}
               />
             )}
             {view === "reports"  && (

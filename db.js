@@ -1335,6 +1335,152 @@ export async function dbGetEffectiveFavorites(userSub) {
   };
 }
 
+// ── UGC bank overlay (Phase B of UGC coach-authored sets) ──────────────
+// See UGC_COACH_SETS_SCOPE.md §7. Returns the caller's UGC overlay shaped
+// to match the 12 JS bank constants exactly, so the client picker can
+// merge with a single `[...JS_CONST, ...overlay[KEY]]` (or per-sub-key
+// for drill/main).
+//
+// Visibility scoping:
+//   - own UGC (any visibility, including private)
+//   - admin-approved public UGC (any author)
+//   - team-shared UGC where caller is in the team — either as a coach
+//     (team_coaches row) OR as a swimmer in a group belonging to the
+//     team (group_members → groups.team_id)
+//   - in all cases, exclude promoted_at IS NOT NULL (graduated to JS)
+//
+// Each option carries metadata (_ugc, _author_sub, _visibility) so the
+// client can render the right indicator badge (📝 own / 👥 team / 🌐 public).
+const SECTION_KEY_BY_POOL = {
+  warmup:   { "25y": "WARMUP_OPTIONS",   "25m": "WARMUP_OPTIONS_SCM",   "50m": "WARMUP_OPTIONS_50M"   },
+  cooldown: { "25y": "COOLDOWN_OPTIONS", "25m": "COOLDOWN_OPTIONS_SCM", "50m": "COOLDOWN_OPTIONS_50M" },
+  drill:    { "25y": "DRILL_OPTIONS",    "25m": "DRILL_OPTIONS_SCM",    "50m": "DRILL_OPTIONS_50M"    },
+  main:     { "25y": "MAIN_OPTIONS",     "25m": "MAIN_OPTIONS_SCM",     "50m": "MAIN_OPTIONS_50M"     },
+};
+
+export async function dbGetUgcOverlay(userSub) {
+  // Always return the full 12-key shape (empty arrays/objects when no
+  // UGC visible). Lets the client merge unconditionally without null
+  // checks per section.
+  const empty = {
+    WARMUP_OPTIONS:        [],
+    COOLDOWN_OPTIONS:      [],
+    DRILL_OPTIONS:         {},
+    MAIN_OPTIONS:          {},
+    WARMUP_OPTIONS_50M:    [],
+    COOLDOWN_OPTIONS_50M:  [],
+    DRILL_OPTIONS_50M:     {},
+    MAIN_OPTIONS_50M:      {},
+    WARMUP_OPTIONS_SCM:    [],
+    COOLDOWN_OPTIONS_SCM:  [],
+    DRILL_OPTIONS_SCM:     {},
+    MAIN_OPTIONS_SCM:      {},
+    _meta: { fetched_at: new Date().toISOString(), rowCount: 0 },
+  };
+  if (!userSub) return empty;
+
+  // Visibility-scoped query: own + admin-approved public + team-shared
+  // (team membership via team_coaches OR via group_members→groups.team_id).
+  // DISTINCT because a team-shared option could match via multiple paths.
+  const optionRows = await pool.query(
+    "SELECT DISTINCT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, " +
+    "       bo.`pool_mode`, bo.`label`, bo.`total_yards`, bo.`type_affinity`, " +
+    "       bo.`author_sub`, bo.`visibility` " +
+    "FROM `bank_options` bo " +
+    "WHERE bo.`promoted_at` IS NULL " +
+    "  AND ( " +
+    "    bo.`author_sub` = ? " +
+    "    OR bo.`visibility` = 'public' " +
+    "    OR ( " +
+    "      bo.`visibility` = 'team' AND EXISTS ( " +
+    "        SELECT 1 FROM `bank_option_team_shares` ts " +
+    "        WHERE ts.`option_id` = bo.`id` " +
+    "          AND ( " +
+    "            ts.`team_id` IN ( " +
+    "              SELECT tc.`team_id` FROM `team_coaches` tc " +
+    "              WHERE tc.`coach_sub` = ? AND tc.`removed_at` IS NULL " +
+    "            ) " +
+    "            OR ts.`team_id` IN ( " +
+    "              SELECT g.`team_id` FROM `groups` g " +
+    "              JOIN `group_members` gm ON gm.`group_id` = g.`id` " +
+    "              WHERE gm.`member_swimmer_sub` = ? " +
+    "                AND gm.`left_at` IS NULL " +
+    "                AND g.`archived` = 0 " +
+    "            ) " +
+    "          ) " +
+    "      ) " +
+    "    ) " +
+    "  )",
+    [userSub, userSub, userSub]
+  );
+  if (optionRows.length === 0) return empty;
+
+  // Fetch all sets for the matched options in a single query.
+  const optionIds = optionRows.map(r => r.id);
+  const setPlaceholders = optionIds.map(() => "?").join(",");
+  const setRows = await pool.query(
+    `SELECT \`id\`, \`option_id\`, \`seq\`, \`reps\`, \`dist\`, \`desc\`, ` +
+    `       \`interval\`, \`focus\`, \`stroke\`, \`eq\` ` +
+    `FROM \`bank_sets\` WHERE \`option_id\` IN (${setPlaceholders}) ` +
+    `ORDER BY \`option_id\`, \`seq\``,
+    optionIds
+  );
+  // Group sets by option_id.
+  const setsByOption = new Map();
+  for (const s of setRows) {
+    if (!setsByOption.has(s.option_id)) setsByOption.set(s.option_id, []);
+    setsByOption.get(s.option_id).push({
+      id:       s.id,
+      reps:     s.reps,
+      dist:     s.dist,
+      desc:     s.desc,
+      interval: s.interval,
+      ...(s.focus  ? { focus:  s.focus  } : {}),
+      ...(s.stroke ? { stroke: s.stroke } : {}),
+      ...(s.eq     ? { eq:     s.eq     } : {}),
+    });
+  }
+
+  // Project into the 12-key overlay shape.
+  const overlay = { ...empty };
+  for (const r of optionRows) {
+    const key = SECTION_KEY_BY_POOL[r.section]?.[r.pool_mode];
+    if (!key) continue;  // unknown section/pool_mode → skip silently
+    let typeAffinity = null;
+    if (r.type_affinity) {
+      try {
+        typeAffinity = typeof r.type_affinity === "string"
+          ? JSON.parse(r.type_affinity)
+          : r.type_affinity;
+      } catch (_) { /* malformed JSON; skip */ }
+    }
+    const option = {
+      label:       r.label,
+      totalYards:  r.total_yards,
+      ...(typeAffinity ? { typeAffinity } : {}),
+      sets:        setsByOption.get(r.id) || [],
+      // UGC-only metadata. Underscore-prefixed to signal "not part of
+      // the canonical option contract; UI uses these for badges."
+      _ugc:           true,
+      _option_id:     r.id,
+      _author_sub:    r.author_sub,
+      _visibility:    r.visibility,
+      _is_own:        r.author_sub === userSub,
+    };
+    if (r.section === "warmup" || r.section === "cooldown") {
+      overlay[key].push(option);
+    } else {
+      // drill/main are nested by type_id OR stroke_id
+      const subKey = r.type_id || r.stroke_id;
+      if (!subKey) continue;  // shouldn't happen with valid data
+      if (!overlay[key][subKey]) overlay[key][subKey] = [];
+      overlay[key][subKey].push(option);
+    }
+  }
+  overlay._meta.rowCount = optionRows.length;
+  return overlay;
+}
+
 // ── Goals ────────────────────────────────────────────────────────────
 // Metric set is fixed; period_start/end are NULL for recurring goals
 // (the only kind exposed by the UI in MVP). Multiple historical rows
