@@ -20083,7 +20083,7 @@
                 <label style={labelStyle}>Section</label>
                 <select value={section} onChange={(e) => setSection(e.target.value)} style={{ ...fieldStyle, width: "100%" }}>
                   <option value="warmup">warmup</option>
-                  <option value="drill">drill</option>
+                  <option value="drill">drill / pre-main</option>
                   <option value="main">main</option>
                   <option value="cooldown">cooldown</option>
                 </select>
@@ -20118,6 +20118,7 @@
                       <option value="breast">breast</option>
                       <option value="fly">fly</option>
                       <option value="free">free</option>
+                      <option value="im">im</option>
                     </select>
                   </div>
                 </>
@@ -20189,13 +20190,21 @@
             </p>
             <div style={{ marginBottom: 16 }}>
               {sets.map((s, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 60px 1fr 100px 1fr 30px", gap: 6, marginBottom: 6, alignItems: "start" }}>
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 60px 1fr 100px 1fr 90px 30px", gap: 6, marginBottom: 6, alignItems: "start" }}>
                   <input type="number" min="1" value={s.reps} onChange={(e) => updateSet(i, { reps: e.target.value })} placeholder="reps" style={fieldStyle}
                     ref={i === sets.length - 1 ? newRowRepsRef : null} />
                   <input type="number" min="1" value={s.dist} onChange={(e) => updateSet(i, { dist: e.target.value })} placeholder="dist" style={fieldStyle} />
                   <input value={s.desc} onChange={(e) => updateSet(i, { desc: e.target.value })} placeholder="Description" style={fieldStyle} maxLength={500} />
                   <input value={s.interval} onChange={(e) => updateSet(i, { interval: e.target.value })} placeholder="On 2:00" style={fieldStyle} />
                   <input value={s.focus || ""} onChange={(e) => updateSet(i, { focus: e.target.value })} placeholder="Focus (optional)" style={fieldStyle} maxLength={240} />
+                  <select value={s.eq || ""} onChange={(e) => updateSet(i, { eq: e.target.value || null })} style={fieldStyle} title="Equipment required for this set">
+                    <option value="">(no eq)</option>
+                    <option value="kick">kick (board)</option>
+                    <option value="pull">pull (buoy)</option>
+                    <option value="snorkel">snorkel</option>
+                    <option value="fins">fins</option>
+                    <option value="underkick">underkick</option>
+                  </select>
                   <button onClick={() => removeSet(i)} disabled={sets.length === 1} style={{ background: "transparent", border: "none", color: sets.length === 1 ? "var(--color-border)" : "#ef4444", cursor: sets.length === 1 ? "default" : "pointer", fontSize: 16 }}>✕</button>
                 </div>
               ))}
@@ -21747,7 +21756,7 @@
       // Sub IDs used to classify a 'selectedType' value as a TYPE vs STROKE
       // when building the snapshot pre-fill (drill/main need one of the two).
       const UGC_TYPE_KEYS_CLIENT   = React.useMemo(() => new Set(["im","distance","sprint","endurance","mixed","technique"]), []);
-      const UGC_STROKE_KEYS_CLIENT = React.useMemo(() => new Set(["back","breast","fly","free"]), []);
+      const UGC_STROKE_KEYS_CLIENT = React.useMemo(() => new Set(["back","breast","fly","free","im"]), []);
       // Pre-built Map of UGC overlay set IDs → { _is_own, _visibility }
       // for the badge derivation in WorkoutBlock. Phase D needs the
       // metadata (not just presence) to pick the right badge variant:

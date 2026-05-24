@@ -1490,7 +1490,7 @@ export async function dbGetUgcOverlay(userSub) {
 const UGC_SECTIONS    = new Set(["warmup", "drill", "main", "cooldown"]);
 const UGC_POOL_MODES  = new Set(["25y", "25m", "50m"]);
 const UGC_TYPE_KEYS   = new Set(["im", "distance", "sprint", "endurance", "mixed", "technique"]);
-const UGC_STROKE_KEYS = new Set(["back", "breast", "fly", "free"]);
+const UGC_STROKE_KEYS = new Set(["back", "breast", "fly", "free", "im"]);
 const UGC_VISIBILITY  = new Set(["private", "team", "public", "pending", "rejected"]);
 const UGC_INTERVAL_RE = /^(On \d+:\d{2}|No interval.*)$/;
 const UGC_QUOTA_PER_COACH = 50;  // counts unpromoted only
