@@ -19989,9 +19989,20 @@
       const updateSet = (i, patch) => {
         setSets(prev => prev.map((s, j) => j === i ? { ...s, ...patch } : s));
       };
+      // Autofocus the freshly-added row's first input after render. Counter
+      // bumps on addSet; useEffect on the counter fires post-render.
+      const newRowRepsRef = React.useRef(null);
+      const [addCount, setAddCount] = React.useState(0);
       const addSet = () => {
         setSets(prev => [...prev, { reps: 1, dist: 100, desc: "", interval: "On 2:00", focus: "" }]);
+        setAddCount(n => n + 1);
       };
+      React.useEffect(() => {
+        if (addCount > 0 && newRowRepsRef.current) {
+          newRowRepsRef.current.focus();
+          newRowRepsRef.current.select();  // select the "1" so user can type-replace
+        }
+      }, [addCount]);
       const removeSet = (i) => {
         if (sets.length === 1) return;  // keep at least 1
         setSets(prev => prev.filter((_, j) => j !== i));
@@ -20179,7 +20190,8 @@
             <div style={{ marginBottom: 16 }}>
               {sets.map((s, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 60px 1fr 100px 1fr 30px", gap: 6, marginBottom: 6, alignItems: "start" }}>
-                  <input type="number" min="1" value={s.reps} onChange={(e) => updateSet(i, { reps: e.target.value })} placeholder="reps" style={fieldStyle} />
+                  <input type="number" min="1" value={s.reps} onChange={(e) => updateSet(i, { reps: e.target.value })} placeholder="reps" style={fieldStyle}
+                    ref={i === sets.length - 1 ? newRowRepsRef : null} />
                   <input type="number" min="1" value={s.dist} onChange={(e) => updateSet(i, { dist: e.target.value })} placeholder="dist" style={fieldStyle} />
                   <input value={s.desc} onChange={(e) => updateSet(i, { desc: e.target.value })} placeholder="Description" style={fieldStyle} maxLength={500} />
                   <input value={s.interval} onChange={(e) => updateSet(i, { interval: e.target.value })} placeholder="On 2:00" style={fieldStyle} />
