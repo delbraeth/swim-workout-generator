@@ -16029,6 +16029,316 @@
     // day. Actions: ▶ Run (loads into Run mode, link via runScheduledId),
     // ✎ Edit (loads back into generator), 🗐 Copy to (date picker), 🗑 Delete.
     // Completed rows show a green ✓ + workout link.
+    // ═══════════════════════════════════════════════════════════════
+    //  REPORTS VIEW — Reporting v1 Phase B (R1-R3 coach reports)
+    //  Spec: REPORTING_SCOPE.md §2 + §5. Self-only (gated to current
+    //  coach via server). Numbers + tables only — no charts in v1
+    //  (deferred per Cap'n's scope call).
+    // ═══════════════════════════════════════════════════════════════
+    const REPORT_RANGES = [
+      { id: "week",            label: "Last 7 days" },
+      { id: "month",           label: "Last 30 days" },
+      { id: "quarter",         label: "Last 90 days" },
+      { id: "season-to-date",  label: "Season-to-date" },
+    ];
+
+    function ReportsView() {
+      const [tab, setTab] = React.useState("programming-mix");
+      const [range, setRange] = React.useState("month");
+      const [groupId, setGroupId] = React.useState("");   // "" = all groups
+      const [groups, setGroups] = React.useState([]);
+      const [data, setData] = React.useState(null);
+      const [err, setErr] = React.useState(null);
+      const [loading, setLoading] = React.useState(false);
+
+      // Load coach's groups for the filter dropdown.
+      React.useEffect(() => {
+        fetch("/api/picker/coach-targets", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(list => setGroups(Array.isArray(list) ? list : []))
+          .catch(() => setGroups([]));
+      }, []);
+
+      // Re-fetch the active report whenever tab / range / groupId changes.
+      React.useEffect(() => {
+        const qs = new URLSearchParams({ range });
+        if (groupId) qs.set("group_id", groupId);
+        const url = `/api/reports/${tab}?${qs}`;
+        setLoading(true); setErr(null); setData(null);
+        fetch(url, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(new Error(j.error || `HTTP ${r.status}`))))
+          .then(d => { setData(d); setLoading(false); })
+          .catch(e => { setErr(e.message); setLoading(false); });
+      }, [tab, range, groupId]);
+
+      const tabs = [
+        { id: "programming-mix",    label: "📈 Programming Mix" },
+        { id: "schedule-adherence", label: "🗓 Schedule Adherence" },
+        { id: "curation-log",       label: "🎚 Curation Log" },
+      ];
+
+      return (
+        <div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0, color: "var(--color-text)" }}>📊 Reports</h2>
+            <span style={{ color: "var(--color-text-dim)", fontSize: 13 }}>
+              Self-only coach view · numbers + tables (charts in a future phase)
+            </span>
+          </div>
+
+          {/* Sticky filter row: range + group */}
+          <div style={{
+            display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center",
+            padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)",
+            borderRadius: 8, marginBottom: 14,
+          }}>
+            <span style={{ color: "var(--color-text-dim)", fontSize: 12, fontWeight: 600 }}>RANGE</span>
+            {REPORT_RANGES.map(r => {
+              const active = range === r.id;
+              return (
+                <button key={r.id} onClick={() => setRange(r.id)}
+                  style={{
+                    padding: "5px 12px", borderRadius: 999,
+                    border: `1px solid ${active ? "var(--color-primary)" : "var(--color-border)"}`,
+                    background: active ? "#1e3a5f" : "var(--color-bg)",
+                    color: active ? "var(--color-primary)" : "var(--color-text-dim)",
+                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  }}>{r.label}</button>
+              );
+            })}
+            {groups.length > 0 && (
+              <>
+                <span style={{ color: "var(--color-text-dim)", fontSize: 12, fontWeight: 600, marginLeft: 8 }}>GROUP</span>
+                <select value={groupId} onChange={e => setGroupId(e.target.value)}
+                  style={{
+                    padding: "5px 10px", borderRadius: 6,
+                    background: "var(--color-bg)", color: "var(--color-text)",
+                    border: "1px solid var(--color-border-strong)", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}>
+                  <option value="">All groups</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </>
+            )}
+            {data && (
+              <span style={{ marginLeft: "auto", color: "var(--color-text-muted)", fontSize: 11 }}>
+                {data.startYmd} → {data.endYmd}
+              </span>
+            )}
+          </div>
+
+          {/* Tab nav */}
+          <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--color-border)", marginBottom: 16 }}>
+            {tabs.map(t => {
+              const active = tab === t.id;
+              return (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  style={{
+                    padding: "10px 16px", border: "none", background: "transparent",
+                    color: active ? "var(--color-primary)" : "var(--color-text-dim)",
+                    fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    borderBottom: `3px solid ${active ? "var(--color-primary)" : "transparent"}`,
+                    marginBottom: -1,
+                  }}>{t.label}</button>
+              );
+            })}
+          </div>
+
+          {/* Tab body */}
+          {loading && <div style={{ color: "var(--color-text-dim)" }}>Loading…</div>}
+          {err && <div style={{ color: "var(--color-destructive)", padding: 12, background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>⚠ {err}</div>}
+          {!loading && !err && data && tab === "programming-mix"    && <R1ProgrammingMixTab data={data} />}
+          {!loading && !err && data && tab === "schedule-adherence" && <R2ScheduleAdherenceTab data={data} hasGroup={!!groupId} />}
+          {!loading && !err && data && tab === "curation-log"       && <R3CurationLogTab data={data} />}
+        </div>
+      );
+    }
+
+    // R1 — Programming Mix tab body. Stat cards + 3 tables (yards by type,
+    // yards by stroke, section yards). Source mix as a single horizontal bar.
+    function R1ProgrammingMixTab({ data }) {
+      const fmt = (n) => Number(n || 0).toLocaleString();
+      const pct = (n, d) => d > 0 ? Math.round((n / d) * 100) : 0;
+      const srcTotal = Object.values(data.sourceCounts || {}).reduce((s, n) => s + n, 0);
+      const typeRows = Object.entries(data.yardsByType || {}).sort((a, b) => b[1] - a[1]);
+      const strokeRows = Object.entries(data.yardsByStroke || {}).sort((a, b) => b[1] - a[1]);
+      const sectionRows = Object.entries(data.sectionYards || {}).sort((a, b) => b[1] - a[1]);
+
+      const card = { padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 };
+      const cardLabel = { fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 };
+      const cardValue = { fontSize: 24, fontWeight: 800, color: "var(--color-text)" };
+
+      return (
+        <div>
+          {/* Top stat cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 18 }}>
+            <div style={card}><div style={cardLabel}>Total yards</div><div style={cardValue}>{fmt(data.totalYards)}</div></div>
+            <div style={card}><div style={cardLabel}>Workouts</div><div style={cardValue}>{data.workoutCount}</div></div>
+            <div style={card}><div style={cardLabel}>Distinct labels</div><div style={cardValue}>{(data.bankLabels || []).length}</div></div>
+            <div style={card}>
+              <div style={cardLabel}>Source mix</div>
+              <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                Bank {pct(data.sourceCounts?.bank || 0, srcTotal)}% · Engine {pct(data.sourceCounts?.engine || 0, srcTotal)}% · Mix {pct(data.sourceCounts?.mix || 0, srcTotal)}%
+              </div>
+            </div>
+          </div>
+          {/* Tables */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+            <_ReportTable title="Yards by type"   rows={typeRows}   totalYards={data.totalYards} />
+            <_ReportTable title="Yards by stroke" rows={strokeRows} totalYards={data.totalYards} />
+            <_ReportTable title="Yards by section" rows={sectionRows} totalYards={data.totalYards} />
+          </div>
+        </div>
+      );
+    }
+
+    // Shared small two-column table with bar fills. rows = [[key, value], ...]
+    function _ReportTable({ title, rows, totalYards }) {
+      return (
+        <div style={{ padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
+          <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>{title}</div>
+          {rows.length === 0 ? (
+            <div style={{ color: "var(--color-text-muted)", fontSize: 12, fontStyle: "italic" }}>No data in range</div>
+          ) : (
+            <table style={{ width: "100%", fontSize: 12, color: "#cbd5e1" }}>
+              <tbody>
+                {rows.map(([k, v]) => {
+                  const pct = totalYards > 0 ? (v / totalYards) * 100 : 0;
+                  return (
+                    <tr key={k}>
+                      <td style={{ padding: "3px 6px 3px 0", whiteSpace: "nowrap", textTransform: "capitalize" }}>{k}</td>
+                      <td style={{ padding: "3px 6px", width: "60%" }}>
+                        <div style={{ background: "var(--color-bg)", borderRadius: 3, height: 8, position: "relative", overflow: "hidden" }}>
+                          <div style={{ position: "absolute", inset: 0, width: `${Math.min(100, pct)}%`, background: "var(--color-primary)" }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: "3px 0", textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--color-text-dim)" }}>{Number(v).toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      );
+    }
+
+    // R2 — Schedule Adherence tab body.
+    function R2ScheduleAdherenceTab({ data, hasGroup }) {
+      const pct = (n, d) => d > 0 ? Math.round((n / d) * 100) : 0;
+      const card = { padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 };
+      const cardLabel = { fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 };
+      const cardValue = { fontSize: 24, fontWeight: 800, color: "var(--color-text)" };
+      return (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 18 }}>
+            <div style={card}>
+              <div style={cardLabel}>Scheduled</div>
+              <div style={cardValue}>{data.scheduledCount}</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>practices in range</div>
+            </div>
+            <div style={card}>
+              <div style={cardLabel}>Completed</div>
+              <div style={cardValue}>{data.completedCount}</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
+                {Math.round(data.completionPct)}% of scheduled
+              </div>
+            </div>
+            <div style={card}>
+              <div style={cardLabel}>With attendance</div>
+              <div style={cardValue}>{data.withAttendance}</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
+                {pct(data.withAttendance, data.completedCount)}% of completed
+              </div>
+            </div>
+            <div style={card}>
+              <div style={cardLabel}>Avg attendance</div>
+              <div style={cardValue}>{Math.round(data.avgAttendancePct)}%</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
+                per practice w/ attendance
+              </div>
+            </div>
+          </div>
+          {data.rosterTrend && (
+            <div style={{ padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Roster trend (selected group, in range)
+              </div>
+              <div style={{ fontSize: 13, color: "#cbd5e1" }}>
+                <span style={{ color: "var(--color-positive)" }}>+{data.rosterTrend.added}</span> joined ·{" "}
+                <span style={{ color: "var(--color-destructive)" }}>−{data.rosterTrend.removed}</span> left
+              </div>
+            </div>
+          )}
+          {data.withoutAttendance > 0 && (
+            <div className="callout note" style={{ marginTop: 14, padding: 10, fontSize: 12, color: "var(--color-text-dim)", background: "rgba(245,158,11,0.08)", border: "1px solid var(--color-warn)", borderRadius: 6 }}>
+              <strong>{data.withoutAttendance}</strong> completed practice{data.withoutAttendance === 1 ? "" : "s"} ha{data.withoutAttendance === 1 ? "s" : "ve"} no attendance recorded — open the WeekView and tap <strong>📋 Mark done</strong> to fill in the roster.
+            </div>
+          )}
+          {!hasGroup && (
+            <div style={{ marginTop: 14, fontSize: 12, color: "var(--color-text-muted)", fontStyle: "italic" }}>
+              Tip: pick a group from the filter to see roster trend.
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // R3 — Curation Log tab body. Three subsections (labels / sets / engine).
+    function R3CurationLogTab({ data }) {
+      const sub = { marginBottom: 18 };
+      const subTitle = { fontSize: 13, color: "var(--color-text-dim)", fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" };
+      const list = { padding: 10, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 6, fontSize: 12 };
+      const empty = { color: "var(--color-text-muted)", fontStyle: "italic" };
+      const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) : "—";
+
+      const Section = ({ favs, dis, fmtItem }) => (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={list}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-primary)", marginBottom: 6 }}>★ Favorites ({favs.length})</div>
+            {favs.length === 0 ? <div style={empty}>none in range</div> : (
+              <div>{favs.map((f, i) => <div key={i} style={{ padding: "3px 0", borderBottom: "1px solid var(--color-bg)" }}>{fmtItem(f)}</div>)}</div>
+            )}
+          </div>
+          <div style={list}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-warn)", marginBottom: 6 }}>👎 Disfavorites ({dis.length})</div>
+            {dis.length === 0 ? <div style={empty}>none in range</div> : (
+              <div>{dis.map((d, i) => <div key={i} style={{ padding: "3px 0", borderBottom: "1px solid var(--color-bg)" }}>{fmtItem(d)}</div>)}</div>
+            )}
+          </div>
+        </div>
+      );
+
+      return (
+        <div>
+          <div style={sub}>
+            <div style={subTitle}>Bank labels</div>
+            <Section
+              favs={data.bankLabels?.favorites || []}
+              dis={data.bankLabels?.disfavorites || []}
+              fmtItem={(x) => <><strong>{x.label}</strong> <span style={{ color: "var(--color-text-muted)", marginLeft: 6 }}>{fmtTime(x.at)}</span></>}
+            />
+          </div>
+          <div style={sub}>
+            <div style={subTitle}>Set IDs</div>
+            <Section
+              favs={data.sets?.favorites || []}
+              dis={data.sets?.disfavorites || []}
+              fmtItem={(x) => <><code style={{ fontFamily: "monospace" }}>{x.set_id}</code> <span style={{ color: "var(--color-text-muted)", marginLeft: 6 }}>{fmtTime(x.at)}</span></>}
+            />
+          </div>
+          <div style={sub}>
+            <div style={subTitle}>Engine tuples <span style={{ fontSize: 10, color: "var(--color-text-muted)", textTransform: "none", fontWeight: 400, marginLeft: 4 }}>(current state — no per-item timestamps)</span></div>
+            <Section
+              favs={data.engine?.favorites || []}
+              dis={data.engine?.disfavorites || []}
+              fmtItem={(x) => <><code style={{ fontFamily: "monospace" }}>{x.template_id}</code> · <em>{x.stroke}</em></>}
+            />
+          </div>
+        </div>
+      );
+    }
+
     // Reporting Phase A — modal for marking a scheduled practice done +
     // recording attendance. Fetches /attendance-context to get roster
     // (point-in-time) + any existing attendance, renders roster pre-checked,
@@ -21798,8 +22108,8 @@
                       <button onClick={() => setCoachMenuOpen(v => !v)}
                         title="Coach tools (Teams, Swimmers, Catalog)"
                         style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-primary)",
-                          background: ["teams","swimmers","catalog"].includes(view) ? "var(--color-primary)" : "var(--color-card)",
-                          color: ["teams","swimmers","catalog"].includes(view) ? "var(--color-bg)" : "var(--color-primary)",
+                          background: ["teams","swimmers","catalog","reports"].includes(view) ? "var(--color-primary)" : "var(--color-card)",
+                          color: ["teams","swimmers","catalog","reports"].includes(view) ? "var(--color-bg)" : "var(--color-primary)",
                           fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1,
                           display: "inline-flex", alignItems: "center", gap: 4 }}>
                         🔧 <span style={{ fontSize: 10 }}>▾</span>
@@ -21819,6 +22129,7 @@
                               { id: "teams",    emoji: "👥", label: "Teams" },
                               { id: "swimmers", emoji: "🏊", label: "Managed swimmers" },
                               { id: "catalog",  emoji: "📚", label: "Catalog" },
+                              { id: "reports",  emoji: "📊", label: "Reports" },
                             ].map(item => {
                               const active = view === item.id;
                               return (
@@ -21975,6 +22286,9 @@
                 disfavorSets={disfavorSets}
                 onCycleSetStatus={authenticated ? handleCycleSetStatus : null}
               />
+            )}
+            {view === "reports"  && effectiveMe?.is_coach && (
+              <ReportsView coachTargets={null} />
             )}
 
             {view === "history" && (

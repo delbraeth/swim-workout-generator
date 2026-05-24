@@ -3721,6 +3721,193 @@ export async function dbGetGroupRosterAsOf(groupId, scheduledDate) {
   }));
 }
 
+// ── Reporting v1 Phase B (R1-R3 coach reports) ────────────────────────
+// Spec: REPORTING_SCOPE.md §2. Self-only — caller must be req.userSub.
+// Optional groupId narrows to workouts tied to that specific group via
+// payload.assignment_target.group_id (Phase 2b coach-fanout convention)
+// or intent_params.group_id.
+
+// Pull all workouts in range, optionally filtered by group association.
+// Returns raw rows; aggregation happens in JS for portability + clarity.
+async function _getOwnWorkoutsInRange(userSub, startYmd, endYmd, groupId = null) {
+  if (!userSub || !isYmd(startYmd) || !isYmd(endYmd)) return [];
+  const rows = await pool.query(
+    "SELECT `id`, `saved_at`, `date_completed`, `type`, `pool_mode`, `total_yards`, `payload` " +
+    "FROM `workouts` WHERE `user_sub` = ? AND `date_completed` BETWEEN ? AND ?",
+    [userSub, startYmd, endYmd]
+  );
+  return rows.map(r => {
+    let p = r.payload;
+    if (typeof p === "string") { try { p = JSON.parse(p); } catch (_) { p = {}; } }
+    return { ...r, payload: p || {} };
+  }).filter(r => {
+    if (!groupId) return true;
+    const at = r.payload.assignment_target;
+    return at && at.group_id === groupId;
+  });
+}
+
+// R1 — Programming Mix. Returns aggregated counts. Charts not generated
+// here; client renders raw numbers + tables per Cap'n's call to defer charts.
+export async function dbGetProgrammingMix(userSub, { startYmd, endYmd, groupId = null } = {}) {
+  const ws = await _getOwnWorkoutsInRange(userSub, startYmd, endYmd, groupId);
+  const out = {
+    workoutCount:  ws.length,
+    totalYards:    0,
+    yardsByType:   {},   // { im: N, distance: N, ... } — keyed by WORKOUT_TYPES.id
+    yardsByStroke: {},   // { free: N, back: N, breast: N, fly: N, IM: N, choice: N, kick: N }
+    sectionYards:  {},   // { warmup: N, main: N, cooldown: N, drill: N, recovery: N }
+    sourceCounts:  { bank: 0, engine: 0, mix: 0, unknown: 0 },  // per-section counts
+    bankLabels:    [],   // distinct labels used (for diversity counter)
+  };
+  const labelSet = new Set();
+  for (const w of ws) {
+    const yards = Number(w.total_yards) || 0;
+    out.totalYards += yards;
+    if (w.type) out.yardsByType[w.type] = (out.yardsByType[w.type] || 0) + yards;
+    // Walk blocks for section + source + stroke + label aggregation.
+    const blocks = Array.isArray(w.payload.blocks) ? w.payload.blocks : [];
+    for (const b of blocks) {
+      // Section yardage. Sum sets in this block.
+      let blockYards = 0;
+      const sets = Array.isArray(b.sets) ? b.sets : [];
+      for (const s of sets) {
+        const repYards = (Number(s.reps) || 1) * (Number(s.dist) || 0);
+        blockYards += repYards;
+        if (s.stroke) out.yardsByStroke[s.stroke] = (out.yardsByStroke[s.stroke] || 0) + repYards;
+      }
+      if (b.section) out.sectionYards[b.section] = (out.sectionYards[b.section] || 0) + blockYards;
+      // Source: per-block bank/engine/mix. Engine blocks carry __engineMeta
+      // (set by template-engine renderer); mix blocks may have a source field.
+      let source = "unknown";
+      if (b.__engineMeta) source = "engine";
+      else if (b.source === "mix" || b.mix) source = "mix";
+      else if (b.label || b.bankLabel || b.section) source = "bank";  // best-effort fallback
+      out.sourceCounts[source] = (out.sourceCounts[source] || 0) + 1;
+      // Bank label tracking — only for bank-sourced blocks with a label.
+      if (source === "bank" && b.label) labelSet.add(b.label);
+    }
+  }
+  out.bankLabels = Array.from(labelSet).sort();
+  return out;
+}
+
+// R2 — Schedule Adherence. Per-group completion stats joining
+// scheduled_workouts + practice_attendance + group_members for roster trend.
+export async function dbGetScheduleAdherence(userSub, { startYmd, endYmd, groupId = null } = {}) {
+  if (!userSub || !isYmd(startYmd) || !isYmd(endYmd)) {
+    return { scheduledCount: 0, completedCount: 0, completionPct: 0, withAttendance: 0, withoutAttendance: 0, avgAttendancePct: 0, rosterTrend: null };
+  }
+  // 1. Scheduled rows owned by caller in range. Optional groupId narrows.
+  let sql = "SELECT `id`, `intent_params`, `payload`, `completed_at` FROM `scheduled_workouts` " +
+            "WHERE `user_sub` = ? AND `scheduled_date` BETWEEN ? AND ?";
+  const args = [userSub, startYmd, endYmd];
+  const scheduled = await pool.query(sql, args);
+  const inGroup = (sw) => {
+    if (!groupId) return true;
+    for (const f of ["intent_params", "payload"]) {
+      let v = sw[f];
+      if (typeof v === "string") { try { v = JSON.parse(v); } catch (_) { v = null; } }
+      if (!v) continue;
+      if (v.group_id === groupId) return true;
+      if (v.assignment_target && v.assignment_target.group_id === groupId) return true;
+    }
+    return false;
+  };
+  const filtered = scheduled.filter(inGroup);
+  const completedRows = filtered.filter(s => s.completed_at != null);
+  const completedIds  = completedRows.map(r => Number(r.id));
+  // 2. Attendance rows for completed workouts in range.
+  let attendanceByWorkout = new Map();   // scheduled_workout_id → [rows]
+  if (completedIds.length > 0) {
+    const placeholders = completedIds.map(() => "?").join(",");
+    const arows = await pool.query(
+      `SELECT \`scheduled_workout_id\`, \`present\` FROM \`practice_attendance\` ` +
+      `WHERE \`scheduled_workout_id\` IN (${placeholders})`,
+      completedIds
+    );
+    for (const r of arows) {
+      const k = Number(r.scheduled_workout_id);
+      if (!attendanceByWorkout.has(k)) attendanceByWorkout.set(k, []);
+      attendanceByWorkout.get(k).push(r);
+    }
+  }
+  let withAttendance = 0, withoutAttendance = 0, sumAttendancePct = 0;
+  for (const c of completedRows) {
+    const rows = attendanceByWorkout.get(Number(c.id)) || [];
+    if (rows.length === 0) { withoutAttendance++; continue; }
+    withAttendance++;
+    const present = rows.filter(r => r.present === 1 || r.present === true).length;
+    sumAttendancePct += rows.length > 0 ? (present / rows.length) * 100 : 0;
+  }
+  // 3. Roster trend — only meaningful when groupId set.
+  let rosterTrend = null;
+  if (groupId) {
+    const r = await pool.query(
+      "SELECT " +
+      "  SUM(CASE WHEN `joined_at` BETWEEN ? AND ? THEN 1 ELSE 0 END) AS added, " +
+      "  SUM(CASE WHEN `left_at`   BETWEEN ? AND ? THEN 1 ELSE 0 END) AS removed " +
+      "FROM `group_members` WHERE `group_id` = ?",
+      [startYmd + " 00:00:00", endYmd + " 23:59:59", startYmd + " 00:00:00", endYmd + " 23:59:59", groupId]
+    );
+    rosterTrend = { added: Number(r[0]?.added || 0), removed: Number(r[0]?.removed || 0) };
+  }
+  return {
+    scheduledCount:     filtered.length,
+    completedCount:     completedRows.length,
+    completionPct:      filtered.length > 0 ? (completedRows.length / filtered.length) * 100 : 0,
+    withAttendance, withoutAttendance,
+    avgAttendancePct:   withAttendance > 0 ? sumAttendancePct / withAttendance : 0,
+    rosterTrend,
+  };
+}
+
+// R3 — Curation Log. Bank labels + set IDs + engine tuples the user has
+// touched in the range, with timestamps where available. Engine tuples
+// live in settings.extra JSON without per-item timestamps — included as
+// current state (no date filter on those).
+export async function dbGetCurationLog(userSub, { startYmd, endYmd } = {}) {
+  if (!userSub || !isYmd(startYmd) || !isYmd(endYmd)) {
+    return { bankLabels: { favorites: [], disfavorites: [] }, sets: { favorites: [], disfavorites: [] }, engine: { favorites: [], disfavorites: [] } };
+  }
+  const range = [userSub, startYmd + " 00:00:00", endYmd + " 23:59:59"];
+  const favLabels = await pool.query(
+    "SELECT `label`, `created_at` FROM `favorites` WHERE `user_sub` = ? AND `created_at` BETWEEN ? AND ? ORDER BY `created_at` DESC",
+    range
+  );
+  const disLabels = await pool.query(
+    "SELECT `label`, `created_at` FROM `disfavorites` WHERE `user_sub` = ? AND `created_at` BETWEEN ? AND ? ORDER BY `created_at` DESC",
+    range
+  );
+  const favSets = await pool.query(
+    "SELECT `set_id`, `created_at` FROM `user_favorite_sets` WHERE `user_sub` = ? AND `created_at` BETWEEN ? AND ? ORDER BY `created_at` DESC",
+    range
+  );
+  const disSets = await pool.query(
+    "SELECT `set_id`, `created_at` FROM `user_disfavor_sets` WHERE `user_sub` = ? AND `created_at` BETWEEN ? AND ? ORDER BY `created_at` DESC",
+    range
+  );
+  // Engine fav/disfav live in settings.extra JSON — current state only,
+  // no per-item timestamps available. Return as-is for v1.
+  const settings = await dbGetSettings(userSub);
+  const engineFav = Array.isArray(settings?.engine_favorites) ? settings.engine_favorites : [];
+  const engineDis = Array.isArray(settings?.engine_disfavorites) ? settings.engine_disfavorites : [];
+  return {
+    bankLabels: {
+      favorites:    favLabels.map(r => ({ label: r.label, at: dtToIso(r.created_at) })),
+      disfavorites: disLabels.map(r => ({ label: r.label, at: dtToIso(r.created_at) })),
+    },
+    sets: {
+      favorites:    favSets.map(r => ({ set_id: r.set_id, at: dtToIso(r.created_at) })),
+      disfavorites: disSets.map(r => ({ set_id: r.set_id, at: dtToIso(r.created_at) })),
+    },
+    engine: {
+      favorites:    engineFav,   // [{ template_id, stroke }]
+      disfavorites: engineDis,
+    },
+  };
+}
+
 // ── Lane plans (Stage 3 / R-E) ────────────────────────────────────────
 // Per scope §7 + decision #14. Persistent reusable per-group lane configs.
 // plan_data JSON shape:

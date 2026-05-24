@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-23** (post run-screen v1 + rate-limit/audit-log fixes)
+Last refreshed: **2026-05-23** (post Reporting Phase B deploy)
 
 ## How this file works
 
@@ -22,11 +22,20 @@ _Nothing in progress as of 2026-05-23._
 
 ## Next (small, ready)
 
-_Empty. Pick from Bigger threads or wait for a new rough edge._
+- **Reporting Phase C — Solo/Masters R4 (Program Recap)** — single-tab report for users without a roster: yardage rollups + most/least-used templates + multi-lane fit success rate + 4-stroke balance check. Reuses Phase B's range selector + chart-free table style. Endpoint shape mirrors `/api/reports/*`. ~2-3h. Spec: `REPORTING_SCOPE.md` §2 (R4). Source: [[swim-generator-reporting-scope]]
+- **Branding polish bundle** — captured 2026-05-23. Two small UI tweaks:
+  - (a) Change copyright text from "© 2026 Patrick Cassidy · All rights reserved." to **"© 2026 Competition Aquatics, LLC · All rights reserved."** Affects 4 files: `public/index.html` (footer ~line 23398), `public/manual.html` (~line 1868), `public/privacy.html` (~line 194), `public/terms.html` (~line 175). Pure string change.
+  - (b) Add SetForge **logo to the left of the "SetForge" wordmark** in the header (and other places it makes sense — manual masthead, sign-in screen). Source assets live in `/png/` at the repo root: `icon-192.png` is the most likely fit; `icon-512.png` if higher DPI matters. Need to confirm `/png/` is served by the express static handler before linking. ~30-45min total.
 
 ## Bigger threads (need a planning session)
 
-- **Reporting engine v1** — spec locked 2026-05-23 in repo `REPORTING_SCOPE.md`. 6 reports across 3 audiences (coach-self / solo / admin). Bundles lightweight default-present attendance (migration 029 + "Mark practice done" modal) + PDF/markdown export. Cross-coach-within-team deferred to v2; head-coach view also deferred. ~24-34h across 6 phases. Trigger: first paying coach asking "how is my group doing." Source: [[swim-generator-reporting-scope]]
+- **Reporting engine v1** (in flight) — spec locked 2026-05-23 in repo `REPORTING_SCOPE.md`. 6 reports across 3 audiences (coach-self / solo / admin). Cross-coach-within-team and head-coach view deferred to v2.
+  - **Phase A** — Attendance (migration 029 + "Mark practice done" modal) — ✅ shipped 2026-05-23 (`reporting-phase-a`)
+  - **Phase B** — Coach reports R1-R3 (Programming Mix / Schedule Adherence / Curation Log) — ✅ shipped 2026-05-23 (`reporting-phase-b`)
+  - **Phase C** — Solo/Masters R4 (Program Recap) — see Next (~2-3h)
+  - **Phase D** — Admin R5-R6 (Platform Health, Curation & Support) — open (~4-6h)
+  - **Phase E** — PDF + markdown export renderers — open (~4-6h)
+  - **Phase F** — Smoke + manual sweep + tag — open (~2-3h)
 - **Pricing implementation** — spec locked in repo `PRICING.md`. Four-tier Patreon (Free / Supporter $3 / Coach $10 / Program $25). Coaches pay, swimmers free. Trigger: first paying pilot. Source: [[swim-generator-pricing-direction]]
 - **Sprint/fly main templates for large budgets** — residual fallback after slice-1 (~4.4% overall) is concentrated in sprint mains ≥1200yd and fly mains ≥1000yd. Both fail validator due to "no rep > 100yd" + budget packing. Real coaches may not program these (so current behavior could be correct). Defer until coach pilot reports a problem. Source: [[swim-generator-fallback-tuning-drill-v1]]
 
@@ -55,6 +64,9 @@ Reverse-chronological. Each is a memo in the memory directory.
 
 | Date | Tag | What |
 |---|---|---|
+| 2026-05-23 | `reporting-phase-b` | Reporting v1 Phase B: 3 coach reports (R1 Programming Mix · R2 Schedule Adherence · R3 Curation Log). New 📊 Reports view in coach dropdown with range + group filters. Numbers + tables (charts deferred). 3 db.js helpers + 3 GET routes + ReportsView component + R1/R2/R3 tab renderers. |
+| 2026-05-23 | `reporting-phase-a` | Reporting v1 Phase A: practice_attendance table (migration 029) + completed_at on scheduled_workouts + /attendance-context GET + /complete POST + Mark practice done modal in WeekView. Owner-OR-active-group-coach authz. |
+| 2026-05-23 | (no tag, post v2) | View-as v2: persona simulation (wipes data on entry, write-block via ref guards, exit-reload) + auth-beyond-Apple backlog |
 | 2026-05-23 | (no tag) | AdminUsers: 📋 sub copy button + ROADMAP: tier-aware rate limits backlog entry |
 | 2026-05-23 | (no tag) | Rate-limit + audit-log: writeLimiter D (compound key + bump 30→100 + ADMIN_SUBS skip), handler explicit logging, audit chip filters in admin UI |
 | 2026-05-23 | `run-screen-v1` | PaceClockView landscape rebuild (clock 80→128px, hierarchy swap, INTERVAL/REST/GO label, repDots to right col, button-height bump) + ✋ Lap-button toggle in start modal |

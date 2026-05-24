@@ -63,6 +63,7 @@ import {
   dbGetEffectiveDisfavorites,
   dbGetEffectiveFavorites,
   dbGetCoachImpact,
+  dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog,
   dbStartImpersonation, dbEndImpersonation, dbGetActiveImpersonation, dbValidateImpersonationHeader,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
@@ -1581,6 +1582,63 @@ app.get("/api/coach/curation-impact", requireAuth, requireCoach, async (req, res
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// ───── Reporting v1 Phase B — coach reports (R1-R3) ──────────────────
+// Spec: REPORTING_SCOPE.md §2 + §4. Self-only — caller is always
+// req.userSub. Optional group_id query param narrows R1/R2 to a specific
+// group. Range is one of week / month / quarter / season-to-date / custom.
+
+// Normalize ?range= + optional ?start= / ?end= into { startYmd, endYmd }.
+// Falls back to last 30 days for malformed input rather than 400 — reports
+// are read-only, soft failure to "no data" is friendlier than rejection.
+function _parseReportRange(q = {}) {
+  const today = new Date();
+  const ymd   = (d) => d.toISOString().slice(0, 10);
+  const back  = (days) => { const d = new Date(today); d.setUTCDate(d.getUTCDate() - days); return d; };
+  const range = String(q.range || "month").toLowerCase();
+  if (range === "custom" && /^\d{4}-\d{2}-\d{2}$/.test(q.start) && /^\d{4}-\d{2}-\d{2}$/.test(q.end)) {
+    return { startYmd: q.start, endYmd: q.end };
+  }
+  switch (range) {
+    case "week":              return { startYmd: ymd(back(7)),   endYmd: ymd(today) };
+    case "month":             return { startYmd: ymd(back(30)),  endYmd: ymd(today) };
+    case "quarter":           return { startYmd: ymd(back(90)),  endYmd: ymd(today) };
+    case "season-to-date": {
+      // Crude season anchor: Sept 1 of the most recent September (US club
+      // season convention). Past coaches asked for season metrics; this is
+      // a sensible-ish default until we add per-coach season config.
+      const yr = today.getUTCMonth() >= 8 ? today.getUTCFullYear() : today.getUTCFullYear() - 1;
+      return { startYmd: `${yr}-09-01`, endYmd: ymd(today) };
+    }
+    default:                  return { startYmd: ymd(back(30)),  endYmd: ymd(today) };
+  }
+}
+
+app.get("/api/reports/programming-mix", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const { startYmd, endYmd } = _parseReportRange(req.query);
+    const groupId = req.query.group_id || null;
+    const data = await dbGetProgrammingMix(req.userSub, { startYmd, endYmd, groupId });
+    res.json({ startYmd, endYmd, groupId, ...data });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/reports/schedule-adherence", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const { startYmd, endYmd } = _parseReportRange(req.query);
+    const groupId = req.query.group_id || null;
+    const data = await dbGetScheduleAdherence(req.userSub, { startYmd, endYmd, groupId });
+    res.json({ startYmd, endYmd, groupId, ...data });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/reports/curation-log", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const { startYmd, endYmd } = _parseReportRange(req.query);
+    const data = await dbGetCurationLog(req.userSub, { startYmd, endYmd });
+    res.json({ startYmd, endYmd, ...data });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // ───── Set-level favorites (set IDs from assign_set_ids.py) ────────────
