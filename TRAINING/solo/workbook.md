@@ -10,7 +10,7 @@
 
 Generate your own swim workouts. Read them on deck. Tell SetForge what you like. Track what you actually swim.
 
-This workbook is designed to be printed (~13 pages) or read alongside the app on your phone. It assumes you can already swim — what's new is the workflow around picking the workout. By the end you'll have run five workouts, taught the generator your preferences, and have a clear sense of which types and structures suit you.
+This workbook is designed to be printed (~14 pages) or read alongside the app on your phone. It assumes you can already swim — what's new is the workflow around picking the workout. By the end you'll have run five workouts, taught the generator your preferences, and have a clear sense of which types and structures suit you.
 
 *Use it solo. No coach required.*
 
@@ -467,6 +467,10 @@ The ⇄ swap uses a non-linear interval calc — doubling a 100 to a 200 doesn't
 
 Check the physical silent switch on the side of your phone. iOS Safari respects it for Web Audio — silent switch on = no beeps. Tap to enable audio cues in the rest picker triggers a one-beep preview so you can confirm.
 
+### I don't want to tap "✓ Lap" every rep
+
+In the Start Workout dialog, right under the audio cues toggle, there's a **✋ Lap button** option. Turn it OFF and the per-rep Lap button disappears — the running view shows just ⏸ Pause as the primary action, and the timer auto-advances when it hits zero on each rep. Splits aren't recorded in this mode (every split would be on-time, so the feedback pill hides too). Useful when you want a quiet pace clock without tap-managing each rep. Preference is saved per-account; default is ON.
+
 ### I got a Required-equipment error banner
 
 You've set an equipment item to **Required** (amber ★ badge), but the generator can't find any combination of warm-up + drill + main + cool-down at your max yardage that includes it. Fix one of these:
@@ -560,7 +564,40 @@ If you miss a week, don't reset — just keep going. The goal is a direction, no
 
 ---
 
-## Page 13 — Quick Reference Card
+## Page 13 — Tracking Progress with Reports
+
+After ~6 workouts logged, you've got enough data for Reports to be useful. Tap the **📊** button in the top nav. You'll see one tab: **📖 Program Recap**.
+
+### What Program Recap shows
+
+Pick a range from the chip row at the top — Last 7 days, Last 30 days (default), Last 90 days, or Season-to-date. The page below updates to summarize *your* training over that window:
+
+- **Total yards · Workouts · Multi-lane fit rate** — top-row stat cards. Multi-lane is mostly a coach feature; you can ignore it as a solo swimmer.
+- **Stroke gaps** — count of 30-day windows where you missed one of the four strokes (free / back / breast / fly). If this is greater than zero, you've gone a stretch without a stroke. See the warning table at the bottom for which window + which strokes.
+- **Yards by type** — how your time was distributed across the 9 workout types. The bar fills show share of total. If you set out to "do more sprint" and the bar shows you're still 70% endurance, that's a real signal.
+- **Yards by stroke** — same idea for the six strokes (free / back / breast / fly / IM / kick / choice).
+- **Most-used + least-used bank labels** — which warm-ups, mains, and cooldowns you've leaned on vs. ignored. Useful when you want to deliberately broaden — disfavor your top 3 most-used main labels and let the picker explore.
+
+### Export it
+
+Two buttons next to the range chips:
+
+- **📄 Print / PDF** — opens a print-friendly view. Use your browser's Save as PDF option from the print dialog if you want a file.
+- **📋 Markdown** — downloads a `.md` text file. Paste it into Notes, email, or wherever you keep training logs.
+
+Both work for the same data — pick whatever format your downstream tool wants.
+
+### When to look
+
+- **Weekly review (Sunday).** Pull "Last 7 days" — eyeball stroke + type distribution. Use it to plan the coming week's intent.
+- **Monthly check-in.** "Last 30 days" — confirm goals are on track. Look at most-used labels to decide what to deliberately retire.
+- **Pre-meet / pre-event taper.** Pull "Season-to-date" — confirm you actually did the volume you remember doing. Spot stroke gaps before they bite.
+
+The reflection exercises on Page 12 ask you to journal these signals by hand. Reports gives you the same signals with no journaling. Use them together for the first month; lean on Reports once you trust the picture it paints.
+
+---
+
+## Page 14 — Quick Reference Card
 
 *(Cut this page out and stick it in your gear bag.)*
 
@@ -601,6 +638,12 @@ AFTER
   Log as today's session    →  One tap from finish screen
   Difficulty stars (1–5)    →  Optional, useful
   Focus note                →  Pre-workout, sticks with log
+
+TRACK PROGRESS
+  📊 Reports (top nav)      →  Program Recap (R4)
+  Range chips               →  7d / 30d / 90d / season-to-date
+  📄 Print / PDF            →  One-page printable
+  📋 Markdown               →  Paste-into-notes export
 
 REGRET / RESET
   ↺ block button       →  New option for that block

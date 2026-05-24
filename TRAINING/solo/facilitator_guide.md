@@ -279,3 +279,13 @@ Spend 5 minutes immediately after the call writing down:
 5. How many attendees actually generated a workout during the session? Target: 100%. Below 80% and demo 2 needs tightening.
 
 Treat each session as a tuning pass on this guide. Update the guide in place.
+
+---
+
+## What's new since v1 (2026-05-23)
+
+The training package was first written before the **Reports** view shipped. Solo users now have a **📊 Reports** button in the top nav (one tab: Program Recap / R4). Workbook coverage was added as Page 13.
+
+If you're facilitating after this date and have time, optionally weave it in as a brief "and here's where you can see your progress later" mention at the end of Demo 4 (curation) — don't make it a 5th demo unless an attendee asks. The pattern is: log 6+ workouts → Reports gives you the same picture the journal exercises on Page 12 ask you to build by hand.
+
+Also new: the run-mode **✋ Lap button** toggle in the Start Workout dialog (right under audio cues). Default ON; off = no per-rep tap, timer auto-advances. Not worth demoing; mention only if someone asks "do I have to tap Lap every rep?"
