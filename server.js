@@ -66,6 +66,7 @@ import {
   dbCreateUgcOption, dbGetUgcOption, dbListUgcOptionsByAuthor, dbUpdateUgcOption, dbDeleteUgcOption,
   dbSetUgcOptionVisibility,
   dbListPendingUgc, dbReviewUgcOption, dbGetLatestUgcReview,
+  dbListPromotableUgc, dbMarkUgcPromoted, buildUgcGraduateSnippet,
   dbGetCoachImpact,
   dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog, dbGetProgramRecap,
   dbGetPlatformHealth, dbGetCurationSupport,
@@ -1723,6 +1724,62 @@ app.get("/api/admin/pending-ugc", requireAuth, requireAdmin, async (req, res) =>
     const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
     res.json(await dbListPendingUgc({ limit, offset }));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Phase F — list public UGC eligible for graduation into the JS bank.
+app.get("/api/admin/promotable-ugc", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const limit  = Math.min(500, Math.max(1, parseInt(req.query.limit  || "100", 10)));
+    const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
+    res.json(await dbListPromotableUgc({ limit, offset }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Returns the JS snippet + target constant + paste instructions for a
+// promotable option. Read-only — does NOT stamp promoted_at. Admin
+// pastes the snippet into local public/index.html, commits, pushes,
+// then POSTs /graduate (below) to confirm.
+app.get("/api/admin/ugc/:id/graduate-snippet", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const opt = await dbGetUgcOption(req.params.id);
+    if (!opt) return res.status(404).json({ error: "not_found" });
+    if (opt.visibility !== "public") {
+      return res.status(409).json({ error: `bad state: visibility=${opt.visibility}, need public` });
+    }
+    if (opt.promoted_at) return res.status(409).json({ error: "already_promoted" });
+    const pack = buildUgcGraduateSnippet(opt);
+    res.json({
+      ok:          true,
+      option_id:   opt.id,
+      label:       opt.label,
+      ...pack,  // snippet, constantName, subKey, instructions
+    });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Stamps promoted_at + promoted_by_sub. Admin calls this AFTER pasting
+// the snippet locally, committing, and pushing. Overlay endpoint then
+// stops returning the row (filtered by promoted_at IS NOT NULL) — the
+// JS file becomes the source of truth for this set.
+app.post("/api/admin/ugc/:id/graduate", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const r = await dbMarkUgcPromoted(req.userSub, req.params.id);
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       "ugc.option.graduate",
+      ...reqMeta(req),
+      details:         { option_id: req.params.id },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json(r);
+  } catch (err) {
+    const msg = err.message || String(err);
+    let status = 500;
+    if (msg === "not_found")        status = 404;
+    else if (msg === "already_promoted") status = 409;
+    else if (msg.startsWith("bad state")) status = 409;
+    res.status(status).json({ error: msg });
+  }
 });
 
 // Approve or reject a pending UGC option. Body: { decision, reason? }.

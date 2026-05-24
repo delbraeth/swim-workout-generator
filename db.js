@@ -1923,6 +1923,134 @@ export async function dbReviewUgcOption(reviewerSub, optionId, { decision, reaso
   }
 }
 
+// Phase F — JS snippet builder. Converts a UGC option (with sets) into
+// a JS literal matching the existing bank style. The admin pastes the
+// returned snippet into public/index.html under the target constant
+// (and sub-key for drill/main). Spec: UGC_COACH_SETS_SCOPE.md §3.F.
+
+// Map (section, pool_mode) → JS constant name in public/index.html.
+const UGC_GRADUATE_CONSTANTS = {
+  warmup:   { "25y": "WARMUP_OPTIONS",   "25m": "WARMUP_OPTIONS_SCM",   "50m": "WARMUP_OPTIONS_50M"   },
+  cooldown: { "25y": "COOLDOWN_OPTIONS", "25m": "COOLDOWN_OPTIONS_SCM", "50m": "COOLDOWN_OPTIONS_50M" },
+  drill:    { "25y": "DRILL_OPTIONS",    "25m": "DRILL_OPTIONS_SCM",    "50m": "DRILL_OPTIONS_50M"    },
+  main:     { "25y": "MAIN_OPTIONS",     "25m": "MAIN_OPTIONS_SCM",     "50m": "MAIN_OPTIONS_50M"     },
+};
+
+// Renders one set as a JS object literal one-liner. Order matches the
+// existing bank's per-set field order: id, reps, dist, desc, interval,
+// then optional focus/stroke/eq.
+function _renderUgcSetLine(s) {
+  const parts = [];
+  parts.push(`id: ${JSON.stringify(s.id)}`);
+  parts.push(`reps: ${s.reps}`);
+  parts.push(`dist: ${s.dist}`);
+  parts.push(`desc: ${JSON.stringify(s.desc)}`);
+  parts.push(`interval: ${JSON.stringify(s.interval)}`);
+  if (s.focus)  parts.push(`focus: ${JSON.stringify(s.focus)}`);
+  if (s.stroke) parts.push(`stroke: ${JSON.stringify(s.stroke)}`);
+  if (s.eq)     parts.push(`eq: ${JSON.stringify(s.eq)}`);
+  return `{ ${parts.join(", ")} }`;
+}
+
+// Builds the full graduate package for a single UGC option. Returns
+// { snippet, constantName, subKey, instructions }. Throws if the
+// (section, pool_mode) tuple can't map to a known constant.
+export function buildUgcGraduateSnippet(option) {
+  if (!option) throw new Error("option required");
+  const constantName = UGC_GRADUATE_CONSTANTS[option.section]?.[option.pool_mode];
+  if (!constantName) {
+    throw new Error(`no constant for section=${option.section}, pool_mode=${option.pool_mode}`);
+  }
+  // drill/main are object-keyed; sub-key is type_id OR stroke_id.
+  const needsSubKey = (option.section === "drill" || option.section === "main");
+  const subKey = needsSubKey ? (option.type_id || option.stroke_id || null) : null;
+  if (needsSubKey && !subKey) {
+    throw new Error(`${option.section} option needs type_id or stroke_id`);
+  }
+
+  // Render the option literal. Indentation matches the existing bank
+  // (8 spaces leading for the option line inside a flat array; 10 for
+  // set lines inside the sets array). The admin pastes verbatim.
+  const lines = [];
+  // Header: open + label + totalYards + (typeAffinity?) + sets[
+  const headerParts = [];
+  headerParts.push(`label: ${JSON.stringify(option.label)}`);
+  if (Array.isArray(option.type_affinity) && option.type_affinity.length > 0) {
+    headerParts.push(`typeAffinity: ${JSON.stringify(option.type_affinity)}`);
+  }
+  headerParts.push(`totalYards: ${option.total_yards}`);
+  lines.push(`        { ${headerParts.join(", ")}, sets: [`);
+  for (const s of (option.sets || [])) {
+    lines.push(`            ${_renderUgcSetLine(s)},`);
+  }
+  lines.push(`          ]},`);
+  const snippet = lines.join("\n");
+
+  const target = needsSubKey
+    ? `${constantName}[${JSON.stringify(subKey)}]`
+    : constantName;
+  const instructions =
+    `In public/index.html, find ${target} and paste this option just before ` +
+    `the closing \`]\` of that ${needsSubKey ? "sub-array" : "constant"}.`;
+
+  return { snippet, constantName, subKey, instructions };
+}
+
+// Phase F — list public UGC options eligible for graduation into JS.
+// visibility='public' AND promoted_at IS NULL. Ordered by the most
+// recent approval timestamp (from the latest review row of decision='approve')
+// so admin sees freshly-approved options at top.
+export async function dbListPromotableUgc({ limit = 100, offset = 0 } = {}) {
+  const rows = await pool.query(
+    "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, bo.`pool_mode`, " +
+    "       bo.`label`, bo.`total_yards`, bo.`author_sub`, bo.`created_at`, bo.`updated_at`, " +
+    "       u.`display_name` AS author_name, u.`initials` AS author_initials, u.`email` AS author_email, " +
+    "       (SELECT MAX(`reviewed_at`) FROM `bank_option_reviews` r " +
+    "          WHERE r.`option_id` = bo.`id` AND r.`decision` = 'approve') AS approved_at " +
+    "FROM `bank_options` bo " +
+    "LEFT JOIN `users` u ON u.`sub` = bo.`author_sub` " +
+    "WHERE bo.`visibility` = 'public' AND bo.`promoted_at` IS NULL " +
+    "ORDER BY approved_at DESC, bo.`updated_at` DESC " +
+    "LIMIT ? OFFSET ?",
+    [Math.min(500, Math.max(1, limit)), Math.max(0, offset)]
+  );
+  return rows.map(r => ({
+    id:               r.id,
+    section:          r.section,
+    type_id:          r.type_id,
+    stroke_id:        r.stroke_id,
+    pool_mode:        r.pool_mode,
+    label:            r.label,
+    total_yards:      r.total_yards,
+    author_sub:       r.author_sub,
+    author_name:      r.author_name,
+    author_initials:  r.author_initials,
+    author_email:     r.author_email,
+    created_at:       r.created_at,
+    updated_at:       r.updated_at,
+    approved_at:      r.approved_at,
+  }));
+}
+
+// Stamp a UGC option as promoted into JS. Two-step graduate flow: admin
+// pastes the snippet locally + pushes, then confirms here. After this,
+// the overlay endpoint stops returning the row (filtered by promoted_at
+// IS NOT NULL); the JS file is now the authority.
+export async function dbMarkUgcPromoted(reviewerSub, optionId) {
+  if (!reviewerSub || !optionId) throw new Error("reviewerSub + optionId required");
+  const current = await dbGetUgcOption(optionId);
+  if (!current) throw new Error("not_found");
+  if (current.visibility !== "public") {
+    throw new Error(`bad state: option is ${current.visibility}, not public`);
+  }
+  if (current.promoted_at) throw new Error("already_promoted");
+  await pool.query(
+    "UPDATE `bank_options` SET `promoted_at` = CURRENT_TIMESTAMP, `promoted_by_sub` = ? WHERE `id` = ?",
+    [reviewerSub, optionId]
+  );
+  return { ok: true, id: optionId, promoted_by_sub: reviewerSub };
+}
+
 // Fetch the latest review row for an option (used by MySetsView to
 // show the rejection reason on rejected rows). Returns null when no
 // reviews exist.
