@@ -38,6 +38,12 @@ _Nothing in progress as of 2026-05-23._
   - **Phase F** — Smoke + manual sweep + tag — open (~2-3h)
 - **Pricing implementation** — spec locked in repo `PRICING.md`. Four-tier Patreon (Free / Supporter $3 / Coach $10 / Program $25). Coaches pay, swimmers free. Trigger: first paying pilot. Source: [[swim-generator-pricing-direction]]
 - **Sprint/fly main templates for large budgets** — residual fallback after slice-1 (~4.4% overall) is concentrated in sprint mains ≥1200yd and fly mains ≥1000yd. Both fail validator due to "no rep > 100yd" + budget packing. Real coaches may not program these (so current behavior could be correct). Defer until coach pilot reports a problem. Source: [[swim-generator-fallback-tuning-drill-v1]]
+- **Coach-authored workout sets (UGC into engine)** — captured 2026-05-23. NEEDS A SCOPE SESSION. Cap'n wants a workflow where coaches create / generate / suggest workouts in a format the engine can ingest as picker candidates (alongside today's hardcoded bank + engine templates). Two interlocking dimensions:
+  - **Authoring model**: form-based create? full payload upload? snapshot from a generated workout the coach liked? "Suggest" implies some approval/review step — confirm whether that's a moderation queue or just a tier above private.
+  - **Ownership + sharing tiers**: per Cap'n — `private` (just me) / `team` (my coached teams or groups?) / `public` (entire SetForge community, needs moderation). Each tier needs auth + visibility rules in the picker.
+  - **Engine integration**: how do user-authored sets get weighted vs. hardcoded bank/engine output? Inherit fav/disfav system? Get their own propagation? Risk: a coach's bad set spreads via "team" tier and pollutes their swimmers.
+  - **Overlaps with existing systems**: favorites already let a coach bias the picker (3× weight on items they like). UGC sets are stronger — they ADD new options, not just reweight existing ones. Worth deciding if UGC sets just go into the bank with an `author_sub` column, or live in a parallel `user_sets` table.
+  - Trigger: confirm demand from coach pilot OR plan it as part of the broader catalog evolution. Probably 20-40h all in. Source: chat 2026-05-23.
 
 ## Backlog (captured, low priority)
 
