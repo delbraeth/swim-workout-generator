@@ -16083,9 +16083,10 @@
       { id: "season-to-date",  label: "Season-to-date" },
     ];
 
-    function ReportsView({ isCoach = false }) {
+    function ReportsView({ isCoach = false, isAdmin = false }) {
       // Non-coaches land on Program Recap (R4) — the only tab they can see.
-      // Coaches default to Programming Mix (R1) as before.
+      // Coaches default to Programming Mix (R1) as before. Admin gets two
+      // extra tabs (R5 Platform Health, R6 Curation & Support).
       const [tab, setTab] = React.useState(isCoach ? "programming-mix" : "program-recap");
       const [range, setRange] = React.useState("month");
       const [groupId, setGroupId] = React.useState("");   // "" = all groups
@@ -16115,7 +16116,8 @@
           .catch(e => { setErr(e.message); setLoading(false); });
       }, [tab, range, groupId]);
 
-      // Coach tabs are gated; Program Recap is always visible.
+      // Coach tabs gated to coaches; admin tabs gated to admins; Program
+      // Recap is always visible.
       const tabs = [
         ...(isCoach ? [
           { id: "programming-mix",    label: "📈 Programming Mix" },
@@ -16123,6 +16125,10 @@
           { id: "curation-log",       label: "🎚 Curation Log" },
         ] : []),
         { id: "program-recap",        label: "📖 Program Recap" },
+        ...(isAdmin ? [
+          { id: "platform-health",    label: "🩺 Platform Health" },
+          { id: "curation-support",   label: "🛡 Curation & Support" },
+        ] : []),
       ];
 
       return (
@@ -16199,6 +16205,8 @@
           {!loading && !err && data && tab === "schedule-adherence" && <R2ScheduleAdherenceTab data={data} hasGroup={!!groupId} />}
           {!loading && !err && data && tab === "curation-log"       && <R3CurationLogTab data={data} />}
           {!loading && !err && data && tab === "program-recap"      && <R4ProgramRecapTab data={data} />}
+          {!loading && !err && data && tab === "platform-health"    && <R5PlatformHealthTab data={data} />}
+          {!loading && !err && data && tab === "curation-support"   && <R6CurationSupportTab data={data} />}
         </div>
       );
     }
@@ -16490,6 +16498,206 @@
               </table>
             </div>
           )}
+        </div>
+      );
+    }
+
+    // R5 — Platform Health (Reporting v1 Phase D, admin only).
+    function R5PlatformHealthTab({ data }) {
+      const fmt = (n) => Number(n || 0).toLocaleString();
+      const pct = (n) => Math.round(Number(n || 0));
+      const fa  = data.featureAdoption || {};
+      const ac  = data.activeCoaches || {};
+      const card = { padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 };
+      const cardLabel = { fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 };
+      const cardValue = { fontSize: 24, fontWeight: 800, color: "var(--color-text)" };
+      const maxWeekly = Math.max(1, ...(data.weeklyByTeam || []).map(w => w.total));
+
+      return (
+        <div>
+          {/* Active coaches stat cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 18 }}>
+            <div style={card}><div style={cardLabel}>Active 7d</div><div style={cardValue}>{ac.d7}</div><div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>coaches</div></div>
+            <div style={card}><div style={cardLabel}>Active 14d</div><div style={cardValue}>{ac.d14}</div><div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>coaches</div></div>
+            <div style={card}><div style={cardLabel}>Active 30d</div><div style={cardValue}>{ac.d30}</div><div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>coaches</div></div>
+            <div style={card}><div style={cardLabel}>Workouts (range)</div><div style={cardValue}>{fmt(fa.totalWorkouts)}</div></div>
+          </div>
+
+          {/* Feature adoption */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 18 }}>
+            <div style={card}>
+              <div style={cardLabel}>Engine usage</div>
+              <div style={cardValue}>{pct(fa.enginePct)}%</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>of workouts use engine</div>
+            </div>
+            <div style={card}>
+              <div style={cardLabel}>Mix usage</div>
+              <div style={cardValue}>{pct(fa.mixPct)}%</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>of workouts use mix</div>
+            </div>
+            <div style={card}>
+              <div style={cardLabel}>Multi-lane usage</div>
+              <div style={cardValue}>{pct(fa.multiLanePct)}%</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>of workouts</div>
+            </div>
+            <div style={card}>
+              <div style={cardLabel}>Fallback rate</div>
+              <div style={cardValue}>{pct(fa.fallbackPct)}%</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>any-block fallback</div>
+            </div>
+            <div style={card}>
+              <div style={cardLabel}>Users with favs/disfavs</div>
+              <div style={cardValue}>{fa.usersWithFavs}/{fa.usersWithDis}</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>of {fa.totalUsers} total</div>
+            </div>
+          </div>
+
+          {/* Workouts per week (trended) */}
+          <div style={{ padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8, marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Workouts per week
+            </div>
+            {(data.weeklyByTeam || []).length === 0 ? (
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12, fontStyle: "italic" }}>No workouts in range</div>
+            ) : (
+              <table style={{ width: "100%", fontSize: 12, color: "#cbd5e1" }}>
+                <tbody>
+                  {data.weeklyByTeam.map(w => (
+                    <tr key={w.weekStart}>
+                      <td style={{ padding: "3px 6px 3px 0", whiteSpace: "nowrap", color: "var(--color-text-muted)" }}>Week of {w.weekStart}</td>
+                      <td style={{ padding: "3px 6px", width: "60%" }}>
+                        <div style={{ background: "var(--color-bg)", borderRadius: 3, height: 8, position: "relative", overflow: "hidden" }}>
+                          <div style={{ position: "absolute", inset: 0, width: `${Math.min(100, (w.total / maxWeekly) * 100)}%`, background: "var(--color-primary)" }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: "3px 0", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{w.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Fallback rate trended */}
+          {(data.fallbackTrend || []).length > 0 && (
+            <div style={{ padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Engine fallback rate per week
+              </div>
+              <table style={{ width: "100%", fontSize: 12, color: "#cbd5e1" }}>
+                <tbody>
+                  {data.fallbackTrend.map(w => (
+                    <tr key={w.weekStart}>
+                      <td style={{ padding: "3px 6px 3px 0", whiteSpace: "nowrap", color: "var(--color-text-muted)" }}>Week of {w.weekStart}</td>
+                      <td style={{ padding: "3px 6px", width: "50%" }}>
+                        <div style={{ background: "var(--color-bg)", borderRadius: 3, height: 8, position: "relative", overflow: "hidden" }}>
+                          <div style={{ position: "absolute", inset: 0, width: `${Math.min(100, w.fallbackPct)}%`, background: w.fallbackPct > 10 ? "var(--color-warn)" : "var(--color-positive)" }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: "3px 0", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{Math.round(w.fallbackPct)}% <span style={{ color: "var(--color-text-muted)" }}>({w.fallbackCount}/{w.totalWorkouts})</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // R6 — Curation & Support Activity (admin only).
+    function R6CurationSupportTab({ data }) {
+      const card = { padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 };
+      const subTitle = { fontSize: 12, color: "var(--color-text-dim)", fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" };
+      const cByT = data.curationByTeam || [];
+      const maxProp = Math.max(1, ...cByT.map(t => t.total_propagating));
+
+      return (
+        <div>
+          {/* Per-team propagating disfavor counts */}
+          <div style={{ ...card, marginBottom: 14 }}>
+            <div style={subTitle}>Propagating disfavor by team <span style={{ fontSize: 10, color: "var(--color-text-muted)", textTransform: "none", fontWeight: 400, marginLeft: 4 }}>(simplified proxy — true {">"} 30% bank-reduction calc deferred)</span></div>
+            {cByT.length === 0 ? (
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12, fontStyle: "italic" }}>No teams</div>
+            ) : (
+              <table style={{ width: "100%", fontSize: 12, color: "#cbd5e1" }}>
+                <thead>
+                  <tr style={{ color: "var(--color-text-dim)", textAlign: "left", borderBottom: "1px solid var(--color-bg)" }}>
+                    <th style={{ padding: "4px 6px 4px 0" }}>Team</th>
+                    <th style={{ padding: "4px", textAlign: "right" }}>Coaches</th>
+                    <th style={{ padding: "4px", textAlign: "right" }}>Labels</th>
+                    <th style={{ padding: "4px", textAlign: "right" }}>Sets</th>
+                    <th style={{ padding: "4px", textAlign: "right" }}>Engine</th>
+                    <th style={{ padding: "4px", textAlign: "right" }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cByT.map(t => (
+                    <tr key={t.team_id} style={{ borderBottom: "1px solid var(--color-bg)" }}>
+                      <td style={{ padding: "4px 6px 4px 0" }}>{t.team_name}</td>
+                      <td style={{ padding: "4px", textAlign: "right", color: "var(--color-text-muted)" }}>{t.coach_count}</td>
+                      <td style={{ padding: "4px", textAlign: "right", color: "var(--color-text-muted)" }}>{t.label_count}</td>
+                      <td style={{ padding: "4px", textAlign: "right", color: "var(--color-text-muted)" }}>{t.set_count}</td>
+                      <td style={{ padding: "4px", textAlign: "right", color: "var(--color-text-muted)" }}>{t.engine_count}</td>
+                      <td style={{ padding: "4px", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: t.total_propagating > 30 ? "var(--color-warn)" : "var(--color-text)" }}>{t.total_propagating}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Impersonation activity */}
+          <div style={{ ...card, marginBottom: 14 }}>
+            <div style={subTitle}>Impersonation activity (range)</div>
+            {(data.impersonationByActor || []).length === 0 ? (
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12, fontStyle: "italic" }}>No impersonation sessions in range</div>
+            ) : (
+              <table style={{ width: "100%", fontSize: 12, color: "#cbd5e1" }}>
+                <thead>
+                  <tr style={{ color: "var(--color-text-dim)", textAlign: "left", borderBottom: "1px solid var(--color-bg)" }}>
+                    <th style={{ padding: "4px 6px 4px 0" }}>Admin sub</th>
+                    <th style={{ padding: "4px", textAlign: "right" }}>Sessions</th>
+                    <th style={{ padding: "4px", textAlign: "right" }}>Avg min</th>
+                    <th style={{ padding: "4px", textAlign: "right" }}>Distinct targets</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.impersonationByActor.map(a => (
+                    <tr key={a.admin_sub} style={{ borderBottom: "1px solid var(--color-bg)" }}>
+                      <td style={{ padding: "4px 6px 4px 0", fontFamily: "monospace", fontSize: 10 }} title={a.admin_sub}>{(a.admin_sub || "").slice(0, 16)}…</td>
+                      <td style={{ padding: "4px", textAlign: "right" }}>{a.sessions}</td>
+                      <td style={{ padding: "4px", textAlign: "right", color: "var(--color-text-muted)" }}>{a.avg_minutes}</td>
+                      <td style={{ padding: "4px", textAlign: "right", color: "var(--color-text-muted)" }}>{a.distinct_targets}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Per-team audit rollup */}
+          <div style={card}>
+            <div style={subTitle}>Audit events per team (range)</div>
+            {(data.auditByTeam || []).length === 0 ? (
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12, fontStyle: "italic" }}>No audit events tied to any team in range</div>
+            ) : (
+              <div>
+                {data.auditByTeam.map(t => (
+                  <div key={t.team_id} style={{ marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--color-bg)" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)", marginBottom: 4 }}>Team {t.team_id} <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>({t.total} events)</span></div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {t.events.map(e => (
+                        <span key={e.event_type} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text-muted)" }}>
+                          <code style={{ fontFamily: "monospace" }}>{e.event_type}</code> ×{e.count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -22456,7 +22664,7 @@
               />
             )}
             {view === "reports"  && (
-              <ReportsView isCoach={!!effectiveMe?.is_coach} />
+              <ReportsView isCoach={!!effectiveMe?.is_coach} isAdmin={!!effectiveMe?.is_admin} />
             )}
 
             {view === "history" && (

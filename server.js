@@ -64,6 +64,7 @@ import {
   dbGetEffectiveFavorites,
   dbGetCoachImpact,
   dbGetProgrammingMix, dbGetScheduleAdherence, dbGetCurationLog, dbGetProgramRecap,
+  dbGetPlatformHealth, dbGetCurationSupport,
   dbStartImpersonation, dbEndImpersonation, dbGetActiveImpersonation, dbValidateImpersonationHeader,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
@@ -1648,6 +1649,28 @@ app.get("/api/reports/program-recap", requireAuth, async (req, res) => {
   try {
     const { startYmd, endYmd } = _parseReportRange(req.query);
     const data = await dbGetProgramRecap(req.userSub, { startYmd, endYmd });
+    res.json({ startYmd, endYmd, ...data });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// R5 — Platform Health (admin). Active coaches, workouts/week, feature
+// adoption, fallback rate trended. Optional team_id query param narrows
+// to one team.
+app.get("/api/reports/platform-health", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { startYmd, endYmd } = _parseReportRange(req.query);
+    const teamId = req.query.team_id || null;
+    const data = await dbGetPlatformHealth({ startYmd, endYmd, teamId });
+    res.json({ startYmd, endYmd, teamId, ...data });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// R6 — Curation & Support Activity (admin). Per-team propagating disfavor
+// counts, impersonation activity by actor, per-team audit rollups.
+app.get("/api/reports/curation-support", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { startYmd, endYmd } = _parseReportRange(req.query);
+    const data = await dbGetCurationSupport({ startYmd, endYmd });
     res.json({ startYmd, endYmd, ...data });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });

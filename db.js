@@ -3862,6 +3862,201 @@ export async function dbGetScheduleAdherence(userSub, { startYmd, endYmd, groupI
   };
 }
 
+// R5 — Platform Health (Reporting v1 Phase D, admin-gated). Active coaches
+// by recency, workouts/week-per-team trended table, feature adoption %s,
+// engine fallback rate trended weekly.
+export async function dbGetPlatformHealth({ startYmd, endYmd, teamId = null } = {}) {
+  if (!isYmd(startYmd) || !isYmd(endYmd)) {
+    return { activeCoaches: { d7: 0, d14: 0, d30: 0 }, weeklyByTeam: [], featureAdoption: {}, fallbackTrend: [] };
+  }
+  const today = new Date();
+  const cutoffYmd = (daysBack) => { const d = new Date(today); d.setUTCDate(d.getUTCDate() - daysBack); return d.toISOString().slice(0, 10); };
+  // 1. Active coaches: distinct coach subs who generated a workout within
+  //    7 / 14 / 30 days. Joins workouts to team_coaches to filter to actual
+  //    coaches (not all users). Optional team filter narrows.
+  const teamJoin = teamId ? "JOIN `team_coaches` tc ON tc.`coach_sub` = w.`user_sub` AND tc.`team_id` = ? AND tc.`removed_at` IS NULL " : "JOIN `team_coaches` tc ON tc.`coach_sub` = w.`user_sub` AND tc.`removed_at` IS NULL ";
+  const teamArg = teamId ? [teamId] : [];
+  const activeCoaches = {};
+  for (const days of [7, 14, 30]) {
+    const r = await pool.query(
+      `SELECT COUNT(DISTINCT w.\`user_sub\`) AS n FROM \`workouts\` w ${teamJoin} WHERE w.\`date_completed\` >= ?`,
+      [...teamArg, cutoffYmd(days)]
+    );
+    activeCoaches["d" + days] = Number(r[0]?.n || 0);
+  }
+  // 2. Workouts per week per team — bucket by ISO week (Mon start) over
+  //    the selected range. Output: [{ weekStart: YYYY-MM-DD, teams: {teamId: count}, total }]
+  const wRows = await pool.query(
+    `SELECT w.\`date_completed\`, COALESCE(tc.\`team_id\`, '__none__') AS team_id, COUNT(*) AS n ` +
+    `FROM \`workouts\` w ` +
+    `LEFT JOIN \`team_coaches\` tc ON tc.\`coach_sub\` = w.\`user_sub\` AND tc.\`removed_at\` IS NULL ` +
+    `WHERE w.\`date_completed\` BETWEEN ? AND ? ` +
+    (teamId ? `AND tc.\`team_id\` = ? ` : ``) +
+    `GROUP BY w.\`date_completed\`, tc.\`team_id\``,
+    teamId ? [startYmd, endYmd, teamId] : [startYmd, endYmd]
+  );
+  // Bucket by week-start (Monday). Maintain insertion order.
+  const weekBuckets = new Map();   // weekStart YMD -> { teams: {id:n}, total }
+  const ymdToWeekStart = (d) => {
+    const x = new Date(d + "T00:00:00Z");
+    const day = x.getUTCDay();   // 0=Sun
+    const diff = day === 0 ? -6 : 1 - day;
+    x.setUTCDate(x.getUTCDate() + diff);
+    return x.toISOString().slice(0, 10);
+  };
+  for (const r of wRows) {
+    if (!r.date_completed) continue;
+    const dateStr = (typeof r.date_completed === "string") ? r.date_completed : r.date_completed.toISOString().slice(0, 10);
+    const wk = ymdToWeekStart(dateStr);
+    if (!weekBuckets.has(wk)) weekBuckets.set(wk, { weekStart: wk, teams: {}, total: 0 });
+    const b = weekBuckets.get(wk);
+    b.teams[r.team_id] = (b.teams[r.team_id] || 0) + Number(r.n);
+    b.total += Number(r.n);
+  }
+  const weeklyByTeam = Array.from(weekBuckets.values()).sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  // 3. Feature adoption — counts over the whole range.
+  //    Walk each workout's payload to detect engine/mix usage + multi-lane.
+  const allW = await pool.query(
+    "SELECT `payload` FROM `workouts` WHERE `date_completed` BETWEEN ? AND ?",
+    [startYmd, endYmd]
+  );
+  let usedEngine = 0, usedMix = 0, usedMultiLane = 0, total = allW.length, withFallback = 0;
+  for (const row of allW) {
+    let p = row.payload;
+    if (typeof p === "string") { try { p = JSON.parse(p); } catch (_) { p = {}; } }
+    if (!p || typeof p !== "object") continue;
+    const blocks = Array.isArray(p.blocks) ? p.blocks : [];
+    let hasEngine = false, hasMix = false, hasFallback = false;
+    for (const b of blocks) {
+      if (b.__engineMeta) hasEngine = true;
+      if (b.source === "mix" || b.mix) hasMix = true;
+      if (b.__laneFitFallback) hasFallback = true;
+    }
+    if (hasEngine) usedEngine++;
+    if (hasMix) usedMix++;
+    if (p.multi_lane && p.multi_lane.enabled) usedMultiLane++;
+    if (hasFallback) withFallback++;
+  }
+  // Has-favorites / has-disfavorites — count distinct user_subs in each table.
+  const favU = await pool.query("SELECT COUNT(DISTINCT `user_sub`) AS n FROM `favorites`");
+  const disU = await pool.query("SELECT COUNT(DISTINCT `user_sub`) AS n FROM `disfavorites`");
+  const allUsers = await pool.query("SELECT COUNT(*) AS n FROM `users`");
+  const featureAdoption = {
+    totalWorkouts:     total,
+    enginePct:         total > 0 ? (usedEngine    / total) * 100 : 0,
+    mixPct:            total > 0 ? (usedMix       / total) * 100 : 0,
+    multiLanePct:      total > 0 ? (usedMultiLane / total) * 100 : 0,
+    fallbackPct:       total > 0 ? (withFallback  / total) * 100 : 0,
+    usersWithFavs:     Number(favU[0]?.n || 0),
+    usersWithDis:      Number(disU[0]?.n || 0),
+    totalUsers:        Number(allUsers[0]?.n || 0),
+  };
+  // 4. Fallback trend — per week, fallback workouts / total workouts.
+  const fallbackTrend = [];
+  for (const b of weeklyByTeam) {
+    // Don't have per-week fallback aggregated; recompute from the per-week
+    // bucket by re-scanning workouts in that week. Cheap enough for the
+    // small ranges we ship today (week/month/quarter/season).
+    const fbRows = await pool.query(
+      "SELECT `payload` FROM `workouts` WHERE `date_completed` BETWEEN ? AND DATE_ADD(?, INTERVAL 6 DAY)",
+      [b.weekStart, b.weekStart]
+    );
+    let fb = 0;
+    for (const r of fbRows) {
+      let p = r.payload;
+      if (typeof p === "string") { try { p = JSON.parse(p); } catch (_) { p = null; } }
+      const blocks = p && Array.isArray(p.blocks) ? p.blocks : [];
+      if (blocks.some(bl => bl.__laneFitFallback)) fb++;
+    }
+    fallbackTrend.push({ weekStart: b.weekStart, totalWorkouts: fbRows.length, fallbackCount: fb, fallbackPct: fbRows.length > 0 ? (fb / fbRows.length) * 100 : 0 });
+  }
+  return { activeCoaches, weeklyByTeam, featureAdoption, fallbackTrend };
+}
+
+// R6 — Curation & Support Activity (Reporting v1 Phase D, admin-gated).
+// Simplified curation-health proxy: count propagating disfavor items per
+// team. Plus impersonation activity rollup + per-team audit rollup.
+export async function dbGetCurationSupport({ startYmd, endYmd } = {}) {
+  if (!isYmd(startYmd) || !isYmd(endYmd)) {
+    return { curationByTeam: [], impersonationByActor: [], auditByTeam: [] };
+  }
+  // 1. Per-team propagating disfavor count. Across all team's coaches,
+  //    sum label-disfavorites + set-disfavorites + engine-disfavorites
+  //    (engine_disfavorites lives in settings.extra JSON).
+  const teamCoachRows = await pool.query(
+    "SELECT t.`id` AS team_id, t.`name` AS team_name, " +
+    "       (SELECT COUNT(*) FROM `disfavorites` d JOIN `team_coaches` tc2 ON tc2.`coach_sub` = d.`user_sub` AND tc2.`team_id` = t.`id` AND tc2.`removed_at` IS NULL) AS label_count, " +
+    "       (SELECT COUNT(*) FROM `user_disfavor_sets` ds JOIN `team_coaches` tc3 ON tc3.`coach_sub` = ds.`user_sub` AND tc3.`team_id` = t.`id` AND tc3.`removed_at` IS NULL) AS set_count, " +
+    "       (SELECT COUNT(DISTINCT tc4.`coach_sub`) FROM `team_coaches` tc4 WHERE tc4.`team_id` = t.`id` AND tc4.`removed_at` IS NULL) AS coach_count " +
+    "FROM `teams` t WHERE t.`archived` = 0"
+  );
+  // Engine disfavorites count requires per-coach JSON parse. Pull once.
+  const allCoachSettings = await pool.query(
+    "SELECT s.`user_sub`, s.`extra` FROM `settings` s " +
+    "WHERE s.`user_sub` IN (SELECT DISTINCT `coach_sub` FROM `team_coaches` WHERE `removed_at` IS NULL)"
+  );
+  const engineDisCountBySub = new Map();
+  for (const r of allCoachSettings) {
+    let ex = r.extra;
+    if (typeof ex === "string") { try { ex = JSON.parse(ex); } catch (_) { ex = null; } }
+    if (ex && Array.isArray(ex.engine_disfavorites)) {
+      engineDisCountBySub.set(r.user_sub, ex.engine_disfavorites.length);
+    }
+  }
+  const teamCoachMap = await pool.query(
+    "SELECT `team_id`, `coach_sub` FROM `team_coaches` WHERE `removed_at` IS NULL"
+  );
+  const engineByTeam = new Map();
+  for (const r of teamCoachMap) {
+    const n = engineDisCountBySub.get(r.coach_sub) || 0;
+    engineByTeam.set(r.team_id, (engineByTeam.get(r.team_id) || 0) + n);
+  }
+  const curationByTeam = teamCoachRows.map(r => ({
+    team_id:        r.team_id,
+    team_name:      r.team_name,
+    coach_count:    Number(r.coach_count),
+    label_count:    Number(r.label_count),
+    set_count:      Number(r.set_count),
+    engine_count:   engineByTeam.get(r.team_id) || 0,
+    total_propagating: Number(r.label_count) + Number(r.set_count) + (engineByTeam.get(r.team_id) || 0),
+  })).sort((a, b) => b.total_propagating - a.total_propagating);
+  // 2. Impersonation activity — sessions in range, grouped by admin_sub.
+  const impRows = await pool.query(
+    "SELECT `admin_sub`, COUNT(*) AS sessions, " +
+    "       AVG(TIMESTAMPDIFF(MINUTE, `started_at`, COALESCE(`ended_at`, `expires_at`))) AS avg_min, " +
+    "       COUNT(DISTINCT `target_sub`) AS distinct_targets " +
+    "FROM `impersonation_sessions` WHERE `started_at` BETWEEN ? AND ? GROUP BY `admin_sub`",
+    [startYmd + " 00:00:00", endYmd + " 23:59:59"]
+  );
+  const impersonationByActor = impRows.map(r => ({
+    admin_sub:        r.admin_sub,
+    sessions:         Number(r.sessions),
+    avg_minutes:      Math.round(Number(r.avg_min || 0) * 10) / 10,
+    distinct_targets: Number(r.distinct_targets),
+  })).sort((a, b) => b.sessions - a.sessions);
+  // 3. Per-team audit rollup. Map user_sub → team_id via team_coaches,
+  //    then count audit_events for each. Limited to events with user_sub
+  //    (anon events like rate_limit.hit pre-auth are excluded).
+  const auditRows = await pool.query(
+    "SELECT tc.`team_id`, ae.`event_type`, COUNT(*) AS n " +
+    "FROM `audit_events` ae " +
+    "JOIN `team_coaches` tc ON tc.`coach_sub` = ae.`user_sub` AND tc.`removed_at` IS NULL " +
+    "WHERE ae.`created_at` BETWEEN ? AND ? " +
+    "GROUP BY tc.`team_id`, ae.`event_type` " +
+    "ORDER BY tc.`team_id`, n DESC",
+    [startYmd + " 00:00:00", endYmd + " 23:59:59"]
+  );
+  const auditByTeamMap = new Map();
+  for (const r of auditRows) {
+    if (!auditByTeamMap.has(r.team_id)) auditByTeamMap.set(r.team_id, { team_id: r.team_id, events: [], total: 0 });
+    const b = auditByTeamMap.get(r.team_id);
+    b.events.push({ event_type: r.event_type, count: Number(r.n) });
+    b.total += Number(r.n);
+  }
+  const auditByTeam = Array.from(auditByTeamMap.values()).sort((a, b) => b.total - a.total);
+  return { curationByTeam, impersonationByActor, auditByTeam };
+}
+
 // R4 — Program Recap (Reporting v1 Phase C). Solo/masters report — no
 // group dimension. Uses the same own-workouts-in-range query as R1 but
 // adds template usage counts, multi-lane fit success rate, and a 30-day

@@ -1700,6 +1700,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <ul>
         <li><strong>Coaches</strong> get four tabs: Programming Mix, Schedule Adherence, Curation Log, and Program Recap.</li>
         <li><strong>Solo / masters swimmers</strong> get one tab: Program Recap (R4 — your own training rollup).</li>
+        <li><strong>Admins</strong> get two additional tabs: Platform Health and Curation &amp; Support.</li>
       </ul>
       <p>Self-only across the board — every report shows YOUR data; cross-coach comparison comes in a later phase.</p>
 
@@ -1722,6 +1723,12 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>📖 Program Recap (R4)</h3>
       <p>Available to all users (solo / masters / coaches). Personal training rollup over the selected range — no group dimension. Stat cards: total yards, workout count, multi-lane fit success rate (% of multi-lane workouts that satisfied every lane without falling back), and a count of any 30-day windows where you missed one of the four strokes. Below that, yards-by-type and yards-by-stroke tables (same bar-fill style as R1), and most/least-used bank labels and engine templates so you can see what you lean on vs. what's been gathering dust.</p>
       <p>The 4-stroke gap detector slides a 30-day window through your range in 7-day steps. Any window missing free / back / breast / fly shows up in the warning table at the bottom — useful for catching "I haven't done breaststroke in over a month" without manually scrolling history.</p>
+
+      <h3>🩺 Platform Health (R5, admin only)</h3>
+      <p>Cross-team operational view. Stat cards for active coaches over the last 7/14/30 days (any coach who generated a workout). Below that: weekly bar-fill tables for workouts-per-week and engine fallback rate trend, plus feature-adoption percentages (% of workouts using engine, mix, multi-lane, fallback rate, count of users with favorites/disfavorites set vs. total user count). Optional team filter narrows the active-coaches + per-team breakdown.</p>
+
+      <h3>🛡 Curation &amp; Support Activity (R6, admin only)</h3>
+      <p>Three sections. <strong>Propagating disfavor by team:</strong> per-team table showing how many disfavor items (labels + sets + engine tuples) the team's coaches collectively propagate to their swimmers — totals above 30 are flagged amber as a "this team is heavily curating" signal. (This is a simplified proxy; the true {">"} 30% effective-bank-reduction calculation is on the backlog.) <strong>Impersonation activity:</strong> per support actor, sessions count + average session minutes + distinct targets in range. Useful for review of support-session hygiene. <strong>Audit events per team:</strong> per-team rollup chips showing event_type ×count — quick scan for which teams are generating CSRF rejects, rate-limit hits, etc.</p>
 
       <h3>What Reports v1 does NOT do</h3>
       <ul>
