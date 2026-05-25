@@ -90,6 +90,8 @@ The hard part isn't that team-tier needs more features — Cap'n knows that. The
 - **PRICING.md and RELATIONSHIPS_SCOPE.md confirmed absent from disk** (third independent persona to surface this — first was solo swimmer, now team personas). Worth a 1-minute audit.
 - **Manual line 1406 explicitly says "ownership transfer is a planned future flow."** Head Coach surfaced this; it's a known gap, not a hidden one.
 
+> **Reconciliation (2026-05-25, same day):** the missing-docs finding was acted on. Audit confirmed both docs had never existed in git history despite being referenced in 5+ code/manual/ROADMAP places. Both reconstructed from memory: RELATIONSHIPS_SCOPE.md as design-history of shipped relationships work, PRICING.md as 2026-05-19 workshop + revisions driven by this and the other two eval sweeps. The reconstruction is non-load-bearing for the eval findings above; just closes a public promise (the manual literally tells users *"See RELATIONSHIPS_SCOPE.md at the repo root"*).
+
 ---
 
 ## Verbatim persona reports (input data, preserved for audit)

@@ -2,7 +2,7 @@
 
 Live at https://setforge.io. Single source of truth — supersedes any scattered "open follow-ups" in v1.x checkpoint memos.
 
-Last refreshed: **2026-05-25** (UGC v1 CLOSED at tag `ugc-coach-sets-v1` / commit `8a461f6`. Three-eval sweep complete: coach + swimmer + team. Bigger Threads grown with cross-validated candidates: per-swimmer constraint vector, meet-anchored taper, data portability + tombstone, team-curation tier, vendor paper kit, outbound email, ownership transfer.)
+Last refreshed: **2026-05-25** (UGC v1 CLOSED at tag `ugc-coach-sets-v1` / commit `8a461f6`. Three-eval sweep complete: coach + swimmer + team. Bigger Threads grown with cross-validated candidates: per-swimmer constraint vector, meet-anchored taper, data portability + tombstone, team-curation tier, vendor paper kit, outbound email, ownership transfer. Missing scope docs RELATIONSHIPS_SCOPE.md + PRICING.md reconstructed from memory; PRICING.md revised per eval sweep findings.)
 
 ## How this file works
 
@@ -47,7 +47,7 @@ _Empty. UGC v1 (now) is the active build._
 - **Outbound email infrastructure** — Resend/Postmark provider + transactional template + queue. ~4-6h. Foundational unlock: blocks parent portal, MAAP coach-CC, Discord scope notifications, Lesson tier confirmations, abandonment/re-engagement nudges, review-request loops. Discovered by parent persona; reinforced by team eval (Treasurer breach-notification SLA needs it; Team Manager mass-blast). Cost band S-M. Source: [[swim-generator-swimmer-evaluation-2026-05-25]] + [[swim-generator-team-evaluation-2026-05-25]]
 - **Ownership transfer + UGC reassignment on departure** — Head Coach, Assistant, Lifecycle all flag. Manual line 1406 already documents "planned future flow." Cost band M. Without it teams orphan on founder-exit. Source: [[swim-generator-team-evaluation-2026-05-25]]
 - **Reporting engine v1** — ✅ COMPLETE 2026-05-23. All 6 phases (A-F) shipped in one day. 6 reports across 3 audiences (coach-self / solo / admin) + Print/PDF + Markdown export. Tag `reporting-v1-complete` after Cap'n's live-exercise pass. v1.1 deferred punch list (charts, true bank-reduction calc, R5/R6 PDF, etc.) lives in [[swim-generator-reporting-v1-complete]]. Source: [[swim-generator-reporting-scope]]
-- **Pricing implementation** — spec locked in repo `PRICING.md`. Four-tier Patreon (Free / Supporter $3 / Coach $10 / Program $25). Coaches pay, swimmers free. Trigger: first paying pilot. Source: [[swim-generator-pricing-direction]]
+- **Pricing implementation** — spec at repo `PRICING.md` (reconstructed + revised 2026-05-25 per three-eval sweep). Current model: **Free / [Tip jar $3] / Coach $10 / Lesson $5-7 TBD / Program $25 (gated on team-curation + paper kit shipping)**. Coaches pay, swimmers free. Trigger: first paying pilot. Source: [[swim-generator-pricing-direction]]
 - **Sprint/fly main templates for large budgets** — residual fallback after slice-1 (~4.4% overall) is concentrated in sprint mains ≥1200yd and fly mains ≥1000yd. Both fail validator due to "no rep > 100yd" + budget packing. Real coaches may not program these (so current behavior could be correct). Defer until coach pilot reports a problem. Source: [[swim-generator-fallback-tuning-drill-v1]]
 
 ## Backlog (captured, low priority)

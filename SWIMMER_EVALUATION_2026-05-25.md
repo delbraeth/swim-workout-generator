@@ -80,6 +80,8 @@ Parent persona discovered: `server.js` has **zero outbound mail** (no SendGrid, 
 
 While reading scope docs, the Solo agent reported **PRICING.md and RELATIONSHIPS_SCOPE.md don't exist on disk** despite being referenced by name in memory + this evaluation's input prompts. Two possibilities: they were drafted-then-not-committed, or memory + ROADMAP reference them by intention. Worth a 1-minute audit.
 
+> **Reconciliation (2026-05-25, same day):** audit confirmed both docs had NEVER existed in git history despite being referenced in 5+ places across code + manual + ROADMAP. The relationships work shipped Stage 1-4 (Stage 5 rolled back). Both docs reconstructed from memory checkpoints on 2026-05-25: RELATIONSHIPS_SCOPE.md as-shipped design history, PRICING.md as 2026-05-19 workshop + revisions driven by this evaluation sweep (Supporter demoted to tip jar, Lesson tier added, Program tier gated on team-curation + paper kit).
+
 ---
 
 ## Verbatim persona reports (input data, preserved for audit)
