@@ -2720,6 +2720,65 @@ export function isCoppaProtected(dob, asOf = new Date()) {
   return age < 13;
 }
 
+// ── Discord feedback webhook (DISCORD_SCOPE.md §6) ────────────────────
+// Best-effort fire-and-forget POST to a private Discord channel for
+// triage. The DB write is the source of truth; this is observability,
+// not durability. Minor-bypass + DOB-null-bypass is enforced by the
+// caller in server.js (see /api/feedback route).
+//
+// Payload shape per scope §6:
+//   [<category>] <subject>
+//   by <display_name>
+//   on <page>
+//   ---
+//   <body>
+//
+// Webhook URL is in process.env.DISCORD_FEEDBACK_WEBHOOK_URL. If unset
+// (e.g. dev/test envs without Discord wired), the helper no-ops with a
+// warn log. Webhook failures (Discord 4xx/5xx, network error, timeout)
+// are logged but never bubble up — the user's /api/feedback request
+// must not fail because of a third-party outage.
+export async function postFeedbackToDiscord({ category, subject, body, page, displayName }) {
+  const url = process.env.DISCORD_FEEDBACK_WEBHOOK_URL;
+  if (!url) {
+    console.warn("[discord] DISCORD_FEEDBACK_WEBHOOK_URL not set; skipping post");
+    return { posted: false, reason: "no_url" };
+  }
+  // Discord max message length is 2000 chars; clip body to leave headroom.
+  const safeBody = (body || "").slice(0, 1500);
+  const safeSubject = (subject || "(no subject)").slice(0, 200);
+  const safePage = (page || "(unknown page)").slice(0, 200);
+  const safeName = (displayName || "(unknown user)").slice(0, 100);
+  const safeCategory = (category || "feedback").slice(0, 32);
+
+  const content =
+    `[${safeCategory}] ${safeSubject}\n` +
+    `by ${safeName}\n` +
+    `on ${safePage}\n` +
+    `---\n` +
+    safeBody;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);  // 5s cap
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      console.warn(`[discord] webhook POST returned ${res.status}; feedback row remains in DB`);
+      return { posted: false, reason: `http_${res.status}` };
+    }
+    return { posted: true };
+  } catch (err) {
+    console.warn(`[discord] webhook POST threw: ${err.message}; feedback row remains in DB`);
+    return { posted: false, reason: err.name === "AbortError" ? "timeout" : "exception" };
+  }
+}
+
 // DOB sanity bounds — reject obvious nonsense at insert/update time.
 //   * Future dates → impossible (not born yet)
 //   * Before 1900 → effectively impossible for an active swimmer

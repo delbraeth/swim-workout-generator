@@ -73,6 +73,7 @@ import {
   dbStartImpersonation, dbEndImpersonation, dbGetActiveImpersonation, dbValidateImpersonationHeader,
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
+  isMinor, postFeedbackToDiscord,
   dbIsUser, dbIsAdmin, dbIsCoach, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
@@ -2027,6 +2028,40 @@ app.post("/api/feedback", checkOrigin, requireAuth, requireCsrf, writeLimiter, a
       details:   { feedback_id: r.id, category },
     });
     res.json({ ok: true, id: r.id });
+
+    // ── Discord webhook (DISCORD_SCOPE.md §6) ─────────────────────────
+    // Fire-and-forget AFTER res.json so the user never waits on Discord.
+    // Bypass when DOB is unknown (null) or user is under 18 — minor
+    // protection per scope §6 + §2 audience-is-adults-only. The DB row
+    // is canonical; missing the Discord post degrades triage UX but
+    // never user data integrity.
+    pool.query("SELECT `display_name`, `dob` FROM `users` WHERE `sub` = ?", [req.userSub])
+      .then(async (rows) => {
+        const u = rows[0];
+        if (!u) return;
+        const minor = isMinor(u.dob);
+        if (minor === null || minor === true) {
+          // null DOB (unknown) → safer-side bypass; true → enforced bypass.
+          dbAuditEvent({
+            userSub:   req.userSub,
+            eventType: "feedback.discord.bypassed",
+            ...reqMeta(req),
+            details:   { feedback_id: r.id, reason: minor === null ? "dob_unknown" : "minor" },
+          });
+          return;
+        }
+        const result = await postFeedbackToDiscord({
+          category, subject, body, page,
+          displayName: u.display_name,
+        });
+        dbAuditEvent({
+          userSub:   req.userSub,
+          eventType: result.posted ? "feedback.discord.posted" : "feedback.discord.failed",
+          ...reqMeta(req),
+          details:   { feedback_id: r.id, reason: result.reason || null },
+        });
+      })
+      .catch(err => console.warn(`[feedback] Discord dispatch path threw: ${err.message}`));
   } catch (err) {
     res.status(400).json({ error: err.message || String(err) });
   }
