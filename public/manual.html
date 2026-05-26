@@ -1911,6 +1911,8 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>In progress</h3>
       <p>Active build right now. You'll see these show up in the app over the coming weeks.</p>
       <ul>
+        <li><strong>Meet-anchored taper</strong> — <strong>v1 live</strong>. Coaches set a championship meet as a group's anchor from <em>Teams</em> (🎯 Anchor button on any team event); swimmers see a "Week N of M toward [meet]" countdown on their Assigned-to-me cards. The system suggests a Training Phase (Base / Build / Peak / Taper) based on weeks-out. Auto-clears when the underlying event is deleted. <em>Coming in v1.1:</em> a small 🎯 phase pill on workouts whose source group is anchored.</li>
+        <li><strong>Per-swimmer constraints</strong> — <strong>data plane shipping in stages</strong>. Foundation landed: a coach can record clinical/practical limits per swimmer ("no fly for Linda this month," "shoulder injury — no paddles," yardage cap during taper, easy-only intensity cap) that the picker will hard-exclude rather than just downweight. Closed vocabulary across stroke / equipment / section / caps. Coach UX (per-swimmer panel + Generate-time per-practice checklist), picker integration, substitution rendering on multi-lane print views, and swimmer-side visibility in <em>Profile</em> + <em>Assigned to me</em> all land in subsequent slices.</li>
         <li><strong>Coach-authored workout sets (UGC)</strong> — <strong>v1 complete</strong>. <em>Live:</em> authoring (📝 My Sets in the coach menu), snapshot (📥 button on any generated workout block), team sharing (👥 TEAM badge), public submission with admin moderation (🌐 PUBLIC badge after approval), and the graduate-to-JS admin tool that turns a battle-tested public UGC option into a canonical bank entry. Your own sets always show with a 📝 UGC badge. <strong>Multi-tag</strong> means one set can declare membership in multiple type/stroke pools (e.g., a kick set can land in <em>distance</em>, <em>sprint</em>, and <em>endurance</em> at once), avoiding the duplication trap — the canonical bank uses the same model.</li>
       </ul>
 
@@ -1924,10 +1926,8 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Bigger ideas that need a design pass before any code happens. Each of these has been thought about but not committed. Order doesn't mean priority.</p>
       <ul>
         <li><strong>Pricing tiers</strong> — Free for swimmers, paid tiers for coaches. The plan is locked in scope but trigger is the first paying coach asking.</li>
-        <li><strong>More sign-in options beyond Apple</strong> — <strong>Google OAuth</strong> is the next sign-in path (Phase 2 of the public plan). Apple stays primary. SetForge is OAuth-only on purpose: no email + password ever, no magic-link emails either — your account is delegated to an identity provider you already trust, and we can't lose a password we never had.</li>
         <li><strong>Better persona preview for admins</strong> — currently view-as wipes data state and reloads to swap. Next iteration would be smoother and could also include filtered settings (default pace, etc.) so admins can QA the genuine first-time-user experience.</li>
         <li><strong>Cross-coach reports</strong> — head-coach view that compares assistant coaches' programming patterns. Phase 1 of Reporting is self-only by design; cross-coach is its own thing.</li>
-        <li><strong>Discord community</strong> — a SetForge Discord server for feedback, bug reports, feature requests, and coach-to-coach discussion. Scope locked: 7 channels, automod, under-13 blocked at sign-up (Discord's own minimum age is 13+), feedback submitted by under-18 accounts stays in the in-app admin queue (never reaches Discord). Server setup ships with Phase 1 closeout; the `/api/feedback` → Discord webhook ships in Phase 2 alongside email infra.</li>
       </ul>
 
       <h3>Decided against</h3>
