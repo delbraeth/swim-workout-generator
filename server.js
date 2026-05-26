@@ -2289,6 +2289,47 @@ app.patch("/api/admin/feedback/:id", checkOrigin, requireAuth, requireAdmin, req
   }
 });
 
+// Admin: send a test email to yourself. Fires through the real enqueueEmail
+// path (lib/email.js) so all the production guards apply — minor-bypass,
+// EMAIL_ACTIVE check, dedup_key uniqueness, audit logging. The returned
+// shape mirrors enqueueEmail's: { id } on enqueue, { bypassed: reason }
+// when minor-bypass triggered, { skipped: reason } for inactive / unknown
+// user / missing email. The UI uses this to give an honest worker result.
+//
+// dedup_key includes Date.now() so repeated test sends from the same
+// admin don't collide. template_id defaults to 'welcome'; future templates
+// can be tested by passing template_id in the body.
+app.post("/api/admin/email/test", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const templateId = (req.body?.template_id || "welcome").toString().slice(0, 64);
+    // Vars passed through to the renderer. For welcome we look up the
+    // admin's display_name. Future templates can pull other fields.
+    const userRows = await pool.query(
+      "SELECT `display_name` FROM `users` WHERE `sub` = ?",
+      [req.userSub]
+    );
+    const displayName = userRows[0]?.display_name || null;
+
+    const result = await enqueueEmail({
+      dedupKey:    `test:${templateId}:${req.userSub}:${Date.now()}`,
+      toUserSub:   req.userSub,
+      templateId,
+      displayName,
+      manualUrl:   `${APP_URL}/manual.html`,
+    });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "admin.email.test",
+      ...reqMeta(req),
+      details:   { template_id: templateId, result },
+    });
+    res.json(result);
+  } catch (err) {
+    console.error("[admin/email/test]", err.message);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // ───── Teams (relationships scope, Stage 1 / R-A) ────────────────────
 // See RELATIONSHIPS_SCOPE.md. v1 surfaces only the owner role; admin tier
 // is in the data model but no UI to set it until R-J. Coach-gated overall
