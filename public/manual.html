@@ -1910,10 +1910,10 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Bigger ideas that need a design pass before any code happens. Each of these has been thought about but not committed. Order doesn't mean priority.</p>
       <ul>
         <li><strong>Pricing tiers</strong> — Free for swimmers, paid tiers for coaches. The plan is locked in scope but trigger is the first paying coach asking.</li>
-        <li><strong>More sign-in options beyond Apple</strong> — passcode-based (email-delivered one-time codes or similar). Explicitly NOT going to use email + password — your account is OAuth or nothing.</li>
+        <li><strong>More sign-in options beyond Apple</strong> — <strong>Google OAuth</strong> is the next sign-in path (Phase 2 of the public plan). Apple stays primary. SetForge is OAuth-only on purpose: no email + password ever, no magic-link emails either — your account is delegated to an identity provider you already trust, and we can't lose a password we never had.</li>
         <li><strong>Better persona preview for admins</strong> — currently view-as wipes data state and reloads to swap. Next iteration would be smoother and could also include filtered settings (default pace, etc.) so admins can QA the genuine first-time-user experience.</li>
         <li><strong>Cross-coach reports</strong> — head-coach view that compares assistant coaches' programming patterns. Phase 1 of Reporting is self-only by design; cross-coach is its own thing.</li>
-        <li><strong>Discord community</strong> — a SetForge Discord server for user feedback, bug reports, feature requests, and coach-to-coach discussion. Still being designed (channels, moderation, how minors interact with Discord's 13+ ToS).</li>
+        <li><strong>Discord community</strong> — a SetForge Discord server for feedback, bug reports, feature requests, and coach-to-coach discussion. Scope locked: 7 channels, automod, under-13 blocked at sign-up (Discord's own minimum age is 13+), feedback submitted by under-18 accounts stays in the in-app admin queue (never reaches Discord). Server setup ships with Phase 1 closeout; the `/api/feedback` → Discord webhook ships in Phase 2 alongside email infra.</li>
       </ul>
 
       <h3>Decided against</h3>
