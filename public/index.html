@@ -14835,18 +14835,14 @@
       const handleSetAnchor = async () => {
         if (!anchoringEventId || !anchorTargetGroupId) return;
         setAnchorBusy(true);
-        const eventIdNum = Number(anchoringEventId);
-        const payload    = { event_id: eventIdNum };
-        console.log("[anchor] handleSetAnchor", {
-          anchoringEventId, type: typeof anchoringEventId,
-          eventIdNum, isFinite: Number.isFinite(eventIdNum),
-          anchorTargetGroupId, payload,
-        });
         try {
+          // event_id is a VARCHAR string (ev_xxx) on the server — pass through
+          // unchanged. The initial implementation Number()-converted, which
+          // turned the string into NaN and the server rejected the body.
           const res = await fetch(`/api/groups/${anchorTargetGroupId}/anchor`, {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify(payload),
+            body:    JSON.stringify({ event_id: anchoringEventId }),
           });
           if (!res.ok) {
             const j = await res.json().catch(() => ({}));

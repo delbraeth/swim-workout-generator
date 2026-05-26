@@ -3577,14 +3577,17 @@ export async function dbSetGroupAnchor({ groupId, eventId, byCoachSub }) {
   if (!groupId || !eventId || !byCoachSub) {
     throw new Error("dbSetGroupAnchor: groupId, eventId, byCoachSub all required");
   }
+  // group_id + event_id are VARCHAR strings (gr_xxx / ev_xxx).
+  const groupIdStr = String(groupId);
+  const eventIdStr = String(eventId);
   // Clear any existing active anchor first (replace semantics — one per group).
   await pool.query(
     "UPDATE `group_anchors` SET `active` = 0, `cleared_at` = NOW() WHERE `group_id` = ? AND `active` = 1",
-    [groupId]
+    [groupIdStr]
   );
   const r = await pool.query(
     "INSERT INTO `group_anchors` (`group_id`, `event_id`, `set_by_coach_sub`) VALUES (?, ?, ?)",
-    [groupId, eventId, byCoachSub]
+    [groupIdStr, eventIdStr, byCoachSub]
   );
   return Number(r.insertId);
 }
@@ -3594,13 +3597,14 @@ export async function dbClearGroupAnchor({ groupId, byCoachSub: _byCoachSub }) {
   // byCoachSub is captured in audit_events at the route layer; not stored here.
   const r = await pool.query(
     "UPDATE `group_anchors` SET `active` = 0, `cleared_at` = NOW() WHERE `group_id` = ? AND `active` = 1",
-    [groupId]
+    [String(groupId)]
   );
   return { cleared: r.affectedRows > 0 };
 }
 
 // Returns the active anchor for a group with derived weeks_out + suggested_phase,
-// or null if no anchor exists or the underlying event is gone.
+// or null if no anchor exists or the underlying event is gone. group_id +
+// event_id are VARCHAR strings (gr_xxx, ev_xxx); only anchor_id is BIGINT.
 export async function dbGetActiveAnchor(groupId) {
   if (!groupId) return null;
   const rows = await pool.query(
@@ -3609,7 +3613,7 @@ export async function dbGetActiveAnchor(groupId) {
     "FROM `group_anchors` ga " +
     "LEFT JOIN `team_events` te ON te.`id` = ga.`event_id` " +
     "WHERE ga.`group_id` = ? AND ga.`active` = 1 LIMIT 1",
-    [groupId]
+    [String(groupId)]
   );
   const r = rows[0];
   if (!r) return null;
@@ -3618,7 +3622,7 @@ export async function dbGetActiveAnchor(groupId) {
   const weeksOut = weeksUntilEvent(eventDateYmd);
   return {
     anchor_id:        Number(r.anchor_id),
-    event_id:         Number(r.event_id),
+    event_id:         r.event_id,                  // STRING (ev_xxx)
     event_name:       r.event_name,
     event_date:       eventDateYmd,
     set_by_coach_sub: r.set_by_coach_sub,
@@ -3654,8 +3658,8 @@ export async function dbListAnchorsForMemberSwimmer(userSub) {
     const eventDateYmd = dateToYmd(r.event_date);
     const weeksOut = weeksUntilEvent(eventDateYmd);
     return {
-      group_id:         Number(r.group_id),
-      event_id:         Number(r.event_id),
+      group_id:         r.group_id,                // STRING (gr_xxx)
+      event_id:         r.event_id,                // STRING (ev_xxx)
       event_name:       r.event_name,
       event_date:       eventDateYmd,
       weeks_out:        weeksOut,

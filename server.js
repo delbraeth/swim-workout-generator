@@ -2802,8 +2802,9 @@ app.post("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writeL
   try {
     const role = await getCallerGroupRole(req.params.id, req.userSub);
     if (!role) return res.status(403).json({ error: "not a group coach" });
-    const eventId = Number(req.body?.event_id);
-    if (!Number.isFinite(eventId) || eventId <= 0) {
+    // event_id is a VARCHAR string (ev_xxx); not a number. Validate length + non-empty.
+    const eventId = String(req.body?.event_id || "").trim();
+    if (!eventId) {
       console.warn("[anchor.set] event_id rejected — group:", req.params.id, "body:", JSON.stringify(req.body), "userSub:", req.userSub);
       return res.status(400).json({ error: "event_id required" });
     }
@@ -2816,7 +2817,7 @@ app.post("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writeL
     if (event.team_id !== group.team_id) return res.status(400).json({ error: "event/team mismatch" });
 
     const anchorId = await dbSetGroupAnchor({
-      groupId:     Number(req.params.id),
+      groupId:     req.params.id,
       eventId,
       byCoachSub:  req.userSub,
     });
@@ -2835,7 +2836,7 @@ app.delete("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writ
   try {
     const role = await getCallerGroupRole(req.params.id, req.userSub);
     if (!role) return res.status(403).json({ error: "not a group coach" });
-    const r = await dbClearGroupAnchor({ groupId: Number(req.params.id), byCoachSub: req.userSub });
+    const r = await dbClearGroupAnchor({ groupId: req.params.id, byCoachSub: req.userSub });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "anchor.clear",
