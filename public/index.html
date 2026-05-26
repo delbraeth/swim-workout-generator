@@ -14835,11 +14835,18 @@
       const handleSetAnchor = async () => {
         if (!anchoringEventId || !anchorTargetGroupId) return;
         setAnchorBusy(true);
+        const eventIdNum = Number(anchoringEventId);
+        const payload    = { event_id: eventIdNum };
+        console.log("[anchor] handleSetAnchor", {
+          anchoringEventId, type: typeof anchoringEventId,
+          eventIdNum, isFinite: Number.isFinite(eventIdNum),
+          anchorTargetGroupId, payload,
+        });
         try {
           const res = await fetch(`/api/groups/${anchorTargetGroupId}/anchor`, {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ event_id: Number(anchoringEventId) }),
+            body:    JSON.stringify(payload),
           });
           if (!res.ok) {
             const j = await res.json().catch(() => ({}));

@@ -2803,7 +2803,10 @@ app.post("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writeL
     const role = await getCallerGroupRole(req.params.id, req.userSub);
     if (!role) return res.status(403).json({ error: "not a group coach" });
     const eventId = Number(req.body?.event_id);
-    if (!Number.isFinite(eventId) || eventId <= 0) return res.status(400).json({ error: "event_id required" });
+    if (!Number.isFinite(eventId) || eventId <= 0) {
+      console.warn("[anchor.set] event_id rejected — group:", req.params.id, "body:", JSON.stringify(req.body), "userSub:", req.userSub);
+      return res.status(400).json({ error: "event_id required" });
+    }
     // Sanity check: the event must belong to the same team as the group.
     // dbGetGroup returns the group's team_id; dbGetTeamEvent returns the event's team_id.
     const group = await dbGetGroup(req.params.id);
