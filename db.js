@@ -126,12 +126,61 @@ function entryToWorkoutRow(entry) {
 
 // ─── users ──────────────────────────────────────────────────────────────────
 // Idempotent — call before any write that has a user_sub FK target.
-export async function dbEnsureUser(userSub, initials = null) {
+export async function dbEnsureUser(userSub, initials = null, displayName = null) {
   if (!userSub) return;
+  // displayName defaulted from Google's `given_name` on first sign-up per
+  // GOOGLE_OAUTH_SCOPE.md decision 11. INSERT IGNORE means the value only
+  // applies to brand-new rows — returning users keep their existing
+  // display_name unchanged.
   await pool.query(
-    "INSERT IGNORE INTO `users` (`sub`, `initials`) VALUES (?, ?)",
-    [userSub, initials]
+    "INSERT IGNORE INTO `users` (`sub`, `initials`, `display_name`) VALUES (?, ?, ?)",
+    [userSub, initials, displayName]
   );
+}
+
+// ── OAuth provider mapping (GOOGLE_OAUTH_SCOPE.md §3.3) ───────────────
+// Look up which SetForge user owns a given (provider, provider_sub) pair.
+// Returns the user_sub string or null if no such mapping exists. Used by
+// the Google callback to detect returning users (who get straight to
+// session creation) vs new ones (who go through invite + link).
+export async function dbGetUserSubByProvider(provider, providerSub) {
+  if (!provider || !providerSub) return null;
+  const rows = await pool.query(
+    "SELECT `user_sub` FROM `user_oauth_providers` WHERE `provider` = ? AND `provider_sub` = ?",
+    [provider, providerSub]
+  );
+  return rows[0]?.user_sub || null;
+}
+
+// Idempotent link: insert (provider, provider_sub, user_sub) if not present.
+// Used both by the migration backfill conceptually and by the live Google
+// callback when linking-by-verified-email succeeds.
+export async function dbLinkOAuthProvider({ userSub, provider, providerSub }) {
+  if (!userSub || !provider || !providerSub) {
+    throw new Error("dbLinkOAuthProvider: userSub, provider, providerSub all required");
+  }
+  await pool.query(
+    "INSERT IGNORE INTO `user_oauth_providers` (`provider`, `provider_sub`, `user_sub`) VALUES (?, ?, ?)",
+    [provider, providerSub, userSub]
+  );
+}
+
+// Find a user by their verified email (case-insensitive). ONLY returns a
+// row when users.email_verified=1 — unverified emails are not trustworthy
+// for the link-by-email path per scope decision 1. Used by the Google
+// callback's link step.
+//
+// Apple-relay caveat: if the existing Apple row's email is the
+// @privaterelay.appleid.com variant, Google's real email will never match
+// it. That user ends up with two accounts per scope decision 3
+// (documented limitation; manual operator merge).
+export async function dbFindUserByVerifiedEmail(email) {
+  if (!email) return null;
+  const rows = await pool.query(
+    "SELECT `sub`, `email`, `email_verified` FROM `users` WHERE LOWER(`email`) = LOWER(?) AND `email_verified` = 1 LIMIT 1",
+    [email]
+  );
+  return rows[0] || null;
 }
 
 // ─── workouts ───────────────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ import path      from "path";
 import helmet    from "helmet";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
+import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 
 import {
   pool, dbActive, pingDb,
@@ -75,6 +76,7 @@ import {
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   isMinor, postFeedbackToDiscord,
   dbIsUser, dbIsAdmin, dbIsCoach, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
+  dbGetUserSubByProvider, dbLinkOAuthProvider, dbFindUserByVerifiedEmail,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
   dbAdminListAuditEvents,
@@ -138,6 +140,14 @@ const APPLE_KEY_ID       = process.env.APPLE_KEY_ID       || "";
 const APPLE_PRIVATE_KEY  = (process.env.APPLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
 
 const APPLE_AUTH_ACTIVE = !!(APPLE_CLIENT_ID && APPLE_TEAM_ID && APPLE_KEY_ID && APPLE_PRIVATE_KEY);
+
+// Google Sign-In config (Phase 2 · GOOGLE_OAUTH_SCOPE.md §3.1). Empty
+// until configured in Hyperlift; route returns 404 when GOOGLE_AUTH_ACTIVE
+// is false so dev/test envs without Google credentials still boot.
+const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     || "";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const GOOGLE_REDIRECT_URI  = process.env.GOOGLE_REDIRECT_URI  || "";
+const GOOGLE_AUTH_ACTIVE   = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REDIRECT_URI);
 
 // Subs (Apple identifiers) that are exempt from the writeLimiter. Comma-
 // separated env var. Used so admin testing across multiple devices doesn't
@@ -486,7 +496,7 @@ app.get("/api/auth/apple", authLimiter, (req, res) => {
 app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false }), async (req, res) => {
   const meta = reqMeta(req);
   const fail = (reason, userSub = null) => {
-    dbAuditEvent({ userSub, eventType: "auth.login.reject", ...meta, details: { reason, channel: "web" } });
+    dbAuditEvent({ userSub, eventType: "auth.login.reject", ...meta, details: { reason, channel: "web", provider: "apple" } });
     res.redirect(`/?auth=error&reason=${encodeURIComponent(reason)}`);
   };
   try {
@@ -515,24 +525,164 @@ app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false
         return fail(`invite_${result.reason}`, sub);
       }
       await dbEnsureUser(sub);
+      // Link the Apple identity in the new join table. Idempotent: backfill
+      // already wrote this row for pre-existing users; this is for brand-new
+      // ones. Per GOOGLE_OAUTH_SCOPE.md §3.2.
+      await dbLinkOAuthProvider({ userSub: sub, provider: "apple", providerSub: sub });
       console.log(`[auth] New user created via invite: sub=${sub}`);
-      dbAuditEvent({ userSub: sub, eventType: "invite.consume", ...meta, details: { code: invite, channel: "web" } });
-      dbAuditEvent({ userSub: sub, eventType: "auth.signup",    ...meta, details: { channel: "web" } });
+      dbAuditEvent({ userSub: sub, eventType: "invite.consume", ...meta, details: { code: invite, channel: "web", provider: "apple" } });
+      dbAuditEvent({ userSub: sub, eventType: "auth.signup",    ...meta, details: { channel: "web", provider: "apple" } });
     }
 
-    const sessionId = await dbCreateSession({
-      userSub:    sub,
-      ip:         meta.ip,
-      userAgent:  meta.userAgent,
-      ttlSeconds: SESSION_MAX_AGE,
-    });
-    res.setHeader("Set-Cookie",
-      `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; Path=/`
-    );
-    dbAuditEvent({ userSub: sub, eventType: "auth.login.success", ...meta, details: { channel: "web" } });
-    res.redirect("/");
+    return signInAs({ res, meta, userSub: sub, provider: "apple" });
   } catch (err) {
     console.error("[auth/callback]", err.message);
+    fail("server_error");
+  }
+});
+
+// signInAs — shared end-of-callback path used by Apple + Google flows.
+// Creates a session, sets the cookie, audit-logs auth.login.success with
+// an explicit provider tag (GOOGLE_OAUTH_SCOPE.md decision 10), and
+// redirects to /. Centralizing this means provider tagging stays
+// consistent across both flows.
+async function signInAs({ res, meta, userSub, provider }) {
+  const sessionId = await dbCreateSession({
+    userSub,
+    ip:        meta.ip,
+    userAgent: meta.userAgent,
+    ttlSeconds: SESSION_MAX_AGE,
+  });
+  res.setHeader("Set-Cookie",
+    `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; Path=/`
+  );
+  dbAuditEvent({ userSub, eventType: "auth.login.success", ...meta, details: { channel: "web", provider } });
+  res.redirect("/");
+}
+
+// ─── Google OAuth ─────────────────────────────────────────────────────
+// Phase 2 deliverable per GOOGLE_OAUTH_SCOPE.md. Mirrors Apple's start +
+// callback shape with these differences:
+//   - Google uses `code` flow (GET callback with ?code=...), not Apple's
+//     form_post POST callback. Token exchange happens server-side.
+//   - id_token verification via google-auth-library handles cert
+//     rotation + audience + expiry checks (decision 8).
+//   - Account-linking by verified email (decision 1): if Google's email
+//     matches an existing users.email with email_verified=1, the Google
+//     sub is bound to that user instead of creating a new one. Apple-
+//     relay edge case → second account by design (decision 3).
+//   - users.display_name on brand-new Google sign-ups seeded from the
+//     Google profile's given_name (decision 11).
+const googleClient = GOOGLE_AUTH_ACTIVE
+  ? new GoogleOAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI)
+  : null;
+
+app.get("/api/auth/google", authLimiter, (req, res) => {
+  if (!GOOGLE_AUTH_ACTIVE) return res.status(404).send("Google auth not configured");
+  const csrf   = crypto.randomBytes(16).toString("hex");
+  const invite = (req.query.invite || "").toString().trim().slice(0, 32);
+  const state  = invite ? `${csrf}.${invite}` : csrf;
+  res.setHeader("Set-Cookie",
+    `oauth_state=${state}; HttpOnly; Secure; SameSite=None; Max-Age=300; Path=/`
+  );
+  const url = googleClient.generateAuthUrl({
+    access_type: "online",            // we don't need refresh tokens
+    scope:       ["openid", "email", "profile"],
+    state,
+    prompt:      "select_account",    // always show account picker, even for one-account browsers
+  });
+  res.redirect(url);
+});
+
+app.get("/api/auth/google/callback", authLimiter, async (req, res) => {
+  const meta = reqMeta(req);
+  const fail = (reason, userSub = null) => {
+    dbAuditEvent({ userSub, eventType: "auth.login.reject", ...meta, details: { reason, channel: "web", provider: "google" } });
+    res.redirect(`/?auth=error&reason=${encodeURIComponent(reason)}`);
+  };
+  if (!GOOGLE_AUTH_ACTIVE) return fail("google_not_configured");
+  try {
+    const { code, state, error } = req.query;
+    if (error) return fail(String(error));
+
+    const storedState = getCookie(req, "oauth_state");
+    res.setHeader("Set-Cookie",
+      `oauth_state=; HttpOnly; Secure; SameSite=None; Max-Age=0; Path=/`
+    );
+    if (!storedState || storedState !== state) return fail("state_mismatch");
+    if (!code) return fail("missing_code");
+
+    // Exchange code → tokens server-side. Google requires the secret;
+    // this call uses GOOGLE_CLIENT_SECRET from the OAuth2Client config.
+    const { tokens } = await googleClient.getToken(String(code));
+    if (!tokens.id_token) return fail("missing_id_token");
+
+    // Verify the id_token (signature, audience, expiry). Library handles
+    // Google's JWK cert rotation under the hood.
+    const ticket = await googleClient.verifyIdToken({
+      idToken:  tokens.id_token,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.sub) return fail("bad_id_token");
+
+    const googleSub             = payload.sub;
+    const googleEmail           = payload.email || null;
+    const googleEmailVerified   = payload.email_verified === true;
+    const googleGivenName       = payload.given_name || null;
+    console.log(`[auth] Google login: sub=${googleSub} email_verified=${googleEmailVerified}`);
+
+    const dotIdx = String(state).indexOf(".");
+    const invite = dotIdx > 0 ? String(state).slice(dotIdx + 1) : null;
+
+    // Step 1 — already-linked Google sub? Returning user, straight to session.
+    let userSub = await dbGetUserSubByProvider("google", googleSub);
+    if (userSub) {
+      return signInAs({ res, meta, userSub, provider: "google" });
+    }
+
+    // Step 2 — link by verified email? Bind Google to an existing Apple-
+    // created user with the same verified email (decision 1).
+    if (googleEmailVerified && googleEmail) {
+      const matched = await dbFindUserByVerifiedEmail(googleEmail);
+      if (matched) {
+        await dbLinkOAuthProvider({ userSub: matched.sub, provider: "google", providerSub: googleSub });
+        dbAuditEvent({ userSub: matched.sub, eventType: "auth.provider.link", ...meta, details: { provider: "google", channel: "web" } });
+        return signInAs({ res, meta, userSub: matched.sub, provider: "google" });
+      }
+    }
+
+    // Step 3 — brand-new user. Invite gate, ensure, link, audit, sign in.
+    const inviteResult = await dbConsumeInviteCode(invite);
+    if (!inviteResult.ok) {
+      console.warn(`[auth] Reject new Google sub ${googleSub}: invite ${inviteResult.reason}`);
+      // We don't have a SetForge sub yet so audit userSub stays null —
+      // the reject still records the channel + provider.
+      return fail(`invite_${inviteResult.reason}`);
+    }
+    // New SetForge user_sub: use the Google sub as the canonical id. (Apple
+    // does the same — provider_sub IS user_sub for the originating provider.)
+    const newSub = googleSub;
+    await dbEnsureUser(newSub, null, googleGivenName);
+    await dbLinkOAuthProvider({ userSub: newSub, provider: "google", providerSub: googleSub });
+    // Also store email + verified flag on the users row so the email
+    // appears in admin views + audit context. dbAdminUpdateUser would
+    // be the long-form path; for now a direct UPDATE.
+    if (googleEmail) {
+      try {
+        await pool.query(
+          "UPDATE `users` SET `email` = ?, `email_verified` = ? WHERE `sub` = ?",
+          [googleEmail, googleEmailVerified ? 1 : 0, newSub]
+        );
+      } catch (err) {
+        console.warn(`[auth] failed to store email on new Google user ${newSub}: ${err.message}`);
+      }
+    }
+    dbAuditEvent({ userSub: newSub, eventType: "invite.consume", ...meta, details: { code: invite, channel: "web", provider: "google" } });
+    dbAuditEvent({ userSub: newSub, eventType: "auth.signup",    ...meta, details: { channel: "web", provider: "google" } });
+    return signInAs({ res, meta, userSub: newSub, provider: "google" });
+  } catch (err) {
+    console.error("[auth/google/callback]", err.message);
     fail("server_error");
   }
 });
