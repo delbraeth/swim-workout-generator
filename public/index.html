@@ -7094,6 +7094,7 @@
       lanesPaceSecs = null,             // v2.0 — array of lane paces (sec/100). When set, picker filters options that don't fit all lanes (see optionFitsAllLanes). null/empty = single-pace path unchanged.
       ugcOverlay = null,                // UGC Phase B — caller's UGC overlay (12-key shape); merged into bank picker per exact pool mode.
       myConstraints = [],               // Phase 3 PSC slice 2 — caller's active swimmer_constraints rows. Step-0 hard-exclude. Skipped entirely in multi-lane mode (per scope §3.5; per-lane sub lands in slice 3).
+      tonightOverrides = [],             // Phase 3 PSC slice 3 — in-memory constraint rows added at Generate time from the per-practice checklist. Unioned with myConstraints; never persisted.
     } = {}) {
       // v1.8 — Resolve the multiplier once. "exclude" zeros the weight;
       // pickWeighted's existing "all weights zero → uniform fallback" is the
@@ -7111,18 +7112,21 @@
       const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay);
       const _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay);
 
-      // Phase 3 PSC slice 2 — hard-exclude step 0. Per
+      // Phase 3 PSC slice 2/3 — hard-exclude step 0. Per
       // PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.4: drop options before weight
       // computation. SKIPPED entirely in multi-lane mode (fork 1 with Cap'n
-      // 2026-05-26: per-lane substitution rendering lands in slice 3).
+      // 2026-05-26: per-lane substitution rendering lands in slice 3+).
       // Bank fallback: if PSC empties a pool, use the unfiltered pool so
       // generation never stalls (silent per fork 3; substitution rendering
       // is slice 3+). Tracked in `pscFilterFallback` for debug only.
-      const usePsc = Array.isArray(myConstraints) && myConstraints.length > 0 && !(Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0);
+      // Slice 3: tonightOverrides (per-practice checklist) unions with
+      // persistent myConstraints — both feed the same picker filter.
+      const _effectiveConstraints = [...(myConstraints || []), ...(tonightOverrides || [])];
+      const usePsc = _effectiveConstraints.length > 0 && !(Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0);
       const pscFilterFallback = { warmup: false, drill: false, main: false, cooldown: false };
       const _narrowByPsc = (pool, sectionKey) => {
         if (!usePsc) return pool;
-        const filtered = pool.filter(o => !optionViolatesPSC(o, myConstraints));
+        const filtered = pool.filter(o => !optionViolatesPSC(o, _effectiveConstraints));
         if (filtered.length === 0) {
           pscFilterFallback[sectionKey] = true;
           return pool;
@@ -7416,7 +7420,7 @@
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
           // S3 — apply engine overrides per section, then recompute total
-          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? myConstraints : []);
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : []);
           const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
           // v2.0 — attach laneFit fallback marker (closure vars live in generateWorkout scope).
@@ -7512,7 +7516,7 @@
 
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       // S3 — apply engine overrides per section, then recompute total
-      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? myConstraints : []);
+      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : []);
       const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
       // v2.0 — same laneFit attachment as the loop-success path above.
@@ -7585,12 +7589,14 @@
       lanesPaceSecs = null,          // v2.0 — multi-lane fit filter on the section's pool
       ugcOverlay = null,             // UGC Phase B — caller's UGC overlay merged into bank picker per exact pool mode
       myConstraints = [],            // Phase 3 PSC slice 2 — caller's active swimmer_constraints rows. Step-0 hard-exclude. Skipped in multi-lane mode.
+      tonightOverrides = [],          // Phase 3 PSC slice 3 — in-memory per-practice overrides; unioned with myConstraints.
     } = {}) {
       // v1.8 — Resolve once for use below.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
-      // Phase 3 PSC slice 2 — same skip-in-multi-lane rule as generateWorkout.
-      const _useLaneFitRegen = Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0;
-      const _usePscRegen     = Array.isArray(myConstraints) && myConstraints.length > 0 && !_useLaneFitRegen;
+      // Phase 3 PSC slice 2/3 — same skip-in-multi-lane rule as generateWorkout.
+      const _useLaneFitRegen     = Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0;
+      const _effectiveCRegen     = [...(myConstraints || []), ...(tonightOverrides || [])];
+      const _usePscRegen         = _effectiveCRegen.length > 0 && !_useLaneFitRegen;
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -7635,7 +7641,7 @@
       // pre-filter. Skipped in multi-lane mode (per fork 1). Bank-fallback
       // on empty filtered pool — silent (per fork 3).
       if (_usePscRegen) {
-        const pscFiltered = pool.filter(o => !optionViolatesPSC(o, myConstraints));
+        const pscFiltered = pool.filter(o => !optionViolatesPSC(o, _effectiveCRegen));
         if (pscFiltered.length > 0) pool = pscFiltered;
         // else: silent bank fallback (caller has no actionable recovery)
       }
@@ -7778,7 +7784,7 @@
           disfavorMode,
           engineFavorites,
           lanesPaceSecs,
-          _usePscRegen ? myConstraints : [],
+          _usePscRegen ? _effectiveCRegen : [],
         );
         newBlock = { ...bankBlock, ...overridden[sectionKey] };
       }
@@ -18779,6 +18785,302 @@
     const DOB_MIN = "1900-01-01";
     const DOB_MAX_TODAY = () => new Date().toISOString().slice(0, 10);
 
+    // ═══════════════════════════════════════════════════════════════
+    //  Per-Swimmer Constraints (PSC) — slice 3 coach UX
+    //  Spec: PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.8
+    //  Decisions (Cap'n 2026-05-26):
+    //    - Managed Swimmers only for v1 (real-user swimmers via API)
+    //    - Edit = delete + recreate (no PATCH route)
+    // ═══════════════════════════════════════════════════════════════
+
+    // Closed vocab — keep in sync with migration 037 ENUM and db.js PSC_TYPES.
+    const PSC_TYPE_GROUPS = [
+      {
+        label: "Stroke (no fly / breast / back / free)",
+        opts: [
+          { v: "stroke_no_fly",    label: "No fly" },
+          { v: "stroke_no_breast", label: "No breaststroke" },
+          { v: "stroke_no_back",   label: "No backstroke" },
+          { v: "stroke_no_free",   label: "No freestyle" },
+        ],
+      },
+      {
+        label: "Equipment (no paddles / fins / etc.)",
+        opts: [
+          { v: "equip_no_paddles",   label: "No paddles" },
+          { v: "equip_no_fins",      label: "No fins" },
+          { v: "equip_no_snorkel",   label: "No snorkel" },
+          { v: "equip_no_kickboard", label: "No kickboard" },
+          { v: "equip_no_buoy",      label: "No pull-buoy" },
+        ],
+      },
+      {
+        label: "Section (skip main / kick / drill)",
+        opts: [
+          { v: "section_no_main",  label: "Skip main set"  },
+          { v: "section_no_kick",  label: "Skip kick section"  },
+          { v: "section_no_drill", label: "Skip drill section" },
+        ],
+      },
+      {
+        label: "Caps (yardage / intensity)",
+        opts: [
+          { v: "cap_yardage",   label: "Yardage cap" },
+          { v: "cap_intensity", label: "Intensity cap (easy-only)" },
+        ],
+      },
+    ];
+
+    // Flat lookup for label rendering.
+    const PSC_LABEL_MAP = (() => {
+      const m = {};
+      for (const g of PSC_TYPE_GROUPS) for (const o of g.opts) m[o.v] = o.label;
+      return m;
+    })();
+
+    function formatPscRow(c) {
+      const base = PSC_LABEL_MAP[c.constraint_type] || c.constraint_type;
+      const valueBit = c.value_num != null ? ` — ${c.value_num} yd` :
+                       c.value_str != null ? ` — ${c.value_str}` : "";
+      const expiryBit = c.expires_at
+        ? ` · expires ${new Date(c.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+        : " · persistent";
+      return `${base}${valueBit}${expiryBit}`;
+    }
+
+    // Add/Edit modal. Edit = caller passes prefill from a soft-deleted row.
+    function ConstraintFormModal({ open, managedId, prefill, onClose, onSaved }) {
+      const [type,     setType]     = React.useState(prefill?.constraint_type || "stroke_no_fly");
+      const [valueNum, setValueNum] = React.useState(prefill?.value_num != null ? String(prefill.value_num) : "");
+      const [valueStr, setValueStr] = React.useState(prefill?.value_str || "easy_only");
+      const [persistent, setPersistent] = React.useState(prefill ? !prefill.expires_at : true);
+      const [expiresYmd, setExpiresYmd] = React.useState(() => {
+        if (prefill?.expires_at) return String(prefill.expires_at).slice(0, 10);
+        // default: 2 weeks from now
+        const d = new Date(); d.setDate(d.getDate() + 14);
+        return d.toISOString().slice(0, 10);
+      });
+      const [busy, setBusy] = React.useState(false);
+      const [err,  setErr]  = React.useState(null);
+
+      // Re-init on open (prefill changes between Add and Edit invocations).
+      React.useEffect(() => {
+        if (!open) return;
+        setType(prefill?.constraint_type || "stroke_no_fly");
+        setValueNum(prefill?.value_num != null ? String(prefill.value_num) : "");
+        setValueStr(prefill?.value_str || "easy_only");
+        setPersistent(prefill ? !prefill.expires_at : true);
+        if (prefill?.expires_at) setExpiresYmd(String(prefill.expires_at).slice(0, 10));
+        setErr(null);
+      }, [open, prefill]);
+
+      if (!open) return null;
+
+      const needsYd  = type === "cap_yardage";
+      const needsStr = type === "cap_intensity";
+
+      const submit = async () => {
+        setErr(null);
+        const body = { managed_id: managedId, constraint_type: type };
+        if (needsYd) {
+          const n = parseInt(valueNum, 10);
+          if (!Number.isInteger(n) || n <= 0) { setErr("Yardage cap must be a positive integer"); return; }
+          body.value_num = n;
+        }
+        if (needsStr) body.value_str = valueStr;
+        if (!persistent) {
+          // Build ISO with end-of-day UTC so the date inclusive feels right
+          body.expires_at = `${expiresYmd}T23:59:59Z`;
+        }
+        setBusy(true);
+        try {
+          const res = await fetch("/api/swimmer-constraints", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify(body),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setBusy(false);
+          onSaved && onSaved(j.constraint);
+          onClose();
+        } catch (e) { setBusy(false); setErr(e.message); }
+      };
+
+      return (
+        <div onClick={onClose} className="modal-overlay"
+          style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(2,6,23,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "10vh 16px" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 460, background: "var(--color-bg)", border: "1px solid var(--color-card)", borderRadius: 14, padding: "22px 22px 18px", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <h3 style={{ color: "var(--color-text)", fontSize: 17, margin: 0, fontWeight: 700 }}>
+                {prefill ? "Edit constraint" : "Add constraint"}
+              </h3>
+              <button onClick={onClose} aria-label="Close"
+                style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", fontSize: 22, cursor: "pointer", padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Constraint type</label>
+              <select value={type} onChange={e => setType(e.target.value)}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 14 }}>
+                {PSC_TYPE_GROUPS.map(g => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.opts.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            {needsYd && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Yardage cap</label>
+                <input type="number" min="100" max="20000" step="100" value={valueNum}
+                  onChange={e => setValueNum(e.target.value)} placeholder="e.g. 1500"
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 14 }} />
+                <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 4 }}>
+                  Workouts beyond this size get trimmed from the end (preserves warmup + main when possible).
+                </div>
+              </div>
+            )}
+
+            {needsStr && (
+              <div style={{ marginBottom: 12, padding: 8, background: "var(--color-card)", borderRadius: 6, fontSize: 12, color: "var(--color-text-muted)" }}>
+                Currently the only intensity cap is <strong>easy_only</strong> — replaces the main set with cooldown-equivalent volume at easy pace.
+              </div>
+            )}
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Expiry</label>
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <button type="button" onClick={() => setPersistent(true)}
+                  style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: persistent ? "var(--color-primary)" : "var(--color-card)", color: persistent ? "var(--color-bg)" : "var(--color-text-muted)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  Persistent (until removed)
+                </button>
+                <button type="button" onClick={() => setPersistent(false)}
+                  style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: !persistent ? "var(--color-primary)" : "var(--color-card)", color: !persistent ? "var(--color-bg)" : "var(--color-text-muted)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  Until date
+                </button>
+              </div>
+              {!persistent && (
+                <input type="date" value={expiresYmd} onChange={e => setExpiresYmd(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 14 }} />
+              )}
+            </div>
+
+            {err && <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 10 }}>Error: {err}</div>}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={submit} disabled={busy}
+                style={{ flex: 1, padding: "9px 14px", background: "var(--color-positive)", color: "var(--color-bg)", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
+                {busy ? "Saving…" : (prefill ? "Save changes" : "Add constraint")}
+              </button>
+              <button onClick={onClose} disabled={busy}
+                style={{ padding: "9px 14px", background: "var(--color-border)", color: "#cbd5e1", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Per-managed-swimmer Constraints subsection. Slots into the swimmer
+    // detail view between ClaimTokensPanel and CoachNotesPanel.
+    function ConstraintsPanel({ managedId }) {
+      const [rows, setRows] = React.useState(null);
+      const [err,  setErr]  = React.useState(null);
+      const [modalOpen, setModalOpen] = React.useState(false);
+      const [editRow,   setEditRow]   = React.useState(null);  // prefill row for Edit
+
+      const load = React.useCallback(async () => {
+        try {
+          const res = await fetch(`/api/swimmer-constraints?managed_id=${encodeURIComponent(managedId)}`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const j = await res.json();
+          setRows(Array.isArray(j.constraints) ? j.constraints : []);
+        } catch (e) { setErr(e.message); setRows([]); }
+      }, [managedId]);
+      React.useEffect(() => { load(); }, [load]);
+
+      const handleRemove = async (id, confirmMsg) => {
+        if (confirmMsg && !window.confirm(confirmMsg)) return false;
+        setErr(null);
+        try {
+          const res = await fetch(`/api/swimmer-constraints/${id}`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+          return true;
+        } catch (e) { setErr(e.message); return false; }
+      };
+
+      const handleEdit = async (row) => {
+        // Per fork 3 (delete + recreate): drop the existing row first, then
+        // open the form prefilled. If delete fails, abort.
+        const ok = await handleRemove(row.id, null);
+        if (!ok) return;
+        setEditRow(row);
+        setModalOpen(true);
+      };
+
+      return (
+        <div className="card" style={{ borderRadius: 10, padding: 16, marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <h3 style={{ color: "var(--color-text)", margin: 0, fontSize: 15 }}>⚠ Active constraints</h3>
+            <button onClick={() => { setEditRow(null); setModalOpen(true); }}
+              style={{ padding: "5px 11px", background: "var(--color-primary)", color: "var(--color-bg)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              + Add constraint
+            </button>
+          </div>
+
+          {rows === null ? (
+            <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>Loading…</div>
+          ) : rows.length === 0 ? (
+            <div style={{ color: "var(--color-text-muted)", fontSize: 12, fontStyle: "italic", padding: "8px 0" }}>
+              No active constraints. Use Add to record an injury restriction, equipment limit, or taper cap.
+            </div>
+          ) : (
+            <div>
+              {rows.map(r => (
+                <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--color-card)", gap: 8 }}>
+                  <div style={{ fontSize: 13, color: "var(--color-text)", flex: 1 }}>
+                    <span style={{ marginRight: 6 }}>⚠</span>
+                    {formatPscRow(r)}
+                  </div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button onClick={() => handleEdit(r)} title="Edit (replaces the row)"
+                      style={{ padding: "4px 9px", background: "var(--color-card)", color: "var(--color-text-muted)", border: "1px solid var(--color-border)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                      Edit
+                    </button>
+                    <button onClick={() => handleRemove(r.id, `Remove "${PSC_LABEL_MAP[r.constraint_type] || r.constraint_type}"?`)}
+                      style={{ padding: "4px 9px", background: "var(--color-card)", color: "var(--color-warn)", border: "1px solid var(--color-warn)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {err && <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 8 }}>Error: {err}</div>}
+
+          <ConstraintFormModal
+            open={modalOpen}
+            managedId={managedId}
+            prefill={editRow}
+            onClose={() => { setModalOpen(false); setEditRow(null); }}
+            onSaved={() => { load(); }}
+          />
+        </div>
+      );
+    }
+
     function ManagedSwimmersView({ mySub = null } = {}) {
       const [list,       setList]       = React.useState(null);
       const [showArch,   setShowArch]   = React.useState(false);
@@ -19025,6 +19327,11 @@
                 isCoppa={detail.is_coppa_protected}
                 parentManaged={detail.parent_managed_flag}
               />
+            )}
+
+            {/* Phase 3 PSC slice 3 — per-swimmer constraints (injury / equipment / cap restrictions) */}
+            {!detail.archived && (
+              <ConstraintsPanel managedId={detail.id} />
             )}
 
             {/* R-H: coach notes journal for this managed profile */}
@@ -22281,6 +22588,13 @@
       // — solo, coach-Generate, etc. Slice 3 adds coach UX + per-practice
       // checklist for assignments targeting specific swimmers.
       const [myConstraints, setMyConstraints] = useState([]);
+      // Phase 3 PSC slice 3 — per-practice checklist.
+      // groupActiveConstraints: { [swimmerKey: sub|managed_id]: [constraint rows] }
+      // tonightSelected: Set<constraint_id> of rows the coach checked for THIS Generate.
+      // groupActiveConstraints refetches on target group change. tonightSelected
+      // resets to empty (default to NOT applying — coach opts in per practice).
+      const [groupActiveConstraints, setGroupActiveConstraints] = useState({});
+      const [tonightSelected, setTonightSelected] = useState(() => new Set());
       // UGC Phase B — bank overlay. Mirrors the 12 JS bank constants;
       // populated by /api/bank/my-overlay (own + team-shared + public
       // UGC, excluding promoted_at). Picker merges with simple concat
@@ -23400,6 +23714,43 @@
       // phase when generating for a group (decision #39).
       const effectivePhase = generateForTarget?.current_phase || phase;
 
+      // Phase 3 PSC slice 3 — per-practice checklist data fetch.
+      // When Generate target switches to a group, fetch its active constraints
+      // roll-up so the coach can opt in (per-practice) to additional restrictions.
+      // Selection resets per target switch (no leaky-state between groups).
+      useEffect(() => {
+        setTonightSelected(new Set());
+        if (!generateForTarget || !generateForTarget.id) {
+          setGroupActiveConstraints({});
+          return;
+        }
+        fetch(`${API_BASE}/groups/${encodeURIComponent(generateForTarget.id)}/active-constraints`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : {})
+          .then(map => { if (map && typeof map === "object") setGroupActiveConstraints(map); else setGroupActiveConstraints({}); })
+          .catch(() => setGroupActiveConstraints({}));
+      }, [generateForTarget?.id]);
+
+      // Derived: flat list of (swimmerKey, constraint) pairs for the checklist.
+      // swimmerKey is either users.sub (real swimmer) or ms_xxxx (managed).
+      const tonightChecklistRows = useMemo(() => {
+        const out = [];
+        for (const [swimmerKey, list] of Object.entries(groupActiveConstraints || {})) {
+          if (!Array.isArray(list)) continue;
+          for (const c of list) out.push({ swimmerKey, c });
+        }
+        return out;
+      }, [groupActiveConstraints]);
+
+      // The subset of checked constraints, expanded into the picker-shape array.
+      const tonightOverrides = useMemo(() => {
+        if (!tonightSelected.size) return [];
+        const out = [];
+        for (const { c } of tonightChecklistRows) {
+          if (tonightSelected.has(c.id)) out.push(c);
+        }
+        return out;
+      }, [tonightChecklistRows, tonightSelected]);
+
       // N1: recently-used main-set labels for the signed-in user (last 7 days).
       // Returns Map<label, daysAgo> — used for (a) generator weight down-bias and
       // (b) "last seen Nd ago" badges in the favorites panel + main-set blocks.
@@ -23494,6 +23845,7 @@
           lanesPaceSecs: useMultiLane ? lanesPaceSecs : null,                   // v2.0 — multi-lane fit filter
           ugcOverlay,                                                           // UGC Phase B — bank overlay merged in getBankOptions
           myConstraints,                                                         // Phase 3 PSC slice 2 — step-0 hard-exclude (skipped in multi-lane)
+          tonightOverrides,                                                       // Phase 3 PSC slice 3 — per-practice checklist selections (in-memory, never persisted)
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -23659,6 +24011,7 @@
           disfavorMode,                                                         // v1.8
           ugcOverlay,                                                           // UGC Phase B — overlay merged into bank picker
           myConstraints,                                                         // Phase 3 PSC slice 2 — step-0 hard-exclude (skipped in multi-lane)
+          tonightOverrides,                                                       // Phase 3 PSC slice 3 — per-practice checklist (regen honors the same selections)
         });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -24931,6 +25284,60 @@
                   </div>
                 );
               })()}
+
+              {/* Phase 3 PSC slice 3 — per-practice constraint checklist.
+                  Shown only when generating for a group whose roster has
+                  active constraints. Each checked row gets unioned into
+                  tonightOverrides for THIS Generate only (in-memory). */}
+              {generateForTarget && tonightChecklistRows.length > 0 && (
+                <div style={{ marginBottom: 12, padding: 12, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, color: "var(--color-text)", fontWeight: 700 }}>
+                      Tonight's constraints
+                      <span style={{ color: "var(--color-text-muted)", fontWeight: 400, marginLeft: 6 }}>
+                        ({tonightChecklistRows.length} active across roster)
+                      </span>
+                    </div>
+                    {tonightSelected.size > 0 && (
+                      <button onClick={() => setTonightSelected(new Set())}
+                        style={{ padding: "3px 8px", background: "transparent", color: "var(--color-text-muted)", border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
+                        Clear ({tonightSelected.size})
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginBottom: 8, lineHeight: 1.4 }}>
+                    Check any constraint to apply to <em>tonight's</em> generated workout only. Persistent constraints already apply automatically — these are extras for one practice.
+                  </div>
+                  <div style={{ maxHeight: 180, overflowY: "auto", paddingRight: 4 }}>
+                    {tonightChecklistRows.map(({ swimmerKey, c }) => {
+                      const checked = tonightSelected.has(c.id);
+                      const swimmerTag = swimmerKey.startsWith("ms_")
+                        ? swimmerKey
+                        : swimmerKey.slice(0, 12) + "…";
+                      return (
+                        <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--color-bg)", fontSize: 12, cursor: "pointer", color: "var(--color-text)" }}>
+                          <input type="checkbox" checked={checked}
+                            onChange={() => {
+                              setTonightSelected(prev => {
+                                const next = new Set(prev);
+                                if (checked) next.delete(c.id); else next.add(c.id);
+                                return next;
+                              });
+                            }}
+                            style={{ accentColor: "var(--color-primary)" }} />
+                          <code style={{ fontFamily: "monospace", fontSize: 10, color: "var(--color-text-muted)", minWidth: 80 }}>{swimmerTag}</code>
+                          <span style={{ flex: 1 }}>{formatPscRow(c)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {tonightSelected.size > 0 && (
+                    <div style={{ fontSize: 11, color: "var(--color-primary)", marginTop: 8, fontWeight: 700 }}>
+                      → {tonightSelected.size} constraint{tonightSelected.size === 1 ? "" : "s"} will apply to this Generate.
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Generate Button */}
               <button
