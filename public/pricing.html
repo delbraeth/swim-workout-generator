@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pricing — SetForge</title>
+  <meta name="description" content="Coaches pay $10/mo. Swimmers are free forever — guaranteed by our Terms of Service." />
+  <link rel="canonical" href="https://setforge.io/pricing.html" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-512.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="color-scheme" content="dark" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://setforge.io/pricing.html" />
+  <meta property="og:title" content="SetForge — Pricing" />
+  <meta property="og:description" content="Coaches pay $10/mo. Swimmers are free forever — guaranteed by our Terms of Service." />
+  <meta property="og:image" content="https://setforge.io/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://setforge.io/og-image.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-primary: #3b82f6; --color-warn: #f59e0b; --color-positive: #22c55e;
+      --color-destructive: #ef4444; --color-bg: #0f172a; --color-card: #1e293b;
+      --color-border: #334155; --color-border-strong: #475569; --color-text: #e2e8f0;
+      --color-text-muted: #94a3b8; --color-text-dim: #64748b;
+      --bg: var(--color-bg); --bg2: var(--color-card); --border: var(--color-border);
+      --text: var(--color-text); --muted: var(--color-text-muted);
+      --blue: var(--color-primary); --blue-lt: #93c5fd;
+      --green: var(--color-positive); --amber: var(--color-warn);
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.65; font-size: 15px;
+    }
+    main { max-width: 1040px; margin: 0 auto; padding: 48px 24px 80px; }
+    @media (max-width: 700px) { main { padding: 24px 20px 60px; } }
+
+    h1 { font-size: 36px; font-weight: 900; color: #fff; letter-spacing: -0.03em; margin-bottom: 8px; }
+    h2 { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.01em; margin: 48px 0 12px; }
+    h3 { font-size: 16px; font-weight: 700; color: var(--blue-lt); margin: 24px 0 8px; }
+    p { color: var(--muted); margin-bottom: 14px; }
+    p strong { color: var(--text); font-weight: 600; }
+    ul { color: var(--muted); padding-left: 22px; margin-bottom: 14px; }
+    li { margin-bottom: 6px; }
+    a { color: var(--blue-lt); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .lead {
+      font-size: 18px;
+      color: var(--text);
+      margin-bottom: 36px;
+      max-width: 720px;
+    }
+
+    .promise {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(34, 197, 94, 0.08));
+      border: 1px solid var(--blue);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin: 24px 0 40px;
+    }
+    .promise strong { color: #fff; font-size: 17px; }
+
+    .tiers {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin: 32px 0;
+    }
+    .tier {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+    .tier.featured {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    .tier.planned {
+      opacity: 0.85;
+      border-style: dashed;
+    }
+    .tier-name {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .tier-price {
+      font-size: 32px;
+      font-weight: 900;
+      color: #fff;
+      margin: 8px 0 4px;
+      letter-spacing: -0.02em;
+    }
+    .tier-price small { font-size: 13px; font-weight: 600; color: var(--muted); }
+    .tier-audience {
+      font-size: 13px;
+      color: var(--blue-lt);
+      margin-bottom: 16px;
+    }
+    .tier ul {
+      padding-left: 18px;
+      margin: 0;
+      font-size: 14px;
+    }
+    .tier li { margin-bottom: 4px; }
+    .tier-status {
+      margin-top: auto;
+      padding-top: 16px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .tier-status.live { color: var(--green); }
+    .tier-status.planned-status { color: var(--amber); }
+
+    .fact-row {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 24px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .fact-row:last-child { border-bottom: none; }
+    .fact-row strong { color: var(--text); }
+
+    footer {
+      text-align: center;
+      padding: 24px 16px 40px;
+      color: var(--color-text-dim);
+      font-size: 11px;
+      border-top: 1px solid var(--border);
+      margin-top: 48px;
+    }
+    footer a { color: var(--blue); margin-right: 14px; }
+  </style>
+</head>
+<body>
+
+<main>
+  <h1>Pricing</h1>
+  <p class="lead">SetForge is built on one premise: <strong>coaches pay, swimmers are free.</strong> No ads, no trackers, no passwords, no rugpull.</p>
+
+  <div class="promise">
+    <strong>Free-tier permanence promise:</strong> the features available without payment as of the v1 release — workout generator, run mode, pace clock, history, multi-pace, per-account curation, assigned workouts, completion logging — will remain free for individual users for as long as SetForge operates. This is in our <a href="/terms.html">Terms of Service</a>.
+  </div>
+
+  <div class="tiers">
+    <div class="tier">
+      <div class="tier-name">Free</div>
+      <div class="tier-price">$0<small> / always</small></div>
+      <div class="tier-audience">All swimmers · parents · trying-it-out coaches</div>
+      <ul>
+        <li>Full workout generator + pace clock</li>
+        <li>History + repeat last week</li>
+        <li>Multi-pace + multi-lane print</li>
+        <li>Personal favorites + disfavorites</li>
+        <li>Assigned-to-me view + completion logging</li>
+        <li>Solo Reports (R4 Program Recap)</li>
+      </ul>
+      <div class="tier-status live">Live now</div>
+    </div>
+
+    <div class="tier featured">
+      <div class="tier-name">Coach</div>
+      <div class="tier-price">$10<small> / month</small></div>
+      <div class="tier-audience">Working coaches with one or more groups</div>
+      <ul>
+        <li>Everything in Free</li>
+        <li>Coach-authored sets (📝 My Sets + snapshot)</li>
+        <li>Coach Reports (programming · adherence · curation)</li>
+        <li>Multi-lane generate with auto-route to per-lane print</li>
+        <li>Group management + lane plans + assignments</li>
+        <li>Coach impact panel</li>
+        <li>Curation propagation to your swimmers</li>
+      </ul>
+      <div class="tier-status planned-status">Billing launches with first paying pilot</div>
+    </div>
+
+    <div class="tier planned">
+      <div class="tier-name">Lesson</div>
+      <div class="tier-price">$5–7<small> / month · TBD</small></div>
+      <div class="tier-audience">Private / individual lesson coaches</div>
+      <ul>
+        <li>Per-managed-swimmer equipment profile</li>
+        <li>Lesson workout type (15–60 min, no forced main set)</li>
+        <li>Parent recap export</li>
+        <li>Managed-swimmer roster</li>
+      </ul>
+      <div class="tier-status planned-status">Planned — not yet built</div>
+    </div>
+
+    <div class="tier planned">
+      <div class="tier-name">Program</div>
+      <div class="tier-price">$25<small> / month · or $300/yr invoiced</small></div>
+      <div class="tier-audience">Multi-coach club teams · 501(c)(3) boards</div>
+      <ul>
+        <li>Everything in Coach × N seats</li>
+        <li>Team-level curation tier + Team Settings</li>
+        <li>Ownership transfer + UGC reassignment</li>
+        <li>Parent portal MVP (weekly digest)</li>
+        <li>Self-serve full-account JSON export</li>
+        <li>Vendor paper kit (DPA + EIN invoice + continuity commitment)</li>
+        <li>Written continuity commitment — see below</li>
+      </ul>
+      <div class="tier-status planned-status">Planned — relaunches when team-level features ship</div>
+    </div>
+  </div>
+
+  <h2>What's not on the price list</h2>
+
+  <div class="fact-row">
+    <strong>Supporter tier</strong>
+    <span>Folded into a tip jar. If you'd like to support SetForge without needing the Coach tier, a "buy me a coffee" link is coming. No feature unlock; just a way to say thanks.</span>
+  </div>
+  <div class="fact-row">
+    <strong>Ads · trackers · analytics</strong>
+    <span>SetForge runs no analytics (Google Analytics, Mixpanel, etc.), no ad pixels, no behavioral tracking, no session replay. <a href="/sub-processors.html">Full sub-processor list</a>.</span>
+  </div>
+  <div class="fact-row">
+    <strong>Email + password sign-in</strong>
+    <span>Apple OAuth today; Google OAuth coming. We never store passwords because we never have them.</span>
+  </div>
+
+  <h2>For boards and treasurers</h2>
+
+  <p>If you're evaluating SetForge for a 501(c)(3) club or school program, the Program tier ships with a vendor paper kit:</p>
+  <ul>
+    <li><strong>Signed services agreement</strong> + <strong>Data Processing Addendum</strong></li>
+    <li><strong>EIN-bearing invoice</strong> (Stripe Invoicing) — quoted as annual contract ($300/yr)</li>
+    <li><strong>Sub-processor list</strong> — already public at <a href="/sub-processors.html">setforge.io/sub-processors</a></li>
+    <li><strong>Breach-notification SLA</strong> in hours, communicated by email</li>
+    <li><strong>Written continuity commitment</strong> — see next section</li>
+  </ul>
+
+  <h2>Continuity commitment</h2>
+
+  <p>SetForge is operated by a single founder. We take the single-operator risk seriously and have committed in writing — in our <a href="/terms.html">Terms of Service</a> — to the following if SetForge ever ceases operation:</p>
+  <ul>
+    <li><strong>90-day advance notice</strong> to all active users by email before service ends</li>
+    <li><strong>Self-serve data export</strong> in JSON format, available throughout the notice period</li>
+    <li><strong>Published migration scripts</strong> released to a public repository so any third party can self-host</li>
+    <li><strong>Open-source the SetForge codebase</strong> at the start of the notice period, so the product can continue independently of the operator</li>
+  </ul>
+  <p>This is the strongest continuity commitment a solo-operator SaaS can credibly make. We chose it on purpose.</p>
+
+  <h2>Questions</h2>
+  <p>For pricing questions or to discuss a Program-tier pilot: <a href="mailto:hello@setforge.io">hello@setforge.io</a>.</p>
+
+</main>
+
+<footer>
+  <a href="/">← Back to the app</a>
+  <a href="/about.html">About</a>
+  <a href="/manual.html">Manual</a>
+  <a href="/changelog.html">Changelog</a>
+  <a href="/security.html">Security</a>
+  <a href="/sub-processors.html">Sub-processors</a>
+  <a href="/privacy.html">Privacy</a>
+  <a href="/terms.html">Terms</a>
+  <br><br>
+  © 2026 Competition Aquatics, LLC · All rights reserved.
+</footer>
+
+</body>
+</html>

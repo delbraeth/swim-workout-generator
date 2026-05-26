@@ -7,16 +7,32 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg:       #0f172a;
-      --bg2:      #1e293b;
-      --border:   #334155;
-      --text:     #e2e8f0;
-      --muted:    #94a3b8;
-      --blue:     #3b82f6;
-      --blue-lt:  #93c5fd;
-      --green:    #22c55e;
-      --amber:    #f59e0b;
-      --red:      #f87171;
+      /* Canonical SetForge palette — single source of truth, matches public/index.html.
+         Phase 1 item 7 (2026-05-26): unified tokens across index/manual/privacy/terms. */
+      --color-primary:      #3b82f6;
+      --color-warn:         #f59e0b;
+      --color-positive:     #22c55e;
+      --color-destructive:  #ef4444;
+      --color-bg:           #0f172a;
+      --color-card:         #1e293b;
+      --color-border:       #334155;
+      --color-border-strong:#475569;
+      --color-text:         #e2e8f0;
+      --color-text-muted:   #94a3b8;
+      --color-text-dim:     #64748b;
+
+      /* Legacy aliases — terms.html shipped with these names; existing usage stays
+         working, but anything new should reach for the canonical --color-* above. */
+      --bg:       var(--color-bg);
+      --bg2:      var(--color-card);
+      --border:   var(--color-border);
+      --text:     var(--color-text);
+      --muted:    var(--color-text-muted);
+      --blue:     var(--color-primary);
+      --blue-lt:  #93c5fd;          /* lighter accent; not in canonical */
+      --green:    var(--color-positive);
+      --amber:    var(--color-warn);
+      --red:      #f87171;          /* lighter than --color-destructive; preserved as-shipped */
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -166,7 +182,7 @@
 
   <h2 id="contact">Contact</h2>
   <p>Questions, disputes, or requests:</p>
-  <p><strong>Email:</strong> <a href="mailto:delbraeth@gmail.com">delbraeth@gmail.com</a></p>
+  <p><strong>Email:</strong> <a href="mailto:hello@setforge.io">hello@setforge.io</a></p>
 
   <footer>
     <a href="/">← Back to the app</a>

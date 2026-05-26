@@ -8,19 +8,35 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0f172a;
-      --bg2:       #1e293b;
-      --bg3:       #0f172a;
-      --border:    #334155;
-      --text:      #e2e8f0;
-      --muted:     #94a3b8;
-      --blue:      #3b82f6;
-      --blue-lt:   #93c5fd;
-      --teal:      #2dd4bf;
-      --green:     #22c55e;
-      --amber:     #f59e0b;
-      --purple:    #a78bfa;
-      --red:       #f87171;
+      /* Canonical SetForge palette — single source of truth, matches public/index.html.
+         Phase 1 item 7 (2026-05-26): unified tokens across index/manual/privacy/terms. */
+      --color-primary:      #3b82f6;
+      --color-warn:         #f59e0b;
+      --color-positive:     #22c55e;
+      --color-destructive:  #ef4444;
+      --color-bg:           #0f172a;
+      --color-card:         #1e293b;
+      --color-border:       #334155;
+      --color-border-strong:#475569;
+      --color-text:         #e2e8f0;
+      --color-text-muted:   #94a3b8;
+      --color-text-dim:     #64748b;
+
+      /* Legacy aliases — manual.html shipped with these names; existing usage stays
+         working, but anything new should reach for the canonical --color-* above. */
+      --bg:        var(--color-bg);
+      --bg2:       var(--color-card);
+      --bg3:       var(--color-bg);
+      --border:    var(--color-border);
+      --text:      var(--color-text);
+      --muted:     var(--color-text-muted);
+      --blue:      var(--color-primary);
+      --blue-lt:   #93c5fd;          /* lighter accent; not in canonical */
+      --teal:      #2dd4bf;          /* manual-only accent; not in canonical */
+      --green:     var(--color-positive);
+      --amber:     var(--color-warn);
+      --purple:    #a78bfa;          /* manual-only accent; not in canonical */
+      --red:       #f87171;          /* lighter than --color-destructive; preserved as-shipped */
       --radius:    10px;
     }
 

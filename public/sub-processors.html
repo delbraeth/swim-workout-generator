@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sub-processors — SetForge</title>
+  <meta name="description" content="The third-party services SetForge uses to operate the application." />
+  <link rel="canonical" href="https://setforge.io/sub-processors.html" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-512.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="color-scheme" content="dark" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      /* Canonical SetForge palette — matches public/index.html. */
+      --color-primary:      #3b82f6;
+      --color-warn:         #f59e0b;
+      --color-positive:     #22c55e;
+      --color-destructive:  #ef4444;
+      --color-bg:           #0f172a;
+      --color-card:         #1e293b;
+      --color-border:       #334155;
+      --color-border-strong:#475569;
+      --color-text:         #e2e8f0;
+      --color-text-muted:   #94a3b8;
+      --color-text-dim:     #64748b;
+      /* Legacy aliases for visual parity with privacy/terms. */
+      --bg:       var(--color-bg);
+      --bg2:      var(--color-card);
+      --border:   var(--color-border);
+      --text:     var(--color-text);
+      --muted:    var(--color-text-muted);
+      --blue:     var(--color-primary);
+      --blue-lt:  #93c5fd;
+      --green:    var(--color-positive);
+      --amber:    var(--color-warn);
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    @media (max-width: 700px) {
+      main { padding: 24px 20px 60px; }
+      table, thead, tbody, tr, th, td { display: block; }
+      thead { display: none; }
+      tr { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+      td { padding: 4px 0; border: none !important; }
+      td::before {
+        content: attr(data-label) ": ";
+        color: var(--muted);
+        font-weight: 600;
+        margin-right: 6px;
+      }
+    }
+
+    h1 { font-size: 32px; font-weight: 900; color: #fff; letter-spacing: -0.03em; margin-bottom: 8px; }
+    h2 { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.01em; margin: 40px 0 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+    p  { color: var(--muted); margin-bottom: 14px; }
+    p strong { color: var(--text); font-weight: 600; }
+    ul { color: var(--muted); padding-left: 22px; margin-bottom: 14px; }
+    li { margin-bottom: 6px; }
+    li strong { color: var(--text); }
+    a { color: var(--blue-lt); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .meta {
+      color: var(--color-text-dim);
+      font-size: 13px;
+      margin-bottom: 32px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 32px;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th {
+      color: var(--text);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      background: var(--bg2);
+    }
+    td { color: var(--muted); }
+    td strong { color: var(--text); font-weight: 600; }
+    td.status { white-space: nowrap; font-weight: 600; }
+    td.status.active { color: var(--green); }
+    td.status.planned { color: var(--amber); }
+
+    .callout {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--blue);
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin: 24px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .callout strong { color: var(--text); }
+
+    footer {
+      text-align: center;
+      padding: 24px 16px 40px;
+      color: var(--color-text-dim);
+      font-size: 11px;
+      border-top: 1px solid var(--border);
+      margin-top: 40px;
+    }
+    footer a { color: var(--blue); margin-right: 14px; }
+  </style>
+</head>
+<body>
+
+<main>
+  <h1>Sub-processors</h1>
+  <p class="meta">Last updated: 2026-05-26</p>
+
+  <p>SetForge uses a small set of third-party services to operate the application. This page lists every vendor that touches user data, what data they see, and where it's stored. We update this page when sub-processors change.</p>
+
+  <div class="callout">
+    <strong>For organizations evaluating SetForge:</strong> if you need this list in a different format (PDF, CSV, vendor-specific questionnaire), email <a href="mailto:hello@setforge.io">hello@setforge.io</a>.
+  </div>
+
+  <h2>Active sub-processors</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Vendor</th>
+        <th>Purpose</th>
+        <th>Data they see</th>
+        <th>Region</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td data-label="Vendor"><strong>Spaceship Hyperlift</strong><br><a href="https://www.spaceship.com/" target="_blank" rel="noopener">spaceship.com</a></td>
+        <td data-label="Purpose">Application hosting + database hosting + DNS</td>
+        <td data-label="Data they see">All application data (workouts, accounts, group rosters, audit logs) — Spaceship operates the servers and storage</td>
+        <td data-label="Region">United States</td>
+        <td data-label="Status" class="status active">Active</td>
+      </tr>
+      <tr>
+        <td data-label="Vendor"><strong>Apple</strong><br><a href="https://developer.apple.com/sign-in-with-apple/" target="_blank" rel="noopener">Sign in with Apple</a></td>
+        <td data-label="Purpose">OAuth authentication (primary sign-in method)</td>
+        <td data-label="Data they see">User's email address (or relay) at sign-in; SetForge stores Apple's opaque <code>sub</code> identifier and the email returned</td>
+        <td data-label="Region">United States (Apple Inc.)</td>
+        <td data-label="Status" class="status active">Active</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Planned sub-processors</h2>
+
+  <p>These vendors will be added as SetForge ships the corresponding features. Listed here so prospects know what's coming and what each will see.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Vendor</th>
+        <th>Purpose</th>
+        <th>Data they will see</th>
+        <th>Region</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td data-label="Vendor"><strong>Google</strong><br>Sign in with Google</td>
+        <td data-label="Purpose">OAuth authentication (additional sign-in method for non-Apple users)</td>
+        <td data-label="Data they will see">User's email address at sign-in; SetForge will store Google's opaque <code>sub</code> identifier and the email returned</td>
+        <td data-label="Region">United States (Google LLC)</td>
+        <td data-label="Status" class="status planned">Planned</td>
+      </tr>
+      <tr>
+        <td data-label="Vendor"><strong>Resend</strong> <em>(or Postmark)</em><br>transactional email provider</td>
+        <td data-label="Purpose">Outbound transactional email — account confirmations, parent recap digests, breach notifications, abandonment nudges</td>
+        <td data-label="Data they will see">Recipient email address + email body content (which may include user display name and workout-context strings)</td>
+        <td data-label="Region">United States — vendor TBD; final choice will be disclosed here when wired</td>
+        <td data-label="Status" class="status planned">Planned</td>
+      </tr>
+      <tr>
+        <td data-label="Vendor"><strong>Discord</strong><br>community + feedback channel</td>
+        <td data-label="Purpose">Community server + private <code>#feedback-stream</code> channel that receives webhook posts from the in-app feedback form</td>
+        <td data-label="Data they will see">Coach-submitted feedback text, display name, and the page the feedback was submitted from. <strong>Feedback from minor accounts (under 18) bypasses the Discord webhook entirely</strong> per <a href="/manual.html#whats-coming">DISCORD_SCOPE</a>.</td>
+        <td data-label="Region">United States (Discord Inc.)</td>
+        <td data-label="Status" class="status planned">Planned</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>What we don't use</h2>
+
+  <p>For symmetry with the sub-processor list, the things SetForge explicitly does <strong>not</strong> integrate with:</p>
+
+  <ul>
+    <li><strong>No analytics</strong> — no Google Analytics, no Mixpanel, no Amplitude, no Plausible, no Fathom, no anything</li>
+    <li><strong>No ad pixels or trackers</strong> — no Facebook Pixel, no LinkedIn Insight, no Twitter pixel</li>
+    <li><strong>No A/B testing infrastructure</strong> — no LaunchDarkly, no Optimizely, no Statsig</li>
+    <li><strong>No session replay</strong> — no FullStory, no Hotjar, no LogRocket</li>
+    <li><strong>No third-party customer support</strong> — no Intercom, no Zendesk, no Drift</li>
+    <li><strong>No third-party CRM</strong> — no HubSpot, no Salesforce</li>
+  </ul>
+
+  <h2>How we notify of changes</h2>
+
+  <p>When we add, remove, or change a sub-processor:</p>
+  <ul>
+    <li>This page is updated with the change and the date</li>
+    <li>The change is announced in the SetForge <a href="/changelog.html">changelog</a></li>
+    <li>For changes that materially affect user data handling, active users receive an email notification (when outbound email is live; see "Planned" table above)</li>
+  </ul>
+
+  <h2>Questions</h2>
+
+  <p>If a vendor on this list (or one not on it) raises a concern for your organization, email <a href="mailto:hello@setforge.io">hello@setforge.io</a>. We can sometimes accommodate alternative configurations for specific deployments.</p>
+
+</main>
+
+<footer>
+  <a href="/">← Back to the app</a>
+  <a href="/manual.html">Manual</a>
+  <a href="/privacy.html">Privacy</a>
+  <a href="/terms.html">Terms</a>
+  <br><br>
+  © 2026 Competition Aquatics, LLC · All rights reserved.
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Changelog — SetForge</title>
+  <meta name="description" content="What's shipped, recently, on SetForge. Curated highlights — not the full git log." />
+  <link rel="canonical" href="https://setforge.io/changelog.html" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-512.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="color-scheme" content="dark" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://setforge.io/changelog.html" />
+  <meta property="og:title" content="SetForge — Changelog" />
+  <meta property="og:description" content="What's shipped recently. Curated highlights." />
+  <meta property="og:image" content="https://setforge.io/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://setforge.io/og-image.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-primary: #3b82f6; --color-warn: #f59e0b; --color-positive: #22c55e;
+      --color-destructive: #ef4444; --color-bg: #0f172a; --color-card: #1e293b;
+      --color-border: #334155; --color-border-strong: #475569; --color-text: #e2e8f0;
+      --color-text-muted: #94a3b8; --color-text-dim: #64748b;
+      --bg: var(--color-bg); --bg2: var(--color-card); --border: var(--color-border);
+      --text: var(--color-text); --muted: var(--color-text-muted);
+      --blue: var(--color-primary); --blue-lt: #93c5fd;
+      --green: var(--color-positive); --amber: var(--color-warn);
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.65; font-size: 15px;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+    @media (max-width: 700px) { main { padding: 24px 20px 60px; } }
+
+    h1 { font-size: 36px; font-weight: 900; color: #fff; letter-spacing: -0.03em; margin-bottom: 8px; }
+    h2 { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.01em; margin: 48px 0 12px; }
+    p { color: var(--muted); margin-bottom: 14px; }
+    a { color: var(--blue-lt); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .lead {
+      font-size: 17px;
+      color: var(--text);
+      margin-bottom: 32px;
+    }
+
+    .entry {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--blue);
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin-bottom: 16px;
+    }
+    .entry .meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .entry .date {
+      color: var(--blue-lt);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .entry .tag {
+      color: var(--color-text-dim);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .entry .title {
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .entry .body {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0;
+    }
+    .entry .body strong { color: var(--text); }
+
+    .note {
+      background: rgba(59, 130, 246, 0.08);
+      border-left: 3px solid var(--blue);
+      padding: 14px 18px;
+      border-radius: 6px;
+      margin: 24px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 24px 16px 40px;
+      color: var(--color-text-dim);
+      font-size: 11px;
+      border-top: 1px solid var(--border);
+      margin-top: 48px;
+    }
+    footer a { color: var(--blue); margin-right: 14px; }
+  </style>
+</head>
+<body>
+
+<main>
+  <h1>Changelog</h1>
+  <p class="lead">Curated highlights from the SetForge build log — not every commit, just the things that change how the app works for you.</p>
+
+  <div class="note">
+    For a feature-by-feature view of how to USE these things, see the <a href="/manual.html">manual</a>. For what's coming, see <a href="/manual.html#whats-coming">What's Coming</a>.
+  </div>
+
+  <h2>2026</h2>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 25</span>
+      <span class="tag">ugc-coach-sets-v1</span>
+    </div>
+    <div class="title">Coach-authored sets (UGC) v1 — closed and tagged</div>
+    <p class="body">Coaches can author their own bank sets via the <strong>📝 My Sets</strong> view, snapshot any generated block to save it, share with their team, submit publicly for admin review, and graduate approved options into the canonical JS bank. Multi-tag means one set can land in multiple type/stroke pools without duplication (e.g., a kick set can live in distance, sprint, and endurance simultaneously).</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 23</span>
+      <span class="tag">reporting-v1-complete</span>
+    </div>
+    <div class="title">Reporting v1 — six reports across three audiences</div>
+    <p class="body">📊 Reports tab with Programming Mix (R1), Schedule Adherence (R2), Curation Log (R3), Program Recap for solo/masters (R4), Platform Health (R5 admin), and Curation Support (R6 admin). Print + PDF + Markdown export.</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 22</span>
+      <span class="tag">multi-lane-generate-v1 · n6-multipace-export-2026-05-19</span>
+    </div>
+    <div class="title">Multi-lane generate + per-lane print</div>
+    <p class="body">Generate one workout that fits every lane's pace, then auto-route to a print view with one page per lane. Yellow banner appears when the generator had to fall back from a strict lane fit.</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 22</span>
+      <span class="tag">disfavor-flag-v1 → set-disfavor-v1 → coach-disfavor-prop-v1 → hard-exclude-v1</span>
+    </div>
+    <div class="title">Tri-state favorite / disfavor system</div>
+    <p class="body">Every label, set, and engine template gets a three-way toggle: ★ Favorite (3× weight) · — Neutral · 👎 Disfavor (0.25× weight or hard-exclude). Coach picks propagate to swimmers in their groups. Symmetric audit panels under Profile show what you've curated.</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 21</span>
+      <span class="tag">template-engine-v1.1</span>
+    </div>
+    <div class="title">Template engine + Bank/Engine/Mix toggle</div>
+    <p class="body">Per-section toggle lets you choose how SetForge composes each block: from the canonical bank (curated), from the engine (generative), or mix (some of each). 17 templates today; ~3.9% fallback rate. Built-in anti-repeat memory so you don't get the same set every Tuesday.</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 23</span>
+      <span class="tag">run-screen-v1</span>
+    </div>
+    <div class="title">Pace clock UI rebuilt for landscape phones</div>
+    <p class="body">Larger clock (128px), reorganized hierarchy, INTERVAL/REST/GO labels, optional Lap button for split capture. Designed for the wall during a set — readable from across the pool.</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 17</span>
+      <span class="tag">relationships-stage4-rg-pilot-ready</span>
+    </div>
+    <div class="title">Teams · groups · managed swimmers · "Assigned to me"</div>
+    <p class="body">Full multi-stakeholder data model: coaches own teams, teams have groups, groups have swimmer members (account-holders OR coach-managed). Coaches generate workouts for a group; swimmers see them in 📥 Assigned to me and mark complete from their own phone.</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 20</span>
+      <span class="tag">setforge-rebrand-2026-05-20</span>
+    </div>
+    <div class="title">SetForge brand + setforge.io launch</div>
+    <p class="body">Product renamed to SetForge. New domain, new wordmark, new dark-mode palette, new icon set across all surfaces.</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 19</span>
+      <span class="tag">(pricing direction locked)</span>
+    </div>
+    <div class="title">Pricing model decided</div>
+    <p class="body">Coaches pay, swimmers free forever. Free / Coach $10 / Lesson (planned) / Program $25. Implementation triggers on the first paying pilot — see <a href="/pricing.html">Pricing</a>.</p>
+  </div>
+
+  <div class="entry">
+    <div class="meta">
+      <span class="date">May 14</span>
+      <span class="tag">code-quality-complete</span>
+    </div>
+    <div class="title">Code-quality sprint — five sessions, 33 punch-list items</div>
+    <p class="body">Cleanup pass across the engine, picker, generator, history, and audit. No new features; meaningful boost to maintainability and a few quiet bug fixes.</p>
+  </div>
+
+</main>
+
+<footer>
+  <a href="/">← Back to the app</a>
+  <a href="/pricing.html">Pricing</a>
+  <a href="/about.html">About</a>
+  <a href="/manual.html">Manual</a>
+  <a href="/security.html">Security</a>
+  <a href="/sub-processors.html">Sub-processors</a>
+  <a href="/privacy.html">Privacy</a>
+  <a href="/terms.html">Terms</a>
+  <br><br>
+  © 2026 Competition Aquatics, LLC · All rights reserved.
+</footer>
+
+</body>
+</html>
