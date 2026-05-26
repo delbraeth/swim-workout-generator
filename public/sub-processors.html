@@ -131,7 +131,7 @@
 
 <main>
   <h1>Sub-processors</h1>
-  <p class="meta">Last updated: 2026-05-26</p>
+  <p class="meta">Last updated: 2026-05-26 — Google + Resend + Discord moved from Planned to Active.</p>
 
   <p>SetForge uses a small set of third-party services to operate the application. This page lists every vendor that touches user data, what data they see, and where it's stored. We update this page when sub-processors change.</p>
 
@@ -166,44 +166,26 @@
         <td data-label="Region">United States (Apple Inc.)</td>
         <td data-label="Status" class="status active">Active</td>
       </tr>
-    </tbody>
-  </table>
-
-  <h2>Planned sub-processors</h2>
-
-  <p>These vendors will be added as SetForge ships the corresponding features. Listed here so prospects know what's coming and what each will see.</p>
-
-  <table>
-    <thead>
       <tr>
-        <th>Vendor</th>
-        <th>Purpose</th>
-        <th>Data they will see</th>
-        <th>Region</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td data-label="Vendor"><strong>Google</strong><br>Sign in with Google</td>
-        <td data-label="Purpose">OAuth authentication (additional sign-in method for non-Apple users)</td>
-        <td data-label="Data they will see">User's email address at sign-in; SetForge will store Google's opaque <code>sub</code> identifier and the email returned</td>
+        <td data-label="Vendor"><strong>Google</strong><br><a href="https://developers.google.com/identity/sign-in/web/sign-in" target="_blank" rel="noopener">Sign in with Google</a></td>
+        <td data-label="Purpose">OAuth authentication (alternative sign-in method to Apple)</td>
+        <td data-label="Data they see">User's email address at sign-in; SetForge stores Google's opaque <code>sub</code> identifier and the email returned</td>
         <td data-label="Region">United States (Google LLC)</td>
-        <td data-label="Status" class="status planned">Planned</td>
+        <td data-label="Status" class="status active">Active</td>
       </tr>
       <tr>
-        <td data-label="Vendor"><strong>Resend</strong> <em>(or Postmark)</em><br>transactional email provider</td>
-        <td data-label="Purpose">Outbound transactional email — account confirmations, parent recap digests, breach notifications, abandonment nudges</td>
-        <td data-label="Data they will see">Recipient email address + email body content (which may include user display name and workout-context strings)</td>
-        <td data-label="Region">United States — vendor TBD; final choice will be disclosed here when wired</td>
-        <td data-label="Status" class="status planned">Planned</td>
+        <td data-label="Vendor"><strong>Resend</strong><br><a href="https://resend.com/" target="_blank" rel="noopener">resend.com</a></td>
+        <td data-label="Purpose">Outbound transactional email — account welcome / confirmation, future parent recap digests, breach notifications</td>
+        <td data-label="Data they see">Recipient email address + email subject + email body content (which may include user display name and workout context). Hard-bounce notifications come back as webhook events.</td>
+        <td data-label="Region">United States</td>
+        <td data-label="Status" class="status active">Active</td>
       </tr>
       <tr>
-        <td data-label="Vendor"><strong>Discord</strong><br>community + feedback channel</td>
+        <td data-label="Vendor"><strong>Discord</strong><br><a href="https://discord.com/" target="_blank" rel="noopener">discord.com</a></td>
         <td data-label="Purpose">Community server + private <code>#feedback-stream</code> channel that receives webhook posts from the in-app feedback form</td>
-        <td data-label="Data they will see">Coach-submitted feedback text, display name, and the page the feedback was submitted from. <strong>Feedback from minor accounts (under 18) bypasses the Discord webhook entirely</strong> per <a href="/manual.html#whats-coming">DISCORD_SCOPE</a>.</td>
+        <td data-label="Data they see">Adult-only feedback text, display name, and the page the feedback was submitted from. <strong>Feedback from minor accounts (under 18) — or accounts where DOB is not on file — bypasses the Discord webhook entirely</strong>; minor feedback stays in the in-app admin queue and never leaves SetForge servers.</td>
         <td data-label="Region">United States (Discord Inc.)</td>
-        <td data-label="Status" class="status planned">Planned</td>
+        <td data-label="Status" class="status active">Active</td>
       </tr>
     </tbody>
   </table>

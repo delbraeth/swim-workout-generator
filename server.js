@@ -52,6 +52,7 @@ import helmet    from "helmet";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
+import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 
 import {
   pool, dbActive, pingDb,
@@ -512,7 +513,13 @@ app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false
 
     const payload = await verifyAppleIdToken(id_token);
     const sub = payload.sub;
-    console.log(`[auth] Apple login: sub=${sub}`);
+    // Apple's id_token includes `email` and `email_verified` only on the
+    // user's FIRST sign-in to this Service ID (and only if the user
+    // shared it). Subsequent sign-ins omit email — we rely on what was
+    // captured here.
+    const appleEmail         = payload.email || null;
+    const appleEmailVerified = payload.email_verified === true || payload.email_verified === "true";
+    console.log(`[auth] Apple login: sub=${sub} email_verified=${appleEmailVerified}`);
 
     const dotIdx = state.indexOf(".");
     const invite = dotIdx > 0 ? state.slice(dotIdx + 1) : null;
@@ -525,6 +532,19 @@ app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false
         return fail(`invite_${result.reason}`, sub);
       }
       await dbEnsureUser(sub);
+      // Store email on the new user row if Apple shared it. Required for
+      // Phase 2 welcome email (EMAIL_INFRA_SCOPE.md §3.6) and for the
+      // Google-OAuth link-by-email path (GOOGLE_OAUTH_SCOPE.md §3.4).
+      if (appleEmail) {
+        try {
+          await pool.query(
+            "UPDATE `users` SET `email` = ?, `email_verified` = ? WHERE `sub` = ?",
+            [appleEmail, appleEmailVerified ? 1 : 0, sub]
+          );
+        } catch (err) {
+          console.warn(`[auth] failed to store email on new Apple user ${sub}: ${err.message}`);
+        }
+      }
       // Link the Apple identity in the new join table. Idempotent: backfill
       // already wrote this row for pre-existing users; this is for brand-new
       // ones. Per GOOGLE_OAUTH_SCOPE.md §3.2.
@@ -532,6 +552,15 @@ app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false
       console.log(`[auth] New user created via invite: sub=${sub}`);
       dbAuditEvent({ userSub: sub, eventType: "invite.consume", ...meta, details: { code: invite, channel: "web", provider: "apple" } });
       dbAuditEvent({ userSub: sub, eventType: "auth.signup",    ...meta, details: { channel: "web", provider: "apple" } });
+
+      // Welcome email (EMAIL_INFRA_SCOPE.md §3.6). Fire-and-forget;
+      // minor-bypass + missing-email skip handled inside enqueueEmail.
+      enqueueEmail({
+        dedupKey:   `welcome:${sub}`,
+        toUserSub:  sub,
+        templateId: "welcome",
+        manualUrl:  `${APP_URL}/manual.html`,
+      }).catch(err => console.warn(`[auth] welcome email enqueue failed for ${sub}: ${err.message}`));
     }
 
     return signInAs({ res, meta, userSub: sub, provider: "apple" });
@@ -680,6 +709,19 @@ app.get("/api/auth/google/callback", authLimiter, async (req, res) => {
     }
     dbAuditEvent({ userSub: newSub, eventType: "invite.consume", ...meta, details: { code: invite, channel: "web", provider: "google" } });
     dbAuditEvent({ userSub: newSub, eventType: "auth.signup",    ...meta, details: { channel: "web", provider: "google" } });
+
+    // Welcome email (EMAIL_INFRA_SCOPE.md §3.6). Same pattern as Apple
+    // signup path. Fire-and-forget; minor-bypass + missing-email skip
+    // handled inside enqueueEmail. given_name (already used to seed
+    // display_name per decision 11) is passed through as the greeting.
+    enqueueEmail({
+      dedupKey:    `welcome:${newSub}`,
+      toUserSub:   newSub,
+      templateId:  "welcome",
+      displayName: googleGivenName,
+      manualUrl:   `${APP_URL}/manual.html`,
+    }).catch(err => console.warn(`[auth] welcome email enqueue failed for ${newSub}: ${err.message}`));
+
     return signInAs({ res, meta, userSub: newSub, provider: "google" });
   } catch (err) {
     console.error("[auth/google/callback]", err.message);
@@ -3731,6 +3773,10 @@ async function boot() {
     console.log(`[swim-workout-generator] listening on :${PORT}`);
     if (APPLE_AUTH_ACTIVE)  console.log(`[auth] Apple Sign-In active. Gate: existing user in DB OR valid invite code`);
     else                    console.warn("[auth] Apple auth not configured (dev mode)");
+    if (GOOGLE_AUTH_ACTIVE) console.log(`[auth] Google Sign-In active.`);
+    else                    console.warn("[auth] Google auth not configured");
+    if (EMAIL_ACTIVE)       startEmailWorker();
+    else                    console.warn("[email] EMAIL_ACTIVE=false; worker not started");
   });
 
   // S5 S4 — Graceful shutdown on SIGTERM. Docker / Hyperlift send SIGTERM
