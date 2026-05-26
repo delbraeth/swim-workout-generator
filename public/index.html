@@ -8043,6 +8043,144 @@
       return false;
     }
 
+    // Phase 3 PSC slice 4 — substitution policy v1 (scope §3.5).
+    // Pure function. Walks workout.blocks/sets against constraints, returns
+    // per-set annotations describing what would be substituted FOR THIS
+    // SWIMMER. Used by AssignedToMeView per-card details and by
+    // MultiPacePrintView per-lane substitution rendering.
+    //
+    // Output shape:
+    //   [
+    //     { block_idx, set_idx, kind: "stroke_sub", from, to, constraint_type },
+    //     { block_idx, set_idx, kind: "equip_drop", eq, constraint_type },
+    //     { block_idx,          kind: "section_skip", section, constraint_type },
+    //     {                     kind: "cap_yardage", value, constraint_type },
+    //     {                     kind: "cap_intensity", value, constraint_type },
+    //   ]
+    //
+    // The renderer decides how to display each kind. Section-skip + caps are
+    // workout-level (no set_idx); stroke + equip are per-set.
+    //
+    // Substitution policy per scope §3.5 table.
+    function computeSubstitutionsForSwimmer(workout, constraints) {
+      const out = [];
+      if (!workout || !Array.isArray(workout.blocks) || !Array.isArray(constraints) || constraints.length === 0) {
+        return out;
+      }
+      const STROKE_REGEX = {
+        fly:    /\b(fly|butterfly)\b/i,
+        breast: /\bbreast(?:stroke)?\b/i,
+        back:   /\bback(?:stroke)?\b/i,
+        free:   /\b(free(?:style)?|FREE)\b/i,
+      };
+      const STROKE_FROM_TYPE = {
+        stroke_no_fly:    "fly",
+        stroke_no_breast: "breast",
+        stroke_no_back:   "back",
+        stroke_no_free:   "free",
+      };
+      // v1 substitution table (stroke). stroke_no_free defaults to back per scope §6 open fork.
+      const STROKE_SUB = {
+        stroke_no_fly:    "free",
+        stroke_no_breast: "free",
+        stroke_no_back:   "free",
+        stroke_no_free:   "back",
+      };
+      const EQ_TO_BANNED = {
+        paddles:   "equip_no_paddles",
+        fins:      "equip_no_fins",
+        snorkel:   "equip_no_snorkel",
+        kick:      "equip_no_kickboard",
+        pull:      "equip_no_buoy",
+      };
+      const SECTION_BANNED = {
+        warmup:   null,                // no section_no_warmup in v1 vocab
+        drill:    "section_no_drill",
+        main:     "section_no_main",
+        cooldown: null,                // no section_no_cooldown in v1 vocab
+      };
+
+      // Workout-level caps surface once each.
+      for (const c of constraints) {
+        if (c.constraint_type === "cap_yardage") {
+          out.push({ kind: "cap_yardage", value: c.value_num, constraint_type: "cap_yardage" });
+        } else if (c.constraint_type === "cap_intensity") {
+          out.push({ kind: "cap_intensity", value: c.value_str || "easy_only", constraint_type: "cap_intensity" });
+        }
+      }
+
+      for (let bi = 0; bi < workout.blocks.length; bi++) {
+        const block = workout.blocks[bi];
+        if (!block) continue;
+
+        // Section-level skip — check any constraint marks this section banned.
+        const sectionBan = SECTION_BANNED[block.section];
+        if (sectionBan) {
+          const hit = constraints.find(c => c.constraint_type === sectionBan);
+          if (hit) {
+            out.push({ block_idx: bi, kind: "section_skip", section: block.section, constraint_type: sectionBan });
+            continue;  // No need to also annotate per-set when the whole section is skipped.
+          }
+        }
+
+        const sets = Array.isArray(block.sets) ? block.sets : [];
+        for (let si = 0; si < sets.length; si++) {
+          const s = sets[si];
+          const blob = ((s.desc || "") + " " + (s.focus || ""));
+          // Stroke subs — first matching constraint wins for this set.
+          let strokeSubbed = false;
+          for (const c of constraints) {
+            const target = STROKE_FROM_TYPE[c.constraint_type];
+            if (!target) continue;
+            const re = STROKE_REGEX[target];
+            if (re && re.test(blob)) {
+              out.push({
+                block_idx: bi, set_idx: si,
+                kind: "stroke_sub",
+                from: target,
+                to:   STROKE_SUB[c.constraint_type],
+                constraint_type: c.constraint_type,
+              });
+              strokeSubbed = true;
+              break;
+            }
+          }
+          // Equip drops — independent of stroke (a set can both swap stroke AND drop gear).
+          if (s.eq) {
+            const banKey = EQ_TO_BANNED[s.eq];
+            if (banKey) {
+              const hit = constraints.find(c => c.constraint_type === banKey);
+              if (hit) {
+                out.push({
+                  block_idx: bi, set_idx: si,
+                  kind: "equip_drop",
+                  eq: s.eq,
+                  constraint_type: banKey,
+                });
+              }
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    // Tag-extract used by the constraint UIs to render substitutions
+    // attached to a particular block/set. Returns array of subs for that
+    // (block_idx, set_idx) — pre-filtered for the renderer.
+    function pickSetSubs(subs, blockIdx, setIdx) {
+      if (!Array.isArray(subs)) return [];
+      return subs.filter(s => s.block_idx === blockIdx && s.set_idx === setIdx);
+    }
+    function pickBlockSubs(subs, blockIdx) {
+      if (!Array.isArray(subs)) return [];
+      return subs.filter(s => s.block_idx === blockIdx && s.set_idx == null);
+    }
+    function pickWorkoutSubs(subs) {
+      if (!Array.isArray(subs)) return [];
+      return subs.filter(s => s.block_idx == null);
+    }
+
     function optionFitsAllLanes(option, lanesPaceSecs, minRest = 5, maxRestRatio = 1.5, paceBaseline = 120) {
       if (!option || !Array.isArray(option.sets) || option.sets.length === 0) return true;
       if (!Array.isArray(lanesPaceSecs) || lanesPaceSecs.length === 0) return true;
@@ -13299,6 +13437,9 @@
         ? currentPlan.plan_data.lanes.map((l, i) => ({
             lane_label: l.lane_label || `Lane ${i + 1}`,
             pace: l.pace || "",
+            // Phase 3 PSC slice 4 — preserve members so the per-lane print
+            // view can render per-swimmer substitution annotations.
+            members: Array.isArray(l.members) ? l.members : [],
           }))
         : [];
 
@@ -13469,7 +13610,7 @@
 
     // Print overlay. Renders the workout at every lane's pace. Mounts as
     // a fullscreen layer that hides the rest of the app via body class.
-    function MultiPacePrintView({ workout, lanes, mode, onClose }) {
+    function MultiPacePrintView({ workout, lanes, mode, onClose, groupActiveConstraints = {} }) {
       // Toggle body class so screen view hides the rest of the app under
       // this overlay AND so we can scope print CSS to the multi-pace path.
       React.useEffect(() => {
@@ -13558,6 +13699,50 @@
           </button>
           {lanes.map((lane, li) => {
             const rescaled = rescaleBlocksForPace(workout.blocks, lane.pace);
+
+            // Phase 3 PSC slice 4 — per-swimmer-on-lane substitution annotations.
+            // Per scope §3.7: lane card shows per-swimmer sub when ANY member of
+            // this lane has an active constraint. Workout content is unchanged
+            // at the workout level; the annotations are visual only.
+            //
+            // Build a map of (blockIdx, setIdx) → array of "<name>: <sub>" strings.
+            // Also collect workout-level annotations (caps + section skips) for
+            // the header.
+            const laneMembers = Array.isArray(lane.members) ? lane.members : [];
+            const perSetAnnotations = {}; // key: `${bi}-${si}` → ["Linda: sub free for fly", …]
+            const perBlockAnnotations = {}; // key: bi → [section-skip notes]
+            const workoutLevelNotes = [];
+            for (const m of laneMembers) {
+              const key = m.swimmer_sub || m.managed_id;
+              if (!key) continue;
+              const memberConstraints = groupActiveConstraints[key] || [];
+              if (memberConstraints.length === 0) continue;
+              const subs = computeSubstitutionsForSwimmer({ blocks: rescaled }, memberConstraints);
+              const memberName = (m.display_name || m.label || (key.startsWith("ms_") ? key : key.slice(-8))).slice(0, 24);
+              for (const s of subs) {
+                let str = "";
+                if (s.kind === "stroke_sub") {
+                  str = `${memberName}: ${s.from} → ${s.to}`;
+                } else if (s.kind === "equip_drop") {
+                  str = `${memberName}: drop ${s.eq}`;
+                } else if (s.kind === "section_skip") {
+                  const k = s.block_idx;
+                  (perBlockAnnotations[k] = perBlockAnnotations[k] || []).push(`${memberName}: skip section`);
+                  continue;
+                } else if (s.kind === "cap_yardage") {
+                  workoutLevelNotes.push(`${memberName}: cap ${s.value} yd (trim from end)`);
+                  continue;
+                } else if (s.kind === "cap_intensity") {
+                  workoutLevelNotes.push(`${memberName}: ${s.value}`);
+                  continue;
+                }
+                if (s.block_idx != null && s.set_idx != null) {
+                  const k = `${s.block_idx}-${s.set_idx}`;
+                  (perSetAnnotations[k] = perSetAnnotations[k] || []).push(str);
+                }
+              }
+            }
+
             return (
               <div key={li} className="multipace-page" style={{ padding: "0.5in", minHeight: "10in", pageBreakAfter: li === lanes.length - 1 ? "auto" : "always" }}>
                 <div className="multipace-print-header" style={{ borderBottom: "2pt solid #000", paddingBottom: 8, marginBottom: 12 }}>
@@ -13566,28 +13751,99 @@
                     {workout.typeLabel || workout.type || "Workout"} · {workout.totalYards} {(workout.poolMode === "25m" || workout.poolMode === "50m") ? "m" : "yds"}
                     {workout.focusNote ? <span> · {workout.focusNote}</span> : null}
                   </div>
-                </div>
-                {rescaled.map((block, bi) => (
-                  <div key={bi} className="multipace-block" style={{ border: "1pt solid #000", padding: "8pt 10pt", marginBottom: 10, pageBreakInside: "avoid", breakInside: "avoid" }}>
-                    <div style={{ fontWeight: 700, fontSize: "12pt", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-                      {block.name || block.label || block.section}
-                      {block.label && block.name && block.label !== block.name ? <span style={{ fontWeight: 400, fontStyle: "italic", textTransform: "none", letterSpacing: 0, marginLeft: 6 }}>— {block.label}</span> : null}
-                      <span style={{ float: "right", fontWeight: 400, fontStyle: "italic" }}>{block.totalYards}</span>
+                  {workoutLevelNotes.length > 0 && (
+                    <div style={{ fontSize: "10pt", marginTop: 6, padding: "4pt 6pt", border: "0.5pt solid #000", background: "#f7f7f7" }}>
+                      <strong>⚠ Constraints:</strong> {workoutLevelNotes.join(" · ")}
                     </div>
-                    {block.sets.map((s, si) => (
-                      <div key={si} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3, fontSize: "11pt" }}>
-                        <span><b>{s.reps}×{s.dist}</b>{s.eq ? <i style={{ marginLeft: 4 }}>[{s.eq}]</i> : null} {s.desc || ""}</span>
-                        <span style={{ fontFamily: "ui-monospace, 'SFMono-Regular', monospace", marginLeft: 12, whiteSpace: "nowrap" }}>{s.interval || ""}</span>
+                  )}
+                </div>
+                {rescaled.map((block, bi) => {
+                  const blockNotes = perBlockAnnotations[bi] || [];
+                  return (
+                    <div key={bi} className="multipace-block" style={{ border: "1pt solid #000", padding: "8pt 10pt", marginBottom: 10, pageBreakInside: "avoid", breakInside: "avoid" }}>
+                      <div style={{ fontWeight: 700, fontSize: "12pt", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+                        {block.name || block.label || block.section}
+                        {block.label && block.name && block.label !== block.name ? <span style={{ fontWeight: 400, fontStyle: "italic", textTransform: "none", letterSpacing: 0, marginLeft: 6 }}>— {block.label}</span> : null}
+                        <span style={{ float: "right", fontWeight: 400, fontStyle: "italic" }}>{block.totalYards}</span>
                       </div>
-                    ))}
-                    {block.rounds && block.rounds > 1 ? (
-                      <div style={{ fontStyle: "italic", marginTop: 4, fontSize: "10pt" }}>Rounds: {block.rounds}{block.roundRestSecs ? ` · rest ${block.roundRestSecs}s between rounds` : ""}</div>
-                    ) : null}
-                  </div>
-                ))}
+                      {blockNotes.length > 0 && (
+                        <div style={{ fontSize: "9.5pt", fontStyle: "italic", marginBottom: 6, color: "#444" }}>
+                          ⚠ {blockNotes.join(" · ")}
+                        </div>
+                      )}
+                      {block.sets.map((s, si) => {
+                        const setNotes = perSetAnnotations[`${bi}-${si}`] || [];
+                        return (
+                          <div key={si} style={{ marginBottom: 3, fontSize: "11pt" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                              <span><b>{s.reps}×{s.dist}</b>{s.eq ? <i style={{ marginLeft: 4 }}>[{s.eq}]</i> : null} {s.desc || ""}</span>
+                              <span style={{ fontFamily: "ui-monospace, 'SFMono-Regular', monospace", marginLeft: 12, whiteSpace: "nowrap" }}>{s.interval || ""}</span>
+                            </div>
+                            {setNotes.length > 0 && (
+                              <div style={{ fontSize: "9.5pt", fontStyle: "italic", color: "#444", paddingLeft: "1em", marginTop: 1 }}>
+                                ⚠ {setNotes.join(" · ")}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {block.rounds && block.rounds > 1 ? (
+                        <div style={{ fontStyle: "italic", marginTop: 4, fontSize: "10pt" }}>Rounds: {block.rounds}{block.roundRestSecs ? ` · rest ${block.roundRestSecs}s between rounds` : ""}</div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
+        </div>
+      );
+    }
+
+    // Phase 3 PSC slice 4 — read-only Active Constraints subsection.
+    // Spec: PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.9. Read-only by decision #7
+    // (coach is write authority). Lives inside ProfileModal so swimmers see
+    // their constraints in the same place they see favorites/disfavorites.
+    function ProfileActiveConstraintsSection() {
+      const [rows, setRows] = React.useState(null);
+      const [err,  setErr]  = React.useState(null);
+      React.useEffect(() => {
+        fetch(`${API_BASE}/me/constraints`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (d && Array.isArray(d.constraints)) setRows(d.constraints);
+            else setRows([]);
+          })
+          .catch(e => { setErr(e.message); setRows([]); });
+      }, []);
+
+      // Hide the entire section when the swimmer has no constraints —
+      // ProfileModal is busy enough; empty cards add noise. Coach + admin
+      // can still see "no constraints" on the per-swimmer panel.
+      if (rows === null || rows.length === 0) return null;
+
+      return (
+        <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-warn)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
+            ⚠ Active constraints ({rows.length})
+          </div>
+          <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
+            {rows.map(r => (
+              <div key={r.id} style={{ background: "var(--color-card)", border: "1px solid var(--color-warn)", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ color: "var(--color-text)", fontWeight: 600 }}>
+                  <span style={{ marginRight: 6 }}>⚠</span>
+                  {formatPscRow(r)}
+                </div>
+                <div style={{ color: "var(--color-text-muted)", fontSize: 10, marginTop: 4 }}>
+                  Set by coach <code style={{ fontFamily: "monospace" }}>{(r.set_by_coach_sub || "").slice(-8) || "—"}</code>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10, fontSize: 11, color: "var(--color-text-muted)", lineHeight: 1.5 }}>
+            Constraints are set by your coach. To change them, talk with your coach. Your generated workouts already honor these — you don't need to do anything.
+          </div>
+          {err && <div style={{ color: "#fca5a5", fontSize: 11, marginTop: 6 }}>Error: {err}</div>}
         </div>
       );
     }
@@ -14095,6 +14351,12 @@
                     <BenchmarksSection onPaceUpdate={onPaceUpdate} />
                   </div>
                 </div>
+
+                {/* Phase 3 PSC slice 4 — read-only Active Constraints section.
+                    Closes scope decision #8 (transparency): swimmer sees their
+                    own constraints with set-by + expiry. Read-only — coach is
+                    the write authority. */}
+                <ProfileActiveConstraintsSection />
 
                 {/* v1.12 — Favorites audit panel. Mirrors the v1.4/v1.10
                     Disfavorites panel for favorites. Bank labels + set IDs
@@ -17853,18 +18115,28 @@
       // when list reloads. Map of { group_id: anchor } so per-card lookup
       // by assignment.assigned_via_group_id is O(1).
       const [groupAnchors, setGroupAnchors] = React.useState({});
+      // Phase 3 PSC slice 4 — swimmer's own active constraints for
+      // computeSubstitutionsForSwimmer on each assigned workout. View-local
+      // fetch (mirrors App-level myConstraints but scoped to this view's
+      // lifecycle).
+      const [myConstraints, setMyConstraints] = React.useState([]);
 
       const load = React.useCallback(async () => {
         try {
           const q = stateFilter ? `?state=${encodeURIComponent(stateFilter)}` : "";
-          const [assignRes, anchorRes] = await Promise.all([
+          const [assignRes, anchorRes, constraintRes] = await Promise.all([
             fetch(`/api/me/assignments${q}`, { cache: "no-store" }),
             fetch(`/api/me/group-anchors`,   { cache: "no-store" }),
+            fetch(`/api/me/constraints`,     { cache: "no-store" }),
           ]);
           if (!assignRes.ok) throw new Error(`HTTP ${assignRes.status}`);
           setList(await assignRes.json());
           if (anchorRes.ok) setGroupAnchors(await anchorRes.json());
           else setGroupAnchors({});
+          if (constraintRes.ok) {
+            const d = await constraintRes.json();
+            setMyConstraints(Array.isArray(d?.constraints) ? d.constraints : []);
+          } else { setMyConstraints([]); }
         } catch (e) { setList([]); setMsg(e.message); }
       }, [stateFilter]);
       React.useEffect(() => { load(); }, [load]);
@@ -17944,6 +18216,13 @@
                 // MEET_ANCHORED_TAPER_SCOPE §3.7. Cosmetic only.
                 const anchor = groupAnchors[a.assigned_via_group_id] || groupAnchors[a.group_id];
                 const showAnchorBadge = anchor && anchor.weeks_out != null && anchor.weeks_out >= 0;
+                // Phase 3 PSC slice 4 — per-card substitution computation.
+                // Substitutions are derived from the swimmer's OWN constraints
+                // applied to the assigned workout. Coach-side workout content
+                // doesn't carry sub annotations; the swimmer's view computes
+                // them at render time.
+                const subs = a.workout ? computeSubstitutionsForSwimmer(a.workout, myConstraints) : [];
+                const subCount = subs.length;
                 return (
                   <div key={a.id} style={{ background: "var(--color-card)", border: `1px solid ${meta.color}`, borderRadius: 10, overflow: "hidden" }}>
                     <button onClick={() => setExpandedId(isExpanded ? null : a.id)}
@@ -17964,6 +18243,11 @@
                               🎯 {anchor.weeks_out === 0 ? "This week" : `${anchor.weeks_out} wk${anchor.weeks_out === 1 ? "" : "s"} to`} <strong>{anchor.event_name}</strong> · suggested phase: <strong style={{ textTransform: "capitalize" }}>{anchor.suggested_phase}</strong>
                             </div>
                           )}
+                          {subCount > 0 && (
+                            <div style={{ fontSize: 11, color: "var(--color-warn)", marginTop: 4, fontWeight: 600 }}>
+                              ⚠ {subCount} substitution{subCount === 1 ? "" : "s"} applied for your active constraint{myConstraints.length === 1 ? "" : "s"}
+                            </div>
+                          )}
                         </div>
                         <span style={{ fontSize: 10, padding: "3px 9px", borderRadius: 999, background: `${meta.color}22`, border: `1px solid ${meta.color}`, color: meta.color, fontWeight: 700 }}>
                           {meta.label}{isCoachMarked ? " (by coach)" : ""}
@@ -17972,6 +18256,61 @@
                     </button>
                     {isExpanded && (
                       <div style={{ padding: "0 14px 14px", borderTop: "1px solid var(--color-border)" }}>
+                        {subCount > 0 && (
+                          <div style={{ marginTop: 10, padding: 10, background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6, fontSize: 11 }}>
+                            <div style={{ color: "var(--color-warn)", fontWeight: 700, marginBottom: 6 }}>
+                              ⚠ What was substituted ({subCount})
+                            </div>
+                            <div style={{ color: "var(--color-text-muted)", marginBottom: 6 }}>
+                              These changes apply to YOUR copy because of your active constraints. Other swimmers in the group get the original.
+                            </div>
+                            <ul style={{ margin: 0, paddingLeft: 18, color: "var(--color-text)", lineHeight: 1.6 }}>
+                              {subs.map((s, i) => {
+                                const block = a.workout.blocks?.[s.block_idx];
+                                const sectName = block?.section || "section";
+                                if (s.kind === "stroke_sub") {
+                                  return (
+                                    <li key={i}>
+                                      <em>{sectName}</em> set {s.set_idx + 1}: swap <strong>{s.from}</strong> → <strong>{s.to}</strong>
+                                      <span style={{ color: "var(--color-text-muted)" }}> · {PSC_LABEL_MAP[s.constraint_type] || s.constraint_type}</span>
+                                    </li>
+                                  );
+                                }
+                                if (s.kind === "equip_drop") {
+                                  return (
+                                    <li key={i}>
+                                      <em>{sectName}</em> set {s.set_idx + 1}: drop <strong>{s.eq}</strong> gear, swim unassisted
+                                      <span style={{ color: "var(--color-text-muted)" }}> · {PSC_LABEL_MAP[s.constraint_type] || s.constraint_type}</span>
+                                    </li>
+                                  );
+                                }
+                                if (s.kind === "section_skip") {
+                                  return (
+                                    <li key={i}>
+                                      Skip <em>{s.section}</em> — rest or own choice instead
+                                      <span style={{ color: "var(--color-text-muted)" }}> · {PSC_LABEL_MAP[s.constraint_type] || s.constraint_type}</span>
+                                    </li>
+                                  );
+                                }
+                                if (s.kind === "cap_yardage") {
+                                  return (
+                                    <li key={i}>
+                                      Yardage cap <strong>{s.value} yd</strong> — trim from the end if the workout runs long
+                                    </li>
+                                  );
+                                }
+                                if (s.kind === "cap_intensity") {
+                                  return (
+                                    <li key={i}>
+                                      Intensity cap <strong>{s.value}</strong> — main set replaced with easy-pace equivalent volume
+                                    </li>
+                                  );
+                                }
+                                return null;
+                              })}
+                            </ul>
+                          </div>
+                        )}
                         {a.workout?.blocks && (
                           <div style={{ marginTop: 10 }}>
                             {a.workout.blocks.map((b, i) => (
@@ -25964,6 +26303,7 @@
               workout={workout}
               lanes={multiPaceLanes.lanes}
               mode={multiPaceLanes.mode}
+              groupActiveConstraints={groupActiveConstraints}
               onClose={() => setMultiPaceLanes(null)}
             />
           )}
