@@ -20970,7 +20970,10 @@
       const [copiedCode, setCopiedCode] = React.useState(null);
 
       const copyShareUrl = (code) => {
-        navigator.clipboard.writeText(`${window.location.origin}/api/auth/apple?invite=${code}`);
+        // Provider-neutral invite landing — recipient picks Apple OR Google
+        // on SignInGate; the chosen button preserves the invite param.
+        // Was hard-coded to /api/auth/apple?invite= pre Phase 2 Google.
+        navigator.clipboard.writeText(`${window.location.origin}/?invite=${code}`);
         setCopiedCode(code);
         setTimeout(() => setCopiedCode(c => c === code ? null : c), 1500);
       };
@@ -21612,6 +21615,16 @@
     //   - Primary CTA: Sign in with Apple (existing). Secondary: "No invite?
     //     Request one" mailto. Google OAuth slot pre-wired but commented out.
     function SignInGate({ authError }) {
+      // Provider-neutral invite landing: an invite URL of the form
+      // setforge.io/?invite=CODE lets the user pick Apple OR Google,
+      // and we forward the code to whichever auth start route they tap.
+      // Used by AdminInvites "Copy link" (which now emits /?invite=CODE
+      // instead of provider-specific /api/auth/apple?invite=CODE).
+      const inviteParam = (typeof window !== "undefined")
+        ? (new URLSearchParams(window.location.search).get("invite") || "")
+        : "";
+      const appleHref  = inviteParam ? `/api/auth/apple?invite=${encodeURIComponent(inviteParam)}`   : "/api/auth/apple";
+      const googleHref = inviteParam ? `/api/auth/google?invite=${encodeURIComponent(inviteParam)}`  : "/api/auth/google";
       return (
         <div style={{
           minHeight: "100vh",
@@ -21699,7 +21712,7 @@
 
               {/* CTAs: primary Sign in (existing flow), secondary Request invite */}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                <a href="/api/auth/apple" style={{ textDecoration: "none" }} aria-label="Sign in with Apple">
+                <a href={appleHref} style={{ textDecoration: "none" }} aria-label="Sign in with Apple">
                   <div style={{
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
                     background: "#fff", color: "#000", borderRadius: 12,
@@ -21719,7 +21732,7 @@
                     multicolor "G" mark — Google's official identity guidelines
                     permit the white-on-white variant when the wordmark is
                     "Sign in with Google" verbatim. */}
-                <a href="/api/auth/google" style={{ textDecoration: "none" }} aria-label="Sign in with Google">
+                <a href={googleHref} style={{ textDecoration: "none" }} aria-label="Sign in with Google">
                   <div style={{
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
                     background: "#fff", color: "#1f1f1f", borderRadius: 12,
