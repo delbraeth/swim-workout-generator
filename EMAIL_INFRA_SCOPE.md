@@ -31,29 +31,24 @@ Per [[feedback-no-password-auth]]: no magic-link emails. Auth stays OAuth. This 
 | 9 | **`/api/email/send` is internal only — no HTTP route** | Routes that need to trigger email call `enqueueEmail(...)` directly. No "send email" REST endpoint to abuse. |
 | 10 | **No unsubscribe link on transactional** | Transactional emails (welcome, billing receipt, security notification) don't need unsubscribe per CAN-SPAM. **Any future marketing email gets its own table + List-Unsubscribe header + opt-in default-off.** Documented upfront so nobody adds an OnboardingCampaign drip without flipping the bit. |
 | 11 | **Audit-log every queue write + every provider response** | Two audit event types: `email.enqueue` (writes to DB queue) and `email.send.result` (provider returned success or failure). Failures retry up to 3× with exponential backoff (1m, 5m, 30m); after that, status → `failed` + admin notification in feedback queue. |
-| 12 | **Hard-stop on minors** | The minor-bypass posture from DISCORD_SCOPE.md §6 extends here: **never email an account where `users.dob` indicates under-18 OR `users.dob IS NULL`** (default to bypass when DOB unknown — safer side). `enqueueEmail` short-circuits before the queue write. The welcome email checks this; minors just don't get the welcome (they see in-app welcome instead, scope TBD). |
+| 12 | **Hard-stop on minors** | The minor-bypass posture from DISCORD_SCOPE.md §6 extends here: **never email an account where `users.dob` indicates under-18 OR `users.dob IS NULL`** (default to bypass when DOB unknown — safer side). `enqueueEmail` short-circuits before the queue write. The welcome email checks this; minors get the in-app modal alternative per decision 14. |
+| 13 | **Resend Pro tier ($20/mo)** | Required for apex-domain support (Free tier forces `noreply@mail.setforge.io`, uglier + lower-trust subdomain). $20/mo includes 50k emails/mo, way above our solo-operator volume. Pricing transparent; no sales call. |
+| 14 | **DMARC: `p=none` v1 → `p=quarantine` after 30 clean days** | Standard staged rollout. v1 records DKIM/SPF compliance reports without enforcement. After 30 days of clean reports (verify in Resend dashboard), flip to `p=quarantine` so suspicious mail routes to spam. `p=reject` is Phase 3+ posture; revisit when continuity commitment surfaces require maximum deliverability proof. |
+| 15 | **Minor welcome = in-app modal alternative (Phase 2.1 followup)** | Minors skipped by the email-send pathway (decision 12) still need a "welcome, here's the manual" touch. Render the same content as an in-app modal on first login post-13+-account-claim. Stored in `localStorage` flag so it shows once. Scope this as a Phase 2.1 micro-followup; not Phase 2 critical path. |
+| 16 | **Hard bounces → auto-generated admin feedback row** | When Resend reports a hard bounce on a `to_user_sub`, insert a synthetic feedback row with `category='email_bounce'`, `subject='Hard bounce on welcome to {sub}'`, body containing the Resend error reason + suggested action. Cap'n sees it next time he opens admin. No Discord alert (low-volume; doesn't need real-time). `email.send.result` audit event still fires regardless. |
 
 ---
 
-## 3. Open Cap'n forks
+## 3. Implementation (deferred until Resend account + DNS exist)
 
-1. **Resend pricing tier choice.** Free tier is 3k emails/mo + setforge.io subdomain only. Pro is $20/mo + apex domain support. Apex is needed for `noreply@setforge.io` (not `noreply@mail.setforge.io`). Pro is the assumed pick; confirm.
-2. **DMARC rollout policy.** v1 ships `p=none` (monitor only). After 30 days of clean reports → flip to `p=quarantine` (suspicious goes to spam). Flip to `p=reject` is Phase 3+ posture. OK with this rollout?
-3. **Minor welcome email — do they get an in-app welcome instead, or nothing?** If "in-app welcome modal," scope it in a v1.1 followup or fold into Phase 4 parent-portal. If "nothing," that's a degraded experience for swimmers who claim a managed account at 13+.
-4. **Cap'n on the bounce list.** Resend will notify on hard bounces. Should those become admin feedback rows, Discord alerts, or just dashboard? `email.send.result` audit log captures it regardless; the question is what else.
-
----
-
-## 4. Implementation (deferred until Resend account + DNS exist)
-
-### 4.1 New env vars
+### 3.1 New env vars
 
 - `RESEND_API_KEY` — from Resend dashboard
 - `EMAIL_FROM` — `"SetForge <noreply@setforge.io>"`
 - `EMAIL_REPLY_TO` — `"hello@setforge.io"`
 - Computed flag: `EMAIL_ACTIVE = !!RESEND_API_KEY`. When false, `enqueueEmail` no-ops with a warn log (lets dev/test envs run without sending real email).
 
-### 4.2 DNS records (Cap'n at Spaceship)
+### 3.2 DNS records (Cap'n at Spaceship)
 
 | Record | Type | Value (from Resend dashboard) |
 |---|---|---|
@@ -65,7 +60,7 @@ Per [[feedback-no-password-auth]]: no magic-link emails. Auth stays OAuth. This 
 
 Verify in Resend dashboard before sending the first email.
 
-### 4.3 New migration (034)
+### 3.3 New migration (034)
 
 ```sql
 CREATE TABLE `email_outbox` (
@@ -88,7 +83,7 @@ CREATE TABLE `email_outbox` (
 ) ENGINE=InnoDB;
 ```
 
-### 4.4 New module: `lib/email.js`
+### 3.4 New module: `lib/email.js`
 
 Exports:
 
@@ -97,7 +92,7 @@ Exports:
 - `processQueue()` — claims up to 10 pending rows, sends via Resend, updates row status.
 - `renderTemplate(templateId, vars)` — returns `{ subject, html, text }`. Templates live in `lib/email-templates/`.
 
-### 4.5 First template: `welcome.js`
+### 3.5 First template: `welcome.js`
 
 ```js
 // lib/email-templates/welcome.js
@@ -122,7 +117,7 @@ A few quick things:
 
 Plain text + matching minimal HTML. No tracking pixels (security.html promises no email tracking). No images hosted off-domain. ~600 bytes total.
 
-### 4.6 Server wiring
+### 3.6 Server wiring
 
 In the Apple OAuth callback (and Google's, once Phase 2.1 ships), after `dbAuditEvent('auth.signup')`:
 
@@ -139,7 +134,7 @@ enqueueEmail({
 
 Fire-and-forget. Welcome never blocks sign-up.
 
-### 4.7 Boot: start the worker
+### 3.7 Boot: start the worker
 
 In `server.js` near the end, after the listen call:
 
@@ -150,7 +145,7 @@ if (EMAIL_ACTIVE) startEmailWorker();
 
 ---
 
-## 5. Smoke checklist
+## 4. Smoke checklist
 
 - `EMAIL_ACTIVE=false` (no `RESEND_API_KEY`) → all enqueue calls no-op with warn log. App still works.
 - DNS verified in Resend dashboard. Test send from Resend's dashboard arrives in a real inbox.
@@ -162,7 +157,7 @@ if (EMAIL_ACTIVE) startEmailWorker();
 
 ---
 
-## 6. Out of scope (deferred)
+## 5. Out of scope (deferred)
 
 - **Marketing email infrastructure** — separate table, opt-in default-off, List-Unsubscribe header. Phase 3+ if ever.
 - **Email open/click tracking** — actively declined per security.html promise. Don't add even if Resend's dashboard suggests it.
@@ -172,7 +167,7 @@ if (EMAIL_ACTIVE) startEmailWorker();
 
 ---
 
-## 7. Effort estimate
+## 6. Effort estimate
 
 ~8-10 hours implementation + 1-2 hours smoke + ~1 hour DNS waiting + verification.
 
@@ -188,7 +183,7 @@ Single 10-12h session feasible.
 
 ---
 
-## 8. Dependencies on Cap'n's hands
+## 7. Dependencies on Cap'n's hands
 
 1. Create Resend account at resend.com. Pro tier ($20/mo) for apex-domain support.
 2. Add `setforge.io` as a domain in Resend dashboard.
@@ -203,7 +198,7 @@ Until step 6 verifies clean, deferred. After: code can start.
 
 ---
 
-## 9. Related
+## 8. Related
 
 - [[feedback-no-password-auth]] — OAuth-only stance; no magic-link emails
 - [[swim-generator-discord-scope]] — minor-bypass pattern; same shape used here
