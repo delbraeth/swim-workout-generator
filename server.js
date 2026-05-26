@@ -93,6 +93,9 @@ import {
   dbCreateGroup, dbGetGroup, dbListGroupsForTeam, dbListGroupsForCoach,
   dbUpdateGroup, dbArchiveGroup, dbSetGroupPhase, dbGetGroupRole,
   dbSetGroupAnchor, dbClearGroupAnchor, dbGetActiveAnchor, dbExpireOrphanAnchors, dbListAnchorsForMemberSwimmer,
+  dbAddSwimmerConstraint, dbRemoveSwimmerConstraint, dbGetSwimmerConstraintById,
+  dbListConstraintsForSwimmer, dbGetActiveConstraintsForGroup, dbExpirePastConstraints,
+  dbListMyActiveConstraints, dbAuthzCoachOfSwimmer,
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
@@ -2858,6 +2861,144 @@ app.get("/api/me/group-anchors", requireAuth, async (req, res) => {
     const map = {};
     for (const a of anchors) map[a.group_id] = a;
     res.json(map);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ── Per-Swimmer Constraints (PSC) — Phase 3 ─────────────────────────
+// Read/write the swimmer_constraints table (migration 037). Authz:
+// - reads: coach-of-swimmer OR the swimmer themselves
+// - writes: coach-of-swimmer only (decision 7)
+// Both swimmer_sub and managed_id targets supported; exactly one of
+// the two must be supplied per request.
+
+// Parse + validate target from query/body. Returns { swimmerSub, managedId }
+// with exactly one populated, or throws. Strings only — no type coercion.
+function parsePscTarget(src) {
+  const swimmerSub = src?.swimmer_sub ? String(src.swimmer_sub).trim() : "";
+  const managedId  = src?.managed_id  ? String(src.managed_id).trim()  : "";
+  if (!!swimmerSub === !!managedId) {
+    throw new Error("exactly one of swimmer_sub or managed_id required");
+  }
+  return {
+    swimmerSub: swimmerSub || null,
+    managedId:  managedId  || null,
+  };
+}
+
+// GET /api/swimmer-constraints?swimmer_sub=... OR ?managed_id=...
+// Returns active rows only by default; ?include_inactive=1 for audit.
+app.get("/api/swimmer-constraints", requireAuth, async (req, res) => {
+  try {
+    let target;
+    try { target = parsePscTarget(req.query); }
+    catch (e) { return res.status(400).json({ error: e.message }); }
+    // Authz: the swimmer themselves (for swimmer_sub) OR coach-of-this-swimmer.
+    const isSelf = target.swimmerSub && target.swimmerSub === req.userSub;
+    if (!isSelf) {
+      const ok = await dbAuthzCoachOfSwimmer(req.userSub, target);
+      if (!ok) return res.status(403).json({ error: "not a coach of this swimmer" });
+    }
+    const includeInactive = req.query?.include_inactive === "1" || req.query?.include_inactive === "true";
+    const rows = await dbListConstraintsForSwimmer(target, { includeInactive });
+    res.json({ constraints: rows });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// POST /api/swimmer-constraints
+// body: { swimmer_sub | managed_id, constraint_type, value_num?, value_str?, expires_at? }
+app.post("/api/swimmer-constraints", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    let target;
+    try { target = parsePscTarget(req.body); }
+    catch (e) { return res.status(400).json({ error: e.message }); }
+    const ok = await dbAuthzCoachOfSwimmer(req.userSub, target);
+    if (!ok) return res.status(403).json({ error: "not a coach of this swimmer" });
+
+    const constraintType = String(req.body?.constraint_type || "").trim();
+    const valueNum = req.body?.value_num != null ? Number(req.body.value_num) : null;
+    const valueStr = req.body?.value_str != null ? String(req.body.value_str) : null;
+    const expiresAt = req.body?.expires_at || null;
+
+    let id;
+    try {
+      id = await dbAddSwimmerConstraint({
+        ...target,
+        setByCoachSub: req.userSub,
+        constraintType,
+        valueNum,
+        valueStr,
+        expiresAt,
+      });
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "psc.set",
+      ...reqMeta(req),
+      details:   {
+        constraint_id:   id,
+        swimmer_sub:     target.swimmerSub,
+        managed_id:      target.managedId,
+        constraint_type: constraintType,
+        value_num:       valueNum,
+        value_str:       valueStr,
+        expires_at:      expiresAt,
+      },
+    });
+    const row = await dbGetSwimmerConstraintById(id);
+    res.json({ constraint: row });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// DELETE /api/swimmer-constraints/:id — soft-delete (sets active=0).
+// Authz: coach-of-swimmer (target derived from the row).
+app.delete("/api/swimmer-constraints/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const row = await dbGetSwimmerConstraintById(req.params.id);
+    if (!row) return res.status(404).json({ error: "constraint not found" });
+    const target = {
+      swimmerSub: row.swimmer_sub || null,
+      managedId:  row.managed_id  || null,
+    };
+    const ok = await dbAuthzCoachOfSwimmer(req.userSub, target);
+    if (!ok) return res.status(403).json({ error: "not a coach of this swimmer" });
+    const r = await dbRemoveSwimmerConstraint(req.params.id);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "psc.remove",
+      ...reqMeta(req),
+      details:   {
+        constraint_id:   Number(req.params.id),
+        swimmer_sub:     target.swimmerSub,
+        managed_id:      target.managedId,
+        constraint_type: row.constraint_type,
+        was_active:      r.removed,
+      },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// GET /api/groups/:id/active-constraints — group-scoped roll-up for the
+// Generate-time per-practice checklist. Authz: coach-of-group.
+// Shape: { [swimmerSub|managedId]: [constraint rows...] }
+app.get("/api/groups/:id/active-constraints", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const map = await dbGetActiveConstraintsForGroup(req.params.id);
+    res.json(map);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// GET /api/me/constraints — the caller's own active constraints, for
+// ProfileModal + AssignedToMe substitution rendering. Read-only view
+// for the swimmer themselves.
+app.get("/api/me/constraints", requireAuth, async (req, res) => {
+  try {
+    const rows = await dbListMyActiveConstraints(req.userSub);
+    res.json({ constraints: rows });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

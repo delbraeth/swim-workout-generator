@@ -3686,6 +3686,237 @@ export async function dbExpireOrphanAnchors() {
   return { cleared: r.affectedRows || 0 };
 }
 
+// ── Per-Swimmer Constraints (PSC) ────────────────────────────────────
+// Phase 3 · per PER_SWIMMER_CONSTRAINTS_SCOPE.md. The new TOP tier of
+// the fav/disfavor cascade — hard exclude, not soft weight. Closed
+// vocab of 14 constraint_type values across 4 categories (stroke /
+// equipment / section / caps).
+//
+// Schema notes (migration 037):
+//   - swimmer_sub XOR managed_id — exactly one populated per row.
+//     Enforced here in helpers; not at the SQL layer.
+//   - No FK constraints into users/managed_swimmers (legacy tables).
+//     LEFT JOIN reads + cron sweep handle integrity.
+//   - active=1 row + expires_at NULL = persistent. expires_at < NOW()
+//     gets flipped to active=0 by dbExpirePastConstraints (cron).
+//   - removed_at stamped when coach soft-deletes; row stays for audit.
+
+// Closed vocab — keep in sync with migration 037's ENUM.
+const PSC_TYPES = [
+  'stroke_no_fly','stroke_no_breast','stroke_no_back','stroke_no_free',
+  'equip_no_paddles','equip_no_fins','equip_no_snorkel','equip_no_kickboard','equip_no_buoy',
+  'section_no_main','section_no_kick','section_no_drill',
+  'cap_yardage','cap_intensity'
+];
+
+// Central authz: is coachSub an active coach (primary OR assistant)
+// of any non-archived group containing this swimmer? Mirrors the
+// dbGetEffectiveDisfavorites coach-lookup pattern. Returns boolean.
+//
+// Pass exactly one of { swimmerSub, managedId }. If both/neither,
+// returns false (caller bug; surface via 400 at the route layer).
+export async function dbAuthzCoachOfSwimmer(coachSub, { swimmerSub = null, managedId = null } = {}) {
+  if (!coachSub) return false;
+  const hasSub = !!swimmerSub;
+  const hasMan = !!managedId;
+  if (hasSub === hasMan) return false;  // XOR violated
+  if (hasSub) {
+    const rows = await pool.query(
+      "SELECT 1 FROM `group_members` gm " +
+      "JOIN `groups`         g  ON g.`id`         = gm.`group_id` " +
+      "JOIN `group_coaches`  gc ON gc.`group_id`  = g.`id` AND gc.`removed_at` IS NULL " +
+      "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL " +
+      "  AND g.`archived` = 0 AND gc.`coach_sub` = ? LIMIT 1",
+      [swimmerSub, coachSub]
+    );
+    return rows.length > 0;
+  }
+  // managed: coach can act if they OWN the managed swimmer OR if the
+  // managed swimmer is in a group the coach is on. Owner check first
+  // since it's the common case (managed swimmers usually have one coach).
+  const ownRows = await pool.query(
+    "SELECT 1 FROM `coach_managed_swimmers` WHERE `id` = ? AND `owner_coach_sub` = ? LIMIT 1",
+    [String(managedId), coachSub]
+  );
+  if (ownRows.length > 0) return true;
+  const grpRows = await pool.query(
+    "SELECT 1 FROM `group_members` gm " +
+    "JOIN `groups`         g  ON g.`id`         = gm.`group_id` " +
+    "JOIN `group_coaches`  gc ON gc.`group_id`  = g.`id` AND gc.`removed_at` IS NULL " +
+    "WHERE gm.`member_managed_id` = ? AND gm.`left_at` IS NULL " +
+    "  AND g.`archived` = 0 AND gc.`coach_sub` = ? LIMIT 1",
+    [String(managedId), coachSub]
+  );
+  return grpRows.length > 0;
+}
+
+// Validate type+value combination. Throws on bad input. cap_yardage
+// requires a positive int in value_num; cap_intensity requires
+// 'easy_only' in value_str; all other types have no value fields.
+function validatePscTypeValue(constraintType, valueNum, valueStr) {
+  if (!PSC_TYPES.includes(constraintType)) {
+    throw new Error(`bad constraint_type: ${constraintType}`);
+  }
+  if (constraintType === 'cap_yardage') {
+    if (!Number.isInteger(valueNum) || valueNum <= 0 || valueNum > 100000) {
+      throw new Error("cap_yardage requires positive integer value_num");
+    }
+    if (valueStr != null) throw new Error("cap_yardage must not set value_str");
+    return;
+  }
+  if (constraintType === 'cap_intensity') {
+    if (valueStr !== 'easy_only') {
+      throw new Error("cap_intensity requires value_str='easy_only'");
+    }
+    if (valueNum != null) throw new Error("cap_intensity must not set value_num");
+    return;
+  }
+  // boolean-flag types: no value fields
+  if (valueNum != null || valueStr != null) {
+    throw new Error(`${constraintType} must not set value_num or value_str`);
+  }
+}
+
+// Insert a new constraint row. Authz is the caller's responsibility
+// (dbAuthzCoachOfSwimmer at the route layer); this helper enforces
+// XOR + type/value invariants only. Returns the new row id.
+export async function dbAddSwimmerConstraint({ swimmerSub = null, managedId = null, setByCoachSub, constraintType, valueNum = null, valueStr = null, expiresAt = null }) {
+  if (!setByCoachSub) throw new Error("setByCoachSub required");
+  const hasSub = !!swimmerSub;
+  const hasMan = !!managedId;
+  if (hasSub === hasMan) throw new Error("exactly one of swimmerSub or managedId required");
+  validatePscTypeValue(constraintType, valueNum, valueStr);
+  // expiresAt: null (persistent) or a Date / ISO string. Coerce to Date
+  // and reject anything obviously in the past (24h grace for clock skew).
+  let expDate = null;
+  if (expiresAt) {
+    expDate = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
+    if (isNaN(expDate.getTime())) throw new Error("bad expires_at");
+    if (expDate.getTime() < Date.now() - 24*60*60*1000) {
+      throw new Error("expires_at is in the past");
+    }
+  }
+  const r = await pool.query(
+    "INSERT INTO `swimmer_constraints` " +
+    "(`swimmer_sub`, `managed_id`, `set_by_coach_sub`, `constraint_type`, `value_num`, `value_str`, `expires_at`) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [
+      hasSub ? swimmerSub : null,
+      hasMan ? String(managedId) : null,
+      setByCoachSub,
+      constraintType,
+      valueNum,
+      valueStr,
+      expDate,
+    ]
+  );
+  return Number(r.insertId);
+}
+
+// Soft-delete a constraint. Sets active=0 + removed_at=NOW(). Returns
+// { removed: true } if a row was flipped (active=1 → 0); { removed: false }
+// if no matching active row. Authz check is caller's responsibility.
+export async function dbRemoveSwimmerConstraint(id) {
+  if (!id) throw new Error("id required");
+  const r = await pool.query(
+    "UPDATE `swimmer_constraints` SET `active` = 0, `removed_at` = NOW() " +
+    "WHERE `id` = ? AND `active` = 1",
+    [Number(id)]
+  );
+  return { removed: (r.affectedRows || 0) > 0 };
+}
+
+// Fetch one constraint row by id (for authz lookups + edit flows).
+// Returns null if not found.
+export async function dbGetSwimmerConstraintById(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `swimmer_sub`, `managed_id`, `set_by_coach_sub`, `constraint_type`, " +
+    "       `value_num`, `value_str`, `expires_at`, `active`, `created_at`, `removed_at` " +
+    "FROM `swimmer_constraints` WHERE `id` = ? LIMIT 1",
+    [Number(id)]
+  );
+  return rows[0] || null;
+}
+
+// List constraints for one swimmer. Pass exactly one of swimmerSub or
+// managedId. Default: active rows only. { includeInactive: true } for
+// audit panels.
+export async function dbListConstraintsForSwimmer({ swimmerSub = null, managedId = null }, { includeInactive = false } = {}) {
+  const hasSub = !!swimmerSub;
+  const hasMan = !!managedId;
+  if (hasSub === hasMan) throw new Error("exactly one of swimmerSub or managedId required");
+  const where = hasSub ? "`swimmer_sub` = ?" : "`managed_id` = ?";
+  const param = hasSub ? swimmerSub : String(managedId);
+  const activeFilter = includeInactive ? "" : "AND `active` = 1 ";
+  const rows = await pool.query(
+    "SELECT `id`, `swimmer_sub`, `managed_id`, `set_by_coach_sub`, `constraint_type`, " +
+    "       `value_num`, `value_str`, `expires_at`, `active`, `created_at`, `removed_at` " +
+    `FROM \`swimmer_constraints\` WHERE ${where} ${activeFilter}` +
+    "ORDER BY `active` DESC, `created_at` DESC",
+    [param]
+  );
+  return rows;
+}
+
+// Group roll-up — returns { '<swimmerSub or ms_xxx>': [constraints...] }
+// for every swimmer in the group with at least one active constraint.
+// Used by the Generate-time per-practice checklist.
+// Note: managed swimmers are keyed by their `ms_xxx` managed_id, real
+// users by their `users.sub`. Caller can disambiguate by inspecting the
+// row's swimmer_sub vs managed_id fields.
+export async function dbGetActiveConstraintsForGroup(groupId) {
+  if (!groupId) return {};
+  const rows = await pool.query(
+    "SELECT sc.* FROM `swimmer_constraints` sc " +
+    "JOIN `group_members` gm ON " +
+    "    (gm.`member_swimmer_sub` IS NOT NULL AND gm.`member_swimmer_sub` = sc.`swimmer_sub`) OR " +
+    "    (gm.`member_managed_id`  IS NOT NULL AND gm.`member_managed_id`  = sc.`managed_id`) " +
+    "WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL AND sc.`active` = 1 " +
+    "ORDER BY sc.`created_at` DESC",
+    [String(groupId)]
+  );
+  const out = {};
+  for (const r of rows) {
+    const key = r.swimmer_sub || r.managed_id;
+    if (!key) continue;
+    if (!out[key]) out[key] = [];
+    out[key].push(r);
+  }
+  return out;
+}
+
+// Cron sweep — runs hourly via the email worker tick alongside
+// dbExpireOrphanAnchors. Flips active=0 on rows whose expires_at has
+// passed. No audit log here (caller can fetch the list before sweep
+// if it needs to emit psc.expire events). Returns count for logging.
+export async function dbExpirePastConstraints() {
+  const r = await pool.query(
+    "UPDATE `swimmer_constraints` SET `active` = 0 " +
+    "WHERE `active` = 1 AND `expires_at` IS NOT NULL AND `expires_at` < NOW()"
+  );
+  return { expired: r.affectedRows || 0 };
+}
+
+// Swimmer-side read: a real-user swimmer fetching their OWN active
+// constraints for ProfileModal + AssignedToMe substitution rendering.
+// No authz arg — caller is the swimmer themselves (sub === param).
+export async function dbListMyActiveConstraints(userSub) {
+  if (!userSub) return [];
+  return dbListConstraintsForSwimmer({ swimmerSub: userSub }, { includeInactive: false });
+}
+
+// Swimmer-side: a real-user swimmer's effective constraints aggregated
+// across every (swimmerSub) row + every managed_id where they later
+// claim a managed swimmer. v1 = swimmerSub only. Managed-claim handoff
+// is rare; revisit if Phase 4 surfaces it.
+//
+// Returns a flat array of active rows. Caller (picker integration in
+// next slice) builds the per-option exclusion check.
+export async function dbGetEffectiveConstraints(userSub) {
+  return dbListMyActiveConstraints(userSub);
+}
+
 // Swimmer-side visibility check for team resources (events today; potentially
 // more later). True if the swimmer is an active full-account member of any
 // group whose `team_id` matches. Note: managed swimmers don't authenticate, so
