@@ -92,6 +92,7 @@ import {
   dbBulkCreateManagedSwimmers, dbUpdateMeDob,
   dbCreateGroup, dbGetGroup, dbListGroupsForTeam, dbListGroupsForCoach,
   dbUpdateGroup, dbArchiveGroup, dbSetGroupPhase, dbGetGroupRole,
+  dbSetGroupAnchor, dbClearGroupAnchor, dbGetActiveAnchor, dbExpireOrphanAnchors,
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
@@ -2764,6 +2765,79 @@ app.post("/api/groups/:id/phase", checkOrigin, requireAuth, requireCsrf, writeLi
       eventType: "group.phase.set",
       ...reqMeta(req),
       details:   { group_id: req.params.id, phase },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ── Group anchor (meet-anchored taper, cheap version) ────────────────
+// MEET_ANCHORED_TAPER_SCOPE.md §3.4. Anchor = one event from this team's
+// calendar that drives the suggested Training Phase week-to-week. Read
+// open to coach-of-group OR swimmer-in-group; writes restricted to
+// coach-of-group only.
+
+// Helper: is this user a swimmer member of this group? Used by the GET
+// read-side authz to allow swimmers to see "Week N of 14 toward X" on
+// their AssignedToMe cards.
+async function isSwimmerInGroup(groupId, userSub) {
+  if (!groupId || !userSub) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `group_members` WHERE `group_id` = ? AND `member_swimmer_sub` = ? AND `left_at` IS NULL LIMIT 1",
+    [groupId, userSub]
+  );
+  return rows.length > 0;
+}
+
+app.get("/api/groups/:id/anchor", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    const isMember = role ? false : await isSwimmerInGroup(req.params.id, req.userSub);
+    if (!role && !isMember) return res.status(403).json({ error: "not a member of this group" });
+    const anchor = await dbGetActiveAnchor(req.params.id);
+    res.json({ anchor }); // anchor may be null when no active anchor
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const eventId = Number(req.body?.event_id);
+    if (!Number.isFinite(eventId) || eventId <= 0) return res.status(400).json({ error: "event_id required" });
+    // Sanity check: the event must belong to the same team as the group.
+    // dbGetGroup returns the group's team_id; dbGetTeamEvent returns the event's team_id.
+    const group = await dbGetGroup(req.params.id);
+    if (!group) return res.status(404).json({ error: "group not found" });
+    const event = await dbGetTeamEvent(eventId);
+    if (!event) return res.status(404).json({ error: "event not found" });
+    if (event.team_id !== group.team_id) return res.status(400).json({ error: "event/team mismatch" });
+
+    const anchorId = await dbSetGroupAnchor({
+      groupId:     Number(req.params.id),
+      eventId,
+      byCoachSub:  req.userSub,
+    });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "anchor.set",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, event_id: eventId, event_date: event.date, anchor_id: anchorId },
+    });
+    const anchor = await dbGetActiveAnchor(req.params.id);
+    res.json({ anchor });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const r = await dbClearGroupAnchor({ groupId: Number(req.params.id), byCoachSub: req.userSub });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "anchor.clear",
+      ...reqMeta(req),
+      details:   { group_id: req.params.id, cleared: r.cleared },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }

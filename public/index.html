@@ -14490,6 +14490,13 @@
       const [editingEventId, setEditingEventId] = React.useState(null);
       const [editEventName,  setEditEventName]  = React.useState("");
       const [editEventDate,  setEditEventDate]  = React.useState("");
+      // Meet-anchored taper (MEET_ANCHORED_TAPER_SCOPE §3.6): inline picker
+      // appears when coach clicks 🎯 on an event row. anchoringEventId = ev.id
+      // while the picker is open. Groups list fetched on open.
+      const [anchoringEventId, setAnchoringEventId] = React.useState(null);
+      const [anchorGroupsList, setAnchorGroupsList] = React.useState(null); // null while loading
+      const [anchorTargetGroupId, setAnchorTargetGroupId] = React.useState("");
+      const [anchorBusy, setAnchorBusy] = React.useState(false);
       const [msg,         setMsg]         = React.useState(null);
 
       const loadGroups = React.useCallback(async (teamId) => {
@@ -14799,6 +14806,56 @@
         } catch (err) { setMsg(`Error: ${err.message}`); }
       };
 
+      // Open the inline anchor-picker for an event. Fetches the team's
+      // groups so the coach can pick which group inherits this event as
+      // its training-phase anchor. Per MEET_ANCHORED_TAPER_SCOPE §3.6.
+      const openAnchorPicker = async (eventId) => {
+        setAnchoringEventId(eventId);
+        setAnchorGroupsList(null);
+        setAnchorTargetGroupId("");
+        try {
+          const res = await fetch(`/api/teams/${detail.id}/groups`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const groups = await res.json();
+          const live = (Array.isArray(groups) ? groups : []).filter(g => !g.archived);
+          setAnchorGroupsList(live);
+          if (live.length === 1) setAnchorTargetGroupId(String(live[0].id));
+        } catch (err) {
+          setMsg(`Error loading groups: ${err.message}`);
+          setAnchoringEventId(null);
+        }
+      };
+
+      const cancelAnchorPicker = () => {
+        setAnchoringEventId(null);
+        setAnchorGroupsList(null);
+        setAnchorTargetGroupId("");
+      };
+
+      const handleSetAnchor = async () => {
+        if (!anchoringEventId || !anchorTargetGroupId) return;
+        setAnchorBusy(true);
+        try {
+          const res = await fetch(`/api/groups/${anchorTargetGroupId}/anchor`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ event_id: Number(anchoringEventId) }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          const groupName = anchorGroupsList?.find(g => String(g.id) === String(anchorTargetGroupId))?.name || "group";
+          setMsg(`🎯 Anchor set for ${groupName} (${data.anchor?.weeks_out ?? "?"} wks out, suggested phase: ${data.anchor?.suggested_phase || "—"})`);
+          cancelAnchorPicker();
+        } catch (err) {
+          setMsg(`Error: ${err.message}`);
+        } finally {
+          setAnchorBusy(false);
+        }
+      };
+
       // ── Render ──────────────────────────────────────────────────────
       const isOwner = detail?.viewer_role === "owner";
 
@@ -15082,23 +15139,63 @@
                         </div>
                       );
                     }
+                    const isAnchoring = anchoringEventId === ev.id;
                     return (
-                      <div key={ev.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6, opacity: isPast ? 0.6 : 1 }}>
-                        <div>
-                          <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13 }}>{ev.name}</span>
-                          <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}</span>
-                          {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
+                      <div key={ev.id}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6, opacity: isPast ? 0.6 : 1 }}>
+                          <div>
+                            <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13 }}>{ev.name}</span>
+                            <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}</span>
+                            {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
+                          </div>
+                          {detail.viewer_role && (
+                            <div style={{ display: "flex", gap: 6 }}>
+                              {!isPast && (
+                                <button onClick={() => openAnchorPicker(ev.id)}
+                                  title="Set as training-phase anchor for a group"
+                                  style={{ padding: "3px 9px", background: "transparent", color: "var(--color-warn)", border: "1px solid var(--color-warn)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                  🎯 Anchor
+                                </button>
+                              )}
+                              <button onClick={() => startEditEvent(ev)}
+                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                Edit
+                              </button>
+                              <button onClick={() => handleDeleteEvent(ev.id)}
+                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        {detail.viewer_role && (
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={() => startEditEvent(ev)}
-                              style={{ padding: "3px 9px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
-                              Edit
-                            </button>
-                            <button onClick={() => handleDeleteEvent(ev.id)}
-                              style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
-                              Delete
-                            </button>
+                        {isAnchoring && (
+                          <div style={{ marginTop: 6, padding: "10px 12px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6 }}>
+                            <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>
+                              Set <strong style={{ color: "var(--color-text)" }}>{ev.name}</strong> as anchor for which group? Group's Training Phase will auto-suggest base/build/peak/taper from weeks out. Replacing an existing anchor clears the prior one.
+                            </div>
+                            {anchorGroupsList === null ? (
+                              <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>Loading groups…</div>
+                            ) : anchorGroupsList.length === 0 ? (
+                              <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>This team has no active groups. Create a group first.</div>
+                            ) : (
+                              <>
+                                <select value={anchorTargetGroupId} onChange={e => setAnchorTargetGroupId(e.target.value)}
+                                  style={{ padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, marginRight: 8, minWidth: 200 }}>
+                                  <option value="">— pick a group —</option>
+                                  {anchorGroupsList.map(g => (
+                                    <option key={g.id} value={g.id}>{g.name}</option>
+                                  ))}
+                                </select>
+                                <button onClick={handleSetAnchor} disabled={!anchorTargetGroupId || anchorBusy}
+                                  style={{ padding: "5px 12px", background: (!anchorTargetGroupId || anchorBusy) ? "var(--color-border)" : "var(--color-warn)", color: (!anchorTargetGroupId || anchorBusy) ? "#cbd5e1" : "var(--color-bg)", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: (!anchorTargetGroupId || anchorBusy) ? "not-allowed" : "pointer", marginRight: 6 }}>
+                                  {anchorBusy ? "Setting…" : "Set anchor"}
+                                </button>
+                                <button onClick={cancelAnchorPicker} disabled={anchorBusy}
+                                  style={{ padding: "5px 11px", background: "var(--color-border)", color: "#cbd5e1", border: "none", borderRadius: 5, fontSize: 12, cursor: anchorBusy ? "not-allowed" : "pointer" }}>
+                                  Cancel
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>

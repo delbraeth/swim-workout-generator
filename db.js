@@ -12,6 +12,7 @@
 
 import { createPool } from "mariadb";
 import crypto          from "crypto";
+import { suggestedPhaseFromWeeksOut, weeksUntilEvent } from "./lib/season.js";
 
 const {
   DB_HOST,
@@ -3560,6 +3561,87 @@ export async function dbListTeamEvents(teamId) {
     created_by_coach_sub: r.created_by_coach_sub,
     created_at: dtToIso(r.created_at),
   }));
+}
+
+// ── Group anchors / meet-anchored taper (MEET_ANCHORED_TAPER_SCOPE) ───
+// One active anchor per group; replacing → old row gets active=0
+// stamped + cleared_at, new row inserted active=1. The UNIQUE
+// (group_id, active) DB constraint forces the two-step.
+//
+// Authz lives at the route layer (coach-of-group check via dbGetGroupRole
+// or equivalent). These helpers don't re-check; callers MUST gate.
+// Pure helpers imported at the top of this file (suggestedPhaseFromWeeksOut,
+// weeksUntilEvent) live in lib/season.js so client + server share them.
+
+export async function dbSetGroupAnchor({ groupId, eventId, byCoachSub }) {
+  if (!groupId || !eventId || !byCoachSub) {
+    throw new Error("dbSetGroupAnchor: groupId, eventId, byCoachSub all required");
+  }
+  // Clear any existing active anchor first (replace semantics — one per group).
+  await pool.query(
+    "UPDATE `group_anchors` SET `active` = 0, `cleared_at` = NOW() WHERE `group_id` = ? AND `active` = 1",
+    [groupId]
+  );
+  const r = await pool.query(
+    "INSERT INTO `group_anchors` (`group_id`, `event_id`, `set_by_coach_sub`) VALUES (?, ?, ?)",
+    [groupId, eventId, byCoachSub]
+  );
+  return Number(r.insertId);
+}
+
+export async function dbClearGroupAnchor({ groupId, byCoachSub: _byCoachSub }) {
+  if (!groupId) throw new Error("dbClearGroupAnchor: groupId required");
+  // byCoachSub is captured in audit_events at the route layer; not stored here.
+  const r = await pool.query(
+    "UPDATE `group_anchors` SET `active` = 0, `cleared_at` = NOW() WHERE `group_id` = ? AND `active` = 1",
+    [groupId]
+  );
+  return { cleared: r.affectedRows > 0 };
+}
+
+// Returns the active anchor for a group with derived weeks_out + suggested_phase,
+// or null if no anchor exists or the underlying event is gone.
+export async function dbGetActiveAnchor(groupId) {
+  if (!groupId) return null;
+  const rows = await pool.query(
+    "SELECT ga.`id` AS anchor_id, ga.`event_id`, te.`name` AS event_name, te.`date` AS event_date, " +
+    "       ga.`set_by_coach_sub`, ga.`created_at` " +
+    "FROM `group_anchors` ga " +
+    "LEFT JOIN `team_events` te ON te.`id` = ga.`event_id` " +
+    "WHERE ga.`group_id` = ? AND ga.`active` = 1 LIMIT 1",
+    [groupId]
+  );
+  const r = rows[0];
+  if (!r) return null;
+  if (!r.event_id || !r.event_date) return null;   // orphan (event deleted; cron will sweep)
+  const eventDateYmd = dateToYmd(r.event_date);
+  const weeksOut = weeksUntilEvent(eventDateYmd);
+  return {
+    anchor_id:        Number(r.anchor_id),
+    event_id:         Number(r.event_id),
+    event_name:       r.event_name,
+    event_date:       eventDateYmd,
+    set_by_coach_sub: r.set_by_coach_sub,
+    weeks_out:        weeksOut,
+    suggested_phase:  suggestedPhaseFromWeeksOut(weeksOut),
+  };
+}
+
+// Convenience wrapper used by the suggested-phase reads from the client.
+export async function dbGetSuggestedPhaseForGroup(groupId) {
+  const a = await dbGetActiveAnchor(groupId);
+  return a ? a.suggested_phase : null;
+}
+
+// Cron sweep — runs hourly via the email worker tick. Flips active=0 on
+// any active anchor whose underlying event has been deleted (event_id is
+// NULL because the FK cascaded SET NULL). Returns count for logging.
+export async function dbExpireOrphanAnchors() {
+  const r = await pool.query(
+    "UPDATE `group_anchors` SET `active` = 0, `cleared_at` = NOW() " +
+    "WHERE `event_id` IS NULL AND `active` = 1"
+  );
+  return { cleared: r.affectedRows || 0 };
 }
 
 // Swimmer-side visibility check for team resources (events today; potentially
