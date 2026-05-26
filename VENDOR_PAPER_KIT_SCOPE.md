@@ -40,6 +40,7 @@ Without this kit, the Program tier ($25/mo or $300/yr) is unsellable to any orga
 | 8 | **Continuity commitment lives in three places: ToS (legal), pricing page (marketing), kit standalone PDF (procurement)** | Same text in three contexts. ToS is the legally binding source; the standalone PDF in the kit is a procurement-friendly extract. Pricing page is the public-facing summary. |
 | 9 | **W-9 stored as a static PDF in the kit** | Cap'n fills it once with Competition Aquatics, LLC info + EIN + signature. Re-issue only when the LLC details change. Not generated on demand. |
 | 10 | **No formal "annual security review" commitment** | Some board templates ask for an annual SOC 2 / annual pen-test attestation. SetForge does not have either and won't; this is consistent with the "What we don't have" honest-list on /security. Document the absence in the kit's cover letter; don't promise what we won't deliver. |
+| 10a | **DPA data-rights language stays narrow to current state** | DPA documents what exists today: access (export **by request via email**, not self-serve), correction (in-app Profile fields), deletion (cascade-wipe of user data + audit-log sub-NULL tombstone). Does NOT promise self-serve export — that ships in Phase 4 alongside identity refactor per `IDENTITY_SCOPE.md` phase I-G. Cross-phase decision 2026-05-26: not pulling export forward; accepting that some Program-tier boards will defer until self-serve ships. See §5. |
 | 11 | **Cover letter accompanies every kit send** | A short Markdown → PDF letter Cap'n sends with the bundle. Mentions: free-tier permanence, what's in the kit, what isn't (no SOC 2 etc.), continuity commitment summary, "I'm the one who answers the email" line. Sets expectations honestly upfront. |
 | 12 | **Audit log when a kit is sent** | New audit event `vendor_kit.sent` with `{ recipient_email, organization_name }` in details. Sent manually by Cap'n via a one-click admin action (see §3.5). Helps track adoption + answer "who has the kit?" questions later. |
 
@@ -124,7 +125,8 @@ If Phase 2 email infra isn't live yet, the button instead renders the cover lett
 
 ## 5. Out of scope (deferred to v1.1 or later)
 
-- **Self-serve download portal.** Treasurer can't get the kit without emailing first. v2 if volume justifies.
+- **Self-serve JSON data export.** Bundled with the identity refactor at Phase 4 (`IDENTITY_SCOPE.md` phase I-G). The vendor kit's DPA accurately states data export is available **by request** today, which is the current implementation per `security.html`. Boards that demand self-serve export will need to wait for Phase 4 or accept the by-request flow. Decision 2026-05-26: not pulling export forward — the schema redesign cost is real (export needs to include persons + guardians rows once they exist), and "by request" satisfies most Coach-tier boards. Program-tier boards may push back; that's an accepted trade.
+- **Self-serve download portal for the kit.** Treasurer can't get the kit without emailing first. v2 if volume justifies.
 - **Per-org customization of templates.** Same template for every recipient in v1. v2 could insert custom clauses for specific boards.
 - **Electronic signature integration** (DocuSign, HelloSign, etc.). v1 = treasurer signs PDF and emails back. DocuSign adds another vendor + sub-processor list entry.
 - **SOC 2 attestation.** Decision 10 — won't ever offer; honest about the absence in the cover letter.
