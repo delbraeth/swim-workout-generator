@@ -6956,7 +6956,7 @@
     // Returns { option, templateUsed, attempts } or { option: null } on
     // no-applicable-template or full-failure (caller silently falls
     // back to bank).
-    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs) {
+    function generateEngineForSection(section, typeId, budgetYd, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints = []) {
       if (typeof TEMPLATE_ENGINE === "undefined") return { option: null };
       const applicable = TEMPLATE_ENGINE.applicable(section, typeId);
       if (!applicable.length) return { option: null };
@@ -6990,7 +6990,7 @@
         tpl = applicable[pickIdx];
       }
       return TEMPLATE_ENGINE.generateWithRetry({
-        templateId: tpl.id, typeKey: typeId, section, budgetYd, recent: recent || [], lanesPaceSecs,
+        templateId: tpl.id, typeKey: typeId, section, budgetYd, recent: recent || [], lanesPaceSecs, activeConstraints,
       });
     }
 
@@ -7002,7 +7002,7 @@
     // the picker's combination validation (equipment, yardage min/max)
     // while substituting content per section. Engine output gets a
     // __engineMeta marker so the renderer can show the ⚡ badge.
-    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs) {
+    function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints = []) {
       if (!sources) return sections;
       const out = { ...sections };
       for (const sect of ["warmup", "drill", "main", "cooldown"]) {
@@ -7010,7 +7010,7 @@
         if (src === "engine") {
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
-          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
+          const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints);
           if (res && res.option) {
             out[sect] = {
               ...res.option,
@@ -7032,7 +7032,7 @@
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
           const engineBudget = Math.max(100, Math.round(original.totalYards * 0.5));
-          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
+          const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints);
           if (res && res.option) {
             const stroke = templateDefaultStroke(typeId);
             out[sect] = {
@@ -7093,6 +7093,7 @@
       disfavorMode = "downweight",      // v1.8 — "downweight" (0.25×) or "exclude" (hard-exclude, weight 0)
       lanesPaceSecs = null,             // v2.0 — array of lane paces (sec/100). When set, picker filters options that don't fit all lanes (see optionFitsAllLanes). null/empty = single-pace path unchanged.
       ugcOverlay = null,                // UGC Phase B — caller's UGC overlay (12-key shape); merged into bank picker per exact pool mode.
+      myConstraints = [],               // Phase 3 PSC slice 2 — caller's active swimmer_constraints rows. Step-0 hard-exclude. Skipped entirely in multi-lane mode (per scope §3.5; per-lane sub lands in slice 3).
     } = {}) {
       // v1.8 — Resolve the multiplier once. "exclude" zeros the weight;
       // pickWeighted's existing "all weights zero → uniform fallback" is the
@@ -7109,6 +7110,29 @@
       const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode, ugcOverlay);
       const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay);
       const _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay);
+
+      // Phase 3 PSC slice 2 — hard-exclude step 0. Per
+      // PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.4: drop options before weight
+      // computation. SKIPPED entirely in multi-lane mode (fork 1 with Cap'n
+      // 2026-05-26: per-lane substitution rendering lands in slice 3).
+      // Bank fallback: if PSC empties a pool, use the unfiltered pool so
+      // generation never stalls (silent per fork 3; substitution rendering
+      // is slice 3+). Tracked in `pscFilterFallback` for debug only.
+      const usePsc = Array.isArray(myConstraints) && myConstraints.length > 0 && !(Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0);
+      const pscFilterFallback = { warmup: false, drill: false, main: false, cooldown: false };
+      const _narrowByPsc = (pool, sectionKey) => {
+        if (!usePsc) return pool;
+        const filtered = pool.filter(o => !optionViolatesPSC(o, myConstraints));
+        if (filtered.length === 0) {
+          pscFilterFallback[sectionKey] = true;
+          return pool;
+        }
+        return filtered;
+      };
+      const _allWarmupsPsc   = _narrowByPsc(_allWarmupsRaw,   "warmup");
+      const _allCooldownsPsc = _narrowByPsc(_allCooldownsRaw, "cooldown");
+      const _drillListPsc    = _narrowByPsc(_drillListRaw,    "drill");
+      const _mainListPsc     = _narrowByPsc(_mainListRaw,     "main");
 
       // v2.0 — Multi-lane lane-fit pre-filter. When lanesPaceSecs is non-empty,
       // narrow each pool to options whose intervals fit ALL lanes (rest ∈
@@ -7128,10 +7152,10 @@
         }
         return filtered;
       };
-      const allWarmups   = _narrowByLanes(_allWarmupsRaw,   "warmup");
-      const allCooldowns = _narrowByLanes(_allCooldownsRaw, "cooldown");
-      const drillList    = _narrowByLanes(_drillListRaw,    "drill");
-      let   mainList     = _narrowByLanes(_mainListRaw,     "main");
+      const allWarmups   = _narrowByLanes(_allWarmupsPsc,   "warmup");
+      const allCooldowns = _narrowByLanes(_allCooldownsPsc, "cooldown");
+      const drillList    = _narrowByLanes(_drillListPsc,    "drill");
+      let   mainList     = _narrowByLanes(_mainListPsc,     "main");
 
       // C: recovery mode — filter mains down to easy/aerobic zone options.
       // If the filter would empty the pool, fall back to all mains and let
@@ -7392,7 +7416,7 @@
         const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
           // S3 — apply engine overrides per section, then recompute total
-          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? myConstraints : []);
           const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
           // v2.0 — attach laneFit fallback marker (closure vars live in generateWorkout scope).
@@ -7488,7 +7512,7 @@
 
       const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
       // S3 — apply engine overrides per section, then recompute total
-      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs);
+      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? myConstraints : []);
       const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
       // v2.0 — same laneFit attachment as the loop-success path above.
@@ -7560,9 +7584,13 @@
       disfavorMode = "downweight",   // v1.8 — "downweight" (0.25) or "exclude" (0)
       lanesPaceSecs = null,          // v2.0 — multi-lane fit filter on the section's pool
       ugcOverlay = null,             // UGC Phase B — caller's UGC overlay merged into bank picker per exact pool mode
+      myConstraints = [],            // Phase 3 PSC slice 2 — caller's active swimmer_constraints rows. Step-0 hard-exclude. Skipped in multi-lane mode.
     } = {}) {
       // v1.8 — Resolve once for use below.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
+      // Phase 3 PSC slice 2 — same skip-in-multi-lane rule as generateWorkout.
+      const _useLaneFitRegen = Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0;
+      const _usePscRegen     = Array.isArray(myConstraints) && myConstraints.length > 0 && !_useLaneFitRegen;
       if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
         return { workout: null, error: "No workout to update." };
       }
@@ -7603,10 +7631,18 @@
           });
         }
       }
+      // Phase 3 PSC slice 2 — hard-exclude step 0, before the lane-fit
+      // pre-filter. Skipped in multi-lane mode (per fork 1). Bank-fallback
+      // on empty filtered pool — silent (per fork 3).
+      if (_usePscRegen) {
+        const pscFiltered = pool.filter(o => !optionViolatesPSC(o, myConstraints));
+        if (pscFiltered.length > 0) pool = pscFiltered;
+        // else: silent bank fallback (caller has no actionable recovery)
+      }
       // v2.0 — Multi-lane fit pre-filter on the section's pool. Same
       // graceful fallback as generateWorkout (use unfiltered if empty).
       let _laneFitFallback = false;
-      if (Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0) {
+      if (_useLaneFitRegen) {
         const filtered = pool.filter(o => optionFitsAllLanes(o, lanesPaceSecs));
         if (filtered.length > 0) pool = filtered;
         else                     _laneFitFallback = true;
@@ -7742,6 +7778,7 @@
           disfavorMode,
           engineFavorites,
           lanesPaceSecs,
+          _usePscRegen ? myConstraints : [],
         );
         newBlock = { ...bankBlock, ...overridden[sectionKey] };
       }
@@ -7944,6 +7981,62 @@
     //   - Empty/null lanesPace: returns true (single-pace path, no filter)
     //   - Unparseable pace: skipped (treated as "any pace" — defensive)
     //   - dist <= 0 or missing: set skipped (defensive against bad bank rows)
+    // Phase 3 / PSC slice 2 — hard-exclude check.
+    // Returns true if `option` violates ANY constraint in `constraints`.
+    // Used as step-0 of the picker (before favorites + disfavor) per
+    // PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.4.
+    //
+    // Constraint types handled here (12 of 14 — option-level):
+    //   stroke_no_{fly,breast,back,free}     — checks option.strokes[] + label/desc fallback
+    //   equip_no_{paddles,fins,snorkel,kickboard,buoy} — checks set.eq across all sets
+    // Section + cap constraints are NOT option-level; caller handles those
+    // separately at the section/post-assembly level.
+    //
+    // Equipment mapping (bank eq vocab → constraint type):
+    //   "paddles" → equip_no_paddles  (rare; bank uses paddles in desc text only)
+    //   "fins"    → equip_no_fins
+    //   "snorkel" → equip_no_snorkel
+    //   "kick"    → equip_no_kickboard  (eq="kick" implies kickboard-assisted)
+    //   "pull"    → equip_no_buoy       (eq="pull" implies pull-buoy)
+    function optionViolatesPSC(option, constraints) {
+      if (!option || !Array.isArray(constraints) || constraints.length === 0) return false;
+      const STROKE_REGEX = {
+        fly:    /\b(fly|butterfly)\b/i,
+        breast: /\bbreast(?:stroke)?\b/i,
+        back:   /\bback(?:stroke)?\b/i,
+        free:   /\b(free(?:style)?|FREE)\b/i,
+      };
+      const EQ_TO_BANNED = {
+        paddles:   "equip_no_paddles",
+        fins:      "equip_no_fins",
+        snorkel:   "equip_no_snorkel",
+        kick:      "equip_no_kickboard",
+        pull:      "equip_no_buoy",
+      };
+      const optStrokes = Array.isArray(option.strokes) ? option.strokes : [];
+      const sets       = Array.isArray(option.sets)    ? option.sets    : [];
+      const blob       = ((option.label || "") + " " + sets.map(s => (s.desc || "") + " " + (s.focus || "")).join(" "));
+      for (const c of constraints) {
+        const t = c && c.constraint_type;
+        if (!t) continue;
+        // Stroke exclusions — option-level: explicit strokes tag wins; fallback to text match.
+        if (t === "stroke_no_fly"    && (optStrokes.includes("fly")    || STROKE_REGEX.fly.test(blob)))    return true;
+        if (t === "stroke_no_breast" && (optStrokes.includes("breast") || STROKE_REGEX.breast.test(blob))) return true;
+        if (t === "stroke_no_back"   && (optStrokes.includes("back")   || STROKE_REGEX.back.test(blob)))   return true;
+        if (t === "stroke_no_free"   && (optStrokes.includes("free")   || STROKE_REGEX.free.test(blob)))   return true;
+        // Equipment exclusions — set-level: any set with the matching eq disqualifies the whole option.
+        if (t.startsWith("equip_no_")) {
+          for (const s of sets) {
+            if (!s.eq) continue;
+            if (EQ_TO_BANNED[s.eq] === t) return true;
+          }
+        }
+        // Paddles edge case: bank eq vocab doesn't have "paddles" — fall back to text.
+        if (t === "equip_no_paddles" && /\bpaddles?\b/i.test(blob)) return true;
+      }
+      return false;
+    }
+
     function optionFitsAllLanes(option, lanesPaceSecs, minRest = 5, maxRestRatio = 1.5, paceBaseline = 120) {
       if (!option || !Array.isArray(option.sets) || option.sets.length === 0) return true;
       if (!Array.isArray(lanesPaceSecs) || lanesPaceSecs.length === 0) return true;
@@ -9041,6 +9134,15 @@
           errs.push({ code: "V-Lane", msg: "engine output's intervals don't fit all lane paces" });
         }
       }
+      // Phase 3 PSC slice 2 — V9: engine output must not violate any active
+      // swimmer constraint. Same option-level check as the bank picker's
+      // step-0 filter. Retry-3 logic in generateWithRetry handles rejection.
+      // Skipped when activeConstraints is empty (no overhead in the default case).
+      if (Array.isArray(context?.activeConstraints) && context.activeConstraints.length > 0) {
+        if (optionViolatesPSC(option, context.activeConstraints)) {
+          errs.push({ code: "V9", msg: "engine output violates an active per-swimmer constraint" });
+        }
+      }
       return errs;
     }
 
@@ -9077,9 +9179,9 @@
       validate(option, context) {
         return templateValidate(option, context);
       },
-      generateWithRetry({ templateId, typeKey, section, budgetYd, recent = [], lanesPaceSecs = null, rand = Math.random }) {
+      generateWithRetry({ templateId, typeKey, section, budgetYd, recent = [], lanesPaceSecs = null, activeConstraints = [], rand = Math.random }) {
         const attempts = [];
-        const ctx = { budgetYd, typeKey, section, lanesPaceSecs };
+        const ctx = { budgetYd, typeKey, section, lanesPaceSecs, activeConstraints };
         const defaultStroke = templateDefaultStroke(typeKey);
         // Anti-repeat lookup set, keyed by `template_id:stroke`.
         // The picker (S3) passes the last 10 generated entries.
@@ -16844,6 +16946,37 @@
               fmtItem={(x) => <><code style={{ fontFamily: "monospace" }}>{x.template_id}</code> · <em>{x.stroke}</em></>}
             />
           </div>
+          {/* Phase 3 PSC slice 2 — fourth subsection: per-swimmer constraint events */}
+          <div style={sub}>
+            <div style={subTitle}>Per-swimmer constraints <span style={{ fontSize: 10, color: "var(--color-text-muted)", textTransform: "none", fontWeight: 400, marginLeft: 4 }}>(set / remove events)</span></div>
+            {(!data.psc || data.psc.length === 0) ? (
+              <div style={list}><span style={empty}>No constraint events in range.</span></div>
+            ) : (
+              <div style={list}>
+                {data.psc.map((e, i) => {
+                  const isSet = e.event_type === "psc.set";
+                  const target = e.swimmer_sub
+                    ? <code style={{ fontFamily: "monospace", fontSize: 10 }}>{(e.swimmer_sub || "").slice(0, 12)}…</code>
+                    : <code style={{ fontFamily: "monospace", fontSize: 10 }}>{e.managed_id}</code>;
+                  const valueBit = e.value_num != null ? ` = ${e.value_num}` :
+                                   e.value_str != null ? ` = ${e.value_str}` : "";
+                  const expiryBit = e.expires_at ? ` · expires ${new Date(e.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "";
+                  return (
+                    <div key={i} style={{ padding: "3px 0", borderBottom: i < data.psc.length - 1 ? "1px solid var(--color-bg)" : "none" }}>
+                      <span style={{ color: isSet ? "var(--color-positive)" : "var(--color-warn)", fontWeight: 700, marginRight: 6 }}>
+                        {isSet ? "+ SET" : "− REMOVE"}
+                      </span>
+                      <code style={{ fontFamily: "monospace", fontSize: 11 }}>{e.constraint_type}</code>
+                      {valueBit && <span style={{ color: "var(--color-text-muted)" }}>{valueBit}</span>}
+                      <span style={{ marginLeft: 8, color: "var(--color-text-muted)" }}>→ {target}</span>
+                      {expiryBit && <span style={{ color: "var(--color-text-muted)" }}>{expiryBit}</span>}
+                      <span style={{ color: "var(--color-text-muted)", marginLeft: 6 }}>{fmtTime(e.at)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -17273,7 +17406,7 @@
       );
     }
 
-    function WeekView({ onRunScheduled, onEditScheduled }) {
+    function WeekView({ onRunScheduled, onEditScheduled, myConstraints = [] }) {
       // Compute the Monday of the current ISO week (Mon=1, Sun=7).
       function isoMondayOf(d) {
         const x = new Date(d);
@@ -17412,6 +17545,7 @@
             phase:        ip.phase || null,
             favoriteSetIds: null,
             sectionBias:  ip.mix || "balanced",
+            myConstraints,                                                       // Phase 3 PSC slice 2 — passed in from App so intent-generates honor active constraints
           });
           if (generated && generated.__generateFailure) {
             setErr(generated.error || "Couldn't generate from intent — try regenerating or editing the intent.");
@@ -22140,6 +22274,13 @@
       // audit panel can list user's own without coach contributions).
       // Lives in settings.extra.engine_favorites, loaded on mount.
       const [engineFavorites, setEngineFavorites]               = useState([]);
+      // Phase 3 PSC slice 2 — caller's own active per-swimmer constraints.
+      // Fetched from /api/me/constraints on mount + 5-min poll. Fed into
+      // generateWorkout/regenerateSection as step-0 hard-exclude. Per Cap'n
+      // fork 2 (2026-05-26): we apply the caller's OWN PSC to every Generate
+      // — solo, coach-Generate, etc. Slice 3 adds coach UX + per-practice
+      // checklist for assignments targeting specific swimmers.
+      const [myConstraints, setMyConstraints] = useState([]);
       // UGC Phase B — bank overlay. Mirrors the 12 JS bank constants;
       // populated by /api/bank/my-overlay (own + team-shared + public
       // UGC, excluding promoted_at). Picker merges with simple concat
@@ -22577,6 +22718,25 @@
         const id = setInterval(refreshEffectiveFavorites, 5 * 60 * 1000);
         return () => clearInterval(id);
       }, [refreshEffectiveFavorites]);
+
+      // Phase 3 PSC slice 2 — fetch own active constraints + 5-min poll.
+      // Mirrors the effective-disfavor refresh pattern. Coach updates on
+      // a swimmer's constraints reach the swimmer's UI within 5 min without
+      // requiring a reload (slice 3 adds coach UX; slice 4 adds visible
+      // swimmer UI like ProfileModal section + AssignedToMe details).
+      const refreshMyConstraints = useCallback(() => {
+        return fetch(`${API_BASE}/me/constraints`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data && Array.isArray(data.constraints)) setMyConstraints(data.constraints);
+          })
+          .catch(() => {});
+      }, []);
+      useEffect(() => { refreshMyConstraints(); }, [refreshMyConstraints]);
+      useEffect(() => {
+        const id = setInterval(refreshMyConstraints, 5 * 60 * 1000);
+        return () => clearInterval(id);
+      }, [refreshMyConstraints]);
 
       // UGC Phase B — pull the UGC bank overlay on mount + 5-min poll.
       // Empty 12-key shape arrives as { WARMUP_OPTIONS: [], DRILL_OPTIONS: {}, ... }
@@ -23333,6 +23493,7 @@
           disfavorMode,                                                         // v1.8 — downweight or exclude
           lanesPaceSecs: useMultiLane ? lanesPaceSecs : null,                   // v2.0 — multi-lane fit filter
           ugcOverlay,                                                           // UGC Phase B — bank overlay merged in getBankOptions
+          myConstraints,                                                         // Phase 3 PSC slice 2 — step-0 hard-exclude (skipped in multi-lane)
         });
         // S3 #3 — generateWorkout returns a failure sentinel when required equipment
         // can't be satisfied. Surface the message and bail before any post-processing.
@@ -23497,6 +23658,7 @@
           })(),
           disfavorMode,                                                         // v1.8
           ugcOverlay,                                                           // UGC Phase B — overlay merged into bank picker
+          myConstraints,                                                         // Phase 3 PSC slice 2 — step-0 hard-exclude (skipped in multi-lane)
         });
         if (result.error) {
           setRegenError({ section: sectionKey, message: result.error });
@@ -24335,6 +24497,7 @@
             {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} />}
             {view === "week"     && (
               <WeekView
+                myConstraints={myConstraints}
                 onRunScheduled={(sw) => {
                   // Same pattern as AssignedToMeView's onRunAssignment: load
                   // the workout into Run mode and tag the schedule id so the

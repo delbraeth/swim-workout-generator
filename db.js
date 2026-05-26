@@ -5523,7 +5523,7 @@ export async function dbGetProgramRecap(userSub, { startYmd, endYmd } = {}) {
 // current state (no date filter on those).
 export async function dbGetCurationLog(userSub, { startYmd, endYmd } = {}) {
   if (!userSub || !isYmd(startYmd) || !isYmd(endYmd)) {
-    return { bankLabels: { favorites: [], disfavorites: [] }, sets: { favorites: [], disfavorites: [] }, engine: { favorites: [], disfavorites: [] } };
+    return { bankLabels: { favorites: [], disfavorites: [] }, sets: { favorites: [], disfavorites: [] }, engine: { favorites: [], disfavorites: [] }, psc: [] };
   }
   const range = [userSub, startYmd + " 00:00:00", endYmd + " 23:59:59"];
   const favLabels = await pool.query(
@@ -5547,6 +5547,33 @@ export async function dbGetCurationLog(userSub, { startYmd, endYmd } = {}) {
   const settings = await dbGetSettings(userSub);
   const engineFav = Array.isArray(settings?.engine_favorites) ? settings.engine_favorites : [];
   const engineDis = Array.isArray(settings?.engine_disfavorites) ? settings.engine_disfavorites : [];
+  // Phase 3 PSC slice 2 — psc.set + psc.remove + psc.expire audit events
+  // for the coach (events they set/removed). Auto-expiry rows have NULL
+  // user_sub since the cron isn't an interactive user — captured at the
+  // coach who SET the constraint via details.set_by_coach_sub (slice-3
+  // todo: emit psc.expire with the original coach as user_sub).
+  // v1 covers psc.set + psc.remove (both attribute to the actor).
+  const pscRows = await pool.query(
+    "SELECT `event_type`, `created_at`, `details` FROM `audit_events` " +
+    "WHERE `user_sub` = ? AND `event_type` IN ('psc.set','psc.remove') " +
+    "AND `created_at` BETWEEN ? AND ? ORDER BY `created_at` DESC",
+    range
+  );
+  const psc = pscRows.map(r => {
+    let d = r.details;
+    if (typeof d === "string") { try { d = JSON.parse(d); } catch (_) { d = {}; } }
+    return {
+      event_type:      r.event_type,
+      at:              dtToIso(r.created_at),
+      constraint_id:   d?.constraint_id ?? null,
+      swimmer_sub:     d?.swimmer_sub   ?? null,
+      managed_id:      d?.managed_id    ?? null,
+      constraint_type: d?.constraint_type ?? null,
+      value_num:       d?.value_num     ?? null,
+      value_str:       d?.value_str     ?? null,
+      expires_at:      d?.expires_at    ?? null,
+    };
+  });
   return {
     bankLabels: {
       favorites:    favLabels.map(r => ({ label: r.label, at: dtToIso(r.created_at) })),
@@ -5560,6 +5587,7 @@ export async function dbGetCurationLog(userSub, { startYmd, endYmd } = {}) {
       favorites:    engineFav,   // [{ template_id, stroke }]
       disfavorites: engineDis,
     },
+    psc,
   };
 }
 
