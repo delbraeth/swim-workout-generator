@@ -38,7 +38,7 @@ Reference: `DISCORD_SCOPE.md` §3-§4 (server + channels + automod), §6+§9 (we
 - [ ] In `#feedback-stream` → channel Settings → Integrations → Webhooks → New Webhook
 - [ ] Name: **SetForge Feedback Bot**
 - [ ] Avatar: drop in `/icons/icon-512.png`
-- [ ] **Copy the webhook URL** (only shown once — paste somewhere safe immediately)
+- [ ] **Copy the webhook URL** (only shown once). ⚠ **TREAT AS A SECRET.** Paste it ONLY into your terminal / a password manager / the Hyperlift env-vars dashboard. **Never** paste a webhook URL into a chat window, public file, commit message, or screenshot — it's the only credential gating posts to this channel. If you ever paste it somewhere it shouldn't be, immediately delete + regenerate the webhook in Discord.
 - [ ] Hyperlift dashboard → Environment Variables → add:
   - `DISCORD_FEEDBACK_WEBHOOK_URL=<paste URL>`
 - [ ] Save + redeploy
