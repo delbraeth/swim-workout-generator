@@ -92,7 +92,7 @@ import {
   dbBulkCreateManagedSwimmers, dbUpdateMeDob,
   dbCreateGroup, dbGetGroup, dbListGroupsForTeam, dbListGroupsForCoach,
   dbUpdateGroup, dbArchiveGroup, dbSetGroupPhase, dbGetGroupRole,
-  dbSetGroupAnchor, dbClearGroupAnchor, dbGetActiveAnchor, dbExpireOrphanAnchors,
+  dbSetGroupAnchor, dbClearGroupAnchor, dbGetActiveAnchor, dbExpireOrphanAnchors, dbListAnchorsForMemberSwimmer,
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
@@ -2840,6 +2840,20 @@ app.delete("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writ
       details:   { group_id: req.params.id, cleared: r.cleared },
     });
     res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Bulk-fetch active anchors for every group the caller is a swimmer
+// member of. Returns a map keyed by group_id so the client can
+// per-card look up "is this card's source group anchored?" without
+// N+1 round trips. Drives the AssignedToMe countdown badge.
+app.get("/api/me/group-anchors", requireAuth, async (req, res) => {
+  try {
+    const anchors = await dbListAnchorsForMemberSwimmer(req.userSub);
+    // Shape as { [group_id]: anchorInfo } for O(1) client lookup.
+    const map = {};
+    for (const a of anchors) map[a.group_id] = a;
+    res.json(map);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

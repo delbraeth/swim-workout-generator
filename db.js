@@ -3633,13 +3633,51 @@ export async function dbGetSuggestedPhaseForGroup(groupId) {
   return a ? a.suggested_phase : null;
 }
 
-// Cron sweep — runs hourly via the email worker tick. Flips active=0 on
-// any active anchor whose underlying event has been deleted (event_id is
-// NULL because the FK cascaded SET NULL). Returns count for logging.
+// List active anchors for every group the user is a swimmer-member
+// of. Returns an array of hydrated anchors with derived
+// weeks_out + suggested_phase. Used by /api/me/group-anchors which
+// powers the AssignedToMe countdown badge.
+//
+// Only includes anchors whose underlying event still exists
+// (LEFT JOIN team_events + WHERE event.id IS NOT NULL).
+export async function dbListAnchorsForMemberSwimmer(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    "SELECT ga.`group_id`, ga.`event_id`, te.`name` AS event_name, te.`date` AS event_date " +
+    "FROM `group_anchors` ga " +
+    "JOIN `team_events`  te ON te.`id`        = ga.`event_id` " +
+    "JOIN `group_members` gm ON gm.`group_id` = ga.`group_id` AND gm.`left_at` IS NULL " +
+    "WHERE gm.`member_swimmer_sub` = ? AND ga.`active` = 1",
+    [userSub]
+  );
+  return rows.map(r => {
+    const eventDateYmd = dateToYmd(r.event_date);
+    const weeksOut = weeksUntilEvent(eventDateYmd);
+    return {
+      group_id:         Number(r.group_id),
+      event_id:         Number(r.event_id),
+      event_name:       r.event_name,
+      event_date:       eventDateYmd,
+      weeks_out:        weeksOut,
+      suggested_phase:  suggestedPhaseFromWeeksOut(weeksOut),
+    };
+  });
+}
+
+// Cron sweep — runs hourly via the email worker tick. Two ways an
+// anchor becomes orphaned:
+//   1. Underlying event was deleted (LEFT JOIN team_events yields NULL)
+//   2. Underlying group was deleted (LEFT JOIN groups yields NULL)
+// Either way, flip active=0 + stamp cleared_at. No FKs in migration 035
+// (see file header for why) so this LEFT JOIN sweep IS the integrity
+// mechanism. Returns count for logging.
 export async function dbExpireOrphanAnchors() {
   const r = await pool.query(
-    "UPDATE `group_anchors` SET `active` = 0, `cleared_at` = NOW() " +
-    "WHERE `event_id` IS NULL AND `active` = 1"
+    "UPDATE `group_anchors` ga " +
+    "LEFT JOIN `team_events` te ON te.`id` = ga.`event_id` " +
+    "LEFT JOIN `groups`      g  ON g.`id`  = ga.`group_id` " +
+    "SET ga.`active` = 0, ga.`cleared_at` = NOW() " +
+    "WHERE ga.`active` = 1 AND (te.`id` IS NULL OR g.`id` IS NULL)"
   );
   return { cleared: r.affectedRows || 0 };
 }

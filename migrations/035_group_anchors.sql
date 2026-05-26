@@ -9,24 +9,36 @@
 --
 -- One active anchor per group is enforced at the DB layer via UNIQUE
 -- (group_id, active). Old anchors get active=0 + cleared_at stamped;
--- the row stays for audit. Underlying team_events.delete cascades
--- event_id to NULL via FK; an hourly cron sweep
--- (dbExpireOrphanAnchors) flips orphaned rows to active=0.
+-- the row stays for audit.
+--
+-- FK constraints DELIBERATELY OMITTED. The existing groups + team_events
+-- schema in this repo doesn't use FKs into them from other tables (see
+-- migrations 026-034), so we follow the convention and rely on app-layer
+-- integrity:
+--   * group archive → anchor stays in DB; dbGetActiveAnchor checks
+--     groups.archived in callers, OR the anchor just keeps pointing
+--     at the archived group with no behavioral effect.
+--   * event delete → dbGetActiveAnchor does a LEFT JOIN on team_events;
+--     a deleted event yields a NULL event_date row which the helper
+--     treats as "no active anchor" (return null). The dbExpireOrphan-
+--     Anchors cron sweeps these to active=0 within ~30 min.
+--
+-- Initial attempt with FOREIGN KEY constraints on groups(id) +
+-- team_events(id) failed with errno 150 (column-type mismatch — the
+-- existing PK types weren't BIGINT). Dropping the FK is the right
+-- pattern for this codebase.
 --
 -- IDEMPOTENT: CREATE TABLE IF NOT EXISTS.
 
 CREATE TABLE IF NOT EXISTS `group_anchors` (
   `id`                BIGINT AUTO_INCREMENT PRIMARY KEY,
   `group_id`          BIGINT NOT NULL,
-  `event_id`          BIGINT NULL,                  -- FK to team_events; NULL when underlying event deleted
+  `event_id`          BIGINT NULL,
   `set_by_coach_sub`  VARCHAR(255) NOT NULL,
   `active`            TINYINT(1) NOT NULL DEFAULT 1,
   `created_at`        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `cleared_at`        DATETIME NULL,
   UNIQUE KEY `uq_one_active_per_group` (`group_id`, `active`),  -- only one active row per group at a time
   INDEX `idx_event` (`event_id`),
-  CONSTRAINT `fk_group_anchors_group_id`
-    FOREIGN KEY (`group_id`) REFERENCES `groups`(`id`)       ON DELETE CASCADE,
-  CONSTRAINT `fk_group_anchors_event_id`
-    FOREIGN KEY (`event_id`) REFERENCES `team_events`(`id`)  ON DELETE SET NULL
+  INDEX `idx_group` (`group_id`)
 ) ENGINE=InnoDB;
