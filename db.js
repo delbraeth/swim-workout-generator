@@ -2645,11 +2645,15 @@ export async function dbGetTeamRole(teamId, coachSub) {
 
 export async function dbListTeamCoaches(teamId) {
   if (!teamId) return [];
+  // Phase 4 Identity I-D slice 4: JOIN persons for display_name + initials.
+  // Legacy u.display_name / u.initials kept as fallback; dropped in I-F.
   const rows = await pool.query(
     "SELECT tc.`coach_sub`, tc.`role`, tc.`added_at`, " +
-    "       u.`display_name`, u.`initials`, u.`email` " +
+    "       u.`display_name` AS legacy_display_name, u.`initials` AS legacy_initials, u.`email`, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
     "FROM `team_coaches` tc " +
     "LEFT JOIN `users` u ON u.`sub` = tc.`coach_sub` " +
+    "LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
     "WHERE tc.`team_id` = ? AND tc.`removed_at` IS NULL " +
     "ORDER BY FIELD(tc.`role`, 'owner', 'admin', 'coach'), tc.`added_at` ASC",
     [teamId]
@@ -2657,8 +2661,10 @@ export async function dbListTeamCoaches(teamId) {
   return rows.map(r => ({
     coach_sub:    r.coach_sub,
     role:         r.role,
-    display_name: r.display_name,
-    initials:     r.initials,
+    display_name: r.first_name
+                    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                    : r.legacy_display_name,
+    initials:     r.person_initials || r.legacy_initials,
     email:        r.email,
     added_at:     dtToIso(r.added_at),
   }));
@@ -3478,11 +3484,15 @@ export async function dbGetGroupRole(groupId, coachSub) {
 
 export async function dbListGroupCoaches(groupId) {
   if (!groupId) return [];
+  // Phase 4 Identity I-D slice 4: JOIN persons for display_name + initials.
+  // Legacy u.display_name / u.initials kept as fallback; dropped in I-F.
   const rows = await pool.query(
     "SELECT gc.`coach_sub`, gc.`role`, gc.`added_at`, " +
-    "       u.`display_name`, u.`initials`, u.`email` " +
+    "       u.`display_name` AS legacy_display_name, u.`initials` AS legacy_initials, u.`email`, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
     "FROM `group_coaches` gc " +
     "LEFT JOIN `users` u ON u.`sub` = gc.`coach_sub` " +
+    "LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
     "WHERE gc.`group_id` = ? AND gc.`removed_at` IS NULL " +
     "ORDER BY FIELD(gc.`role`, 'primary', 'assistant'), gc.`added_at` ASC",
     [groupId]
@@ -3490,8 +3500,10 @@ export async function dbListGroupCoaches(groupId) {
   return rows.map(r => ({
     coach_sub:    r.coach_sub,
     role:         r.role,
-    display_name: r.display_name,
-    initials:     r.initials,
+    display_name: r.first_name
+                    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                    : r.legacy_display_name,
+    initials:     r.person_initials || r.legacy_initials,
     email:        r.email,
     added_at:     dtToIso(r.added_at),
   }));
