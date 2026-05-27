@@ -4391,14 +4391,20 @@ export async function dbCreateClaimToken({ managedId, issuedByCoach }) {
 
 export async function dbGetClaimToken(token) {
   if (!token) return null;
+  // Phase 4 Identity I-D slice 6: JOIN persons twice — once via managed
+  // swimmer's person_id (mp), once via coach's person_id (pc).
   const rows = await pool.query(
     "SELECT t.`token`, t.`managed_id`, t.`issued_by_coach`, t.`issued_at`, " +
     "       t.`expires_at`, t.`redeemed_at`, t.`redeemed_by_swimmer_sub`, " +
-    "       m.`display_name` AS managed_name, m.`owner_coach_sub`, " +
-    "       cu.`display_name` AS coach_name " +
+    "       m.`display_name` AS legacy_managed_name, m.`owner_coach_sub`, " +
+    "       cu.`display_name` AS legacy_coach_name, " +
+    "       mp.`first_name` AS m_first, mp.`last_name` AS m_last, mp.`preferred_name` AS m_preferred, " +
+    "       pc.`first_name` AS c_first, pc.`last_name` AS c_last, pc.`preferred_name` AS c_preferred " +
     "FROM `managed_swimmer_claim_tokens` t " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = t.`managed_id` " +
     "LEFT JOIN `users` cu ON cu.`sub` = t.`issued_by_coach` " +
+    "LEFT JOIN `persons` mp ON mp.`id` = m.`person_id` " +
+    "LEFT JOIN `persons` pc ON pc.`id` = cu.`person_id` " +
     "WHERE t.`token` = ? LIMIT 1",
     [token]
   );
@@ -4407,9 +4413,13 @@ export async function dbGetClaimToken(token) {
   return {
     token:                   r.token,
     managed_id:              r.managed_id,
-    managed_name:            r.managed_name,
+    managed_name:            r.m_first
+                               ? displayNameInline({ first_name: r.m_first, last_name: r.m_last, preferred_name: r.m_preferred })
+                               : r.legacy_managed_name,
     owner_coach_sub:         r.owner_coach_sub,
-    coach_name:              r.coach_name,
+    coach_name:              r.c_first
+                               ? displayNameInline({ first_name: r.c_first, last_name: r.c_last, preferred_name: r.c_preferred })
+                               : r.legacy_coach_name,
     issued_by_coach:         r.issued_by_coach,
     issued_at:               dtToIso(r.issued_at),
     expires_at:              dtToIso(r.expires_at),
@@ -5291,16 +5301,23 @@ export async function dbGetGroupRosterAsOf(groupId, scheduledDate) {
   // Boundary: treat scheduledDate as end-of-day for the join check, so a
   // swimmer who joined ON the scheduled date counts as present.
   const eod = scheduledDate + " 23:59:59";
+  // Phase 4 Identity I-D slice 6: dual person JOIN (polymorphic target),
+  // mirror of dbListGroupMembers from slice 2.
   const rows = await pool.query(
     "SELECT gm.`id`, gm.`member_swimmer_sub`, gm.`member_managed_id`, gm.`role`, " +
     "       gm.`joined_at`, gm.`left_at`, " +
-    "       COALESCE(m.`display_name`, u.`display_name`) AS display_name, " +
-    "       COALESCE(m.`initials`, u.`initials`)         AS initials " +
+    "       COALESCE(m.`display_name`, u.`display_name`) AS legacy_display_name, " +
+    "       COALESCE(mp.`initials`, up.`initials`, m.`initials`, u.`initials`) AS initials, " +
+    "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
+    "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
+    "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name " +
     "FROM `group_members` gm " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
     "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
+    "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
+    "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
     "WHERE gm.`group_id` = ? AND gm.`joined_at` <= ? AND (gm.`left_at` IS NULL OR gm.`left_at` > ?) " +
-    "ORDER BY display_name ASC",
+    "ORDER BY legacy_display_name ASC",
     [groupId, eod, eod]
   );
   return rows.map(r => ({
@@ -5309,7 +5326,9 @@ export async function dbGetGroupRosterAsOf(groupId, scheduledDate) {
     member_managed_id:   r.member_managed_id != null ? Number(r.member_managed_id) : null,
     role:                r.role,
     joined_at:           dtToIso(r.joined_at),
-    display_name:        r.display_name,
+    display_name:        r.first_name
+                           ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                           : r.legacy_display_name,
     initials:            r.initials,
   }));
 }
@@ -6100,20 +6119,27 @@ export async function dbBulkCreateAssignments({ workoutId, groupId = null, laneP
 // Used by the coach-side history badge + (future) the assigned-to-me view.
 export async function dbListAssignmentsForWorkout(workoutId) {
   if (!workoutId) return [];
+  // Phase 4 Identity I-D slice 6: polymorphic dual person JOIN, mirror of
+  // dbListGroupMembers shape from slice 2.
   const rows = await pool.query(
     "SELECT wa.`id`, wa.`workout_id`, wa.`assigned_via_group_id`, wa.`assigned_via_lane_plan_id`, " +
     "       wa.`target_swimmer_sub`, wa.`target_managed_id`, wa.`lane_idx`, wa.`lane_label`, wa.`lane_pace`, " +
     "       wa.`assigned_at`, wa.`completion_state`, wa.`completed_at`, wa.`completed_by_coach_sub`, " +
     "       wa.`difficulty`, wa.`focus_note`, " +
-    "       COALESCE(m.`display_name`, u.`display_name`) AS target_name, " +
-    "       COALESCE(m.`initials`,     u.`initials`)     AS target_initials, " +
+    "       COALESCE(m.`display_name`, u.`display_name`) AS legacy_target_name, " +
+    "       COALESCE(mp.`initials`, up.`initials`, m.`initials`, u.`initials`) AS target_initials, " +
+    "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
+    "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
+    "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name, " +
     "       g.`name`                                      AS group_name " +
     "FROM `workout_assignments` wa " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id`  = wa.`target_managed_id` " +
     "LEFT JOIN `users` u                  ON u.`sub` = wa.`target_swimmer_sub` " +
+    "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
+    "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
     "LEFT JOIN `groups` g                 ON g.`id`  = wa.`assigned_via_group_id` " +
     "WHERE wa.`workout_id` = ? " +
-    "ORDER BY target_name ASC",
+    "ORDER BY legacy_target_name ASC",
     [String(workoutId)]
   );
   return rows.map(r => ({
@@ -6123,7 +6149,9 @@ export async function dbListAssignmentsForWorkout(workoutId) {
     assigned_via_lane_plan_id: r.assigned_via_lane_plan_id,
     target_swimmer_sub:       r.target_swimmer_sub,
     target_managed_id:        r.target_managed_id,
-    target_name:              r.target_name,
+    target_name:              r.first_name
+                                ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                                : r.legacy_target_name,
     target_initials:          r.target_initials,
     group_name:               r.group_name,
     lane_idx:                 r.lane_idx,
@@ -6154,6 +6182,7 @@ export async function dbListAssignmentsForSwimmer(swimmerSub, { state = null, in
     where.push("wa.`completion_state` IN ('not_started','partial')");
   }
   const cap = Math.min(Math.max(1, Number(limit) || 100), 500);
+  // Phase 4 Identity I-D slice 6: single coach JOIN to persons.
   const rows = await pool.query(
     "SELECT wa.`id`, wa.`workout_id`, wa.`assigned_via_group_id`, wa.`assigned_via_lane_plan_id`, " +
     "       wa.`lane_idx`, wa.`lane_label`, wa.`lane_pace`, wa.`assigned_at`, " +
@@ -6162,11 +6191,13 @@ export async function dbListAssignmentsForSwimmer(swimmerSub, { state = null, in
     "       w.`saved_at`, w.`type`, w.`total_yards`, w.`pool_mode`, w.`payload`, " +
     "       w.`user_sub` AS coach_sub, " +
     "       g.`name`                                AS group_name, " +
-    "       cu.`display_name`                       AS coach_name " +
+    "       cu.`display_name`                       AS legacy_coach_name, " +
+    "       pc.`first_name` AS c_first, pc.`last_name` AS c_last, pc.`preferred_name` AS c_preferred " +
     "FROM `workout_assignments` wa " +
     "JOIN `workouts` w  ON w.`id`  = wa.`workout_id` " +
     "LEFT JOIN `groups` g  ON g.`id`  = wa.`assigned_via_group_id` " +
     "LEFT JOIN `users` cu ON cu.`sub` = w.`user_sub` " +
+    "LEFT JOIN `persons` pc ON pc.`id` = cu.`person_id` " +
     "WHERE " + where.join(" AND ") + " " +
     "ORDER BY wa.`assigned_at` DESC " +
     `LIMIT ${cap}`,
@@ -6179,7 +6210,9 @@ export async function dbListAssignmentsForSwimmer(swimmerSub, { state = null, in
     assigned_via_lane_plan_id: r.assigned_via_lane_plan_id,
     group_name:               r.group_name,
     coach_sub:                r.coach_sub,
-    coach_name:               r.coach_name,
+    coach_name:               r.c_first
+                                ? displayNameInline({ first_name: r.c_first, last_name: r.c_last, preferred_name: r.c_preferred })
+                                : r.legacy_coach_name,
     lane_idx:                 r.lane_idx,
     lane_label:               r.lane_label,
     lane_pace:                r.lane_pace,
@@ -6214,6 +6247,7 @@ export async function dbListAssignmentsForGroup(groupId, { state = null, limit =
     vals.push(state);
   }
   const cap = Math.min(Math.max(1, Number(limit) || 100), 500);
+  // Phase 4 Identity I-D slice 6: polymorphic dual person JOIN.
   const rows = await pool.query(
     "SELECT wa.`id`, wa.`workout_id`, wa.`assigned_via_lane_plan_id`, " +
     "       wa.`target_swimmer_sub`, wa.`target_managed_id`, " +
@@ -6221,13 +6255,18 @@ export async function dbListAssignmentsForGroup(groupId, { state = null, limit =
     "       wa.`assigned_at`, wa.`completion_state`, wa.`completed_at`, wa.`completed_by_coach_sub`, " +
     "       wa.`difficulty`, wa.`focus_note`, " +
     "       w.`type`, w.`total_yards`, w.`saved_at`, " +
-    "       COALESCE(m.`display_name`, u.`display_name`) AS target_name " +
+    "       COALESCE(m.`display_name`, u.`display_name`) AS legacy_target_name, " +
+    "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
+    "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
+    "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name " +
     "FROM `workout_assignments` wa " +
     "JOIN `workouts` w  ON w.`id`  = wa.`workout_id` " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id`  = wa.`target_managed_id` " +
     "LEFT JOIN `users`                  u ON u.`sub` = wa.`target_swimmer_sub` " +
+    "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
+    "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
     "WHERE " + where.join(" AND ") + " " +
-    "ORDER BY wa.`assigned_at` DESC, target_name ASC " +
+    "ORDER BY wa.`assigned_at` DESC, legacy_target_name ASC " +
     `LIMIT ${cap}`,
     vals
   );
@@ -6236,7 +6275,9 @@ export async function dbListAssignmentsForGroup(groupId, { state = null, limit =
     workout_id:               r.workout_id,
     target_swimmer_sub:       r.target_swimmer_sub,
     target_managed_id:        r.target_managed_id,
-    target_name:              r.target_name,
+    target_name:              r.first_name
+                                ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                                : r.legacy_target_name,
     lane_idx:                 r.lane_idx,
     lane_label:               r.lane_label,
     lane_pace:                r.lane_pace,
