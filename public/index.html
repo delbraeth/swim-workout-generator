@@ -26062,9 +26062,11 @@
                     </button>
                   )}
                   {/* 👪 Parent view — visible when this user has at least one
-                      active guardian row (me.is_parent). Toggleable so users who
-                      are also a swimmer/coach can still reach their other views. */}
-                  {me?.is_parent && (
+                      active guardian row (effectiveMe.is_parent — so the admin
+                      view-as +parent flag also surfaces the button). Toggleable
+                      so users who are also a swimmer/coach can still reach
+                      their other views. */}
+                  {effectiveMe?.is_parent && (
                     <button onClick={() => setView(v => v === "parent" ? "generator" : "parent")}
                       title={view === "parent" ? "Back to generator" : "Parent view (your swimmers)"}
                       aria-label={view === "parent" ? "Back to generator" : "Parent view"}
