@@ -17577,6 +17577,44 @@
               </div>
             )}
           </div>
+          {/* Team Curation v1 slice 6 — fifth subsection: team-level audit events.
+              Spec §3.7: every team.* event on teams the viewing coach is on, so
+              co-owners + admins see what each other changed. */}
+          <div style={sub}>
+            <div style={subTitle}>Team curation <span style={{ fontSize: 10, color: "var(--color-text-muted)", textTransform: "none", fontWeight: 400, marginLeft: 4 }}>(team favorites / disfavorites / defaults)</span></div>
+            {(!data.team || data.team.length === 0) ? (
+              <div style={list}><span style={empty}>No team curation events in range.</span></div>
+            ) : (
+              <div style={list}>
+                {data.team.map((e, i) => {
+                  const isAdd    = e.event_type.endsWith(".add");
+                  const isRemove = e.event_type.endsWith(".remove");
+                  const isFav    = e.event_type.startsWith("team.fav");
+                  const isApply  = e.event_type === "team.default.apply_to_roster";
+                  const actionLabel = isAdd ? "+ ADD" : isRemove ? "− REMOVE" : isApply ? "↳ PUSH" : "Δ UPDATE";
+                  const actionColor = isAdd ? "var(--color-positive)" : isRemove ? "var(--color-warn)" : isApply ? "var(--color-warn)" : "var(--color-primary)";
+                  // Kind tag: fav / disfav / default
+                  const kindTag = e.event_type.startsWith("team.fav") ? "fav"
+                                : e.event_type.startsWith("team.disfav") ? "disfav"
+                                : "default";
+                  const kindColor = kindTag === "fav" ? "var(--color-positive)" : kindTag === "disfav" ? "var(--color-warn)" : "var(--color-primary)";
+                  return (
+                    <div key={i} style={{ padding: "3px 0", borderBottom: i < data.team.length - 1 ? "1px solid var(--color-bg)" : "none" }}>
+                      <span style={{ color: actionColor, fontWeight: 700, marginRight: 6 }}>{actionLabel}</span>
+                      <span style={{ background: "rgba(59,130,246,0.15)", color: kindColor, padding: "1px 5px", borderRadius: 3, fontSize: 10, fontWeight: 700, marginRight: 6 }}>{kindTag}</span>
+                      {e.label && <span style={{ color: "var(--color-text)" }}>"{e.label}"</span>}
+                      {e.field && <code style={{ fontFamily: "monospace", fontSize: 11, color: "var(--color-text)" }}>{e.field}</code>}
+                      {e.value != null && <span style={{ color: "var(--color-text-muted)" }}> = {typeof e.value === "object" ? JSON.stringify(e.value) : String(e.value)}</span>}
+                      {e.count != null && <span style={{ color: "var(--color-text-muted)" }}> · {e.count} swimmer{e.count === 1 ? "" : "s"}</span>}
+                      <span style={{ marginLeft: 8, color: "var(--color-text-muted)" }}>team <code style={{ fontFamily: "monospace", fontSize: 10 }}>{e.team_id}</code></span>
+                      {e.actor_sub && <span style={{ marginLeft: 8, color: "var(--color-text-muted)" }}>by <code style={{ fontFamily: "monospace", fontSize: 10 }}>{e.actor_sub.slice(-8)}</code>{e.role ? ` (${e.role})` : ""}</span>}
+                      <span style={{ color: "var(--color-text-muted)", marginLeft: 6 }}>{fmtTime(e.at)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       );
     }

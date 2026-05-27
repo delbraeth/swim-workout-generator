@@ -6161,6 +6161,46 @@ export async function dbGetCurationLog(userSub, { startYmd, endYmd } = {}) {
       expires_at:      d?.expires_at    ?? null,
     };
   });
+  // Team Curation v1 slice 6 (2026-05-27): team.* audit events for every
+  // team the viewing coach is on. Per TEAM_CURATION_SCOPE.md §3.7. Scope
+  // is "all team.* events on teams I'm a coach on" — not just events I
+  // personally wrote — so co-owners + admins can see what each other
+  // changed. Filter via JSON_EXTRACT on details.team_id.
+  let team = [];
+  const myTeamRows = await pool.query(
+    "SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL",
+    [userSub]
+  );
+  if (myTeamRows.length > 0) {
+    const teamIds = myTeamRows.map(r => r.team_id);
+    const tPh = teamIds.map(() => "?").join(",");
+    const TEAM_EVENT_TYPES = ["team.fav.add", "team.fav.remove", "team.disfav.add", "team.disfav.remove", "team.default.update", "team.default.apply_to_roster"];
+    const ePh = TEAM_EVENT_TYPES.map(() => "?").join(",");
+    const teamRows = await pool.query(
+      `SELECT event_type, user_sub, created_at, details FROM audit_events ` +
+      `WHERE event_type IN (${ePh}) ` +
+      `AND created_at BETWEEN ? AND ? ` +
+      `AND JSON_UNQUOTE(JSON_EXTRACT(details, '$.team_id')) IN (${tPh}) ` +
+      `ORDER BY created_at DESC`,
+      [...TEAM_EVENT_TYPES, startYmd + " 00:00:00", endYmd + " 23:59:59", ...teamIds]
+    );
+    team = teamRows.map(r => {
+      let d = r.details;
+      if (typeof d === "string") { try { d = JSON.parse(d); } catch (_) { d = {}; } }
+      return {
+        event_type: r.event_type,
+        actor_sub:  r.user_sub,
+        at:         dtToIso(r.created_at),
+        team_id:    d?.team_id ?? null,
+        label:      d?.label   ?? null,                                       // for fav.add/remove + disfav.add/remove
+        field:      d?.field   ?? null,                                       // for default.update + apply_to_roster
+        value:      d?.value   ?? null,                                       // for default.update + apply_to_roster
+        count:      d?.count   ?? null,                                       // for apply_to_roster
+        role:       d?.role    ?? null,                                       // actor's role at write-time
+      };
+    });
+  }
+
   return {
     bankLabels: {
       favorites:    favLabels.map(r => ({ label: r.label, at: dtToIso(r.created_at) })),
@@ -6175,6 +6215,7 @@ export async function dbGetCurationLog(userSub, { startYmd, endYmd } = {}) {
       disfavorites: engineDis,
     },
     psc,
+    team,
   };
 }
 
