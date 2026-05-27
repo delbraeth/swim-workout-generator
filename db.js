@@ -4632,12 +4632,18 @@ const COACH_NOTE_VISIBILITIES = ["private", "group_coaches", "team_coaches"];
 const COACH_NOTE_BODY_MAX = 5000;
 
 function rowToCoachNote(r) {
+  // Phase 4 Identity I-D slice 7: prefer persons-derived display when the
+  // caller JOINed persons + projected first_name. Falls back to legacy
+  // u.display_name alias for callers that didn't add the JOIN.
+  const authorName = r.first_name
+    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+    : (r.author_name || null);
   return {
     id:                 Number(r.id),
     target_swimmer_sub: r.target_swimmer_sub,
     target_managed_id:  r.target_managed_id,
     author_coach_sub:   r.author_coach_sub,
-    author_name:        r.author_name || null,
+    author_name:        authorName,
     team_id:            r.team_id,
     group_id:           r.group_id,
     workout_id:         r.workout_id,
@@ -4676,10 +4682,13 @@ export async function dbCreateCoachNote({
 
 export async function dbGetCoachNote(id) {
   if (!id) return null;
+  // Phase 4 Identity I-D slice 7: JOIN persons for author display.
   const rows = await pool.query(
-    "SELECT n.*, u.`display_name` AS author_name " +
+    "SELECT n.*, u.`display_name` AS author_name, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name` " +
     "FROM `coach_swimmer_notes` n " +
-    "LEFT JOIN `users` u ON u.`sub` = n.`author_coach_sub` " +
+    "LEFT JOIN `users` u   ON u.`sub` = n.`author_coach_sub` " +
+    "LEFT JOIN `persons` p ON p.`id`  = u.`person_id` " +
     "WHERE n.`id` = ? AND n.`deleted_at` IS NULL LIMIT 1",
     [Number(id)]
   );
@@ -4726,10 +4735,13 @@ export async function dbListCoachNotesForTarget({
   const targetClause = swimmerSub != null ? "n.`target_swimmer_sub` = ?" : "n.`target_managed_id` = ?";
   const targetVal    = swimmerSub != null ? swimmerSub : managedId;
   const cap = Math.min(500, Math.max(1, Number(limit) || 100));
+  // Phase 4 Identity I-D slice 7: JOIN persons for author display.
   const rows = await pool.query(
-    "SELECT n.*, u.`display_name` AS author_name " +
+    "SELECT n.*, u.`display_name` AS author_name, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name` " +
     "FROM `coach_swimmer_notes` n " +
-    "LEFT JOIN `users` u ON u.`sub` = n.`author_coach_sub` " +
+    "LEFT JOIN `users` u   ON u.`sub` = n.`author_coach_sub` " +
+    "LEFT JOIN `persons` p ON p.`id`  = u.`person_id` " +
     `WHERE ${targetClause} AND n.\`deleted_at\` IS NULL AND (${visClauses.join(" OR ")}) ` +
     `ORDER BY n.\`created_at\` DESC LIMIT ${cap}`,
     [targetVal, ...visVals]
