@@ -691,18 +691,26 @@ export async function dbListCoachesForPicker(excludeSub) {
 
 // ─── admin helpers ──────────────────────────────────────────────────────────
 export async function dbAdminListUsers() {
+  // Phase 4 Identity I-D slice 3: JOIN persons for display_name + initials.
+  // Legacy u.display_name + u.initials kept as fallback; dropped in I-F.
   const rows = await pool.query(`
-    SELECT u.sub, u.email, u.email_verified, u.display_name, u.initials,
+    SELECT u.sub, u.email, u.email_verified,
+           u.display_name AS legacy_display_name, u.initials AS legacy_initials,
            u.is_admin, u.is_coach, u.is_disabled, u.support_role, u.created_at, u.last_login_at,
+           p.first_name, p.last_name, p.preferred_name, p.initials AS person_initials,
            COALESCE(w.cnt, 0) AS workout_count
       FROM users u
+      LEFT JOIN persons p ON p.id = u.person_id
       LEFT JOIN (SELECT user_sub, COUNT(*) AS cnt FROM workouts GROUP BY user_sub) w
         ON w.user_sub = u.sub
       ORDER BY u.created_at DESC
   `);
   return rows.map(r => ({
     sub: r.sub, email: r.email, email_verified: !!r.email_verified,
-    display_name: r.display_name, initials: r.initials,
+    display_name: r.first_name
+                    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                    : r.legacy_display_name,
+    initials: r.person_initials || r.legacy_initials,
     is_admin: !!r.is_admin, is_coach: !!r.is_coach, is_disabled: !!r.is_disabled,
     support_role: !!r.support_role,
     created_at: r.created_at, last_login_at: r.last_login_at,
@@ -2450,14 +2458,21 @@ export async function dbAdminListFeedback({ status = null, userSub = null, limit
   if (userSub) { where.push("f.`user_sub` = ?"); args.push(userSub); }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const cap = Math.min(Math.max(1, Number(limit) || 200), 500);
+  // Phase 4 Identity I-D slice 3: JOIN persons for submitter + reviewer.
+  // Two person JOINs (pu for submitter, pr for reviewer). Submitter gets a
+  // displayed name (computed via helper); reviewer is initials-only in the UI.
   const rows = await pool.query(
     "SELECT f.`id`, f.`user_sub`, f.`category`, f.`subject`, f.`body`, f.`page`, " +
     "       f.`user_agent`, f.`status`, f.`reviewed_by`, f.`reviewed_at`, f.`admin_note`, f.`created_at`, " +
-    "       u.`initials` AS submitter_initials, u.`display_name` AS submitter_name, " +
-    "       r.`initials` AS reviewer_initials " +
+    "       COALESCE(pu.`initials`, u.`initials`) AS submitter_initials, " +
+    "       u.`display_name` AS submitter_legacy_name, " +
+    "       pu.`first_name` AS submitter_first, pu.`last_name` AS submitter_last, pu.`preferred_name` AS submitter_preferred, " +
+    "       COALESCE(pr.`initials`, r.`initials`) AS reviewer_initials " +
     "FROM `feedback` f " +
-    "LEFT JOIN `users` u ON u.`sub` = f.`user_sub` " +
-    "LEFT JOIN `users` r ON r.`sub` = f.`reviewed_by` " +
+    "LEFT JOIN `users` u    ON u.`sub` = f.`user_sub` " +
+    "LEFT JOIN `users` r    ON r.`sub` = f.`reviewed_by` " +
+    "LEFT JOIN `persons` pu ON pu.`id` = u.`person_id` " +
+    "LEFT JOIN `persons` pr ON pr.`id` = r.`person_id` " +
     `${whereSql} ` +
     "ORDER BY f.`created_at` DESC " +
     `LIMIT ${cap}`,
@@ -2467,7 +2482,9 @@ export async function dbAdminListFeedback({ status = null, userSub = null, limit
     id:                 Number(r.id),
     user_sub:           r.user_sub,
     submitter_initials: r.submitter_initials,
-    submitter_name:     r.submitter_name,
+    submitter_name:     r.submitter_first
+                          ? displayNameInline({ first_name: r.submitter_first, last_name: r.submitter_last, preferred_name: r.submitter_preferred })
+                          : r.submitter_legacy_name,
     category:           r.category,
     subject:            r.subject,
     body:               r.body,
