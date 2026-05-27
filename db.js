@@ -3014,6 +3014,29 @@ export async function dbApplyTeamDefaultToRoster({ teamId, field }) {
   return { ok: true, field, value: pace, count: updated };
 }
 
+// Team roster v1 (2026-05-27): grouped roster across every active group
+// under a team. Per Cap'n's "all swimmers in any group under team X"
+// gap. Returns array of group sections each with members[] from
+// dbListGroupMembers (polymorphic swimmer + managed, dual person JOIN).
+// Archived groups omitted from v1. Empty groups included so coaches see
+// "Sprint Group (0)" rather than the group disappearing.
+export async function dbGetTeamRoster(teamId) {
+  if (!teamId) return [];
+  const groups = await dbListGroupsForTeam(teamId, { includeArchived: false });
+  const sections = [];
+  for (const g of groups) {
+    const members = await dbListGroupMembers(g.id);
+    sections.push({
+      group_id:     g.id,
+      group_name:   g.name,
+      pool_mode:    g.pool_mode_default,
+      member_count: members.length,
+      members,
+    });
+  }
+  return sections;
+}
+
 // Phase 4 Team Curation slice 5 (2026-05-27): list ALL team defaults
 // for any team the user is in. Used by /api/me/team-defaults for the
 // ProfileModal inheritance disclosure. Per spec §6 fork 3: a coach in

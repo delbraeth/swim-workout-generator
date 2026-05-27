@@ -93,7 +93,7 @@ import {
   dbAddTeamFavorite, dbRemoveTeamFavorite,
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
-  dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser,
+  dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
   dbBulkCreateManagedSwimmers, dbUpdateMeDob,
@@ -3202,6 +3202,16 @@ app.get("/api/me/group-anchors", requireAuth, async (req, res) => {
 app.get("/api/me/team-defaults", requireAuth, async (req, res) => {
   try {
     res.json(await dbListTeamDefaultsForUser(req.userSub));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Team roster v1 (2026-05-27): grouped roster across every active group
+// under a team. Any team coach can read. Authz mirrors GET /coaches.
+app.get("/api/teams/:id/roster", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    res.json(await dbGetTeamRoster(req.params.id));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
