@@ -25513,60 +25513,68 @@
               )}
             </div>
 
-            {/* C: Recovery mode toggle — per-generation; not persisted */}
-            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-              <button onClick={() => setRecoveryMode(v => !v)}
-                title={recoveryMode
-                  ? "Recovery day ON — next generate keeps things easy/aerobic"
-                  : "Toggle recovery day — easy/aerobic main only, intervals +10%, no repeat sets"}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 8,
-                  padding: "6px 14px", borderRadius: 999,
-                  border: `1px solid ${recoveryMode ? "var(--color-positive)" : "var(--color-border)"}`,
-                  background: recoveryMode ? "rgba(34,197,94,0.15)" : "transparent",
-                  color: recoveryMode ? "#86efac" : "var(--color-text-dim)",
-                  fontSize: 12, fontWeight: 700, cursor: "pointer",
-                  transition: "all 0.15s",
-                }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: recoveryMode ? "var(--color-positive)" : "var(--color-border-strong)",
-                }} />
-                {recoveryMode ? "Recovery day ON" : "Easy day"}
-              </button>
-              {recoveryMode && (
-                <span style={{ fontSize: 11, color: "var(--color-border-strong)", fontStyle: "italic" }}>
-                  Easy/aerobic mains · intervals +10% · no repeat sets · floor 1,200 {(poolMode === "50m" || poolMode === "25m") ? "m" : "yds"}
-                </span>
-              )}
-            </div>
+            {/* C: Recovery mode toggle (Easy day / Recovery day ON) + section-
+                proportion bias (Mix:) — merged onto one flex row 2026-05-27 per
+                Cap'n's "save vertical space if room permits" request. Both
+                groups flex-wrap as a unit so narrow viewports split them onto
+                two lines cleanly. Outer gap 14 = old marginBottom between the
+                two stacks. */}
+            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
+              {/* Easy day / Recovery day ON toggle + helper text */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button onClick={() => setRecoveryMode(v => !v)}
+                  title={recoveryMode
+                    ? "Recovery day ON — next generate keeps things easy/aerobic"
+                    : "Toggle recovery day — easy/aerobic main only, intervals +10%, no repeat sets"}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 8,
+                    padding: "6px 14px", borderRadius: 999,
+                    border: `1px solid ${recoveryMode ? "var(--color-positive)" : "var(--color-border)"}`,
+                    background: recoveryMode ? "rgba(34,197,94,0.15)" : "transparent",
+                    color: recoveryMode ? "#86efac" : "var(--color-text-dim)",
+                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: "50%",
+                    background: recoveryMode ? "var(--color-positive)" : "var(--color-border-strong)",
+                  }} />
+                  {recoveryMode ? "Recovery day ON" : "Easy day"}
+                </button>
+                {recoveryMode && (
+                  <span style={{ fontSize: 11, color: "var(--color-border-strong)", fontStyle: "italic" }}>
+                    Easy/aerobic mains · intervals +10% · no repeat sets · floor 1,200 {(poolMode === "50m" || poolMode === "25m") ? "m" : "yds"}
+                  </span>
+                )}
+              </div>
 
-            {/* Section-proportion bias (real-shift). Per-generation, session-
-                only. Shifts yardage allocations between warmup / drill / main /
-                cooldown beyond the baseline ~13/17/65/5 split. */}
-            <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, color: "var(--color-border-strong)", marginRight: 4 }}>Mix:</span>
-              {[
-                { id: "balanced",     label: "Balanced",     desc: "Current allocator (warmup ~13% / drill ~17% / main ~65% / cooldown ~5%)" },
-                { id: "warmup_heavy", label: "Warmup-heavy", desc: "Bigger warmup (~22%); main reduced (~62%)" },
-                { id: "drill_heavy",  label: "Drill-heavy",  desc: "Bigger drill section (~26%); main reduced (~61%)" },
-                { id: "long_main",    label: "Long main",    desc: "Most yardage on the main set (~83%); warmup + drill suppressed" },
-              ].map(m => {
-                const active = sectionBias === m.id;
-                return (
-                  <button key={m.id} onClick={() => setSectionBias(m.id)} title={m.desc}
-                    className="pill"
-                    style={{
-                      border: `1px solid ${active ? "var(--color-warn)" : "var(--color-border)"}`,
-                      background: active ? "rgba(245,158,11,0.15)" : "transparent",
-                      color: active ? "var(--color-warn)" : "var(--color-text-dim)",
-                      fontSize: 11, cursor: "pointer",
-                      transition: "all 0.15s",
-                    }}>
-                    {m.label}
-                  </button>
-                );
-              })}
+              {/* Section-proportion bias (real-shift). Per-generation, session-
+                  only. Shifts yardage allocations between warmup / drill /
+                  main / cooldown beyond the baseline ~13/17/65/5 split. */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, color: "var(--color-border-strong)", marginRight: 4 }}>Mix:</span>
+                {[
+                  { id: "balanced",     label: "Balanced",     desc: "Current allocator (warmup ~13% / drill ~17% / main ~65% / cooldown ~5%)" },
+                  { id: "warmup_heavy", label: "Warmup-heavy", desc: "Bigger warmup (~22%); main reduced (~62%)" },
+                  { id: "drill_heavy",  label: "Drill-heavy",  desc: "Bigger drill section (~26%); main reduced (~61%)" },
+                  { id: "long_main",    label: "Long main",    desc: "Most yardage on the main set (~83%); warmup + drill suppressed" },
+                ].map(m => {
+                  const active = sectionBias === m.id;
+                  return (
+                    <button key={m.id} onClick={() => setSectionBias(m.id)} title={m.desc}
+                      className="pill"
+                      style={{
+                        border: `1px solid ${active ? "var(--color-warn)" : "var(--color-border)"}`,
+                        background: active ? "rgba(245,158,11,0.15)" : "transparent",
+                        color: active ? "var(--color-warn)" : "var(--color-text-dim)",
+                        fontSize: 11, cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}>
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Workout type selector */}
