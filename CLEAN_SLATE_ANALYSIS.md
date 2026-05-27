@@ -264,6 +264,14 @@ The vendor kit, the manual, the sub-processor list, the welcome email — they a
 
 **Gap:** Real feature work. Cost band M (8–12h to wire structured logging + a basic dashboard). Risk: low. **Priority: medium** when the first paying pilot signs. Below that, the operator-attention model works.
 
+### 8.2a Account-merge admin tool
+
+**Clean-slate decision:** First-class merge tool from day one. `tools/merge_accounts.mjs --winner SUB --loser SUB --dry-run` prints per-table row counts that would move; `--apply` runs the reassignment as one transaction across every user_sub-carrying table + handles settings.extra JSON collision + UNIQUE-index dedup on favorites/disfavorites + audit-logs a `user.merge` event. Tested against a synthetic pair in CI.
+
+**Current state:** No tool. Documented support path is "email hello@competitionaquatics.com to merge manually" → Cap'n runs hand-written SQL against prod. The Apple-relay → Google second-account edge case ([[swim-generator-google-oauth-scope]] decision 3) is the main trigger that will eventually create a real case. Hasn't bitten yet that we know of.
+
+**Gap:** Captured 2026-05-27 as v2 backlog ([[swim-generator-roadmap-pointer]] backlog entry "Account-merge admin tool"). Cost band M (3-5h). Risk: medium — settings.extra merge rule and UNIQUE collisions need real design. **Priority: medium** but jumps to high the first time a real user reports the dual-account problem. Until then, the manual-SQL fallback is acceptable for a solo-operator support model.
+
 ### 8.2 Smoke tests + CI
 
 **Clean-slate decision:** Real CI on push to main. node --check + Babel parse + smoke test matrix (the existing `sim_template_engine.mjs` is a great seed) + a synthetic-traffic test against a staging endpoint that exercises sign-in + generate + save + assigned-to-me round-trip.
@@ -294,6 +302,7 @@ Cost bands: S = ≤6h, M = 6–15h, L = 15–25h, L+ = 25h+ or multi-session.
 | Deploy via _deploy.py (§2.3) | Move to CI on push | S | Low | M | Second deployer or post-pilot |
 | CI + smoke + staging (§8.2) | Bundle with §2.3 | M | Low | M-H | Post-pilot |
 | Structured logging + dashboards (§8.1) | Ship to aggregator, surface metrics | M | Low | M | First paying pilot |
+| Account-merge admin tool (§8.2a) | `tools/merge_accounts.mjs --winner --loser --dry-run` + transactional `--apply` + audit event | M | Medium | M (jumps to H on first real case) | Apple-relay → Google second-account edge case in production |
 | Env-var consolidation (§2.4) | JSON blob or config file | S | Low-M | L | Next env-var needed |
 | Hardcoded 4-section workout (§5.1) | Pluggable section model + dryland | L+ | High | H (v2) | After v1 wraps; scope session first |
 | Polymorphic swimmer model (§3.2) | Unify managed + full-account | L+ | High | L | Sharp pain from a new feature |
