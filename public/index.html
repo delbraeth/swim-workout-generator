@@ -341,7 +341,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "5f9f03c · 2026-05-27 16:23 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}"
+    const BUILD_ID  = "b1252c0 · 2026-05-27 16:37 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}"
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -13848,7 +13848,7 @@
       );
     }
 
-    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, appEffectiveMe, appViewAsRole, appSetViewAsRole }) {
+    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent }) {
       const [me, setMe]             = React.useState(null);
       const [sessions, setSessions] = React.useState([]);
       const [goals, setGoals]       = React.useState([]);
@@ -14782,6 +14782,26 @@
                         );
                       })}
                     </div>
+                    {/* Orthogonal "+ parent" toggle. Composes with the role
+                        picker so admins can preview coach+parent or
+                        solo+parent UIs (the 👪 nav + ParentDashboard
+                        surface when flipped on). */}
+                    <label
+                      title="Also pretend you have at least one linked guardian row (shows 👪 nav + Parent view). Composes with the role picker."
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        marginLeft: 10, fontSize: 11, fontWeight: 600,
+                        color: appViewAsParent ? "var(--color-primary)" : "var(--color-text-dim)",
+                        cursor: "pointer", userSelect: "none",
+                      }}>
+                      <input
+                        type="checkbox"
+                        checked={!!appViewAsParent}
+                        onChange={(e) => appSetViewAsParent && appSetViewAsParent(e.target.checked)}
+                        style={{ margin: 0, cursor: "pointer" }}
+                      />
+                      + parent
+                    </label>
                   </div>
                 )}
 
@@ -24068,24 +24088,41 @@
         setViewAsRoleState(v);
         try { localStorage.setItem("setforge_view_as", v); } catch (_) {}
       }, []);
+      // Orthogonal "+ parent" toggle (2026-05-27). Composes with the role
+      // picker: when on AND role != self, effectiveMe also flips is_parent
+      // true so the 👪 nav + ParentDashboard are reachable in preview. Only
+      // meaningful for admins (mirrors the rest of view-as v1 semantics).
+      const [viewAsParent, setViewAsParentState] = useState(() => {
+        try { return localStorage.getItem("setforge_view_as_parent") === "1"; } catch (_) { return false; }
+      });
+      const setViewAsParent = useCallback((on) => {
+        const v = !!on;
+        setViewAsParentState(v);
+        try { localStorage.setItem("setforge_view_as_parent", v ? "1" : "0"); } catch (_) {}
+      }, []);
       // effectiveMe — same as me, but with role flags overridden when
       // viewAsRole !== "self". UI gates should read effectiveMe; the
       // view-as switcher itself reads me.is_admin (real) for visibility.
       const effectiveMe = React.useMemo(() => {
         if (!me) return me;
-        if (viewAsRole === "self") return me;
+        if (viewAsRole === "self" && !viewAsParent) return me;
         if (!me.is_admin) return me;  // non-admins can't view-as; ignore the stored value
-        if (viewAsRole === "solo")  return { ...me, is_admin: false, is_coach: false };
-        if (viewAsRole === "coach") return { ...me, is_admin: false, is_coach: true };
-        return me;
-      }, [me, viewAsRole]);
+        let next = me;
+        if      (viewAsRole === "solo")  next = { ...me, is_admin: false, is_coach: false };
+        else if (viewAsRole === "coach") next = { ...me, is_admin: false, is_coach: true  };
+        // Parent flag is orthogonal — composes on top of solo/coach (and
+        // even self, though the banner is hidden in self mode so it has
+        // no UX effect there).
+        if (viewAsParent) next = { ...next, is_parent: true };
+        return next;
+      }, [me, viewAsRole, viewAsParent]);
 
       // View-as v2 (2026-05-23): persona simulation. When admin is viewing-as
       // another role, the read view shows a fresh-new-user empty state AND
       // writes are blocked. Different from v1 which only hid UI surfaces.
       // Different from v3 impersonation (server-side, real target user) —
       // this is pure client-side preview using admin's own session.
-      const isViewingAsOther = !!(me?.is_admin && viewAsRole !== "self");
+      const isViewingAsOther = !!(me?.is_admin && (viewAsRole !== "self" || viewAsParent));
       // Ref mirror — write handlers use useCallback with non-view-as deps, so
       // reading isViewingAsOther directly in the handler closure would stale.
       // The ref is updated on every render so handlers always see the current
@@ -25915,7 +25952,7 @@
           {/* View-as banner — sticky at top when admin has flipped into a
               role-override mode. Only renders to actual admins (real me)
               who picked something other than "self". One-click exit. */}
-          {me?.is_admin && viewAsRole !== "self" && (
+          {me?.is_admin && (viewAsRole !== "self" || viewAsParent) && (
             <div className="screen-only" style={{
               position: "sticky", top: 0, zIndex: 9000,
               background: "var(--color-warn)", color: "#1e293b",
@@ -25923,10 +25960,10 @@
               display: "flex", justifyContent: "center", alignItems: "center", gap: 12,
               boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
             }}>
-              <span>👁 PREVIEW MODE — viewing as <strong style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>{viewAsRole}</strong> · fresh-user view · writes blocked</span>
+              <span>👁 PREVIEW MODE — viewing as <strong style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>{viewAsRole}{viewAsParent ? " + parent" : ""}</strong> · fresh-user view · writes blocked</span>
               <button
                 type="button"
-                onClick={() => setViewAsRole("self")}
+                onClick={() => { setViewAsParent(false); setViewAsRole("self"); }}
                 style={{
                   background: "rgba(30, 41, 59, 0.85)", color: "#fff",
                   border: "none", borderRadius: 4,
@@ -27253,7 +27290,9 @@
               onSendFeedback={() => setShowFeedback(true)}
               appEffectiveMe={effectiveMe}
               appViewAsRole={viewAsRole}
-              appSetViewAsRole={setViewAsRole} />
+              appSetViewAsRole={setViewAsRole}
+              appViewAsParent={viewAsParent}
+              appSetViewAsParent={setViewAsParent} />
           )}
           {showFeedback && (
             <FeedbackModal onClose={() => setShowFeedback(false)} />
