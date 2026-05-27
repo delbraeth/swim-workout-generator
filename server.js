@@ -93,7 +93,7 @@ import {
   dbAddTeamFavorite, dbRemoveTeamFavorite,
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
-  dbApplyTeamDefaultToRoster,
+  dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
   dbBulkCreateManagedSwimmers, dbUpdateMeDob,
@@ -3193,6 +3193,15 @@ app.get("/api/me/group-anchors", requireAuth, async (req, res) => {
     const map = {};
     for (const a of anchors) map[a.group_id] = a;
     res.json(map);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Team Curation v1 slice 5 (2026-05-27): list every team default the
+// caller inherits. Drives ProfileModal inheritance disclosure. Empty
+// array = user isn't in any team that has set defaults yet.
+app.get("/api/me/team-defaults", requireAuth, async (req, res) => {
+  try {
+    res.json(await dbListTeamDefaultsForUser(req.userSub));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

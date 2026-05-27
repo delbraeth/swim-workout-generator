@@ -3014,6 +3014,44 @@ export async function dbApplyTeamDefaultToRoster({ teamId, field }) {
   return { ok: true, field, value: pace, count: updated };
 }
 
+// Phase 4 Team Curation slice 5 (2026-05-27): list ALL team defaults
+// for any team the user is in. Used by /api/me/team-defaults for the
+// ProfileModal inheritance disclosure. Per spec §6 fork 3: a coach in
+// multiple teams gets defaults from BOTH teams; v1 surfaces them with
+// team_name attribution so the user can see which team contributed
+// what. Filter to teams where AT LEAST ONE default is set (no point
+// showing teams that have no curation policy).
+export async function dbListTeamDefaultsForUser(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    "SELECT DISTINCT t.`id`, t.`name`, " +
+    "       t.`default_pace_base`, t.`default_disfavor_mode`, t.`default_equipment_modes` " +
+    "  FROM `group_members` gm " +
+    "  JOIN `groups` g ON g.`id` = gm.`group_id` AND g.`archived` = 0 " +
+    "  JOIN `teams`  t ON t.`id` = g.`team_id` " +
+    " WHERE gm.`member_swimmer_sub` = ? " +
+    "   AND gm.`left_at` IS NULL " +
+    " ORDER BY t.`name` ASC",
+    [userSub]
+  );
+  return rows
+    .filter(r => r.default_pace_base != null || r.default_disfavor_mode != null || r.default_equipment_modes != null)
+    .map(r => {
+      let equipment = null;
+      if (r.default_equipment_modes != null) {
+        try { equipment = typeof r.default_equipment_modes === "string" ? JSON.parse(r.default_equipment_modes) : r.default_equipment_modes; }
+        catch (_) { equipment = null; }
+      }
+      return {
+        team_id:                  r.id,
+        team_name:                r.name,
+        default_pace_base:        r.default_pace_base,
+        default_disfavor_mode:    r.default_disfavor_mode,
+        default_equipment_modes:  equipment,
+      };
+    });
+}
+
 // Used by dbEnsureUser to seed a new user's settings row from the team
 // defaults of whatever team they're in (if any). Returns the team's
 // default values or null if no team / no defaults set.

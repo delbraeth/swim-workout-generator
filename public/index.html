@@ -13872,11 +13872,14 @@
       const [impactData, setImpactData] = React.useState(null);
       // v1.8 — disfavor mode: "downweight" (default 0.25×) or "exclude" (weight 0)
       const [disfavorModeLocal, setDisfavorModeLocal] = React.useState("downweight");
+      // Team Curation v1 slice 5 — defaults inherited from any team the user is in.
+      // Array of { team_id, team_name, default_pace_base, default_disfavor_mode, default_equipment_modes }.
+      const [teamDefaults, setTeamDefaults] = React.useState([]);
 
       const loadAll = React.useCallback(async () => {
         setLoading(true);
         try {
-          const [meRes, sessRes, goalsRes, settingsRes, disfavRes, disfavSetsRes, favRes, favSetsRes] = await Promise.all([
+          const [meRes, sessRes, goalsRes, settingsRes, disfavRes, disfavSetsRes, favRes, favSetsRes, teamDefRes] = await Promise.all([
             fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
             fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/goals", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
@@ -13885,6 +13888,7 @@
             fetch("/api/disfavor-sets", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/favorites", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/favorite-sets", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
+            fetch("/api/me/team-defaults", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
           ]);
           setMe(meRes);
           setSessions(Array.isArray(sessRes) ? sessRes : []);
@@ -13902,6 +13906,8 @@
           setSetFavoritesLocal(Array.isArray(favSetsRes) ? favSetsRes : []);
           // v1.13 — engine favorites (settings.extra.engine_favorites)
           setEngineFavoritesLocal(Array.isArray(settingsRes?.engine_favorites) ? settingsRes.engine_favorites : []);
+          // TC slice 5 — team defaults inherited from group memberships
+          setTeamDefaults(Array.isArray(teamDefRes) ? teamDefRes : []);
           // v3.0 — coach impact fetch (gated on EFFECTIVE coach role so
           // view-as solo also skips the fetch). Fire-and-forget. Not bundled
           // into the Promise.all above because it needs the me result first.
@@ -14569,6 +14575,38 @@
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
                     Disfavorites ({bankDisfavorites.length + engineDisfavoritesLocal.length + setDisfavoritesLocal.length})
                   </div>
+                  {/* Team Curation v1 slice 5: inheritance disclosure. Per
+                      TEAM_CURATION_SCOPE.md §3.6 — show team defaults explicitly
+                      so the user knows what's inherited and where their own
+                      settings diverge. Multi-team coach gets one line per team
+                      (v1: no conflict-resolution UI; defaults union silently
+                      and v1.1 surfaces attribution per the spec fork). */}
+                  {teamDefaults.length > 0 && (
+                    <div style={{ marginBottom: 14, padding: "10px 12px", background: "rgba(59,130,246,0.08)", border: "1px solid var(--color-primary)", borderRadius: 6 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                        👥 Team defaults you inherit
+                      </div>
+                      {teamDefaults.map(td => {
+                        const bits = [];
+                        if (td.default_pace_base)     bits.push(`pace ${td.default_pace_base}`);
+                        if (td.default_disfavor_mode) bits.push(`disfavor mode ${td.default_disfavor_mode}`);
+                        if (td.default_equipment_modes) bits.push("equipment defaults");
+                        return (
+                          <div key={td.team_id} style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.5 }}>
+                            <strong>{td.team_name}</strong>: {bits.join(" · ")}
+                            {td.default_disfavor_mode && td.default_disfavor_mode !== disfavorModeLocal && (
+                              <span style={{ color: "var(--color-warn)", fontSize: 11, marginLeft: 6 }}>
+                                (you've overridden to {disfavorModeLocal})
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <div style={{ fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic", marginTop: 6 }}>
+                        Defaults apply to brand-new swimmers joining the team. Your own settings below override them; clear an override to fall back to the team default.
+                      </div>
+                    </div>
+                  )}
                   {/* v1.8 — mode toggle: applies to all disfavor types */}
                   <div style={{ marginBottom: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>Mode:</span>
