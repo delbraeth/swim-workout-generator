@@ -596,12 +596,23 @@ export async function dbGetMe(sub) {
       pendingFeedbackCount = Number(fbRows[0]?.n || 0);
     }
 
+    // OAuth providers linked to this user. Drives the banner provider-icon
+    // tagline so the user can tell at a glance which OAuth account they're
+    // signed in as (resolves dual-account confusion when someone has both
+    // Apple + Google subs registered as separate users).
+    const providerRows = await conn.query(
+      "SELECT `provider`, `linked_at` FROM `user_oauth_providers` WHERE `user_sub` = ? ORDER BY `linked_at` ASC",
+      [sub]
+    );
+    const providers = providerRows.map(r => ({ provider: r.provider, linked_at: r.linked_at }));
+
     return {
       sub:                     u.sub,
       email:                   u.email,
       email_verified:          !!u.email_verified,
       display_name:            displayName,
       initials:                initials,
+      providers:               providers,
       // DOB returned only to the user themselves (this endpoint is always
       // self-scoped). Other endpoints expose only the derived `is_minor` to
       // protect the raw DATE per decision #27.
