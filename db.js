@@ -1270,8 +1270,25 @@ export async function dbGetEffectiveDisfavorites(userSub) {
       }
     }
   }
+  // Phase 4 Team Curation slice 3 (2026-05-27): third tier of cascade.
+  // Pull team_disfavorites for any team the user is in (via group_members
+  // → groups → teams). Union labels into the existing set. Set-level +
+  // engine team disfavorites are v1.1 per TEAM_CURATION_SCOPE.md §5;
+  // v1 is label-level only.
+  const teamLabelRows = await pool.query(
+    "SELECT DISTINCT td.`label` " +
+    "  FROM `team_disfavorites` td " +
+    "  JOIN `groups` g          ON g.`team_id`  = td.`team_id` " +
+    "  JOIN `group_members` gm  ON gm.`group_id` = g.`id` " +
+    " WHERE gm.`member_swimmer_sub` = ? " +
+    "   AND gm.`left_at` IS NULL " +
+    "   AND g.`archived` = 0",
+    [userSub]
+  );
+  const labelSet = new Set(labelRows.map(r => r.label));
+  for (const r of teamLabelRows) labelSet.add(r.label);
   return {
-    labels:  labelRows.map(r => r.label),
+    labels:  Array.from(labelSet),
     set_ids: setRows.map(r => r.set_id),
     engine:  Array.from(engineMap.values()),
   };
@@ -1473,8 +1490,24 @@ export async function dbGetEffectiveFavorites(userSub) {
       }
     }
   }
+  // Phase 4 Team Curation slice 3 (2026-05-27): third tier of cascade,
+  // favorite side. Pull team_favorites for any team the user is in.
+  // Universal favorite-wins precedence (v1.13) still applies: any
+  // favorite (own/coach/team) wins over any disfavor at any tier.
+  const teamLabelRows = await pool.query(
+    "SELECT DISTINCT tf.`label` " +
+    "  FROM `team_favorites` tf " +
+    "  JOIN `groups` g          ON g.`team_id`  = tf.`team_id` " +
+    "  JOIN `group_members` gm  ON gm.`group_id` = g.`id` " +
+    " WHERE gm.`member_swimmer_sub` = ? " +
+    "   AND gm.`left_at` IS NULL " +
+    "   AND g.`archived` = 0",
+    [userSub]
+  );
+  const labelSet = new Set(labelRows.map(r => r.label));
+  for (const r of teamLabelRows) labelSet.add(r.label);
   return {
-    labels:  labelRows.map(r => r.label),
+    labels:  Array.from(labelSet),
     set_ids: setRows.map(r => r.set_id),
     engine:  Array.from(engineMap.values()),
   };
