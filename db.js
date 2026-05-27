@@ -557,10 +557,12 @@ export async function dbGetMe(sub) {
     const userRows = await conn.query(
       "SELECT u.`sub`, u.`email`, u.`email_verified`, " +
       "       u.`initials` AS legacy_initials, u.`display_name` AS legacy_display_name, " +
-      "       u.`dob`, u.`gender`, u.`is_admin`, u.`is_coach`, " +
+      "       u.`dob` AS legacy_dob, u.`gender` AS legacy_gender, " +
+      "       u.`is_admin`, u.`is_coach`, " +
       "       u.`created_at`, u.`last_login_at`, " +
       "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
-      "       p.`initials` AS person_initials " +
+      "       p.`initials` AS person_initials, " +
+      "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
       "  FROM `users` u " +
       "  LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
       " WHERE u.`sub` = ?",
@@ -572,6 +574,10 @@ export async function dbGetMe(sub) {
       ? displayNameInline({ first_name: u.first_name, last_name: u.last_name, preferred_name: u.preferred_name })
       : u.legacy_display_name;
     const initials = u.person_initials || u.legacy_initials;
+    // Pre-I-F: prefer persons-side dob/gender, fall back to legacy. After
+    // I-F drops users.dob/gender, only the person side will exist.
+    const dob    = u.person_dob != null ? u.person_dob : u.legacy_dob;
+    const gender = u.person_gender != null ? u.person_gender : u.legacy_gender;
     const statsRows = await conn.query(
       "SELECT `pool_mode`, COUNT(*) AS n, SUM(`total_yards`) AS total FROM `workouts` WHERE `user_sub` = ? GROUP BY `pool_mode`",
       [sub]
@@ -599,9 +605,9 @@ export async function dbGetMe(sub) {
       // DOB returned only to the user themselves (this endpoint is always
       // self-scoped). Other endpoints expose only the derived `is_minor` to
       // protect the raw DATE per decision #27.
-      dob:                     dateToYmd(u.dob),
-      is_minor:                isMinor(u.dob),                                // null when DOB unset
-      gender:                  u.gender,                                       // M/F/X/prefer_not_to_say/null
+      dob:                     dateToYmd(dob),
+      is_minor:                isMinor(dob),                                   // null when DOB unset
+      gender:                  gender,                                          // M/F/X/prefer_not_to_say/null
       is_admin:                !!u.is_admin,
       // Coach is granted by either explicit is_coach flag OR is_admin (admin
       // implicitly has coach capability). Mirrors dbIsCoach's check.
@@ -904,19 +910,24 @@ export async function dbAdminDeleteUser(sub) {
 }
 
 export async function dbAdminListInvites() {
+  // Pre-I-F: JOIN persons for initials. Legacy u.initials remains as
+  // fallback until I-F drops it.
   const rows = await pool.query(`
     SELECT ic.code, ic.note, ic.max_uses, ic.times_used,
            ic.expires_at, ic.created_at, ic.created_by,
-           u.initials AS created_by_initials
+           u.initials AS legacy_initials,
+           p.initials AS person_initials
       FROM invite_codes ic
-      LEFT JOIN users u ON u.sub = ic.created_by
+      LEFT JOIN users u   ON u.sub = ic.created_by
+      LEFT JOIN persons p ON p.id  = u.person_id
       ORDER BY ic.created_at DESC
   `);
   return rows.map(r => ({
     code: r.code, note: r.note,
     max_uses: Number(r.max_uses), times_used: Number(r.times_used),
     expires_at: r.expires_at, created_at: r.created_at,
-    created_by: r.created_by, created_by_initials: r.created_by_initials,
+    created_by: r.created_by,
+    created_by_initials: r.person_initials || r.legacy_initials,
     status: r.expires_at && new Date(r.expires_at) < new Date() ? "expired"
           : Number(r.times_used) >= Number(r.max_uses) ? "exhausted"
           : "active",
@@ -2950,17 +2961,21 @@ function rowToManagedSwimmer(r) {
     ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
     : r.display_name;
   const initials = r.person_initials || r.initials;
+  // Pre-I-F: prefer persons-side dob/gender when projected, fall back to
+  // legacy cms columns. Callers without the JOIN still see legacy values.
+  const dob    = r.person_dob != null ? r.person_dob : r.dob;
+  const gender = r.person_gender != null ? r.person_gender : r.gender;
   return {
     id:                   r.id,
     owner_coach_sub:      r.owner_coach_sub,
     team_id:              r.team_id,
     display_name:         displayName,
     initials:             initials,
-    dob:                  dateToYmd(r.dob),
-    age:                  computeAge(r.dob),
-    is_minor:             isMinor(r.dob),
-    is_coppa_protected:   isCoppaProtected(r.dob),
-    gender:               r.gender,
+    dob:                  dateToYmd(dob),
+    age:                  computeAge(dob),
+    is_minor:             isMinor(dob),
+    is_coppa_protected:   isCoppaProtected(dob),
+    gender:               gender,
     parental_contact:     r.parental_contact,
     parent_managed_flag:  !!r.parent_managed_flag,
     pace_scy_100:         r.pace_scy_100,
@@ -3037,7 +3052,8 @@ export async function dbGetManagedSwimmer(id) {
     "       m.`dob`, m.`gender`, m.`parental_contact`, m.`parent_managed_flag`, " +
     "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
-    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
+    "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
     "  FROM `coach_managed_swimmers` m " +
     "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
     " WHERE m.`id` = ?",
@@ -3058,7 +3074,8 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
     "       m.`dob`, m.`gender`, m.`parental_contact`, m.`parent_managed_flag`, " +
     "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
-    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
+    "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
     "  FROM `coach_managed_swimmers` m " +
     "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
     " WHERE m.`owner_coach_sub` = ? " + whereArchived +
@@ -3314,11 +3331,17 @@ function rowToGroup(r) {
 // (coach_managed_swimmers.dob); either polymorphic target is sufficient.
 async function groupHasMinorMember(groupId) {
   if (!groupId) return false;
+  // Pre-I-F: JOIN persons twice (one per polymorphic target). COALESCE so
+  // persons-side dob wins when present, falls back to legacy column. After
+  // I-F drops legacy dob columns, only the persons JOIN remains as source.
   const rows = await pool.query(
-    "SELECT u.`dob` AS udob, m.`dob` AS mdob " +
+    "SELECT COALESCE(up.`dob`, u.`dob`) AS udob, " +
+    "       COALESCE(mp.`dob`, m.`dob`) AS mdob " +
     "FROM `group_members` gm " +
     "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id`  = gm.`member_managed_id` " +
+    "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
+    "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
     "WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL",
     [groupId]
   );
@@ -3583,8 +3606,8 @@ export async function dbListGroupMembers(groupId) {
     "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
     "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
     "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name, " +
-    "       COALESCE(m.`dob`, u.`dob`)                   AS dob, " +
-    "       COALESCE(m.`gender`, u.`gender`)             AS gender " +
+    "       COALESCE(mp.`dob`, up.`dob`, m.`dob`, u.`dob`)             AS dob, " +
+    "       COALESCE(mp.`gender`, up.`gender`, m.`gender`, u.`gender`) AS gender " +
     "FROM `group_members` gm " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
     "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
