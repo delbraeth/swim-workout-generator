@@ -2068,12 +2068,15 @@ export async function dbUpdateUgcOption(authorSub, optionId, payload) {
 // admin "Pending UGC" queue. Returns lightweight rows + author display
 // name/initials/email for the queue listing.
 export async function dbListPendingUgc({ limit = 100, offset = 0 } = {}) {
+  // Phase 4 Identity I-D slice 5: JOIN persons for author display.
   const rows = await pool.query(
     "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, bo.`pool_mode`, " +
     "       bo.`label`, bo.`total_yards`, bo.`author_sub`, bo.`created_at`, bo.`updated_at`, " +
-    "       u.`display_name` AS author_name, u.`initials` AS author_initials, u.`email` AS author_email " +
+    "       u.`display_name` AS legacy_author_name, u.`initials` AS legacy_author_initials, u.`email` AS author_email, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
     "FROM `bank_options` bo " +
-    "LEFT JOIN `users` u ON u.`sub` = bo.`author_sub` " +
+    "LEFT JOIN `users` u   ON u.`sub` = bo.`author_sub` " +
+    "LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
     "WHERE bo.`visibility` = 'pending' " +
     "ORDER BY bo.`updated_at` ASC " +  // FIFO: oldest pending reviewed first
     "LIMIT ? OFFSET ?",
@@ -2088,8 +2091,10 @@ export async function dbListPendingUgc({ limit = 100, offset = 0 } = {}) {
     label:            r.label,
     total_yards:      r.total_yards,
     author_sub:       r.author_sub,
-    author_name:      r.author_name,
-    author_initials:  r.author_initials,
+    author_name:      r.first_name
+                        ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                        : r.legacy_author_name,
+    author_initials:  r.person_initials || r.legacy_author_initials,
     author_email:     r.author_email,
     created_at:       r.created_at,
     updated_at:       r.updated_at,
@@ -2229,14 +2234,17 @@ export function buildUgcGraduateSnippet(option) {
 // recent approval timestamp (from the latest review row of decision='approve')
 // so admin sees freshly-approved options at top.
 export async function dbListPromotableUgc({ limit = 100, offset = 0 } = {}) {
+  // Phase 4 Identity I-D slice 5: JOIN persons for author display.
   const rows = await pool.query(
     "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, bo.`pool_mode`, " +
     "       bo.`label`, bo.`total_yards`, bo.`author_sub`, bo.`created_at`, bo.`updated_at`, " +
-    "       u.`display_name` AS author_name, u.`initials` AS author_initials, u.`email` AS author_email, " +
+    "       u.`display_name` AS legacy_author_name, u.`initials` AS legacy_author_initials, u.`email` AS author_email, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
     "       (SELECT MAX(`reviewed_at`) FROM `bank_option_reviews` r " +
     "          WHERE r.`option_id` = bo.`id` AND r.`decision` = 'approve') AS approved_at " +
     "FROM `bank_options` bo " +
-    "LEFT JOIN `users` u ON u.`sub` = bo.`author_sub` " +
+    "LEFT JOIN `users` u   ON u.`sub` = bo.`author_sub` " +
+    "LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
     "WHERE bo.`visibility` = 'public' AND bo.`promoted_at` IS NULL " +
     "ORDER BY approved_at DESC, bo.`updated_at` DESC " +
     "LIMIT ? OFFSET ?",
@@ -2251,8 +2259,10 @@ export async function dbListPromotableUgc({ limit = 100, offset = 0 } = {}) {
     label:            r.label,
     total_yards:      r.total_yards,
     author_sub:       r.author_sub,
-    author_name:      r.author_name,
-    author_initials:  r.author_initials,
+    author_name:      r.first_name
+                        ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                        : r.legacy_author_name,
+    author_initials:  r.person_initials || r.legacy_author_initials,
     author_email:     r.author_email,
     created_at:       r.created_at,
     updated_at:       r.updated_at,
