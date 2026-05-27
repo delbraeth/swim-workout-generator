@@ -341,7 +341,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "8d2a16e · 2026-05-27 17:03 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}"
+    const BUILD_ID  = "1bbe721 · 2026-05-27 23:21 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}"
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -23672,7 +23672,7 @@
                   maxWidth: 360,
                 }}>
                   {authError === "not_authorized"
-                    ? "Your account isn't on the access list. Email hello@setforge.io to request an invite."
+                    ? "Your account isn't on the access list. Email hello@competitionaquatics.com to request an invite."
                     : "Sign-in failed — please try again."}
                 </div>
               )}
@@ -23722,7 +23722,7 @@
                 {/* Tertiary CTA: mailto fallback for users who don't have an
                     invite yet. After Google OAuth lands, the invite-gate stays
                     in place (per GOOGLE_OAUTH_SCOPE.md decision 5). */}
-                <a href="mailto:hello@setforge.io?subject=SetForge%20invite%20request&body=Hi%20%E2%80%94%20I'd%20like%20an%20invite%20to%20SetForge.%20A%20bit%20about%20me%3A%20"
+                <a href="mailto:hello@competitionaquatics.com?subject=SetForge%20invite%20request&body=Hi%20%E2%80%94%20I'd%20like%20an%20invite%20to%20SetForge.%20A%20bit%20about%20me%3A%20"
                    style={{
                      color: "var(--color-text)", fontSize: 14, fontWeight: 600,
                      textDecoration: "none", padding: "14px 16px",
@@ -23806,7 +23806,7 @@
               <a href="/sub-processors.html" style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>Sub-processors</a>
               <a href="/privacy.html"        style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>Privacy</a>
               <a href="/terms.html"          style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>Terms</a>
-              <a href="mailto:hello@setforge.io" style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>hello@setforge.io</a>
+              <a href="mailto:hello@competitionaquatics.com" style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>hello@competitionaquatics.com</a>
             </nav>
           </footer>
 
