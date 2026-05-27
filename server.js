@@ -89,6 +89,11 @@ import {
   dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
   dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach, dbListCoachesForPicker,
   dbUpdateTeamCoachRole, dbTransferGroupPrimary,
+  dbAssertTeamWriter,
+  dbAddTeamFavorite, dbRemoveTeamFavorite,
+  dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
+  dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
+  dbApplyTeamDefaultToRoster,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
   dbBulkCreateManagedSwimmers, dbUpdateMeDob,
@@ -2711,6 +2716,151 @@ app.delete("/api/teams/:id/coaches/:sub", checkOrigin, requireAuth, requireCsrf,
       eventType: "team.remove_coach",
       ...reqMeta(req),
       details:   { team_id: req.params.id, target_sub: req.params.sub },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Team curation (Phase 4 / TEAM_CURATION_SCOPE.md) ─────────────
+// Owners + admins write team-level favorites + disfavorites + defaults.
+// Regular coaches read-only. Cascade extension into dbGetEffective*
+// ships in slice 3 — until then these routes work but the picker
+// doesn't see team rows yet.
+
+// Read team curation: any team coach (owner/admin/coach).
+app.get("/api/teams/:id/curation", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    res.json(await dbListTeamCuration(req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Add team favorite: owner+admin.
+app.post("/api/teams/:id/favorites", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const { label } = req.body || {};
+    if (!label) return res.status(400).json({ error: "label required" });
+    const r = await dbAddTeamFavorite({ teamId: req.params.id, label, byCoachSub: req.userSub });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.fav.add",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, label, role },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/teams/:id/favorites/:label", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const label = decodeURIComponent(req.params.label);
+    const r = await dbRemoveTeamFavorite({ teamId: req.params.id, label });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.fav.remove",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, label, role, affected: r.affected },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/teams/:id/disfavorites", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const { label } = req.body || {};
+    if (!label) return res.status(400).json({ error: "label required" });
+    const r = await dbAddTeamDisfavorite({ teamId: req.params.id, label, byCoachSub: req.userSub });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.disfav.add",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, label, role },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.delete("/api/teams/:id/disfavorites/:label", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const label = decodeURIComponent(req.params.label);
+    const r = await dbRemoveTeamDisfavorite({ teamId: req.params.id, label });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.disfav.remove",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, label, role, affected: r.affected },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Team settings: read (any team coach), write (owner+admin).
+app.get("/api/teams/:id/settings", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const settings = await dbGetTeamSettings(req.params.id);
+    if (!settings) return res.status(404).json({ error: "team not found" });
+    res.json(settings);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.patch("/api/teams/:id/settings", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const body = req.body || {};
+    const allowed = ["pace_base", "disfavor_mode", "equipment_modes"];
+    const updates = [];
+    for (const field of allowed) {
+      if (field in body) {
+        const r = await dbSetTeamDefault({ teamId: req.params.id, field, value: body[field] });
+        if (!r.ok) return res.status(400).json({ error: `${field}: ${r.reason}` });
+        updates.push({ field, value: body[field], affected: r.affected });
+      }
+    }
+    if (updates.length === 0) return res.status(400).json({ error: "no fields to update" });
+    for (const u of updates) {
+      dbAuditEvent({
+        userSub:   req.userSub,
+        eventType: "team.default.update",
+        ...reqMeta(req),
+        details:   { team_id: req.params.id, field: u.field, value: u.value, role },
+      });
+    }
+    res.json({ ok: true, updates });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Apply-to-roster: one-time bulk push of a default to every swimmer in
+// any group under this team. v1 supports pace_base only; other fields
+// return 400 with reason field_not_apply_capable_yet.
+app.post("/api/teams/:id/settings/apply-to-roster", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const { field } = req.body || {};
+    if (!field) return res.status(400).json({ error: "field required" });
+    const r = await dbApplyTeamDefaultToRoster({ teamId: req.params.id, field });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team.default.apply_to_roster",
+      ...reqMeta(req),
+      details:   { team_id: req.params.id, field, value: r.value, count: r.count, role },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }

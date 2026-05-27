@@ -2786,6 +2786,225 @@ export async function dbUpdateTeamCoachRole(teamId, coachSub, role) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// ─── Team curation (Phase 4 / TEAM_CURATION_SCOPE.md) ─────────────────
+// Third tier of the curation cascade: TEAM. Owners + admins write team-
+// level favorites + disfavorites + defaults; all swimmers in any group
+// under that team inherit via the cascade extension in dbGetEffective*.
+//
+// Authz pattern: helpers themselves return ok/reason; the route layer
+// must check dbGetTeamRole(teamId, callerSub) ∈ ('owner','admin') for
+// writes. dbAssertTeamWriter wraps that check for re-use.
+
+const TEAM_DEFAULT_FIELDS = ["pace_base", "disfavor_mode", "equipment_modes"];
+const TEAM_DISFAVOR_MODES = ["downweight", "exclude"];
+
+// Authz helper used by all team-curation write routes. Returns the role
+// string if the caller can write, or null. Mirrors dbGetTeamRole shape.
+export async function dbAssertTeamWriter(teamId, callerSub) {
+  const role = await dbGetTeamRole(teamId, callerSub);
+  if (role === "owner" || role === "admin") return role;
+  return null;
+}
+
+// Add/remove favorites. Mutex with team_disfavorites enforced at app
+// layer (same label can't be in both at once for the same team).
+export async function dbAddTeamFavorite({ teamId, label, byCoachSub }) {
+  if (!teamId || !label || !byCoachSub) return { ok: false, reason: "missing_args" };
+  const cleaned = String(label).trim();
+  if (!cleaned) return { ok: false, reason: "empty_label" };
+  if (cleaned.length > 255) return { ok: false, reason: "label_too_long" };
+  // Mutex check: if the same label exists in team_disfavorites, the caller
+  // must remove it from there first. Mirror of v1.5's per-user behavior.
+  const conflict = await pool.query(
+    "SELECT 1 FROM `team_disfavorites` WHERE `team_id` = ? AND `label` = ? LIMIT 1",
+    [teamId, cleaned]
+  );
+  if (conflict.length > 0) return { ok: false, reason: "in_disfavorites" };
+  try {
+    await pool.query(
+      "INSERT INTO `team_favorites` (`team_id`, `label`, `set_by_coach_sub`) VALUES (?, ?, ?)",
+      [teamId, cleaned, byCoachSub]
+    );
+    return { ok: true };
+  } catch (e) {
+    if (e.code === "ER_DUP_ENTRY" || /duplicate/i.test(e.message || "")) {
+      return { ok: true, already: true };                                    // idempotent
+    }
+    throw e;
+  }
+}
+
+export async function dbRemoveTeamFavorite({ teamId, label }) {
+  if (!teamId || !label) return { ok: false, reason: "missing_args" };
+  const r = await pool.query(
+    "DELETE FROM `team_favorites` WHERE `team_id` = ? AND `label` = ?",
+    [teamId, String(label).trim()]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbAddTeamDisfavorite({ teamId, label, byCoachSub }) {
+  if (!teamId || !label || !byCoachSub) return { ok: false, reason: "missing_args" };
+  const cleaned = String(label).trim();
+  if (!cleaned) return { ok: false, reason: "empty_label" };
+  if (cleaned.length > 255) return { ok: false, reason: "label_too_long" };
+  const conflict = await pool.query(
+    "SELECT 1 FROM `team_favorites` WHERE `team_id` = ? AND `label` = ? LIMIT 1",
+    [teamId, cleaned]
+  );
+  if (conflict.length > 0) return { ok: false, reason: "in_favorites" };
+  try {
+    await pool.query(
+      "INSERT INTO `team_disfavorites` (`team_id`, `label`, `set_by_coach_sub`) VALUES (?, ?, ?)",
+      [teamId, cleaned, byCoachSub]
+    );
+    return { ok: true };
+  } catch (e) {
+    if (e.code === "ER_DUP_ENTRY" || /duplicate/i.test(e.message || "")) {
+      return { ok: true, already: true };
+    }
+    throw e;
+  }
+}
+
+export async function dbRemoveTeamDisfavorite({ teamId, label }) {
+  if (!teamId || !label) return { ok: false, reason: "missing_args" };
+  const r = await pool.query(
+    "DELETE FROM `team_disfavorites` WHERE `team_id` = ? AND `label` = ?",
+    [teamId, String(label).trim()]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Read both lists in one call. Used by Settings UI + the cascade
+// extension reads the same rows via UNION ALL in dbGetEffective*.
+export async function dbListTeamCuration(teamId) {
+  if (!teamId) return { favorites: [], disfavorites: [] };
+  const [favRows, disfavRows] = await Promise.all([
+    pool.query(
+      "SELECT `label`, `set_by_coach_sub`, `created_at` FROM `team_favorites` " +
+      "WHERE `team_id` = ? ORDER BY `created_at` DESC",
+      [teamId]
+    ),
+    pool.query(
+      "SELECT `label`, `set_by_coach_sub`, `created_at` FROM `team_disfavorites` " +
+      "WHERE `team_id` = ? ORDER BY `created_at` DESC",
+      [teamId]
+    ),
+  ]);
+  return {
+    favorites:    favRows.map(r => ({ label: r.label, set_by_coach_sub: r.set_by_coach_sub, created_at: dtToIso(r.created_at) })),
+    disfavorites: disfavRows.map(r => ({ label: r.label, set_by_coach_sub: r.set_by_coach_sub, created_at: dtToIso(r.created_at) })),
+  };
+}
+
+// Team default settings. Read returns the three current defaults; write
+// updates one field. Set value=null to clear a default.
+export async function dbGetTeamSettings(teamId) {
+  if (!teamId) return null;
+  const rows = await pool.query(
+    "SELECT `default_pace_base`, `default_disfavor_mode`, `default_equipment_modes` " +
+    "FROM `teams` WHERE `id` = ? LIMIT 1",
+    [teamId]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  let equipment = null;
+  if (r.default_equipment_modes != null) {
+    try { equipment = typeof r.default_equipment_modes === "string" ? JSON.parse(r.default_equipment_modes) : r.default_equipment_modes; }
+    catch (_) { equipment = null; }
+  }
+  return {
+    default_pace_base:        r.default_pace_base,
+    default_disfavor_mode:    r.default_disfavor_mode,
+    default_equipment_modes:  equipment,
+  };
+}
+
+export async function dbSetTeamDefault({ teamId, field, value }) {
+  if (!teamId || !field) return { ok: false, reason: "missing_args" };
+  if (!TEAM_DEFAULT_FIELDS.includes(field)) return { ok: false, reason: "bad_field" };
+  // Per-field validation. null clears the default.
+  let stored = value;
+  if (value !== null) {
+    if (field === "pace_base") {
+      if (typeof value !== "string" || !/^\d{1,2}:\d{2}$/.test(value)) return { ok: false, reason: "bad_pace_format" };
+      if (value.length > 8) return { ok: false, reason: "pace_too_long" };
+    } else if (field === "disfavor_mode") {
+      if (!TEAM_DISFAVOR_MODES.includes(value)) return { ok: false, reason: "bad_disfavor_mode" };
+    } else if (field === "equipment_modes") {
+      // Accept any object/array; serialize to JSON. Client owns the shape.
+      if (typeof value !== "object") return { ok: false, reason: "bad_equipment_shape" };
+      try { stored = JSON.stringify(value); } catch (_) { return { ok: false, reason: "equipment_not_serializable" }; }
+    }
+  }
+  const col = `default_${field}`;
+  const r = await pool.query(
+    `UPDATE \`teams\` SET \`${col}\` = ? WHERE \`id\` = ?`,
+    [stored, teamId]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// "Apply to current roster" — bulk-update settings.extra (or the
+// corresponding column) for every swimmer in any group under this team.
+// One-time push; not auto-applied on future default changes. Audit the
+// count so the operator knows the blast radius.
+//
+// MVP: only pace_base is wired (most common pull). disfavor_mode +
+// equipment_modes can extend the switch later when the UI surfaces them.
+// For unsupported fields, returns 501-style ok:false reason.
+export async function dbApplyTeamDefaultToRoster({ teamId, field }) {
+  if (!teamId || !field) return { ok: false, reason: "missing_args" };
+  if (field !== "pace_base") return { ok: false, reason: "field_not_apply_capable_yet" };
+  const settings = await dbGetTeamSettings(teamId);
+  if (!settings || settings.default_pace_base == null) return { ok: false, reason: "default_not_set" };
+  const pace = settings.default_pace_base;
+  // Collect all swimmer subs from any group under this team (active members).
+  const swimmerRows = await pool.query(
+    "SELECT DISTINCT gm.`member_swimmer_sub` AS sub " +
+    "FROM `group_members` gm JOIN `groups` g ON g.`id` = gm.`group_id` " +
+    "WHERE g.`team_id` = ? AND gm.`left_at` IS NULL AND gm.`member_swimmer_sub` IS NOT NULL",
+    [teamId]
+  );
+  let updated = 0;
+  for (const r of swimmerRows) {
+    // Use existing user_settings update path. pace_base lives in
+    // user_settings (pace column); update directly via UPSERT.
+    const upd = await pool.query(
+      "INSERT INTO `user_settings` (`user_sub`, `pace`) VALUES (?, ?) " +
+      "ON DUPLICATE KEY UPDATE `pace` = VALUES(`pace`)",
+      [r.sub, pace]
+    );
+    if (upd.affectedRows > 0) updated++;
+  }
+  return { ok: true, field, value: pace, count: updated };
+}
+
+// Used by dbEnsureUser to seed a new user's settings row from the team
+// defaults of whatever team they're in (if any). Returns the team's
+// default values or null if no team / no defaults set.
+export async function dbGetSeedingDefaultsForNewUser(userSub) {
+  if (!userSub) return null;
+  const rows = await pool.query(
+    "SELECT t.`default_pace_base`, t.`default_disfavor_mode`, t.`default_equipment_modes` " +
+    "  FROM `group_members` gm " +
+    "  JOIN `groups` g ON g.`id` = gm.`group_id` " +
+    "  JOIN `teams`  t ON t.`id` = g.`team_id` " +
+    " WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL " +
+    " LIMIT 1",
+    [userSub]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  if (r.default_pace_base == null && r.default_disfavor_mode == null && r.default_equipment_modes == null) return null;
+  return {
+    pace_base:        r.default_pace_base,
+    disfavor_mode:    r.default_disfavor_mode,
+    equipment_modes:  r.default_equipment_modes,
+  };
+}
+
 // R-J: transfer a group's primary coach to a new sub. Used when removing a
 // coach who's primary on groups (caller must specify the destination).
 // Validates the new primary is an active coach on the team.
