@@ -48,11 +48,13 @@
 import express   from "express";
 import crypto    from "crypto";
 import path      from "path";
+import { readFile } from "fs/promises";
 import helmet    from "helmet";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
+import { BILLING_ACTIVE, createCheckoutSession, createPortalSession, processWebhookEvent, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 
 import {
   pool, dbActive, pingDb,
@@ -2303,6 +2305,186 @@ app.patch("/api/admin/feedback/:id", checkOrigin, requireAuth, requireAdmin, req
 // dedup_key includes Date.now() so repeated test sends from the same
 // admin don't collide. template_id defaults to 'welcome'; future templates
 // can be tested by passing template_id in the body.
+// ───── Vendor paper kit (Phase 3 deliverable 3 of 4) ─────────────────
+// Per VENDOR_PAPER_KIT_SCOPE.md §3.5. Admin-only. The route renders
+// vendor-kit/cover-letter.md with {{ORG_NAME}} + {{TREASURER_NAME}} +
+// {{TODAY_YMD}} placeholders substituted, lists the expected PDF
+// attachments (which Cap'n attaches manually from vendor-kit/build/),
+// and audit-logs the send. Returns the rendered letter + attachment
+// filenames so the client can build a mailto: link.
+//
+// v1 does NOT send the kit via Resend (no attachment support in the
+// current email worker; the PDFs are static files on disk that need
+// to ship with the mailto:). Client opens mailto: and Cap'n attaches
+// the files from vendor-kit/build/ in his mail client.
+app.post("/api/admin/vendor-kit/send", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const recipientEmail   = String(req.body?.recipient_email   || "").trim();
+    const organizationName = String(req.body?.organization_name || "").trim();
+    const treasurerName    = String(req.body?.treasurer_name    || "").trim();
+    if (!recipientEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipientEmail)) {
+      return res.status(400).json({ error: "valid recipient_email required" });
+    }
+    if (!organizationName) return res.status(400).json({ error: "organization_name required" });
+    if (!treasurerName)    return res.status(400).json({ error: "treasurer_name required" });
+
+    // Load + substitute the cover letter. File ships with the repo at
+    // vendor-kit/cover-letter.md. If the file is missing in prod (e.g.,
+    // Dockerfile COPY allowlist forgot it), surface a clear error rather
+    // than a 500.
+    const kitDir = path.join(__dirname, "vendor-kit");
+    let letterTemplate;
+    try {
+      letterTemplate = await readFile(path.join(kitDir, "cover-letter.md"), "utf8");
+    } catch (e) {
+      return res.status(500).json({ error: "vendor-kit/cover-letter.md missing from server — Dockerfile COPY needed" });
+    }
+    const todayYmd = new Date().toISOString().slice(0, 10);
+    const renderedLetter = letterTemplate
+      .replaceAll("{{ORG_NAME}}",       organizationName)
+      .replaceAll("{{TREASURER_NAME}}", treasurerName)
+      .replaceAll("{{TODAY_YMD}}",      todayYmd);
+
+    // Expected PDF attachments — these live in vendor-kit/build/ on
+    // Cap'n's local machine after running build.sh. Listed for the
+    // client to display so Cap'n knows what to attach.
+    const attachmentFilenames = [
+      "services-agreement.pdf",
+      "dpa.pdf",
+      "breach-notification-sla.pdf",
+      "continuity-commitment.pdf",
+      "sub-processor-list.pdf",
+      "w-9.pdf",
+    ];
+
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "vendor_kit.sent",
+      ...reqMeta(req),
+      details:   {
+        recipient_email:   recipientEmail,
+        organization_name: organizationName,
+        treasurer_name:    treasurerName,
+      },
+    });
+
+    res.json({
+      rendered_letter:      renderedLetter,
+      attachment_filenames: attachmentFilenames,
+      recipient_email:      recipientEmail,
+      subject:              `SetForge — vendor paperwork for ${organizationName}`,
+    });
+  } catch (err) {
+    console.error("[admin/vendor-kit/send]", err.message);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ───── Billing thin slice (Phase 3 deliverable 4 of 4 — SCAFFOLD) ────
+// Per BILLING_SCOPE.md §3.4. Five routes, all returning 501 in scaffold
+// mode (BILLING_ACTIVE=false). Real Stripe SDK + body implementations
+// land in the "fill it in" slice that ships when first paying pilot
+// triggers.
+//
+// The route shapes + auth + audit-event names are locked here so the
+// route surface is stable; the inside-the-try bodies are the placeholders.
+// status + history routes are functional NOW against the migration-038
+// schema even before Stripe is live (they read DB columns / table only).
+
+function billingInactiveResponse(res) {
+  return res.status(501).json({
+    error:   "billing_not_configured",
+    message: "Billing isn't configured in this environment. Set STRIPE_SECRET_KEY + STRIPE_PRICE_ID_COACH_MONTHLY to enable.",
+  });
+}
+
+app.post("/api/billing/checkout", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!BILLING_ACTIVE) return billingInactiveResponse(res);
+    const returnUrl = `${APP_URL}/?upgrade=success`;
+    const result = await createCheckoutSession({ userSub: req.userSub, returnUrl });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "billing.checkout.start",
+      ...reqMeta(req),
+      details:   { result_type: result?.url ? "session_created" : (result?.skipped || "unknown") },
+    });
+    if (result?.url) return res.json({ url: result.url });
+    res.status(500).json({ error: "checkout_session_failed", result });
+  } catch (err) {
+    console.error("[billing/checkout]", err.message);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post("/api/billing/portal", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!BILLING_ACTIVE) return billingInactiveResponse(res);
+    const result = await createPortalSession({ userSub: req.userSub });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "billing.portal.open",
+      ...reqMeta(req),
+      details:   { result_type: result?.url ? "portal_session_created" : (result?.error || result?.skipped || "unknown") },
+    });
+    if (result?.url) return res.json({ url: result.url });
+    if (result?.error === "no_customer") return res.status(400).json({ error: "no_stripe_customer", message: "No Stripe customer on file. Subscribe first via Checkout." });
+    res.status(500).json({ error: "portal_session_failed", result });
+  } catch (err) {
+    console.error("[billing/portal]", err.message);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Webhook: NO auth (Stripe is the caller). Real implementation MUST
+// verify Stripe signature via STRIPE_WEBHOOK_SECRET BEFORE inserting
+// the event into stripe_webhook_events. Scaffold returns 501 so
+// Stripe will retry — by the time the trigger fires, this route gets
+// signature verification + idempotency insert + processWebhookEvent call.
+//
+// Note: webhook route is exempt from checkOrigin (Stripe doesn't set
+// Origin) and from CSRF (Stripe doesn't have access to user's CSRF
+// token). Signature verification is the auth.
+app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  try {
+    if (!BILLING_ACTIVE) {
+      // Return 200 so Stripe stops retrying during a test in an
+      // environment where billing isn't configured. The audit log
+      // captures the missed event so we know it happened.
+      console.warn("[billing/webhook] received event but BILLING_ACTIVE=false; acking + dropping");
+      return res.status(200).json({ acked: true, dropped: "billing_inactive" });
+    }
+    // TODO when filling in: signature verification + stripe_webhook_events
+    // idempotency insert + processWebhookEvent dispatch.
+    const result = await processWebhookEvent(req.body);
+    res.status(200).json({ ok: true, result });
+  } catch (err) {
+    // 200 even on internal error so Stripe doesn't retry — we've recorded
+    // the event in stripe_webhook_events and our own monitoring catches
+    // failures via processed_status='failed' rows.
+    console.error("[billing/webhook]", err.message);
+    res.status(200).json({ ok: false, error: err.message });
+  }
+});
+
+// Status: SAFE to call now (reads users.tier + stripe_customer_id from
+// migration 038). When tier hasn't been set (free), returns tier: 'free'.
+app.get("/api/billing/status", requireAuth, async (req, res) => {
+  try {
+    const status = await getBillingStatusFor(req.userSub);
+    res.json(status);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// History: SAFE to call now (reads billing_history from migration 038).
+// Empty array until first invoice arrives via webhook.
+app.get("/api/billing/history", requireAuth, async (req, res) => {
+  try {
+    const rows = await getBillingHistoryFor(req.userSub, req.query?.limit || 10);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 app.post("/api/admin/email/test", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
   try {
     const templateId = (req.body?.template_id || "welcome").toString().slice(0, 64);

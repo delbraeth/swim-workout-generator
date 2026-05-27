@@ -1,0 +1,35 @@
+# Secrets + local config — never commit
+.env
+.env.*
+*.env
+
+# SSH keys + credentials
+swimdb
+swimdb.pub
+*.pem
+*.key
+id_rsa*
+
+# macOS noise
+.DS_Store
+**/.DS_Store
+
+# Local operator scripts (run by Cap'n, not shipped)
+_checkpoint.py
+_deploy.py
+_COMMIT_MSG.txt
+
+# Historical snapshots — kept locally, not in git
+checkpoints/
+
+# Build artifacts
+node_modules/
+vendor-kit/build/
+tools/__pycache__/
+
+# Misc working dirs not for prod
+SwimWorkout
+SwimApp-Sources/
+"SetForge Icons/"
+"new watch app/"
+png/

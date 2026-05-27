@@ -11,6 +11,7 @@ COPY server.js ./
 COPY db.js ./
 COPY lib/ ./lib/
 COPY public/ ./public/
+COPY vendor-kit/ ./vendor-kit/
 
 # Hyperlift sets PORT; default to 8080 for local runs
 ENV PORT=8080

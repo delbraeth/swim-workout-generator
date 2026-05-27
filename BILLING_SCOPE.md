@@ -51,7 +51,12 @@ The "thin slice" is the minimum viable path to that end-state. It explicitly **d
 
 `BILLING_ACTIVE = !!STRIPE_SECRET_KEY`. When false (dev/test), paywall modal opens but Checkout button is greyed with "Billing not configured in this environment."
 
-### 3.2 New migration (037 — assumes Phase 2 took 033 + 034, PSC took 035, taper took 036)
+### 3.2 New migration (038 — actual numbering as of 2026-05-26)
+
+> **Scope update 2026-05-26:** scope originally called this migration 037
+> because the doc was written before PSC + taper landed and assumed
+> billing would ship first. Actual order: 033/034 (Phase 2) → 035 (taper,
+> failed) → 036 (taper VARCHAR recreate) → 037 (PSC) → **038 (billing)**.
 
 ```sql
 ALTER TABLE `users`
@@ -88,6 +93,14 @@ CREATE TABLE `billing_history` (
 
 Tier-vs-is_coach decision: keep `is_coach` for org-role distinction (a coach is someone who coaches a team, regardless of billing tier — a free-tier solo athlete can still be a coach of a managed swimmer). Add `tier` as the billing-status field. Two are independent: `is_coach=1, tier='free'` means "coach who hasn't subscribed yet"; `is_coach=0, tier='coach'` is unreachable (paywall checks `is_coach`).
 
+> **Scope update 2026-05-26 — invariant enforcement:** the
+> "is_coach=0, tier='coach' is unreachable" claim isn't enforced anywhere
+> in v1. If a future code path grants tier without setting is_coach, the
+> paywall might unlock without coach role. v1 lives with the convention;
+> v1.1 should either (a) add a CHECK constraint or (b) wrap tier grants
+> in a db helper that always sets both atomically. Captured here so the
+> trade isn't silent.
+
 ### 3.3 New module: `lib/billing.js`
 
 Exports:
@@ -108,12 +121,34 @@ Exports:
 
 ### 3.5 Webhook handler logic
 
+> **Scope update 2026-05-26 — Stripe customer ↔ user resolution:**
+> `customer.subscription.created` can arrive BEFORE
+> `checkout.session.completed` updates `users.stripe_customer_id`
+> (Stripe orders events by creation time but webhook delivery is
+> independent). If subscription.created tries to resolve customer→user
+> by stripe_customer_id and finds nothing, it grants no tier — even
+> though the user just paid.
+>
+> **Resolution: stamp `userSub` into Stripe customer metadata at
+> Checkout session creation time** via `stripe.checkout.sessions.create({
+> ..., subscription_data: { metadata: { userSub } } })` and
+> `customer_creation: 'always'` with customer metadata too. Every
+> webhook then resolves user via the metadata field on the subscription
+> or customer object, NOT via local `stripe_customer_id` lookup. The
+> local column is still populated (for invoice history + portal session
+> creation) but it's no longer the critical path.
+
 ```
 on stripe event:
   insert into stripe_webhook_events (skip if dup)
+  resolve userSub:
+    1. event.data.object.metadata?.userSub  (set at Checkout)
+    2. fallback: event.data.object.customer.metadata?.userSub
+    3. fallback: SELECT sub FROM users WHERE stripe_customer_id = event.data.object.customer
+    if all three miss → log + skip (orphan event)
   switch event.type:
     case 'checkout.session.completed':
-      → store stripe_customer_id on users (link account)
+      → store stripe_customer_id on users (link account; for future portal sessions)
     case 'customer.subscription.created':
     case 'customer.subscription.updated' where status in ('active','trialing'):
       → grantTier({ userSub, tier: 'coach', source: subscription.id })
@@ -129,7 +164,9 @@ on stripe event:
   mark webhook event processed
 ```
 
-Defensive: if Stripe customer doesn't match a SetForge user (account deleted between subscribe + webhook), log and skip silently — no orphan tier grants.
+Defensive: if userSub can't be resolved by any of the three paths
+(account deleted between subscribe + webhook, metadata not set on
+legacy customer, etc.), log + skip silently — no orphan tier grants.
 
 ### 3.6 Client: paywall modal
 
