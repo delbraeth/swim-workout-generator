@@ -26,86 +26,14 @@
 // Fix wrong parses by editing the persons row directly:
 //   UPDATE persons SET first_name = ?, last_name = ?, initials = ? WHERE id = ?
 
-import { pool, dbAuditEvent } from "../db.js";
-import crypto from "node:crypto";
+// Phase 4 Identity I-B backfill — shares parser + ID generator with the
+// live writer paths in db.js (dbEnsureUser + dbCreateManagedSwimmer)
+// so backfilled rows + live-created rows have identical name-split
+// behavior. If the heuristic drifts in one place, it drifts in both.
+import { pool, dbAuditEvent, genPersonId, parseDisplayName, genInitialsFromParts } from "../db.js";
 
 const APPLY = process.argv.includes("--apply");
-
-// Per scope locked decision 10: persons IDs use the existing repo
-// convention `px_<base36>`. Matches genGroupId/genEventId/genManagedId
-// patterns in db.js.
-function genPersonId() {
-  const n = crypto.randomBytes(4).readUInt32BE(0);
-  return "px_" + n.toString(36).padStart(6, "0").slice(-6);
-}
-
-// Heuristic name-split regexes.
-//   TITLES match common pre-name honorifics (period optional).
-//   SUFFIXES match Jr / Sr / Roman / professional credentials at end.
-//   COMPOUND_LAST_PARTICLES detect multi-word surnames ("van der", "de la").
-const TITLES = /^(dr|mr|mrs|ms|miss|mx|prof|rev|sir|sgt|capt|cmdr|hon|fr)\.?$/i;
-const SUFFIXES = /^(jr|sr|ii|iii|iv|v|phd|md|esq|dds|cpa|do|np|rn)\.?$/i;
-const COMPOUND_LAST_PARTICLES = /^(van|von|de|della|del|du|le|la|el|al|bin|ibn|af|st|mc|mac|der|den|dos|das|do|da)$/i;
-
-// Split display_name into { first, last, reasons }.
-// reasons is an array of ambiguity flags; empty array = clean parse.
-//
-// Cases handled:
-//   "John Smith"               → first="John",    last="Smith"             []
-//   "Smith, John"              → first="John",    last="Smith"             [comma_reversed]
-//   "Mary Lou Smith"           → first="Mary Lou", last="Smith"            []  (last-space rule)
-//   "Smith"                    → first="Smith",   last="(unknown)"         [single_word]
-//   ""                         → first="(unknown)",last="(unknown)"        [empty]
-//   "John Smith Jr."           → first="John",    last="Smith Jr."         [suffix_attached]
-//   "Dr. John Smith"           → first="Dr. John", last="Smith"            [title_prefix]
-//   "Maria van der Berg"       → first="Maria",   last="van der Berg"      [compound_surname]
-//   "Smith-Jones"              → first="Smith-Jones", last="(unknown)"     [single_word]
-//
-// All parses produce SOMETHING — even on ambiguous input we write a
-// best-guess. The flags exist so Cap'n can review + correct via SQL.
-function parseDisplayName(raw) {
-  const norm = (raw || "").trim().replace(/\s+/g, " ");
-  if (!norm) {
-    return { first: "(unknown)", last: "(unknown)", reasons: ["empty"] };
-  }
-  if (norm.includes(",")) {
-    const [lastPart, firstPart] = norm.split(",", 2).map(s => s.trim());
-    if (lastPart && firstPart) {
-      return { first: firstPart, last: lastPart, reasons: ["comma_reversed"] };
-    }
-  }
-  const parts = norm.split(" ");
-  if (parts.length === 1) {
-    return { first: norm, last: "(unknown)", reasons: ["single_word"] };
-  }
-  const reasons = [];
-  let first = parts.slice(0, -1).join(" ");
-  let last = parts[parts.length - 1];
-  if (TITLES.test(parts[0])) reasons.push("title_prefix");
-  if (SUFFIXES.test(last) && parts.length > 2) {
-    // Suffix detected — pull it onto the last_name and re-split
-    const head = parts.slice(0, -1);
-    first = head.slice(0, -1).join(" ");
-    last = head[head.length - 1] + " " + parts[parts.length - 1];
-    reasons.push("suffix_attached");
-  } else if (parts.length >= 3 && COMPOUND_LAST_PARTICLES.test(parts[parts.length - 2])) {
-    // Compound surname — walk backwards collecting particle words
-    let lastIdx = parts.length - 1;
-    while (lastIdx > 1 && COMPOUND_LAST_PARTICLES.test(parts[lastIdx - 1])) {
-      lastIdx--;
-    }
-    first = parts.slice(0, lastIdx).join(" ");
-    last = parts.slice(lastIdx).join(" ");
-    reasons.push("compound_surname");
-  }
-  return { first, last, reasons };
-}
-
-function genInitials(first, last) {
-  const f = (first && first[0] && first[0] !== "(") ? first[0] : "?";
-  const l = (last  && last[0]  && last[0]  !== "(") ? last[0]  : "?";
-  return (f + l).toUpperCase();
-}
+const genInitials = genInitialsFromParts;  // local alias for the existing code below
 
 async function backfillTable({ table, idCol, ownerCol, ownerEventSubFn }) {
   const sel = `SELECT \`${idCol}\`, \`display_name\`, \`initials\`, \`dob\`, \`gender\`` +

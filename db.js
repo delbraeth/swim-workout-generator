@@ -129,14 +129,49 @@ function entryToWorkoutRow(entry) {
 // Idempotent — call before any write that has a user_sub FK target.
 export async function dbEnsureUser(userSub, initials = null, displayName = null) {
   if (!userSub) return;
-  // displayName defaulted from Google's `given_name` on first sign-up per
-  // GOOGLE_OAUTH_SCOPE.md decision 11. INSERT IGNORE means the value only
-  // applies to brand-new rows — returning users keep their existing
-  // display_name unchanged.
-  await pool.query(
-    "INSERT IGNORE INTO `users` (`sub`, `initials`, `display_name`) VALUES (?, ?, ?)",
-    [userSub, initials, displayName]
+  // Phase 4 Identity I-C: every users row must have a person_id once
+  // migration 040 applies NOT NULL + FK. For NEW users we create a
+  // persons row first then INSERT the users row with person_id set.
+  // For RETURNING users (existing sub), we no-op — they already have
+  // person_id from the I-B backfill or from a prior dbEnsureUser call.
+  //
+  // displayName defaulted from Google's `given_name` on first sign-up
+  // per GOOGLE_OAUTH_SCOPE.md decision 11. Apple may not share a name
+  // at all, in which case parseDisplayName returns first="(unknown)"
+  // last="(unknown)" placeholders; user fixes via Profile later.
+  //
+  // Race note: two concurrent OAuth callbacks for the same new user
+  // could both pass the existence check + try to INSERT. The second
+  // hits ER_DUP_ENTRY on users.sub PK; we swallow it. The persons row
+  // created by the loser is an orphan (no users row references it) —
+  // cosmetic noise only, not harmful. Concurrent callbacks for the
+  // same NEW user are vanishingly rare in practice.
+  const existing = await pool.query(
+    "SELECT 1 FROM `users` WHERE `sub` = ? LIMIT 1",
+    [userSub]
   );
+  if (existing.length > 0) return;
+
+  const parse = parseDisplayName(displayName);
+  const personId = genPersonId();
+  const personInitials = initials || genInitialsFromParts(parse.first, parse.last);
+  await pool.query(
+    "INSERT INTO `persons` (`id`, `first_name`, `last_name`, `initials`) VALUES (?, ?, ?, ?)",
+    [personId, parse.first, parse.last, personInitials]
+  );
+  try {
+    await pool.query(
+      "INSERT INTO `users` (`sub`, `initials`, `display_name`, `person_id`) VALUES (?, ?, ?, ?)",
+      [userSub, initials, displayName, personId]
+    );
+  } catch (e) {
+    if (e.code === "ER_DUP_ENTRY" || /duplicate/i.test(e.message || "")) {
+      // Lost a concurrent-insert race; the other callback's users row
+      // wins. Orphan persons row stays behind (no FK from anywhere).
+      return;
+    }
+    throw e;
+  }
 }
 
 // ── OAuth provider mapping (GOOGLE_OAUTH_SCOPE.md §3.3) ───────────────
@@ -2893,15 +2928,28 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
   }
   await dbEnsureUser(ownerSub);
   const id = genManagedId();
+  // Phase 4 Identity I-C: every coach_managed_swimmers row must have a
+  // person_id once migration 040 applies NOT NULL + FK. Parse the
+  // display_name + create the persons row first, then INSERT cms with
+  // person_id set. dob + gender + initials propagate to both rows
+  // since they're the same physical attributes of the same person.
+  const parse = parseDisplayName(display_name);
+  const personId = genPersonId();
+  const personInitials = initials || genInitialsFromParts(parse.first, parse.last);
+  await pool.query(
+    "INSERT INTO `persons` (`id`, `first_name`, `last_name`, `initials`, `dob`, `gender`) VALUES (?, ?, ?, ?, ?, ?)",
+    [personId, parse.first, parse.last, personInitials, dob, gender || null]
+  );
   await pool.query(
     "INSERT INTO `coach_managed_swimmers` " +
     "(`id`, `owner_coach_sub`, `team_id`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
-    " `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`) " +
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    " `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `person_id`) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
       id, ownerSub, team_id || null, display_name.trim(), initials || null, dob, gender || null,
       parental_contact || null, parent_managed_flag ? 1 : 0,
       pace_scy_100 || null, pace_scm_100 || null, pace_lcm_100 || null,
+      personId,
     ]
   );
   return { ok: true, id };
@@ -3075,6 +3123,53 @@ function genGroupId() {
 function genEventId() {
   const n = crypto.randomBytes(4).readUInt32BE(0);
   return "ev_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+// Phase 4 Identity I-A locked decision 10: persons IDs are px_<base36>.
+// Lives here next to the other gen*Id helpers. Exported so the I-B
+// backfill script (tools/identity_backfill.mjs) reuses the same generator.
+export function genPersonId() {
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "px_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+
+// Phase 4 Identity name-split heuristic (shared with I-B backfill).
+// Returns { first, last, reasons }. Same logic as tools/identity_backfill
+// to keep live + backfilled rows consistent. See IDENTITY_SCOPE.md §5
+// (locked decision 1) for the rules.
+const _NAME_TITLES   = /^(dr|mr|mrs|ms|miss|mx|prof|rev|sir|sgt|capt|cmdr|hon|fr)\.?$/i;
+const _NAME_SUFFIXES = /^(jr|sr|ii|iii|iv|v|phd|md|esq|dds|cpa|do|np|rn)\.?$/i;
+const _NAME_PARTICLES = /^(van|von|de|della|del|du|le|la|el|al|bin|ibn|af|st|mc|mac|der|den|dos|das|do|da)$/i;
+export function parseDisplayName(raw) {
+  const norm = (raw || "").trim().replace(/\s+/g, " ");
+  if (!norm) return { first: "(unknown)", last: "(unknown)", reasons: ["empty"] };
+  if (norm.includes(",")) {
+    const [lastPart, firstPart] = norm.split(",", 2).map(s => s.trim());
+    if (lastPart && firstPart) return { first: firstPart, last: lastPart, reasons: ["comma_reversed"] };
+  }
+  const parts = norm.split(" ");
+  if (parts.length === 1) return { first: norm, last: "(unknown)", reasons: ["single_word"] };
+  const reasons = [];
+  let first = parts.slice(0, -1).join(" ");
+  let last  = parts[parts.length - 1];
+  if (_NAME_TITLES.test(parts[0])) reasons.push("title_prefix");
+  if (_NAME_SUFFIXES.test(last) && parts.length > 2) {
+    const head = parts.slice(0, -1);
+    first = head.slice(0, -1).join(" ");
+    last  = head[head.length - 1] + " " + parts[parts.length - 1];
+    reasons.push("suffix_attached");
+  } else if (parts.length >= 3 && _NAME_PARTICLES.test(parts[parts.length - 2])) {
+    let lastIdx = parts.length - 1;
+    while (lastIdx > 1 && _NAME_PARTICLES.test(parts[lastIdx - 1])) lastIdx--;
+    first = parts.slice(0, lastIdx).join(" ");
+    last  = parts.slice(lastIdx).join(" ");
+    reasons.push("compound_surname");
+  }
+  return { first, last, reasons };
+}
+export function genInitialsFromParts(first, last) {
+  const f = (first && first[0] && first[0] !== "(") ? first[0] : "?";
+  const l = (last  && last[0]  && last[0]  !== "(") ? last[0]  : "?";
+  return (f + l).toUpperCase();
 }
 
 function rowToGroup(r) {
