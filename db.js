@@ -547,12 +547,31 @@ export async function dbGetMe(sub) {
   if (!sub) return null;
   const conn = await pool.getConnection();
   try {
+    // Phase 4 Identity I-D: display_name + initials now computed from
+    // persons via JOIN. users.display_name + users.initials remain as
+    // legacy columns (dropped in I-F after 30-day soak). LEFT JOIN
+    // (rather than INNER) is defensive — every user has person_id after
+    // I-B backfill, but I-C hasn't applied yet so the FK isn't enforced.
+    // If person row is missing for any reason, displayNameInline returns
+    // "(unknown)" rather than crashing.
     const userRows = await conn.query(
-      "SELECT `sub`, `email`, `email_verified`, `display_name`, `initials`, `dob`, `gender`, `is_admin`, `is_coach`, `created_at`, `last_login_at` FROM `users` WHERE `sub` = ?",
+      "SELECT u.`sub`, u.`email`, u.`email_verified`, " +
+      "       u.`initials` AS legacy_initials, u.`display_name` AS legacy_display_name, " +
+      "       u.`dob`, u.`gender`, u.`is_admin`, u.`is_coach`, " +
+      "       u.`created_at`, u.`last_login_at`, " +
+      "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
+      "       p.`initials` AS person_initials " +
+      "  FROM `users` u " +
+      "  LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
+      " WHERE u.`sub` = ?",
       [sub]
     );
     if (!userRows[0]) return null;
     const u = userRows[0];
+    const displayName = u.first_name
+      ? displayNameInline({ first_name: u.first_name, last_name: u.last_name, preferred_name: u.preferred_name })
+      : u.legacy_display_name;
+    const initials = u.person_initials || u.legacy_initials;
     const statsRows = await conn.query(
       "SELECT `pool_mode`, COUNT(*) AS n, SUM(`total_yards`) AS total FROM `workouts` WHERE `user_sub` = ? GROUP BY `pool_mode`",
       [sub]
@@ -575,8 +594,8 @@ export async function dbGetMe(sub) {
       sub:                     u.sub,
       email:                   u.email,
       email_verified:          !!u.email_verified,
-      display_name:            u.display_name,
-      initials:                u.initials,
+      display_name:            displayName,
+      initials:                initials,
       // DOB returned only to the user themselves (this endpoint is always
       // self-scoped). Other endpoints expose only the derived `is_minor` to
       // protect the raw DATE per decision #27.
@@ -3170,6 +3189,39 @@ export function genInitialsFromParts(first, last) {
   const f = (first && first[0] && first[0] !== "(") ? first[0] : "?";
   const l = (last  && last[0]  && last[0]  !== "(") ? last[0]  : "?";
   return (f + l).toUpperCase();
+}
+
+// Phase 4 Identity I-D: display_name read-side helpers.
+// Per fork-3 resolution 2026-05-26: "First Last" in chrome contexts
+// (cards, headers, dropdowns), "Last, First" in tables/rosters where
+// sort-by-last is the user expectation.
+//
+// Input is a person-shaped object with first_name, last_name,
+// preferred_name (any may be null/undefined). When preferred_name is set
+// it overrides first_name in BOTH formats — that's the whole point of
+// the field. Last name is never substituted.
+//
+// Falls back gracefully if person is null/undefined: returns "(unknown)"
+// rather than throwing, so callers can safely use these on rows where
+// the LEFT JOIN didn't match (which shouldn't happen after I-C but
+// belt-and-braces for the I-D → I-C gap).
+//
+// Tombstone handling (I-G) will branch on person.tombstoned_at IS NOT
+// NULL to return "(deleted user)" or similar; deliberately not added
+// here so I-D ships without touching I-G's scope.
+export function displayNameInline(person) {
+  if (!person) return "(unknown)";
+  const first = person.preferred_name || person.first_name || "";
+  const last  = person.last_name || "";
+  const joined = (first + " " + last).trim();
+  return joined || "(unknown)";
+}
+export function displayNameSortable(person) {
+  if (!person) return "(unknown)";
+  const first = person.preferred_name || person.first_name || "";
+  const last  = person.last_name || "";
+  if (last && first) return last + ", " + first;
+  return (last || first || "(unknown)").trim();
 }
 
 function rowToGroup(r) {
