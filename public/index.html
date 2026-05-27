@@ -341,7 +341,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "b1252c0 · 2026-05-27 16:37 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}"
+    const BUILD_ID  = "8d2a16e · 2026-05-27 17:03 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}"
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -26062,9 +26062,11 @@
                     </button>
                   )}
                   {/* 👪 Parent view — visible when this user has at least one
-                      active guardian row (me.is_parent). Toggleable so users who
-                      are also a swimmer/coach can still reach their other views. */}
-                  {me?.is_parent && (
+                      active guardian row (effectiveMe.is_parent — so the admin
+                      view-as +parent flag also surfaces the button). Toggleable
+                      so users who are also a swimmer/coach can still reach
+                      their other views. */}
+                  {effectiveMe?.is_parent && (
                     <button onClick={() => setView(v => v === "parent" ? "generator" : "parent")}
                       title={view === "parent" ? "Back to generator" : "Parent view (your swimmers)"}
                       aria-label={view === "parent" ? "Back to generator" : "Parent view"}
