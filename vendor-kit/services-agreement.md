@@ -186,7 +186,7 @@ mandatory arbitration in v1.
 ## 15. Miscellaneous
 
 `TODO`: import standard severability, entire-agreement, no-waiver,
-notices clauses. Notice address for SetForge: `hello@setforge.io`.
+notices clauses. Notice address for SetForge: `hello@competitionaquatics.com`.
 
 ---
 

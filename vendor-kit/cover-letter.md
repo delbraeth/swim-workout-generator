@@ -39,7 +39,7 @@ not have them, and won't pretend otherwise:
 - **No HIPAA Business Associate Agreement.** SetForge is not a HIPAA-covered
   service; we don't accept PHI and the ToS disclaims it.
 - **No self-serve JSON export portal yet.** Data export today is by request
-  via email (`hello@setforge.io`). A self-serve export portal is on the
+  via email (`hello@competitionaquatics.com`). A self-serve export portal is on the
   roadmap; the DPA's data-rights language reflects current state honestly.
 - **No cyber-insurance certificate.** Available if your board specifically
   requires one — I'll purchase a policy and add the certificate to this
@@ -53,7 +53,7 @@ discover a gap mid-engagement.
 SetForge is built and operated by one person — me. That changes the
 shape of vendor commitments compared to a venture-backed SaaS:
 
-- I'm the one who answers `hello@setforge.io`. There's no support tier
+- I'm the one who answers `hello@competitionaquatics.com`. There's no support tier
   to escalate through. Mean response time is < 24 hours.
 - The continuity commitment is real because I wrote the open-source-on-
   shutdown clause into the ToS before any pilot signed. If something
@@ -68,4 +68,4 @@ counsel; redlines welcome.
 
 — Cap'n
 SetForge / Competition Aquatics, LLC
-`hello@setforge.io`
+`hello@competitionaquatics.com`

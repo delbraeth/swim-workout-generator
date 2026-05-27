@@ -23,7 +23,7 @@ the only PDF in version control.
 
 ## How to send a kit
 
-The treasurer / board reviewer emails `hello@setforge.io`. Cap'n:
+The treasurer / board reviewer emails `hello@competitionaquatics.com`. Cap'n:
 
 1. Open **AdminView → Vendor kit** in the app.
 2. Enter recipient email + organization name + treasurer name.

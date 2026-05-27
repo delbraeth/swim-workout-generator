@@ -142,11 +142,11 @@ SetForge:
 
 | Right | How Customer / Data Subject exercises it (today) | Self-serve in roadmap |
 |---|---|---|
-| Access | Email `hello@setforge.io` requesting an export. SetForge replies with a JSON file containing the Data Subject's data within 30 days. | Self-serve export ships in Phase 4 (identity refactor); see `IDENTITY_SCOPE.md` phase I-G |
+| Access | Email `hello@competitionaquatics.com` requesting an export. SetForge replies with a JSON file containing the Data Subject's data within 30 days. | Self-serve export ships in Phase 4 (identity refactor); see `IDENTITY_SCOPE.md` phase I-G |
 | Correction | In-app Profile fields cover display name, DOB, gender, paces. Other corrections by email. | In-app coverage already broad in v1 |
 | Deletion | In-app account-delete flow cascade-wipes Customer Data + sets `audit_events.user_sub` = NULL for the deleted account (tombstone in audit log; identity-replaced rows in other tables) | Already self-serve |
 | Portability | Same as Access — by-request JSON export | Same as Access |
-| Objection / Restriction | Email `hello@setforge.io` | Same |
+| Objection / Restriction | Email `hello@competitionaquatics.com` | Same |
 
 SetForge accurately documents the current state. **Self-serve JSON
 export is on the Phase 4 roadmap** and is not promised in this DPA;

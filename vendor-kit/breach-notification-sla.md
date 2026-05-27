@@ -52,7 +52,7 @@ Each written notice will include, to the extent known at the time:
 5. Measures SetForge has taken or proposes to take to address the
    breach, including (where applicable) measures to mitigate adverse
    effects.
-6. Contact for follow-up: `hello@setforge.io` + a direct phone line
+6. Contact for follow-up: `hello@competitionaquatics.com` + a direct phone line
    provided in the notification.
 
 ## Who receives the notification

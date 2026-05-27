@@ -27,7 +27,7 @@ For symmetry with the sub-processor list:
 - **No marketing-automation tools** (HubSpot, Marketo, etc.) — SetForge does not run marketing automation against customer data.
 - **No CRMs that touch customer data** (Salesforce, etc.) — SetForge maintains its own customer records inside the application.
 - **No payment processors visible to users besides Stripe** — Stripe is the only payment sub-processor (added when the billing thin slice ships); cards are tokenized by Stripe.
-- **No chat or support widgets** (Intercom, Zendesk, etc.) — support is via `hello@setforge.io` email.
+- **No chat or support widgets** (Intercom, Zendesk, etc.) — support is via `hello@competitionaquatics.com` email.
 - **No customer support tooling that ingests customer data** — emails are read by the operator directly in their personal mail client.
 - **No A/B testing or feature-flagging services** (LaunchDarkly, etc.) — feature gating is in-app, in-code, with no external service touching usage data.
 
