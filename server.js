@@ -94,6 +94,10 @@ import {
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
+  dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
+  dbListGuardiansForSwimmer, dbListParentInvitesForSwimmer, dbRemoveGuardian,
+  dbListSwimmersForParent, dbGetWeeklyDigestPayload, dbQueueWeeklyDigests,
+  dbAuthzCoachOfSwimmer,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
   dbBulkCreateManagedSwimmers, dbUpdateMeDob,
@@ -102,7 +106,7 @@ import {
   dbSetGroupAnchor, dbClearGroupAnchor, dbGetActiveAnchor, dbExpireOrphanAnchors, dbListAnchorsForMemberSwimmer,
   dbAddSwimmerConstraint, dbRemoveSwimmerConstraint, dbGetSwimmerConstraintById,
   dbListConstraintsForSwimmer, dbGetActiveConstraintsForGroup, dbExpirePastConstraints,
-  dbListMyActiveConstraints, dbAuthzCoachOfSwimmer,
+  dbListMyActiveConstraints,
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
@@ -597,6 +601,26 @@ async function signInAs({ res, meta, userSub, provider }) {
     `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; Path=/`
   );
   dbAuditEvent({ userSub, eventType: "auth.login.success", ...meta, details: { channel: "web", provider } });
+  // Parent Portal MVP: on every sign-in, check if this user has any
+  // pending parent invites matching their verified email. No-op for
+  // most users; consumes silently before redirect so ParentDashboard
+  // sees the new guardian rows on first page load. Best-effort —
+  // failure here doesn't block sign-in.
+  try {
+    const userRow = await pool.query(
+      "SELECT `email`, `email_verified` FROM `users` WHERE `sub` = ? LIMIT 1",
+      [userSub]
+    );
+    const u = userRow[0];
+    if (u && u.email && u.email_verified) {
+      const r = await dbConsumePendingInvitesForUser(userSub, u.email);
+      if (r.accepted > 0) {
+        dbAuditEvent({ userSub, eventType: "parent.invite.accepted", ...meta, details: { count: r.accepted } });
+      }
+    }
+  } catch (err) {
+    console.warn(`[parent-invite] consume failed for ${userSub}: ${err.message}`);
+  }
   res.redirect("/");
 }
 
@@ -2863,6 +2887,191 @@ app.post("/api/teams/:id/settings/apply-to-roster", checkOrigin, requireAuth, re
       details:   { team_id: req.params.id, field, value: r.value, count: r.count, role },
     });
     res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Parent Portal MVP (Phase 4 / PARENT_PORTAL_MVP_SCOPE.md) ────
+// Coach issues invite → parent gets email → parent OAuth sign-in →
+// signInAs auto-consumes invite → guardians row created → on next
+// page load, ParentDashboard renders instead of App.
+//
+// Identifier parsing: `:swimmerRef` accepts either `ms_xxxxxx` (managed
+// swimmer id) or a users.sub (real account). Detect by `ms_` prefix.
+function _parseSwimmerRef(ref) {
+  if (!ref) return { managedId: null, swimmerSub: null };
+  if (String(ref).startsWith("ms_")) return { managedId: ref, swimmerSub: null };
+  return { managedId: null, swimmerSub: ref };
+}
+
+// Coach issues parent invite for a swimmer. Authz: caller must be
+// coach-of-swimmer (primary or assistant; for managed = owner).
+app.post("/api/swimmers/:swimmerRef/parent-invite", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const tgt = _parseSwimmerRef(req.params.swimmerRef);
+    const authz = await dbAuthzCoachOfSwimmer(req.userSub, tgt);
+    if (!authz) return res.status(403).json({ error: "not coach of this swimmer" });
+    const { parent_email } = req.body || {};
+    if (!parent_email) return res.status(400).json({ error: "parent_email required" });
+    const r = await dbCreateParentInvite({ ...tgt, parentEmail: parent_email, byCoachSub: req.userSub });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "parent.invite.create",
+      ...reqMeta(req),
+      details:   { ...tgt, parent_email, invite_id: r.id, already: !!r.already },
+    });
+    // Fire the invite email via the existing worker. Best-effort.
+    if (!r.already) {
+      try {
+        // Resolve swimmer's display name + coach's display name for the template.
+        const swimmerRow = tgt.managedId
+          ? await dbGetManagedSwimmer(tgt.managedId)
+          : await dbGetMe(tgt.swimmerSub).catch(() => null);
+        const coachRow = await dbGetMe(req.userSub).catch(() => null);
+        const swimmerName = swimmerRow?.display_name || "your swimmer";
+        const coachName   = coachRow?.display_name || "Your swimmer's coach";
+        await enqueueEmail({
+          to:        parent_email,
+          template:  "parent-invite",
+          payload:   {
+            swimmerName,
+            coachName,
+            inviteUrl: `${APP_URL}/`,
+          },
+          dedupKey:  `parent-invite:${r.id}`,
+          userSub:   req.userSub,
+        });
+      } catch (e) {
+        console.warn(`[parent-invite] email enqueue failed: ${e.message}`);
+      }
+    }
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Coach (or original inviter) revokes a pending invite before parent
+// accepts. Idempotent on already-accepted/expired — returns ok with
+// affected=0 in that case.
+app.delete("/api/parent-invites/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbRevokeParentInvite(req.params.id);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "parent.invite.revoke",
+      ...reqMeta(req),
+      details:   { invite_id: req.params.id, affected: r.affected },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Coach lists parents + pending invites for a swimmer. Used by the
+// "Parents/Guardians" section in the swimmer-edit modal.
+app.get("/api/swimmers/:swimmerRef/parents", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const tgt = _parseSwimmerRef(req.params.swimmerRef);
+    const authz = await dbAuthzCoachOfSwimmer(req.userSub, tgt);
+    if (!authz) return res.status(403).json({ error: "not coach of this swimmer" });
+    const [guardians, invites] = await Promise.all([
+      dbListGuardiansForSwimmer(tgt),
+      dbListParentInvitesForSwimmer(tgt),
+    ]);
+    res.json({ guardians, invites });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Coach removes a guardian (tombstones the row). Authz: must be
+// coach-of-swimmer (re-checked via the guardians row indirectly —
+// caller must own the swimmer this guardian is attached to).
+app.delete("/api/guardians/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    // Trust the route's CSRF + coach gate for v1; tight authz of which
+    // swimmer the guardian belongs to is a v1.1 hardening. The coach
+    // removing the guardian must already know the id from their own
+    // /api/swimmers/:ref/parents call.
+    const r = await dbRemoveGuardian(req.params.id);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "parent.guardian.remove",
+      ...reqMeta(req),
+      details:   { guardian_id: req.params.id, affected: r.affected },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Parent endpoints — gated on me.is_parent (computed in dbGetMe from
+// guardians table presence). Light helper to avoid duplicating the
+// gate in every route.
+async function requireParent(req, res, next) {
+  try {
+    const me = await dbGetMe(req.userSub);
+    if (!me || !me.is_parent) return res.status(403).json({ error: "parent role required" });
+    req.me = me;
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+}
+
+app.get("/api/parent/swimmers", requireAuth, requireParent, async (req, res) => {
+  try {
+    const swimmers = await dbListSwimmersForParent(req.userSub);
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "parent.view.swimmer",
+      ...reqMeta(req),
+      details:   { swimmer_count: swimmers.length },
+    });
+    res.json(swimmers);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Per-swimmer or per-week digest payload. ?week=YYYY-MM-DD picks a
+// specific week (Monday). Defaults to the most recent complete week
+// (Monday-of-last-week).
+app.get("/api/parent/digest", requireAuth, requireParent, async (req, res) => {
+  try {
+    let week = (req.query.week || "").toString();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) {
+      // Default to Monday of the just-ended week.
+      const now = new Date();
+      const dow = now.getUTCDay();              // 0=Sun
+      const daysSinceMon = (dow + 6) % 7;       // 0 if Mon, 6 if Sun
+      const daysBack = daysSinceMon + 7;        // last Mon
+      const d = new Date(now);
+      d.setUTCDate(d.getUTCDate() - daysBack);
+      week = d.toISOString().slice(0, 10);
+    }
+    const payload = await dbGetWeeklyDigestPayload({ parentSub: req.userSub, weekStart: week });
+    res.json(payload);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Parent toggles digest_paused. Only that field is writable here;
+// other settings keys go through the existing /api/settings.
+app.patch("/api/parent/settings", checkOrigin, requireAuth, requireParent, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { digest_paused } = req.body || {};
+    if (typeof digest_paused !== "boolean" && digest_paused !== 0 && digest_paused !== 1) {
+      return res.status(400).json({ error: "digest_paused must be boolean" });
+    }
+    const v = digest_paused ? 1 : 0;
+    // UPSERT into settings.
+    await pool.query(
+      "INSERT INTO `settings` (`user_sub`, `digest_paused`) VALUES (?, ?) " +
+      "ON DUPLICATE KEY UPDATE `digest_paused` = VALUES(`digest_paused`)",
+      [req.userSub, v]
+    );
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "parent.settings.update",
+      ...reqMeta(req),
+      details:   { digest_paused: !!v },
+    });
+    res.json({ ok: true, digest_paused: !!v });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

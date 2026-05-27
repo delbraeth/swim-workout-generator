@@ -606,6 +606,33 @@ export async function dbGetMe(sub) {
     );
     const providers = providerRows.map(r => ({ provider: r.provider, linked_at: r.linked_at }));
 
+    // Parent Portal MVP: is_parent computed from existence of any active
+    // guardians row pointing at this user's person_id. Drives the App
+    // top-level branch to ParentDashboard when user is parent-only (not
+    // also coach). Family-coach case (parent + coach) stays on App with
+    // a "View as parent" toggle.
+    let isParent = false;
+    if (u.first_name) {  // implies persons row exists; FK target is valid
+      const guardCheck = await conn.query(
+        "SELECT 1 FROM `guardians` g JOIN `users` uu ON uu.`person_id` = g.`guardian_person_id` " +
+        "WHERE uu.`sub` = ? AND g.`removed_at` IS NULL LIMIT 1",
+        [sub]
+      );
+      isParent = guardCheck.length > 0;
+    }
+
+    // Parent Portal MVP: digest_paused lives on settings (per-parent
+    // opt-out, default ON). Pulled here so ParentDashboard can render
+    // the pause toggle without a second round-trip on mount.
+    let digestPaused = false;
+    if (isParent) {
+      const sRows = await conn.query(
+        "SELECT `digest_paused` FROM `settings` WHERE `user_sub` = ? LIMIT 1",
+        [sub]
+      );
+      digestPaused = !!(sRows[0] && sRows[0].digest_paused);
+    }
+
     return {
       sub:                     u.sub,
       email:                   u.email,
@@ -628,6 +655,8 @@ export async function dbGetMe(sub) {
       workout_count:           workoutCount,
       stats_by_pool:           stats,
       pending_feedback_count:  pendingFeedbackCount,
+      is_parent:               isParent,
+      digest_paused:           digestPaused,
     };
   } finally {
     conn.release();
@@ -3097,6 +3126,376 @@ export async function dbGetSeedingDefaultsForNewUser(userSub) {
     disfavor_mode:    r.default_disfavor_mode,
     equipment_modes:  r.default_equipment_modes,
   };
+}
+
+// ─── Parent Portal MVP (Phase 4 / PARENT_PORTAL_MVP_SCOPE.md) ──────
+// Coach invites parent via email → parent OAuth sign-in matches email →
+// guardians row created → ParentDashboard renders. Migration 042 adds
+// the parent_invites table; guardians + parent_contact_methods tables
+// come from migration 039 (Identity I-A) and were sitting empty until
+// now.
+//
+// All linking goes via persons.id (16-char px_xxxxxx). The
+// helpers below resolve managed/real swimmers + parent users to their
+// person_id consistently, since guardians.* columns are typed to
+// persons.id.
+
+const PARENT_INVITE_TTL_DAYS = 30;
+
+// Resolve a swimmer reference (managed_id OR swimmer_sub) to their
+// person_id. Returns null if not found. Used in invite + consume paths.
+async function _swimmerPersonId({ managedId = null, swimmerSub = null }) {
+  if (!managedId && !swimmerSub) return null;
+  if (managedId) {
+    const rows = await pool.query("SELECT `person_id` FROM `coach_managed_swimmers` WHERE `id` = ? LIMIT 1", [managedId]);
+    return rows[0]?.person_id || null;
+  }
+  const rows = await pool.query("SELECT `person_id` FROM `users` WHERE `sub` = ? LIMIT 1", [swimmerSub]);
+  return rows[0]?.person_id || null;
+}
+
+// Coach issues a parent invite for a specific swimmer. Authz: caller
+// must already be coach-of-swimmer (server route verifies via
+// dbAuthzCoachOfSwimmer). Idempotent on (parent_email, swimmer) — if a
+// pending invite already exists, returns it rather than creating a dup.
+// Email is lowercased for case-insensitive matching against OAuth
+// verified email later.
+export async function dbCreateParentInvite({ swimmerSub = null, managedId = null, parentEmail, byCoachSub }) {
+  if ((swimmerSub == null) === (managedId == null)) return { ok: false, reason: "specify_exactly_one_target" };
+  if (!parentEmail || !byCoachSub) return { ok: false, reason: "missing_args" };
+  const email = String(parentEmail).trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, reason: "bad_email" };
+  // Idempotent: existing pending invite for the same (email, swimmer) wins.
+  const existing = await pool.query(
+    "SELECT `id`, `state`, `expires_at` FROM `parent_invites` " +
+    "WHERE `parent_email` = ? AND `state` = 'pending' " +
+    "  AND " + (managedId ? "`swimmer_managed_id` = ?" : "`swimmer_sub` = ?") + " LIMIT 1",
+    [email, managedId || swimmerSub]
+  );
+  if (existing[0]) {
+    return { ok: true, id: Number(existing[0].id), already: true };
+  }
+  const expiresAt = new Date(Date.now() + PARENT_INVITE_TTL_DAYS * 86400 * 1000)
+    .toISOString().slice(0, 19).replace("T", " ");
+  const r = await pool.query(
+    "INSERT INTO `parent_invites` (`swimmer_managed_id`, `swimmer_sub`, `parent_email`, `invited_by_coach_sub`, `expires_at`) " +
+    "VALUES (?, ?, ?, ?, ?)",
+    [managedId, swimmerSub, email, byCoachSub, expiresAt]
+  );
+  return { ok: true, id: Number(r.insertId), expires_at: expiresAt };
+}
+
+// Coach (or invite creator) revokes a pending invite before parent
+// accepts it. State='revoked' rather than DELETE so audit + analytics
+// preserve the attempt.
+export async function dbRevokeParentInvite(inviteId) {
+  if (!inviteId) return { ok: false, reason: "missing_args" };
+  const r = await pool.query(
+    "UPDATE `parent_invites` SET `state` = 'revoked' WHERE `id` = ? AND `state` = 'pending'",
+    [Number(inviteId)]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Called from OAuth callbacks AFTER dbEnsureUser (so the parent's
+// users + persons rows exist). Matches the user's verified email
+// against pending invites + creates guardians rows for each match.
+// Most users have no pending invites — fast no-op for them.
+//
+// Returns { accepted: N, errors: [...] } for the route to optionally
+// surface "N invites accepted" UX (though spec v1 just silently goes
+// to ParentDashboard on next page load).
+export async function dbConsumePendingInvitesForUser(userSub, verifiedEmail) {
+  if (!userSub || !verifiedEmail) return { accepted: 0, errors: [] };
+  const email = String(verifiedEmail).trim().toLowerCase();
+  const guardianPersonId = await _swimmerPersonId({ swimmerSub: userSub });   // parent's person_id = their users.person_id
+  if (!guardianPersonId) return { accepted: 0, errors: ["parent_has_no_person"] };
+  const pending = await pool.query(
+    "SELECT `id`, `swimmer_managed_id`, `swimmer_sub`, `invited_by_coach_sub` " +
+    "FROM `parent_invites` " +
+    "WHERE `parent_email` = ? AND `state` = 'pending' AND `expires_at` > NOW()",
+    [email]
+  );
+  if (pending.length === 0) return { accepted: 0, errors: [] };
+  let accepted = 0;
+  const errors = [];
+  for (const inv of pending) {
+    const swimmerPid = await _swimmerPersonId({ managedId: inv.swimmer_managed_id, swimmerSub: inv.swimmer_sub });
+    if (!swimmerPid) { errors.push({ invite_id: Number(inv.id), reason: "swimmer_not_found" }); continue; }
+    try {
+      await pool.query(
+        "INSERT INTO `guardians` (`swimmer_person_id`, `guardian_person_id`, `relationship`, `added_by_sub`) " +
+        "VALUES (?, ?, 'guardian', ?)",
+        [swimmerPid, guardianPersonId, inv.invited_by_coach_sub]
+      );
+    } catch (e) {
+      // Duplicate guardians row → already linked, treat as success.
+      if (e.code !== "ER_DUP_ENTRY" && !/duplicate/i.test(e.message || "")) {
+        errors.push({ invite_id: Number(inv.id), reason: e.message || String(e) });
+        continue;
+      }
+    }
+    await pool.query(
+      "UPDATE `parent_invites` SET `state` = 'accepted', `accepted_at` = CURRENT_TIMESTAMP WHERE `id` = ?",
+      [inv.id]
+    );
+    accepted++;
+  }
+  return { accepted, errors };
+}
+
+// List active guardians (parents) for a swimmer. Used by coach view to
+// show "Parents/Guardians" list. Joins guardians → persons → users to
+// project display_name + email. Both LEFT JOINs are defensive.
+export async function dbListGuardiansForSwimmer({ managedId = null, swimmerSub = null }) {
+  if ((managedId == null) === (swimmerSub == null)) return [];
+  const swimmerPid = await _swimmerPersonId({ managedId, swimmerSub });
+  if (!swimmerPid) return [];
+  const rows = await pool.query(
+    "SELECT g.`id`, g.`relationship`, g.`added_at`, g.`added_by_sub`, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
+    "       u.`sub` AS user_sub, u.`email` " +
+    "  FROM `guardians` g " +
+    "  JOIN `persons` p ON p.`id` = g.`guardian_person_id` " +
+    "  LEFT JOIN `users` u ON u.`person_id` = p.`id` " +
+    " WHERE g.`swimmer_person_id` = ? AND g.`removed_at` IS NULL " +
+    " ORDER BY g.`added_at` ASC",
+    [swimmerPid]
+  );
+  return rows.map(r => ({
+    id:           Number(r.id),
+    user_sub:     r.user_sub,
+    display_name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+    email:        r.email,
+    relationship: r.relationship,
+    added_at:     dtToIso(r.added_at),
+    added_by_sub: r.added_by_sub,
+  }));
+}
+
+// Coach lists pending invites for a swimmer (UI shows them alongside
+// accepted guardians so coach knows "invite sent, awaiting response").
+export async function dbListParentInvitesForSwimmer({ managedId = null, swimmerSub = null }) {
+  if ((managedId == null) === (swimmerSub == null)) return [];
+  const where = managedId ? "`swimmer_managed_id` = ?" : "`swimmer_sub` = ?";
+  const rows = await pool.query(
+    "SELECT `id`, `parent_email`, `invited_by_coach_sub`, `state`, " +
+    "       `created_at`, `expires_at`, `accepted_at` " +
+    "  FROM `parent_invites` WHERE " + where + " ORDER BY `created_at` DESC",
+    [managedId || swimmerSub]
+  );
+  return rows.map(r => ({
+    id:                   Number(r.id),
+    parent_email:         r.parent_email,
+    invited_by_coach_sub: r.invited_by_coach_sub,
+    state:                r.state,
+    created_at:           dtToIso(r.created_at),
+    expires_at:           dtToIso(r.expires_at),
+    accepted_at:          dtToIso(r.accepted_at),
+  }));
+}
+
+// Coach removes a parent (tombstones the guardians row). Parent's
+// ParentDashboard no longer shows this swimmer next load. Audit-logged
+// at the route layer.
+export async function dbRemoveGuardian(guardianId) {
+  if (!guardianId) return { ok: false, reason: "missing_args" };
+  const r = await pool.query(
+    "UPDATE `guardians` SET `removed_at` = CURRENT_TIMESTAMP WHERE `id` = ? AND `removed_at` IS NULL",
+    [Number(guardianId)]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Parent dashboard: list the swimmers this parent is linked to. Joins
+// guardians → swimmer's person → back to either cms or users (the
+// swimmer is one or the other). Returns shape consumable by the
+// swimmer-selector + per-swimmer card.
+export async function dbListSwimmersForParent(parentSub) {
+  if (!parentSub) return [];
+  const parentPid = await _swimmerPersonId({ swimmerSub: parentSub });
+  if (!parentPid) return [];
+  // Pull every active guardian row → swimmer_person_id list.
+  const guardianRows = await pool.query(
+    "SELECT `swimmer_person_id` FROM `guardians` " +
+    "WHERE `guardian_person_id` = ? AND `removed_at` IS NULL",
+    [parentPid]
+  );
+  if (guardianRows.length === 0) return [];
+  const swimmerPids = guardianRows.map(r => r.swimmer_person_id);
+  const ph = swimmerPids.map(() => "?").join(",");
+  // Resolve each swimmer_person_id to either a cms row OR a users row.
+  // Project minimal display info; per-swimmer detail comes from
+  // dbGetWeeklyDigestPayload.
+  const cmsRows = await pool.query(
+    "SELECT m.`id` AS managed_id, m.`person_id`, m.`dob`, m.`gender`, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` " +
+    "  FROM `coach_managed_swimmers` m " +
+    "  JOIN `persons` p ON p.`id` = m.`person_id` " +
+    " WHERE m.`person_id` IN (" + ph + ") AND m.`archived` = 0",
+    swimmerPids
+  );
+  const userRows = await pool.query(
+    "SELECT u.`sub` AS swimmer_sub, u.`person_id`, u.`dob`, u.`gender`, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` " +
+    "  FROM `users` u " +
+    "  JOIN `persons` p ON p.`id` = u.`person_id` " +
+    " WHERE u.`person_id` IN (" + ph + ") AND u.`is_disabled` = 0",
+    swimmerPids
+  );
+  const seen = new Set();
+  const out = [];
+  for (const r of cmsRows) {
+    if (seen.has(r.person_id)) continue;
+    seen.add(r.person_id);
+    out.push({
+      kind:         "managed",
+      managed_id:   r.managed_id,
+      swimmer_sub:  null,
+      display_name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+      initials:     r.initials,
+      dob:          dateToYmd(r.dob),
+      age:          computeAge(r.dob),
+      gender:       r.gender,
+    });
+  }
+  for (const r of userRows) {
+    if (seen.has(r.person_id)) continue;
+    seen.add(r.person_id);
+    out.push({
+      kind:         "user",
+      managed_id:   null,
+      swimmer_sub:  r.swimmer_sub,
+      display_name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+      initials:     r.initials,
+      dob:          dateToYmd(r.dob),
+      age:          computeAge(r.dob),
+      gender:       r.gender,
+    });
+  }
+  // Sort by name for stable selector ordering.
+  out.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+  return out;
+}
+
+// Per-swimmer digest payload: assigned/done/yardage + upcoming +
+// attendance. weekStart = YYYY-MM-DD (Monday). Used by both the
+// in-app /api/parent/digest and the Sunday cron.
+export async function dbGetWeeklyDigestPayloadForSwimmer({ managedId = null, swimmerSub = null, weekStart }) {
+  if (!weekStart) return null;
+  // Compute week boundaries: weekStart 00:00 → weekStart+7d 00:00.
+  // Spec uses the week that just ended for "done", week ahead for
+  // "upcoming"; the caller supplies weekStart = Monday of the past
+  // week. Upcoming window is then weekStart+7d → weekStart+14d.
+  const ws = String(weekStart);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ws)) return null;
+  const start = new Date(ws + "T00:00:00");
+  const endOfWeek = new Date(start);  endOfWeek.setUTCDate(endOfWeek.getUTCDate() + 7);
+  const endOfNext = new Date(start);  endOfNext.setUTCDate(endOfNext.getUTCDate() + 14);
+  const wsStr   = ws;
+  const eowStr  = endOfWeek.toISOString().slice(0, 10);
+  const eonStr  = endOfNext.toISOString().slice(0, 10);
+
+  // Assignments done + total + yardage in the week. Target is
+  // polymorphic — match on swimmer_sub OR managed_id.
+  const tgtCol = managedId ? "target_managed_id" : "target_swimmer_sub";
+  const tgtVal = managedId || swimmerSub;
+  const wkRows = await pool.query(
+    "SELECT wa.`completion_state`, w.`total_yards` " +
+    "  FROM `workout_assignments` wa " +
+    "  JOIN `workouts` w ON w.`id` = wa.`workout_id` " +
+    " WHERE wa.`" + tgtCol + "` = ? AND wa.`assigned_at` >= ? AND wa.`assigned_at` < ?",
+    [tgtVal, wsStr + " 00:00:00", eowStr + " 00:00:00"]
+  );
+  const assigned = wkRows.length;
+  const done     = wkRows.filter(r => r.completion_state === "complete").length;
+  const yardage  = wkRows.filter(r => r.completion_state === "complete")
+                         .reduce((s, r) => s + Number(r.total_yards || 0), 0);
+
+  // Upcoming next week.
+  const nextRows = await pool.query(
+    "SELECT COUNT(*) AS n FROM `workout_assignments` " +
+    "WHERE `" + tgtCol + "` = ? AND `assigned_at` >= ? AND `assigned_at` < ?",
+    [tgtVal, eowStr + " 00:00:00", eonStr + " 00:00:00"]
+  );
+  const upcoming = Number(nextRows[0]?.n || 0);
+
+  // Attendance — scheduled_workouts marked done in the week. Match
+  // user_sub for full-account swimmers; managed swimmers don't have
+  // scheduled_workouts of their own (those land on the coach's account).
+  let attendance = { done: 0, total: 0 };
+  if (swimmerSub) {
+    const att = await pool.query(
+      "SELECT COUNT(*) AS total, " +
+      "       SUM(CASE WHEN `completed_at` IS NOT NULL THEN 1 ELSE 0 END) AS done " +
+      "  FROM `scheduled_workouts` " +
+      " WHERE `user_sub` = ? AND `scheduled_date` >= ? AND `scheduled_date` < ?",
+      [swimmerSub, wsStr, eowStr]
+    );
+    attendance = { done: Number(att[0]?.done || 0), total: Number(att[0]?.total || 0) };
+  }
+  return { assigned, done, yardage, upcoming, attendance, weekStart: wsStr };
+}
+
+// Top-level helper: build the full digest payload for a parent (all
+// their swimmers). Returns [{ swimmer, ...payload }] for the email
+// renderer + the in-app dashboard fetch.
+export async function dbGetWeeklyDigestPayload({ parentSub, weekStart }) {
+  const swimmers = await dbListSwimmersForParent(parentSub);
+  const blocks = [];
+  for (const s of swimmers) {
+    const payload = await dbGetWeeklyDigestPayloadForSwimmer({
+      managedId:   s.managed_id,
+      swimmerSub:  s.swimmer_sub,
+      weekStart,
+    });
+    if (payload) blocks.push({ swimmer: s, ...payload });
+  }
+  return { parentSub, weekStart, swimmers: blocks };
+}
+
+// Sunday-evening cron sweep. For every parent with at least one active
+// guardian row and digest_paused != 1, enqueue a digest email via the
+// existing email worker. Idempotent on (parent, weekStart) via the
+// enqueueEmail dedup_key — re-running the cron same week is a no-op.
+//
+// "weekStart" = the Monday-of-the-just-ended week (today is Sunday;
+// the week we recap is Mon last → Sun today).
+//
+// Returns { queued: N, skipped: N } for logging.
+export async function dbQueueWeeklyDigests({ weekStart, enqueueFn }) {
+  if (!weekStart || typeof enqueueFn !== "function") {
+    return { queued: 0, skipped: 0, error: "missing_args" };
+  }
+  // Parents = users that have ≥1 active guardian row pointing at them
+  // AND aren't disabled AND aren't digest-paused.
+  const parentRows = await pool.query(
+    "SELECT DISTINCT u.`sub`, u.`email`, u.`person_id`, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
+    "       COALESCE(s.`digest_paused`, 0) AS paused " +
+    "  FROM `users` u " +
+    "  JOIN `persons` p ON p.`id` = u.`person_id` " +
+    "  JOIN `guardians` g ON g.`guardian_person_id` = u.`person_id` AND g.`removed_at` IS NULL " +
+    "  LEFT JOIN `settings` s ON s.`user_sub` = u.`sub` " +
+    " WHERE u.`is_disabled` = 0 AND u.`email_verified` = 1"
+  );
+  let queued = 0, skipped = 0;
+  for (const p of parentRows) {
+    if (p.paused) { skipped++; continue; }
+    if (!p.email) { skipped++; continue; }
+    const payload = await dbGetWeeklyDigestPayload({ parentSub: p.sub, weekStart });
+    if (!payload.swimmers || payload.swimmers.length === 0) { skipped++; continue; }
+    const parentDisplayName = displayNameInline({ first_name: p.first_name, last_name: p.last_name, preferred_name: p.preferred_name });
+    await enqueueFn({
+      to:         p.email,
+      template:   "parent-digest",
+      payload:    { parentDisplayName, swimmers: payload.swimmers, weekStart },
+      dedupKey:   `parent-digest:${p.sub}:${weekStart}`,
+      userSub:    p.sub,
+    });
+    queued++;
+  }
+  return { queued, skipped };
 }
 
 // R-J: transfer a group's primary coach to a new sub. Used when removing a

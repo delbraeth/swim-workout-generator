@@ -14865,6 +14865,198 @@
       masters:     "Adults only (18+). Minimal compliance burden.",
     };
 
+    // Parent dashboard (PARENT_PORTAL_MVP_SCOPE.md §3 — 2026-05-27).
+    // Top-level view for users with at least one active guardian row.
+    // Shown when they toggle 👪 in nav, regardless of whether they're
+    // also a coach or swimmer themselves. The dashboard surfaces last
+    // week's recap + this-week schedule for each linked swimmer,
+    // plus a pause-digest toggle. Read-only — no write actions from
+    // here per spec.
+    function ParentDashboard({ me }) {
+      const [swimmers,    setSwimmers]    = React.useState(null);   // null = loading
+      const [thisWeek,    setThisWeek]    = React.useState(null);   // digest of week just ended
+      const [selectedId,  setSelectedId]  = React.useState(null);   // managed_id or swimmer_sub
+      const [paused,      setPaused]      = React.useState(!!me?.digest_paused);
+      const [savingPause, setSavingPause] = React.useState(false);
+      const [msg,         setMsg]         = React.useState(null);
+
+      React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+          try {
+            const [swRes, dgRes] = await Promise.all([
+              fetch("/api/parent/swimmers", { cache: "no-store" }),
+              fetch("/api/parent/digest",   { cache: "no-store" }),
+            ]);
+            if (!swRes.ok) throw new Error(`HTTP ${swRes.status} (swimmers)`);
+            const sw = await swRes.json();
+            if (cancelled) return;
+            setSwimmers(Array.isArray(sw) ? sw : []);
+            if (sw.length > 0) {
+              setSelectedId(sw[0].managed_id || sw[0].swimmer_sub);
+            }
+            if (dgRes.ok) {
+              const d = await dgRes.json();
+              setThisWeek(d);
+            }
+          } catch (e) {
+            if (!cancelled) { setSwimmers([]); setMsg(e.message); }
+          }
+        })();
+        return () => { cancelled = true; };
+      }, []);
+
+      const togglePause = async () => {
+        if (savingPause) return;
+        setSavingPause(true); setMsg(null);
+        const next = !paused;
+        try {
+          const res = await fetch("/api/parent/settings", {
+            method:  "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ digest_paused: next }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          setPaused(next);
+        } catch (e) {
+          setMsg(`Couldn't update digest preference: ${e.message}`);
+        } finally {
+          setSavingPause(false);
+        }
+      };
+
+      if (swimmers === null) {
+        return <div style={{ color: "var(--color-text-dim)", fontSize: 13, padding: 24 }}>Loading…</div>;
+      }
+      if (swimmers.length === 0) {
+        return (
+          <div>
+            <h2 style={{ color: "var(--color-text)", marginTop: 0 }}>👪 Parent view</h2>
+            <div className="card" style={{ padding: 20, borderRadius: 10, color: "var(--color-text-dim)", fontSize: 14, lineHeight: 1.6 }}>
+              <p style={{ marginTop: 0 }}>
+                No swimmers linked yet. Once a coach finishes the invite
+                process, your swimmer will show up here with their weekly
+                recap and what's coming up.
+              </p>
+              <p style={{ marginBottom: 0, color: "var(--color-text-muted)", fontSize: 13 }}>
+                If you weren't expecting to see this view, you can ignore it
+                — nothing changes for your account.
+              </p>
+            </div>
+          </div>
+        );
+      }
+
+      const blocks = (thisWeek && Array.isArray(thisWeek.swimmers)) ? thisWeek.swimmers : [];
+      const selected = swimmers.find(s => (s.managed_id || s.swimmer_sub) === selectedId) || swimmers[0];
+      const block = blocks.find(b => {
+        const bid = b.swimmer?.managed_id || b.swimmer?.swimmer_sub;
+        return bid === (selected.managed_id || selected.swimmer_sub);
+      });
+
+      return (
+        <div>
+          <h2 style={{ color: "var(--color-text)", marginTop: 0 }}>
+            👪 Parent view
+            <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 500, color: "var(--color-text-muted)" }}>
+              ({swimmers.length} {swimmers.length === 1 ? "swimmer" : "swimmers"})
+            </span>
+          </h2>
+
+          {/* Swimmer selector */}
+          {swimmers.length > 1 && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+              {swimmers.map(s => {
+                const sid = s.managed_id || s.swimmer_sub;
+                const active = sid === selectedId;
+                return (
+                  <button key={sid}
+                    onClick={() => setSelectedId(sid)}
+                    style={{
+                      padding: "6px 12px", borderRadius: 999,
+                      border: "1px solid " + (active ? "var(--color-primary)" : "var(--color-border)"),
+                      background: active ? "var(--color-primary)" : "var(--color-card)",
+                      color: active ? "var(--color-bg)" : "var(--color-text)",
+                      fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    }}>
+                    {s.display_name || s.initials || "Swimmer"}
+                    {s.age != null && <span style={{ marginLeft: 6, opacity: 0.75 }}>· {s.age}y</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* This week's recap card for the selected swimmer */}
+          <div className="card" style={{ padding: 16, borderRadius: 10, marginBottom: 14 }}>
+            <h3 style={{ color: "var(--color-text)", marginTop: 0, marginBottom: 4, fontSize: 15 }}>
+              {selected.display_name || "Swimmer"}
+            </h3>
+            <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 12 }}>
+              Last week (Mon–Sun){thisWeek?.weekStart ? ` · week of ${thisWeek.weekStart}` : ""}
+            </div>
+            {block ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
+                <Stat label="Workouts done"  value={`${block.done || 0} / ${block.assigned || 0}`} />
+                <Stat label="Yardage"        value={(block.yardage || 0).toLocaleString()} />
+                {block.attendance && block.attendance.total > 0 ? (
+                  <Stat label="Attendance" value={`${block.attendance.done} / ${block.attendance.total}`} />
+                ) : null}
+                <Stat label="Next week" value={`${block.upcoming || 0} scheduled`} />
+              </div>
+            ) : (
+              <div style={{ color: "var(--color-text-dim)", fontSize: 13, fontStyle: "italic" }}>
+                No data yet for last week. Once the coach assigns workouts (or
+                this swimmer logs their own), recaps will appear here.
+              </div>
+            )}
+          </div>
+
+          {/* Pause digest toggle */}
+          <div className="card" style={{ padding: 14, borderRadius: 10, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ color: "var(--color-text)", fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                Weekly Sunday digest
+              </div>
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
+                {paused
+                  ? "Paused. You can still check this page anytime."
+                  : "Sent Sunday evening (US-Eastern). Pause anytime."}
+              </div>
+            </div>
+            <button onClick={togglePause}
+              disabled={savingPause}
+              style={{
+                padding: "6px 12px", borderRadius: 8,
+                border: "1px solid " + (paused ? "var(--color-primary)" : "var(--color-border)"),
+                background: paused ? "var(--color-primary)" : "var(--color-card)",
+                color: paused ? "var(--color-bg)" : "var(--color-text)",
+                fontSize: 12, fontWeight: 700,
+                cursor: savingPause ? "wait" : "pointer",
+                opacity: savingPause ? 0.6 : 1,
+              }}>
+              {paused ? "▶ Resume" : "⏸ Pause"}
+            </button>
+          </div>
+
+          {msg && <div style={{ color: "var(--color-warn)", fontSize: 12, marginTop: 10 }}>{msg}</div>}
+        </div>
+      );
+    }
+
+    // Tiny presentational helper for ParentDashboard's stat tiles.
+    function Stat({ label, value }) {
+      return (
+        <div style={{ background: "var(--color-card-alt, rgba(255,255,255,0.04))", borderRadius: 8, padding: 10, border: "1px solid var(--color-border)" }}>
+          <div style={{ fontSize: 11, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{label}</div>
+          <div style={{ fontSize: 18, color: "var(--color-text)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+        </div>
+      );
+    }
+
     // Team roster v1 (2026-05-27). 🏊 Roster tab in TeamsView showing every
     // swimmer in any active group under the team, grouped by group section.
     // Read-only for all team coaches. Backed by /api/teams/:id/roster.
@@ -19780,6 +19972,179 @@
       );
     }
 
+    // Parents/Guardians subsection (Parent Portal MVP — 2026-05-27).
+    // Slots into the managed-swimmer detail view alongside Constraints +
+    // CoachNotes. Coach types a parent email → backend enqueues an
+    // invite email; parent signs in via Apple/Google with that email and
+    // the join completes server-side. Already-linked guardians can be
+    // removed (one-way; the parent has to be re-invited if removed).
+    // Pending invites can be revoked before the parent acts on them.
+    function ParentsPanel({ swimmerRef, swimmerName }) {
+      const [data,   setData]   = React.useState(null);                    // { guardians, invites }
+      const [email,  setEmail]  = React.useState("");
+      const [busy,   setBusy]   = React.useState(false);
+      const [msg,    setMsg]    = React.useState(null);
+      const [info,   setInfo]   = React.useState(null);
+
+      const load = React.useCallback(async () => {
+        try {
+          const res = await fetch(`/api/swimmers/${encodeURIComponent(swimmerRef)}/parents`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const j = await res.json();
+          setData({
+            guardians: Array.isArray(j.guardians) ? j.guardians : [],
+            invites:   Array.isArray(j.invites)   ? j.invites   : [],
+          });
+        } catch (e) { setMsg(`Load failed: ${e.message}`); setData({ guardians: [], invites: [] }); }
+      }, [swimmerRef]);
+      React.useEffect(() => { load(); }, [load]);
+
+      const submitInvite = async () => {
+        if (busy) return;
+        const trimmed = email.trim();
+        if (!trimmed) { setMsg("Enter the parent's email."); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { setMsg("That doesn't look like a valid email."); return; }
+        setBusy(true); setMsg(null); setInfo(null);
+        try {
+          const res = await fetch(`/api/swimmers/${encodeURIComponent(swimmerRef)}/parent-invite`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ email: trimmed }),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setEmail("");
+          setInfo(`Invite sent to ${trimmed}. They sign in with Apple or Google using that email to complete the link.`);
+          await load();
+        } catch (e) { setMsg(`Invite failed: ${e.message}`); }
+        finally { setBusy(false); }
+      };
+
+      const revokeInvite = async (id) => {
+        if (!window.confirm("Revoke this pending invite? You can re-invite later.")) return;
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/parent-invites/${id}`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setMsg(`Revoke failed: ${e.message}`); }
+        finally { setBusy(false); }
+      };
+
+      const removeGuardian = async (id, who) => {
+        if (!window.confirm(`Remove ${who || "this parent"} from ${swimmerName || "this swimmer"}?\n\nThey'll lose access to the parent view and the weekly digest. You can re-invite them later if needed.`)) return;
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/guardians/${id}`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setMsg(`Remove failed: ${e.message}`); }
+        finally { setBusy(false); }
+      };
+
+      if (data === null) {
+        return (
+          <div className="card" style={{ borderRadius: 10, padding: 14, marginBottom: 14, color: "var(--color-text-dim)", fontSize: 12 }}>
+            Loading parents…
+          </div>
+        );
+      }
+      const { guardians, invites } = data;
+
+      return (
+        <div className="card" style={{ borderRadius: 10, padding: 14, marginBottom: 14 }}>
+          <h3 style={{ color: "var(--color-text)", marginTop: 0, marginBottom: 10, fontSize: 14 }}>
+            👪 Parents & Guardians
+            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--color-text-muted)" }}>
+              · they see a weekly recap + read-only view
+            </span>
+          </h3>
+
+          {/* Current guardians */}
+          {guardians.length === 0 ? (
+            <div style={{ color: "var(--color-text-dim)", fontSize: 12, fontStyle: "italic", marginBottom: 10 }}>
+              No parents linked yet.
+            </div>
+          ) : (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Linked</div>
+              {guardians.map(g => (
+                <div key={g.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 8px", background: "var(--color-bg)", borderRadius: 6, marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, color: "var(--color-text)" }}>
+                    <strong>{g.display_name || g.email || "Parent"}</strong>
+                    {g.email && g.display_name && <span style={{ color: "var(--color-text-muted)", marginLeft: 6, fontSize: 11 }}>{g.email}</span>}
+                  </div>
+                  <button onClick={() => removeGuardian(g.id, g.display_name || g.email)} disabled={busy}
+                    style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", fontSize: 11, cursor: busy ? "wait" : "pointer" }}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pending invites */}
+          {invites.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Pending invites</div>
+              {invites.map(inv => (
+                <div key={inv.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 8px", background: "var(--color-bg)", borderRadius: 6, marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, color: "var(--color-text)" }}>
+                    <span>{inv.parent_email}</span>
+                    <span style={{ color: "var(--color-text-muted)", marginLeft: 8, fontSize: 11 }}>
+                      sent {inv.created_at ? new Date(inv.created_at).toLocaleDateString() : "—"}
+                    </span>
+                  </div>
+                  <button onClick={() => revokeInvite(inv.id)} disabled={busy}
+                    style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", fontSize: 11, cursor: busy ? "wait" : "pointer" }}>
+                    Revoke
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new parent */}
+          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 10 }}>
+            <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Invite a parent</div>
+            <div style={{ display: "flex", gap: 6, alignItems: "stretch", flexWrap: "wrap" }}>
+              <input
+                type="email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setMsg(null); }}
+                onKeyDown={e => { if (e.key === "Enter") submitInvite(); }}
+                placeholder="parent@example.com"
+                disabled={busy}
+                style={{ flex: 1, minWidth: 180, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 13 }}
+              />
+              <button onClick={submitInvite} disabled={busy || !email.trim()}
+                style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: busy ? "var(--color-border)" : "var(--color-primary)", color: "var(--color-bg)", fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>
+                {busy ? "Sending…" : "Send invite"}
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--color-text-dim)", marginTop: 6, lineHeight: 1.5 }}>
+              The parent gets an email with a link to SetForge. When they sign in with Apple or Google using this email, the link completes automatically — no token or password to manage.
+            </div>
+          </div>
+
+          {info && <div style={{ color: "var(--color-positive)", fontSize: 12, marginTop: 8 }}>{info}</div>}
+          {msg  && <div style={{ color: "var(--color-warn)",     fontSize: 12, marginTop: 8 }}>{msg}</div>}
+        </div>
+      );
+    }
+
     // Per-managed-swimmer Constraints subsection. Slots into the swimmer
     // detail view between ClaimTokensPanel and CoachNotesPanel.
     function ConstraintsPanel({ managedId }) {
@@ -20127,6 +20492,11 @@
             {/* Phase 3 PSC slice 3 — per-swimmer constraints (injury / equipment / cap restrictions) */}
             {!detail.archived && (
               <ConstraintsPanel managedId={detail.id} />
+            )}
+
+            {/* Parent Portal MVP — invite/revoke parents on this profile */}
+            {!detail.archived && (
+              <ParentsPanel swimmerRef={detail.id} swimmerName={detail.display_name} />
             )}
 
             {/* R-H: coach notes journal for this managed profile */}
@@ -25654,6 +26024,17 @@
                       {view === "week" ? "⏎" : "📅"}
                     </button>
                   )}
+                  {/* 👪 Parent view — visible when this user has at least one
+                      active guardian row (me.is_parent). Toggleable so users who
+                      are also a swimmer/coach can still reach their other views. */}
+                  {me?.is_parent && (
+                    <button onClick={() => setView(v => v === "parent" ? "generator" : "parent")}
+                      title={view === "parent" ? "Back to generator" : "Parent view (your swimmers)"}
+                      aria-label={view === "parent" ? "Back to generator" : "Parent view"}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-primary)", background: view === "parent" ? "var(--color-primary)" : "var(--color-card)", color: view === "parent" ? "var(--color-bg)" : "var(--color-primary)", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>
+                      {view === "parent" ? "⏎" : "👪"}
+                    </button>
+                  )}
                   {/* Setforge rebrand 2026-05-20 — Coach dropdown collapses
                       Teams / Swimmers / Catalog (REBRAND_SCOPE §8.1). Visible
                       only to coaches. Clicking the trigger toggles a small
@@ -25789,6 +26170,7 @@
           <main id="main-content" style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
 
             {view === "admin"    && <AdminView me={me} onStartImpersonation={handleStartImpersonation} />}
+            {view === "parent"   && <ParentDashboard me={me} />}
             {view === "teams"    && <TeamsView />}
             {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} />}
             {view === "week"     && (
