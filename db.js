@@ -665,16 +665,27 @@ export async function dbIsCoach(sub) {
 // becomes PII leakage; scope down (e.g., "only coaches in teams I'm in") when
 // the threat model warrants.
 export async function dbListCoachesForPicker(excludeSub) {
+  // Phase 4 Identity I-D slice 2: JOIN persons for display_name/initials.
+  // ORDER BY keeps u.display_name as the sort key — it stays in sync with
+  // persons-derived inline name for backfilled rows (parseDisplayName
+  // composes "first last" the same way). Resort by persons.last_name in
+  // I-F when legacy column is dropped.
   const rows = await pool.query(
-    "SELECT `sub`, `display_name`, `initials` FROM `users` " +
-    "WHERE (`is_coach` = 1 OR `is_admin` = 1) AND `is_disabled` = 0 AND `sub` != ? " +
-    "ORDER BY `display_name` ASC, `initials` ASC",
+    "SELECT u.`sub`, " +
+    "       u.`display_name` AS legacy_display_name, u.`initials` AS legacy_initials, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
+    "  FROM `users` u " +
+    "  LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
+    " WHERE (u.`is_coach` = 1 OR u.`is_admin` = 1) AND u.`is_disabled` = 0 AND u.`sub` != ? " +
+    " ORDER BY u.`display_name` ASC, u.`initials` ASC",
     [excludeSub || ""]
   );
   return rows.map(r => ({
     sub:          r.sub,
-    display_name: r.display_name,
-    initials:     r.initials,
+    display_name: r.first_name
+                    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                    : r.legacy_display_name,
+    initials:     r.person_initials || r.legacy_initials,
   }));
 }
 
@@ -2897,12 +2908,21 @@ function validateDob(dob) {
 }
 
 function rowToManagedSwimmer(r) {
+  // Phase 4 Identity I-D slice 2: if the caller JOINed persons and
+  // projected r.first_name, compute display_name from the helper.
+  // Otherwise fall back to the legacy r.display_name column. Same
+  // fallback shape as dbGetMe. Callers WITHOUT the JOIN (e.g., the
+  // pre-claim diff path) still work because r.first_name is undefined.
+  const displayName = r.first_name
+    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+    : r.display_name;
+  const initials = r.person_initials || r.initials;
   return {
     id:                   r.id,
     owner_coach_sub:      r.owner_coach_sub,
     team_id:              r.team_id,
-    display_name:         r.display_name,
-    initials:             r.initials,
+    display_name:         displayName,
+    initials:             initials,
     dob:                  dateToYmd(r.dob),
     age:                  computeAge(r.dob),
     is_minor:             isMinor(r.dob),
@@ -2976,10 +2996,18 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
 
 export async function dbGetManagedSwimmer(id) {
   if (!id || !MS_ID_RE.test(id)) return null;
+  // Phase 4 Identity I-D slice 2: LEFT JOIN persons. rowToManagedSwimmer
+  // computes display_name from the projection.
   const rows = await pool.query(
-    "SELECT `id`, `owner_coach_sub`, `team_id`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
-    "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `archived`, `created_at`, `updated_at` " +
-    "FROM `coach_managed_swimmers`WHERE `id` = ?",
+    "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
+    "       m.`display_name`, m.`initials`, " +
+    "       m.`dob`, m.`gender`, m.`parental_contact`, m.`parent_managed_flag`, " +
+    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
+    "       m.`archived`, m.`created_at`, m.`updated_at`, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
+    "  FROM `coach_managed_swimmers` m " +
+    "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
+    " WHERE m.`id` = ?",
     [id]
   );
   if (!rows[0]) return null;
@@ -2988,13 +3016,20 @@ export async function dbGetManagedSwimmer(id) {
 
 export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived = false } = {}) {
   if (!coachSub) return [];
-  const whereArchived = includeArchived ? "" : "AND `archived` = 0 ";
+  const whereArchived = includeArchived ? "" : "AND m.`archived` = 0 ";
+  // Phase 4 Identity I-D slice 2: LEFT JOIN persons; sort key stays on
+  // legacy m.display_name (in sync with persons-derived inline name).
   const rows = await pool.query(
-    "SELECT `id`, `owner_coach_sub`, `team_id`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
-    "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `archived`, `created_at`, `updated_at` " +
-    "FROM `coach_managed_swimmers`" +
-    "WHERE `owner_coach_sub` = ? " + whereArchived +
-    "ORDER BY `archived` ASC, `display_name` ASC",
+    "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
+    "       m.`display_name`, m.`initials`, " +
+    "       m.`dob`, m.`gender`, m.`parental_contact`, m.`parent_managed_flag`, " +
+    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
+    "       m.`archived`, m.`created_at`, m.`updated_at`, " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
+    "  FROM `coach_managed_swimmers` m " +
+    "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
+    " WHERE m.`owner_coach_sub` = ? " + whereArchived +
+    " ORDER BY m.`archived` ASC, m.`display_name` ASC",
     [coachSub]
   );
   return rows.map(rowToManagedSwimmer);
@@ -3497,18 +3532,27 @@ export async function dbRemoveGroupCoach(groupId, coachSub) {
 export async function dbListGroupMembers(groupId) {
   if (!groupId) return [];
   // Join both polymorphic targets — null-coalesce in the projection.
+  // Phase 4 Identity I-D slice 2: JOIN persons twice (one per polymorphic
+  // target). Project person columns from whichever side hit, then compute
+  // display_name in JS via displayNameInline. Legacy m/u display_name
+  // remains as COALESCE fallback for the I-D → I-F gap.
   const rows = await pool.query(
     "SELECT gm.`id`, gm.`member_swimmer_sub`, gm.`member_managed_id`, gm.`role`, " +
     "       gm.`joined_at`, gm.`left_at`, gm.`reason`, " +
-    "       COALESCE(m.`display_name`, u.`display_name`) AS display_name, " +
-    "       COALESCE(m.`initials`, u.`initials`)         AS initials, " +
+    "       COALESCE(m.`display_name`, u.`display_name`) AS legacy_display_name, " +
+    "       COALESCE(mp.`initials`, up.`initials`, m.`initials`, u.`initials`) AS initials, " +
+    "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
+    "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
+    "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name, " +
     "       COALESCE(m.`dob`, u.`dob`)                   AS dob, " +
     "       COALESCE(m.`gender`, u.`gender`)             AS gender " +
     "FROM `group_members` gm " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
     "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
+    "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
+    "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
     "WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL " +
-    "ORDER BY display_name ASC",
+    "ORDER BY legacy_display_name ASC",
     [groupId]
   );
   return rows.map(r => ({
@@ -3517,7 +3561,9 @@ export async function dbListGroupMembers(groupId) {
     member_managed_id:   r.member_managed_id,
     role:                r.role,
     joined_at:           dtToIso(r.joined_at),
-    display_name:        r.display_name,
+    display_name:        r.first_name
+                           ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
+                           : r.legacy_display_name,
     initials:            r.initials,
     dob:                 dateToYmd(r.dob),
     age:                 computeAge(r.dob),
