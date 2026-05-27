@@ -5931,17 +5931,22 @@ export async function dbGetCurationSupport({ startYmd, endYmd } = {}) {
   // 1. Per-team propagating disfavor count. Across all team's coaches,
   //    sum label-disfavorites + set-disfavorites + engine-disfavorites
   //    (engine_disfavorites lives in settings.extra JSON).
+  // NOTE: team_coaches.coach_sub was created with collation utf8mb4_general_ci
+  // (legacy migration default); disfavorites/user_disfavor_sets/settings/
+  // audit_events all use user_sub utf8mb4_unicode_ci. Explicit COLLATE on
+  // the team_coaches side prevents the "Illegal mix of collations" runtime
+  // error. Fix applied 2026-05-27 after Cap'n hit it in R6 Curation Support.
   const teamCoachRows = await pool.query(
     "SELECT t.`id` AS team_id, t.`name` AS team_name, " +
-    "       (SELECT COUNT(*) FROM `disfavorites` d JOIN `team_coaches` tc2 ON tc2.`coach_sub` = d.`user_sub` AND tc2.`team_id` = t.`id` AND tc2.`removed_at` IS NULL) AS label_count, " +
-    "       (SELECT COUNT(*) FROM `user_disfavor_sets` ds JOIN `team_coaches` tc3 ON tc3.`coach_sub` = ds.`user_sub` AND tc3.`team_id` = t.`id` AND tc3.`removed_at` IS NULL) AS set_count, " +
+    "       (SELECT COUNT(*) FROM `disfavorites` d JOIN `team_coaches` tc2 ON tc2.`coach_sub` COLLATE utf8mb4_unicode_ci = d.`user_sub` AND tc2.`team_id` = t.`id` AND tc2.`removed_at` IS NULL) AS label_count, " +
+    "       (SELECT COUNT(*) FROM `user_disfavor_sets` ds JOIN `team_coaches` tc3 ON tc3.`coach_sub` COLLATE utf8mb4_unicode_ci = ds.`user_sub` AND tc3.`team_id` = t.`id` AND tc3.`removed_at` IS NULL) AS set_count, " +
     "       (SELECT COUNT(DISTINCT tc4.`coach_sub`) FROM `team_coaches` tc4 WHERE tc4.`team_id` = t.`id` AND tc4.`removed_at` IS NULL) AS coach_count " +
     "FROM `teams` t WHERE t.`archived` = 0"
   );
   // Engine disfavorites count requires per-coach JSON parse. Pull once.
   const allCoachSettings = await pool.query(
     "SELECT s.`user_sub`, s.`extra` FROM `settings` s " +
-    "WHERE s.`user_sub` IN (SELECT DISTINCT `coach_sub` FROM `team_coaches` WHERE `removed_at` IS NULL)"
+    "WHERE s.`user_sub` IN (SELECT DISTINCT `coach_sub` COLLATE utf8mb4_unicode_ci FROM `team_coaches` WHERE `removed_at` IS NULL)"
   );
   const engineDisCountBySub = new Map();
   for (const r of allCoachSettings) {
@@ -5988,7 +5993,7 @@ export async function dbGetCurationSupport({ startYmd, endYmd } = {}) {
   const auditRows = await pool.query(
     "SELECT tc.`team_id`, ae.`event_type`, COUNT(*) AS n " +
     "FROM `audit_events` ae " +
-    "JOIN `team_coaches` tc ON tc.`coach_sub` = ae.`user_sub` AND tc.`removed_at` IS NULL " +
+    "JOIN `team_coaches` tc ON tc.`coach_sub` COLLATE utf8mb4_unicode_ci = ae.`user_sub` AND tc.`removed_at` IS NULL " +
     "WHERE ae.`created_at` BETWEEN ? AND ? " +
     "GROUP BY tc.`team_id`, ae.`event_type` " +
     "ORDER BY tc.`team_id`, n DESC",
