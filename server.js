@@ -227,14 +227,21 @@ const authLimiter = rateLimit({
 // same Apple ID no longer share one quota).
 //
 // Bumped 30→100 in 2026-05-23 after multi-device dev testing repeatedly
-// tripped the lower ceiling. CSRF still gates abuse; this is defense-
-// in-depth, not the primary gate.
+// tripped the lower ceiling. Bumped 100→500 in 2026-05-28 after pilot
+// 429s during app-load fetch storms (Profile/TeamsView/AssignedToMe all
+// fire many parallel reads on mount). CSRF still gates abuse; this is
+// defense-in-depth, not the primary gate.
+//
+// NOTE: if 429s persist after this bump, the source is likely Spaceship
+// Hyperlift's platform-level rate limiting, NOT our in-app limiter.
+// Real fix in that case is reducing request volume (composite bootstrap
+// endpoint per ROADMAP backlog), not raising more limits.
 //
 // ADMIN_SUBS env-var list is exempted entirely — admin testing across
 // many devices/tabs would otherwise self-DoS investigation flows.
 const writeLimiter = rateLimit({
   windowMs:         60 * 1000,
-  limit:            100,
+  limit:            500,
   standardHeaders:  true,
   legacyHeaders:    false,
   keyGenerator:     (req) => `${req.userSub || ""}|${req.ip}`,
