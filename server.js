@@ -54,7 +54,7 @@ import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
-import { BILLING_ACTIVE, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
+import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 
 import {
   pool, dbActive, pingDb,
@@ -2616,6 +2616,17 @@ app.get("/api/billing/history", requireAuth, async (req, res) => {
   try {
     const rows = await getBillingHistoryFor(req.userSub, req.query?.limit || 10);
     res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Admin diagnostic — reports which STRIPE_CONFIG fields are populated
+// without exposing the secret values themselves. Use to confirm at-a-glance
+// that BILLING_ACTIVE is true and all four fields are loaded. Returns
+// { active, config_source, has_secret_key, has_webhook, has_price_id,
+//   portal_return }.
+app.get("/api/admin/billing/config", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(billingConfigState());
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
