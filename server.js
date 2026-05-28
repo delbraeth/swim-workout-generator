@@ -78,7 +78,7 @@ import {
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   isMinor, postFeedbackToDiscord,
-  dbIsUser, dbIsAdmin, dbIsCoach, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe,
+  dbIsUser, dbIsAdmin, dbIsCoach, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe, dbGetBootstrapForUser,
   dbGetUserSubByProvider, dbLinkOAuthProvider, dbFindUserByVerifiedEmail,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
@@ -809,6 +809,32 @@ app.get("/api/me", requireAuth, async (req, res) => {
     const me = await dbGetMe(req.userSub);
     if (!me) return res.status(404).json({ error: "user not found" });
     res.json(me);
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Bootstrap composite endpoint — single round-trip equivalent to the 13
+// parallel /api/* reads the App fires on mount. See dbGetBootstrapForUser
+// for which sections are included and which are intentionally kept
+// separate. Billing status is composed here (not in db.js) because
+// getBillingStatusFor lives in lib/billing.js.
+//
+// Returns 404 if the user row vanishes mid-bootstrap (rare race during
+// account deletion). Each section has a documented fallback shape so the
+// client doesn't have to null-check every key — _errors[] lists any
+// helpers that failed so the client can decide to re-fetch lazily.
+app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
+  try {
+    const [bootstrap, billingStatus] = await Promise.all([
+      dbGetBootstrapForUser(req.userSub),
+      getBillingStatusFor(req.userSub).catch(err => {
+        console.warn(`[bootstrap] billing status failed for ${req.userSub}: ${err.message}`);
+        return { tier: "free" };
+      }),
+    ]);
+    if (!bootstrap || !bootstrap.me) return res.status(404).json({ error: "user not found" });
+    res.json({ ...bootstrap, billing: { status: billingStatus } });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
