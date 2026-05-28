@@ -663,6 +663,71 @@ export async function dbGetMe(sub) {
   }
 }
 
+// ─── bootstrap (composite endpoint) ─────────────────────────────────────────
+// Fans out all the parallel reads the App fires on mount as a single
+// in-process Promise.allSettled. Returns one payload with named sections
+// so the client can populate ~13 separate React states from one HTTP
+// round-trip. Per the 429 / fetch-storm investigation in [[swim-generator-roadmap-pointer]]
+// backlog — the proper architectural fix for app-load chattiness, even
+// though the rate-limit pressure itself was solved by bumping the
+// writeLimiter ceiling.
+//
+// Promise.allSettled (not .all) so a single helper failure doesn't tank
+// the whole bootstrap — affected sections come back as their fallback
+// shape ([], {}, null) and the section name lands in _errors[]. Client
+// can then decide per-section whether to retry or render degraded.
+//
+// NOT included (kept as separate endpoints):
+//   - /api/auth/status, /api/auth/csrf — different lifecycle, run before
+//     the user is even authenticated
+//   - /api/billing/* — composed at the route layer (lib/billing.js
+//     getBillingStatusFor isn't a db.js helper, doesn't belong here)
+//   - sessions, coach-impact, view-specific reads — fetched lazily by
+//     ProfileModal / TeamsView / AssignedToMe on their own mount
+//   - /api/picker/coach-targets, /api/events/upcoming — view-specific
+export async function dbGetBootstrapForUser(userSub) {
+  if (!userSub) return null;
+  const results = await Promise.allSettled([
+    dbGetMe(userSub),                          // 0
+    dbListWorkouts(userSub),                   // 1
+    dbGetSettings(userSub),                    // 2
+    dbListFavorites(userSub),                  // 3
+    dbListDisfavorites(userSub),               // 4
+    dbListFavoriteSets(userSub),               // 5
+    dbListDisfavorSets(userSub),               // 6
+    dbGetEffectiveFavorites(userSub),          // 7
+    dbGetEffectiveDisfavorites(userSub),       // 8
+    dbGetUgcOverlay(userSub),                  // 9
+    dbListGoals(userSub),                      // 10
+    dbListAnchorsForMemberSwimmer(userSub),    // 11
+    dbListMyActiveConstraints(userSub),        // 12
+  ]);
+  const sectionNames = [
+    "me", "workouts", "settings", "favorites", "disfavorites",
+    "favoriteSets", "disfavorSets", "effectiveFavorites", "effectiveDisfavorites",
+    "ugcOverlay", "goals", "groupAnchors", "myConstraints",
+  ];
+  const fallbacks = [
+    null, [], {}, [], [],
+    [], [], null, null,
+    {}, [], {}, { constraints: [] },
+  ];
+  const out = {};
+  const errs = [];
+  for (let i = 0; i < sectionNames.length; i++) {
+    const r = results[i];
+    if (r.status === "fulfilled") {
+      out[sectionNames[i]] = r.value;
+    } else {
+      out[sectionNames[i]] = fallbacks[i];
+      errs.push({ section: sectionNames[i], error: r.reason?.message || String(r.reason) });
+      console.warn(`[bootstrap] section '${sectionNames[i]}' failed for ${userSub}: ${r.reason?.message || r.reason}`);
+    }
+  }
+  if (errs.length > 0) out._errors = errs;
+  return out;
+}
+
 // ─── auth helpers ───────────────────────────────────────────────────────────
 export async function dbIsUser(sub) {
   if (!sub) return false;
