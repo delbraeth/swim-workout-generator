@@ -54,7 +54,7 @@ import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
-import { BILLING_ACTIVE, createCheckoutSession, createPortalSession, processWebhookEvent, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
+import { BILLING_ACTIVE, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 
 import {
   pool, dbActive, pingDb,
@@ -929,6 +929,34 @@ app.post("/api/admin/users/:sub/support-role", checkOrigin, requireAuth, require
       impersonatorSub: req.impersonatorSub || null,
     });
     res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Admin tier grant — bypasses Stripe for testers/pilots. Sets users.tier
+// with tier_source='admin_grant' so the lib/billing.js admin_grant bypass
+// kicks in (revoke also works without BILLING_ACTIVE). Audit-logged.
+// Body: { tier: 'coach' | 'program' | 'free' }
+app.post("/api/admin/users/:sub/tier", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
+  try {
+    const tier = String(req.body?.tier || "").toLowerCase();
+    if (!["free", "coach", "program"].includes(tier)) {
+      return res.status(400).json({ error: "invalid_tier", message: "tier must be free, coach, or program" });
+    }
+    const targetSub = req.params.sub;
+    let result;
+    if (tier === "free") {
+      result = await revokeTier({ userSub: targetSub, reason: "admin_grant_revoke" });
+    } else {
+      result = await grantTier({ userSub: targetSub, tier, source: "admin_grant" });
+    }
+    dbAuditEvent({
+      userSub:         req.userSub,
+      eventType:       tier === "free" ? "admin.user.tier.revoke" : "admin.user.tier.grant",
+      ...reqMeta(req),
+      details:         { target_sub: targetSub, tier, result },
+      impersonatorSub: req.impersonatorSub || null,
+    });
+    res.json({ ok: true, tier, result });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -2430,15 +2458,19 @@ function billingInactiveResponse(res) {
 app.post("/api/billing/checkout", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     if (!BILLING_ACTIVE) return billingInactiveResponse(res);
-    const returnUrl = `${APP_URL}/?upgrade=success`;
-    const result = await createCheckoutSession({ userSub: req.userSub, returnUrl });
+    const result = await createCheckoutSession({
+      userSub:    req.userSub,
+      successUrl: `${APP_URL}/?upgrade=success`,
+      cancelUrl:  `${APP_URL}/?upgrade=cancelled`,
+    });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "billing.checkout.start",
       ...reqMeta(req),
-      details:   { result_type: result?.url ? "session_created" : (result?.skipped || "unknown") },
+      details:   { result_type: result?.url ? "session_created" : (result?.error || result?.skipped || "unknown") },
     });
     if (result?.url) return res.json({ url: result.url });
+    if (result?.error === "no_price_id") return res.status(500).json({ error: "no_price_id", message: "Stripe price ID not configured. Set STRIPE_PRICE_ID_COACH_MONTHLY in env." });
     res.status(500).json({ error: "checkout_session_failed", result });
   } catch (err) {
     console.error("[billing/checkout]", err.message);
@@ -2483,14 +2515,54 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
       console.warn("[billing/webhook] received event but BILLING_ACTIVE=false; acking + dropping");
       return res.status(200).json({ acked: true, dropped: "billing_inactive" });
     }
-    // TODO when filling in: signature verification + stripe_webhook_events
-    // idempotency insert + processWebhookEvent dispatch.
-    const result = await processWebhookEvent(req.body);
-    res.status(200).json({ ok: true, result });
+
+    // Step 1: verify Stripe signature against raw body. Throws on bad
+    // signature → 400 (do NOT 200 here; bad signature could be an
+    // attacker, we want Stripe-side alerting on the dashboard).
+    const sigHeader = req.headers["stripe-signature"];
+    let stripeEvent;
+    try {
+      stripeEvent = verifyWebhookSignature(req.body, sigHeader);
+    } catch (sigErr) {
+      console.error("[billing/webhook] signature verify failed:", sigErr.message);
+      return res.status(400).json({ error: "invalid_signature" });
+    }
+
+    // Step 2: idempotency insert. Stripe re-sends on retry; we record
+    // the event_id with status=pending and rely on the PK to dedupe.
+    // ER_DUP_ENTRY means we've seen this event already — ack with 200
+    // and skip processing.
+    try {
+      await pool.query(
+        "INSERT INTO `stripe_webhook_events` (`stripe_event_id`, `event_type`, `payload_json`) VALUES (?, ?, ?)",
+        [stripeEvent.id, stripeEvent.type, JSON.stringify(stripeEvent).slice(0, 16777215)]
+      );
+    } catch (dupErr) {
+      if (dupErr.code === "ER_DUP_ENTRY" || /duplicate/i.test(dupErr.message || "")) {
+        return res.status(200).json({ ok: true, deduped: true, event_id: stripeEvent.id });
+      }
+      throw dupErr;
+    }
+
+    // Step 3: dispatch + mark processed. Errors here flip the row to
+    // failed but we still 200 (Stripe retries on non-200; we'd rather
+    // investigate ourselves via processed_status='failed').
+    try {
+      const result = await processWebhookEvent(stripeEvent);
+      await pool.query(
+        "UPDATE `stripe_webhook_events` SET `processed_status` = 'processed' WHERE `stripe_event_id` = ?",
+        [stripeEvent.id]
+      );
+      res.status(200).json({ ok: true, result });
+    } catch (procErr) {
+      console.error("[billing/webhook] process failed:", procErr.message);
+      await pool.query(
+        "UPDATE `stripe_webhook_events` SET `processed_status` = 'failed', `last_error` = ? WHERE `stripe_event_id` = ?",
+        [String(procErr.message || procErr).slice(0, 1000), stripeEvent.id]
+      );
+      res.status(200).json({ ok: false, error: procErr.message });
+    }
   } catch (err) {
-    // 200 even on internal error so Stripe doesn't retry — we've recorded
-    // the event in stripe_webhook_events and our own monitoring catches
-    // failures via processed_status='failed' rows.
     console.error("[billing/webhook]", err.message);
     res.status(200).json({ ok: false, error: err.message });
   }
