@@ -13804,23 +13804,17 @@
     // Spec: PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.9. Read-only by decision #7
     // (coach is write authority). Lives inside ProfileModal so swimmers see
     // their constraints in the same place they see favorites/disfavorites.
-    function ProfileActiveConstraintsSection() {
-      const [rows, setRows] = React.useState(null);
-      const [err,  setErr]  = React.useState(null);
-      React.useEffect(() => {
-        fetch(`${API_BASE}/me/constraints`, { cache: "no-store" })
-          .then(r => r.ok ? r.json() : null)
-          .then(d => {
-            if (d && Array.isArray(d.constraints)) setRows(d.constraints);
-            else setRows([]);
-          })
-          .catch(e => { setErr(e.message); setRows([]); });
-      }, []);
+    function ProfileActiveConstraintsSection({ constraints }) {
+      // Burst mitigation — accept constraints as a prop from ProfileModal
+      // (sourced from App-level myConstraints, populated by bootstrap).
+      // Dropped the standalone /api/me/constraints fetch.
+      const rows = Array.isArray(constraints) ? constraints : [];
+      const err = null;
 
       // Hide the entire section when the swimmer has no constraints —
       // ProfileModal is busy enough; empty cards add noise. Coach + admin
       // can still see "no constraints" on the per-swimmer panel.
-      if (rows === null || rows.length === 0) return null;
+      if (rows.length === 0) return null;
 
       return (
         <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
@@ -13848,10 +13842,15 @@
       );
     }
 
-    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent }) {
-      const [me, setMe]             = React.useState(null);
+    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints }) {
+      // Burst-mitigation — seed local state from App-level props (already
+      // hydrated by /api/me/bootstrap) instead of re-fetching on open. The
+      // loadAll fetch chain below skips these 6 endpoints. ProfileModal still
+      // owns local state for in-modal edits; on close/onProfileChange the App
+      // re-fetches what it needs.
+      const [me, setMe]             = React.useState(() => appMe || null);
       const [sessions, setSessions] = React.useState([]);
-      const [goals, setGoals]       = React.useState([]);
+      const [goals, setGoals]       = React.useState(() => Array.isArray(appGoals) ? appGoals : []);
       const [nextEvent, setNextEventLocal] = React.useState(null); // { name, date } | null
       const [phase, setPhaseLocal]  = React.useState(null);        // N5
       const [level, setLevelLocal]  = React.useState(null);        // J — swimmer-level preset
@@ -13859,13 +13858,18 @@
       const [revoking, setRevoking] = React.useState(false);
       const [revokeMsg, setRevokeMsg] = React.useState(null);
       // v1.4 — disfavorites audit panel
-      const [bankDisfavorites, setBankDisfavorites] = React.useState([]);
+      const [bankDisfavorites, setBankDisfavorites] = React.useState(() =>
+        Array.isArray(appDisfavorites) ? appDisfavorites : []);
       const [engineDisfavoritesLocal, setEngineDisfavoritesLocal] = React.useState([]);
-      // v1.10 — set-level disfavorites for the audit panel
-      const [setDisfavoritesLocal, setSetDisfavoritesLocal] = React.useState([]);
+      // v1.10 — set-level disfavorites for the audit panel — seeded from
+      // App-level disfavorSets (Set), which arrived via bootstrap.
+      const [setDisfavoritesLocal, setSetDisfavoritesLocal] = React.useState(() =>
+        appDisfavorSets instanceof Set ? Array.from(appDisfavorSets) : []);
       // v1.12 — favorites audit (parallel of disfavor panel)
-      const [bankFavoritesLocal, setBankFavoritesLocal] = React.useState([]);
-      const [setFavoritesLocal, setSetFavoritesLocal] = React.useState([]);
+      const [bankFavoritesLocal, setBankFavoritesLocal] = React.useState(() =>
+        Array.isArray(appFavorites) ? appFavorites : []);
+      const [setFavoritesLocal, setSetFavoritesLocal] = React.useState(() =>
+        appFavoriteSets instanceof Set ? Array.from(appFavoriteSets) : []);
       // v1.13 — engine favorites in the audit panel (mirror of v1.4 engine disfavorites)
       const [engineFavoritesLocal, setEngineFavoritesLocal] = React.useState([]);
       // v3.0 — coach curation impact (last 30 days, aggregate counts)
@@ -13886,47 +13890,43 @@
       const loadAll = React.useCallback(async () => {
         setLoading(true);
         try {
-          const [meRes, sessRes, goalsRes, settingsRes, disfavRes, disfavSetsRes, favRes, favSetsRes, teamDefRes] = await Promise.all([
-            fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
+          // Burst mitigation — dropped 6 fetches that bootstrap already
+          // populated at App level (me, goals, favorites, disfavorites,
+          // favorite-sets, disfavor-sets). Local state for those was seeded
+          // from the App props in the useState initializers above. /api/settings
+          // stays because `level` lives there and isn't lifted to App state.
+          // Remaining parallel burst on open: 3 GETs (settings, sessions,
+          // team-defaults). Billing + coach-impact are sequenced AFTER the
+          // Promise.all to avoid a same-tick burst.
+          const [sessRes, settingsRes, teamDefRes] = await Promise.all([
             fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
-            fetch("/api/goals", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/settings", { cache: "no-store" }).then(r => r.ok ? r.json() : {}),
-            fetch("/api/disfavorites", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
-            fetch("/api/disfavor-sets", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
-            fetch("/api/favorites", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
-            fetch("/api/favorite-sets", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
             fetch("/api/me/team-defaults", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
           ]);
-          setMe(meRes);
           setSessions(Array.isArray(sessRes) ? sessRes : []);
-          setGoals(Array.isArray(goalsRes) ? goalsRes : []);
           setNextEventLocal(settingsRes?.next_event && settingsRes.next_event.name && settingsRes.next_event.date ? settingsRes.next_event : null);
           setPhaseLocal(settingsRes?.phase && PHASES[settingsRes.phase] ? settingsRes.phase : null);
           setLevelLocal(settingsRes?.level && LEVEL_PRESETS[settingsRes.level] ? settingsRes.level : null);
-          // v1.4 — disfavorites panel
-          setBankDisfavorites(Array.isArray(disfavRes) ? disfavRes : []);
           setEngineDisfavoritesLocal(Array.isArray(settingsRes?.engine_disfavorites) ? settingsRes.engine_disfavorites : []);
-          // v1.10 — set-level disfavorites
-          setSetDisfavoritesLocal(Array.isArray(disfavSetsRes) ? disfavSetsRes : []);
-          // v1.12 — favorites audit
-          setBankFavoritesLocal(Array.isArray(favRes) ? favRes : []);
-          setSetFavoritesLocal(Array.isArray(favSetsRes) ? favSetsRes : []);
           // v1.13 — engine favorites (settings.extra.engine_favorites)
           setEngineFavoritesLocal(Array.isArray(settingsRes?.engine_favorites) ? settingsRes.engine_favorites : []);
           // TC slice 5 — team defaults inherited from group memberships
           setTeamDefaults(Array.isArray(teamDefRes) ? teamDefRes : []);
-          // v3.0 — coach impact fetch (gated on EFFECTIVE coach role so
-          // view-as solo also skips the fetch). Fire-and-forget. Not bundled
-          // into the Promise.all above because it needs the me result first.
-          if (appEffectiveMe ? appEffectiveMe.is_coach : meRes?.is_coach) {
+          // v1.8 — disfavor mode
+          if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
+            setDisfavorModeLocal(settingsRes.disfavor_mode);
+          }
+          // Sequenced post-Promise.all so they fire in a later tick — avoids
+          // tripping Hyperlift's burst threshold. v3.0 coach impact + Billing
+          // v1 status + history. Coach-impact gated on EFFECTIVE coach role
+          // so view-as solo also skips. All best-effort; failures don't break
+          // the modal open.
+          if (appEffectiveMe ? appEffectiveMe.is_coach : appMe?.is_coach) {
             fetch("/api/coach/curation-impact", { cache: "no-store" })
               .then(r => r.ok ? r.json() : null)
               .then(d => { if (d) setImpactData(d); })
               .catch(() => {});
           }
-          // Billing v1 — fetch subscription status + history. Both are
-          // safe to call regardless of BILLING_ACTIVE state (status reads
-          // users.tier; history reads billing_history table).
           fetch("/api/billing/status", { cache: "no-store" })
             .then(r => r.ok ? r.json() : null)
             .then(d => { if (d) setBillingStatus(d); })
@@ -13935,10 +13935,6 @@
             .then(r => r.ok ? r.json() : [])
             .then(d => { if (Array.isArray(d)) setBillingHistory(d); })
             .catch(() => {});
-          // v1.8 — disfavor mode
-          if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
-            setDisfavorModeLocal(settingsRes.disfavor_mode);
-          }
         } finally {
           setLoading(false);
         }
@@ -14380,7 +14376,7 @@
                     Closes scope decision #8 (transparency): swimmer sees their
                     own constraints with set-by + expiry. Read-only — coach is
                     the write authority. */}
-                <ProfileActiveConstraintsSection />
+                <ProfileActiveConstraintsSection constraints={appMyConstraints} />
 
                 {/* v1.12 — Favorites audit panel. Mirrors the v1.4/v1.10
                     Disfavorites panel for favorites. Bank labels + set IDs
@@ -24507,52 +24503,72 @@
       // had [] deps and already mounted). In that case, the 5-min polls
       // catch up. Per-section _errors are tolerated — that section keeps
       // its initial state until the next poll.
+      // Apply a /api/me/bootstrap payload to App-level state. Extracted from
+      // the mount useEffect so refreshBootstrap (post-mutation refresh) and
+      // ProfileModal close/save handlers can reuse the same hydration path
+      // without duplicating setters.
+      const applyBootstrap = useCallback((d) => {
+        if (!d || typeof d !== "object") return;
+        // me
+        if (d.me) setMe(d.me);
+        // workouts (history) — merge with local cache like the original useEffect did
+        if (Array.isArray(d.workouts)) {
+          const merged = mergeById(loadLocalHistory(), d.workouts);
+          setHistory(merged);
+          saveLocalHistory(merged);
+          setHistoryLoaded(true);
+        }
+        // favorites + sets (Set wrappers)
+        if (Array.isArray(d.favorites))     setFavorites(d.favorites);
+        if (Array.isArray(d.disfavorites))  setDisfavorites(d.disfavorites);
+        if (Array.isArray(d.favoriteSets))  setFavoriteSets(new Set(d.favoriteSets));
+        if (Array.isArray(d.disfavorSets))  setDisfavorSets(new Set(d.disfavorSets));
+        // effective favorites/disfavorites (three states each)
+        if (d.effectiveDisfavorites && typeof d.effectiveDisfavorites === "object") {
+          if (Array.isArray(d.effectiveDisfavorites.labels))  setEffectiveDisfavorLabels(d.effectiveDisfavorites.labels);
+          if (Array.isArray(d.effectiveDisfavorites.set_ids)) setEffectiveDisfavorSetIds(new Set(d.effectiveDisfavorites.set_ids));
+          if (Array.isArray(d.effectiveDisfavorites.engine))  setEffectiveEngineDisfavorites(d.effectiveDisfavorites.engine);
+        }
+        if (d.effectiveFavorites && typeof d.effectiveFavorites === "object") {
+          if (Array.isArray(d.effectiveFavorites.labels))  setEffectiveFavoriteLabels(d.effectiveFavorites.labels);
+          if (Array.isArray(d.effectiveFavorites.set_ids)) setEffectiveFavoriteSetIds(new Set(d.effectiveFavorites.set_ids));
+          if (Array.isArray(d.effectiveFavorites.engine))  setEffectiveEngineFavorites(d.effectiveFavorites.engine);
+        }
+        // PSC constraints
+        if (d.myConstraints && Array.isArray(d.myConstraints.constraints)) {
+          setMyConstraints(d.myConstraints.constraints);
+        }
+        // UGC overlay — only set if shape looks right
+        if (d.ugcOverlay && typeof d.ugcOverlay === "object" && "WARMUP_OPTIONS" in d.ugcOverlay) {
+          setUgcOverlay(d.ugcOverlay);
+        }
+        // Goals
+        if (Array.isArray(d.goals)) setGoals(d.goals);
+        // Settings — applied through the shared applySettings helper so
+        // we don't refetch /api/settings post-bootstrap. applySettings is
+        // a stable useCallback defined later in this component; deliberately
+        // not in the deps array (it's in TDZ at this point in source order,
+        // and the closure resolves at call time which is post-mount).
+        if (d.settings) applySettings(d.settings);
+      }, []);
+
+      // Programmatic bootstrap re-fetch. Replaces post-mutation refresh
+      // bursts (5-8 GETs after ProfileModal close) with a single composite
+      // GET. Returns the promise so callers can chain. Same stable-callback
+      // pattern as applyBootstrap — applyBootstrap is intentionally not in deps.
+      const refreshBootstrap = useCallback(() => {
+        return fetch(`${API_BASE}/me/bootstrap`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { applyBootstrap(d); return d; })
+          .catch(() => null);
+      }, []);
+
       useEffect(() => {
         if (!authenticated) return;
         let cancelled = false;
         fetch(`${API_BASE}/me/bootstrap`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : null)
-          .then(d => {
-            if (cancelled || !d) return;
-            // me
-            if (d.me) setMe(d.me);
-            // workouts (history) — merge with local cache like the original useEffect did
-            if (Array.isArray(d.workouts)) {
-              const merged = mergeById(loadLocalHistory(), d.workouts);
-              setHistory(merged);
-              saveLocalHistory(merged);
-              setHistoryLoaded(true);
-            }
-            // favorites + sets (Set wrappers)
-            if (Array.isArray(d.favorites))     setFavorites(d.favorites);
-            if (Array.isArray(d.disfavorites))  setDisfavorites(d.disfavorites);
-            if (Array.isArray(d.favoriteSets))  setFavoriteSets(new Set(d.favoriteSets));
-            if (Array.isArray(d.disfavorSets))  setDisfavorSets(new Set(d.disfavorSets));
-            // effective favorites/disfavorites (three states each)
-            if (d.effectiveDisfavorites && typeof d.effectiveDisfavorites === "object") {
-              if (Array.isArray(d.effectiveDisfavorites.labels))  setEffectiveDisfavorLabels(d.effectiveDisfavorites.labels);
-              if (Array.isArray(d.effectiveDisfavorites.set_ids)) setEffectiveDisfavorSetIds(new Set(d.effectiveDisfavorites.set_ids));
-              if (Array.isArray(d.effectiveDisfavorites.engine))  setEffectiveEngineDisfavorites(d.effectiveDisfavorites.engine);
-            }
-            if (d.effectiveFavorites && typeof d.effectiveFavorites === "object") {
-              if (Array.isArray(d.effectiveFavorites.labels))  setEffectiveFavoriteLabels(d.effectiveFavorites.labels);
-              if (Array.isArray(d.effectiveFavorites.set_ids)) setEffectiveFavoriteSetIds(new Set(d.effectiveFavorites.set_ids));
-              if (Array.isArray(d.effectiveFavorites.engine))  setEffectiveEngineFavorites(d.effectiveFavorites.engine);
-            }
-            // PSC constraints
-            if (d.myConstraints && Array.isArray(d.myConstraints.constraints)) {
-              setMyConstraints(d.myConstraints.constraints);
-            }
-            // UGC overlay — only set if shape looks right
-            if (d.ugcOverlay && typeof d.ugcOverlay === "object" && "WARMUP_OPTIONS" in d.ugcOverlay) {
-              setUgcOverlay(d.ugcOverlay);
-            }
-            // Goals
-            if (Array.isArray(d.goals)) setGoals(d.goals);
-            // Settings — applied through the shared applySettings helper so
-            // we don't refetch /api/settings post-bootstrap.
-            if (d.settings) applySettings(d.settings);
-          })
+          .then(d => { if (!cancelled) applyBootstrap(d); })
           .catch(() => { /* tolerated; ref flip in finally */ })
           .finally(() => {
             if (!cancelled) bootstrapHydratingRef.current = false;
@@ -27588,50 +27604,18 @@
             <ProfileModal
               onClose={() => {
                 setShowProfile(false);
-                // Refresh cached /api/me so header gates + initials stay current
-                fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
-                // Refresh goals + settings so stats-panel progress bars and the
-                // Q next-event chip reflect edits made in the modal.
-                refreshGoals();
-                refreshSettings();
+                // Burst mitigation — was 3 parallel GETs (me, goals,
+                // settings). Replaced with a single bootstrap re-fetch which
+                // refreshes me + goals + settings + everything else in one
+                // round-trip.
+                refreshBootstrap();
               }}
               onProfileChange={() => {
-                // Live-refresh App-level `me` (for header personalization) and
-                // settings (for the next-event chip) so changes appear immediately
-                // even if the modal stays open.
-                fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
-                refreshSettings();
-                // v1.4 — refresh disfavorites in App state when the user
-                // removed one from the panel. /api/disfavorites is separate
-                // from /api/settings so refreshSettings alone doesn't cover
-                // the bank list (engine list IS in settings.extra so it gets
-                // covered via refreshSettings).
-                fetch(`${API_BASE}/disfavorites`, { cache: "no-store" })
-                  .then(r => r.ok ? r.json() : [])
-                  .then(data => { if (Array.isArray(data)) setDisfavorites(data); })
-                  .catch(() => {});
-                // v1.10 — also refresh set-level disfavorites (separate
-                // endpoint from settings.extra) and effective union
-                // (coach propagation re-merge).
-                fetch(`${API_BASE}/disfavor-sets`, { cache: "no-store" })
-                  .then(r => r.ok ? r.json() : [])
-                  .then(data => { if (Array.isArray(data)) setDisfavorSets(new Set(data)); })
-                  .catch(() => {});
-                refreshEffectiveDisfavorites();
-                // v1.12 — refresh own favorites + favorite-sets so removes
-                // from the new audit panel propagate to App-level picker
-                // state (favorites get 3× boost).
-                fetch(`${API_BASE}/favorites`, { cache: "no-store" })
-                  .then(r => r.ok ? r.json() : [])
-                  .then(data => { if (Array.isArray(data)) setFavorites(data); })
-                  .catch(() => {});
-                fetch(`${API_BASE}/favorite-sets`, { cache: "no-store" })
-                  .then(r => r.ok ? r.json() : [])
-                  .then(data => { if (Array.isArray(data)) setFavoriteSets(new Set(data)); })
-                  .catch(() => {});
-                // v1.13 — coach-propagated favorites: re-merge the union so
-                // panel removes propagate to the App's picker state.
-                refreshEffectiveFavorites();
+                // Burst mitigation — was 8 parallel GETs (me, settings,
+                // disfavorites, disfavor-sets, effective-disfavorites,
+                // favorites, favorite-sets, effective-favorites). Replaced
+                // with a single bootstrap re-fetch which covers all of them.
+                refreshBootstrap();
               }}
               onPaceUpdate={(newPace) => {
                 // J — LevelRow pushes a preset pace up to App when a level
@@ -27645,7 +27629,17 @@
               appViewAsRole={viewAsRole}
               appSetViewAsRole={setViewAsRole}
               appViewAsParent={viewAsParent}
-              appSetViewAsParent={setViewAsParent} />
+              appSetViewAsParent={setViewAsParent}
+              /* Burst-mitigation — pass App-level state already populated by
+                 bootstrap so ProfileModal can seed its local state without
+                 re-fetching. Each prop replaces one GET in the open burst. */
+              appMe={me}
+              appGoals={goals}
+              appFavorites={favorites}
+              appDisfavorites={disfavorites}
+              appFavoriteSets={favoriteSets}
+              appDisfavorSets={disfavorSets}
+              appMyConstraints={myConstraints} />
           )}
           {showFeedback && (
             <FeedbackModal onClose={() => setShowFeedback(false)} />
