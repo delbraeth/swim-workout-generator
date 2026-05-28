@@ -114,10 +114,11 @@
   <h2>Authentication</h2>
   <p><strong>OAuth-only.</strong> SetForge never stores a password because we never have one. Sign-in is delegated to your existing identity provider:</p>
   <ul>
-    <li><strong>Apple — Sign in with Apple</strong> (live today, primary method)</li>
-    <li><strong>Google OAuth</strong> (planned; see <a href="/changelog.html">changelog</a>)</li>
+    <li><strong>Sign in with Apple</strong> — live</li>
+    <li><strong>Sign in with Google</strong> — live</li>
   </ul>
   <p>SetForge stores the opaque <code>sub</code> identifier returned by the provider plus the email address you authorized it to share. No third-party trackers, no analytics SDKs, no behavioral fingerprinting.</p>
+  <p style="color: #6b7280; font-size: 14px;"><strong>Account linking across providers.</strong> If your verified email address is the same for both Apple and Google, signing in with the second provider after the first will link them into one SetForge account. One known edge case: users who previously signed in with Apple using "Hide My Email" (Apple's <code>@privaterelay.appleid.com</code> address) will end up with two separate accounts when they later sign in with Google, because the relayed Apple address can't match the real Google one. Email <a href="mailto:hello@competitionaquatics.com">hello@competitionaquatics.com</a> to merge manually — see the <a href="/privacy.html">Privacy Policy</a> for details.</p>
 
   <h2>What we collect</h2>
   <p>Only what's needed to operate the app:</p>
@@ -134,7 +135,7 @@
     <li>Session recordings (no FullStory, Hotjar, LogRocket)</li>
     <li>Ad pixels (no Facebook Pixel, LinkedIn Insight, Twitter pixel)</li>
     <li>A/B testing data (no LaunchDarkly, Optimizely, Statsig)</li>
-    <li>Marketing tracking from email (planned email won't carry tracking pixels either)</li>
+    <li>Marketing tracking from email (transactional email is now live via Resend and does not carry tracking pixels)</li>
   </ul>
   <p>See the <a href="/sub-processors.html">sub-processor list</a> for every vendor that touches user data.</p>
 
@@ -185,7 +186,7 @@
     <li><strong>ISO 27001.</strong> Same.</li>
     <li><strong>HIPAA BAA.</strong> SetForge is not designed for protected health information.</li>
     <li><strong>Off-site backup tier separate from primary hosting.</strong> Spaceship's backup retention is the only backup today.</li>
-    <li><strong>24/7 incident response.</strong> One operator; response within a few business days; urgent incidents communicated by email when outbound email is live.</li>
+    <li><strong>24/7 incident response.</strong> One operator; response within a few business days; urgent incidents communicated by email.</li>
     <li><strong>Bug bounty program.</strong> Not run. Security reports welcome at <a href="mailto:hello@competitionaquatics.com">hello@competitionaquatics.com</a>; we'll credit and respond.</li>
   </ul>
 
