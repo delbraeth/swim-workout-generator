@@ -118,14 +118,14 @@
   <h2>Eligibility</h2>
   <ul>
     <li>You must be <strong>18 or older</strong>, or using the app under the supervision of a parent or guardian who accepts these terms on your behalf.</li>
-    <li>You must have a valid Apple ID and accept Apple's terms for Sign in with Apple.</li>
+    <li>You must have a valid Apple ID or Google account and accept the respective provider's terms (Sign in with Apple, Sign in with Google).</li>
     <li>You must have received a valid invite link from the operator or an existing user.</li>
   </ul>
 
   <h2>Your account</h2>
   <ul>
-    <li><strong>One account per person.</strong> Your account is tied to your Apple ID; don't share login access.</li>
-    <li><strong>Keep your Apple ID secure.</strong> Your account is only as safe as your Apple ID — use 2FA on your Apple ID.</li>
+    <li><strong>One account per person.</strong> Your account is tied to your OAuth identity (Apple or Google); don't share login access.</li>
+    <li><strong>Keep your OAuth account secure.</strong> Your SetForge account is only as safe as the Apple or Google account it's signed in with — enable 2FA on that account.</li>
     <li><strong>Revoking sessions.</strong> If you suspect a device is compromised, use the Account menu to sign out everywhere else or revoke specific sessions.</li>
     <li><strong>Account deletion.</strong> If you want your account removed, contact the operator and your account plus all attached data will be permanently deleted (see the Privacy Policy for what gets deleted).</li>
   </ul>
@@ -163,6 +163,50 @@
 
   <h2>Limitation of liability</h2>
   <p>To the maximum extent permitted by law, the operator is not liable for any direct, indirect, incidental, consequential, or punitive damages arising from your use of the App — including but not limited to injury, equipment failure, lost data, or service interruption. Your sole remedy for dissatisfaction is to stop using the App.</p>
+
+  <h2>Subscriptions and billing</h2>
+
+  <div class="callout">
+    <strong>The swimmer tier is free forever.</strong> SetForge commits in these Terms that swimmer-tier access (generating, viewing, and running workouts for your own account) will remain free of charge for the lifetime of the service. This is a contractual commitment, not a marketing promise.
+  </div>
+
+  <h3>Tiers</h3>
+  <ul>
+    <li><strong>Swimmer (Free, permanent).</strong> Generating workouts, viewing assigned workouts from a coach, marking workouts complete, favorites and disfavorites, history. Always free, for everyone.</li>
+    <li><strong>Coach — $10 USD per month.</strong> Coach-only features (managed swimmers, teams, groups, group assignments, multi-lane generate, coach reports, UGC authoring, team curation). 14-day free trial; payment method required at signup; cancel any time before day 14 for no charge.</li>
+    <li><strong>Lesson tier (planned).</strong> Pricing locked at $5-7 USD per month, not yet built. Will be a discounted Coach variant for private/independent coaches who manage a small number of swimmers.</li>
+    <li><strong>Program — $300 USD per year, invoiced annually.</strong> For teams and organizations; includes the Coach feature set plus team-level curation, board-grade audit artifacts, and a vendor paper kit (DPA, sub-processor list, breach SLA, services agreement). Invoiced via Stripe; net-30 payment terms.</li>
+  </ul>
+
+  <h3>Trials</h3>
+  <p>The Coach tier includes a 14-day free trial. A valid payment method is required to start the trial. You will not be charged during the trial. You may cancel any time before the end of the trial through Stripe's customer portal (linked from your Profile) and incur no charge.</p>
+
+  <h3>Cancellation</h3>
+  <ul>
+    <li><strong>How to cancel.</strong> Open your Profile → "Manage subscription" to access Stripe's customer portal, then click "Cancel subscription." No phone calls, no support tickets required.</li>
+    <li><strong>What happens at cancellation.</strong> Your access continues through the end of the current billing period (you've paid for it). After the period ends, your account remains active on the Swimmer (Free) tier — your workouts, history, favorites, and group memberships are preserved. Coach-only features become unavailable until you resubscribe.</li>
+    <li><strong>Resubscribing.</strong> You can resubscribe any time and immediately regain access to Coach-tier features. Your data is preserved across subscription gaps; nothing is deleted because you stopped paying.</li>
+    <li><strong>Annual (Program) cancellation.</strong> Program-tier subscriptions are billed annually. Cancellation stops auto-renewal at the end of the current annual term. Mid-term cancellation does not automatically prorate; see Refunds below.</li>
+  </ul>
+
+  <h3>Refunds</h3>
+  <ul>
+    <li><strong>Coach tier (monthly).</strong> Refunds are handled case-by-case as a goodwill matter. If you were charged for a month you didn't intend to use, email <a href="mailto:hello@competitionaquatics.com">hello@competitionaquatics.com</a> within 30 days of the charge and the operator will issue a refund through Stripe.</li>
+    <li><strong>Program tier (annual).</strong> Prorated refund available within the first 60 days of the annual term, calculated as the unused portion minus a $50 administrative fee. No refunds after 60 days; you keep access through the end of the paid term.</li>
+    <li><strong>Trial cancellations.</strong> No refund needed — you weren't charged.</li>
+  </ul>
+
+  <h3>Payment processing</h3>
+  <p>All payments are processed by Stripe (US-based). SetForge does not see or store your card number, CVV, or expiration date. We store only the Stripe customer ID and an in-app history of which invoices have been paid (for the "billing history" view in your Profile). See the <a href="/privacy.html">Privacy Policy</a> for the full Stripe data flow.</p>
+
+  <h3>Failed payments</h3>
+  <p>If a Coach-tier subscription payment fails, Stripe will automatically retry per its standard schedule (typically 3 attempts over 7 days). If all retries fail, your subscription is cancelled and the account drops to the Swimmer (Free) tier. Data is preserved. You can resubscribe with an updated payment method any time.</p>
+
+  <h3>Price changes</h3>
+  <p>The operator may change the price of paid tiers with at least 30 days' advance notice by email to active subscribers. If you don't agree with the new price, cancel before the change takes effect and keep access through the end of your current paid period at the old price.</p>
+
+  <h3>Comp / promotional access</h3>
+  <p>The operator may grant Coach-tier access at no charge to pilot testers, early customers, or for support purposes. Comped access has no payment method on file; the operator can revoke it any time. Audit logs record every comp grant.</p>
 
   <h2>Service availability and changes</h2>
   <ul>
