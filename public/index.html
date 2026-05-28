@@ -24466,6 +24466,15 @@
         if (typeof window !== "undefined") window.location.reload();
       }, []);
 
+      // Bootstrap composite (2026-05-28). Replaces ~13 parallel /api/* reads
+      // on app load with a single /api/me/bootstrap request. Mitigates 429s
+      // from Spaceship Hyperlift's platform-level inbound rate limit. The
+      // ref starts true so the ~13 individual mount-time useEffects below
+      // can check it as a "skip the duplicate fetch" guard. Bootstrap
+      // completion (success OR failure) flips the ref to false so the
+      // post-mount 5-min polls and post-mutation refreshes still work.
+      const bootstrapHydratingRef = React.useRef(true);
+
       // On mount: check auth status via session cookie (set by /auth/callback)
       useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -24480,23 +24489,92 @@
             setAuthMode(data.mode === "open" ? "open" : "apple");
             if (data.authenticated) {
               refreshCsrf();
-              fetch("/api/me").then(r => r.ok ? r.json() : null).then(setMe).catch(() => {});
+              // Don't fetch /api/me here — bootstrap useEffect below handles it.
+            } else {
+              // Not authed; nothing to bootstrap, free the ref so any
+              // post-sign-in fetches run normally.
+              bootstrapHydratingRef.current = false;
             }
           })
-          .catch(() => { setAuthenticated(false); setAuthMode(null); });
+          .catch(() => { setAuthenticated(false); setAuthMode(null); bootstrapHydratingRef.current = false; });
       }, []);
+
+      // Bootstrap fetch — fires when auth confirms. Hydrates 13 sections in
+      // one round-trip. Each section that comes back populates its state
+      // directly; the original individual mount-time useEffects skip via the
+      // bootstrapHydratingRef guard. If bootstrap fails entirely, the ref
+      // flips to false and the individual useEffects... won't re-fire (they
+      // had [] deps and already mounted). In that case, the 5-min polls
+      // catch up. Per-section _errors are tolerated — that section keeps
+      // its initial state until the next poll.
+      useEffect(() => {
+        if (!authenticated) return;
+        let cancelled = false;
+        fetch(`${API_BASE}/me/bootstrap`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (cancelled || !d) return;
+            // me
+            if (d.me) setMe(d.me);
+            // workouts (history) — merge with local cache like the original useEffect did
+            if (Array.isArray(d.workouts)) {
+              const merged = mergeById(loadLocalHistory(), d.workouts);
+              setHistory(merged);
+              saveLocalHistory(merged);
+              setHistoryLoaded(true);
+            }
+            // favorites + sets (Set wrappers)
+            if (Array.isArray(d.favorites))     setFavorites(d.favorites);
+            if (Array.isArray(d.disfavorites))  setDisfavorites(d.disfavorites);
+            if (Array.isArray(d.favoriteSets))  setFavoriteSets(new Set(d.favoriteSets));
+            if (Array.isArray(d.disfavorSets))  setDisfavorSets(new Set(d.disfavorSets));
+            // effective favorites/disfavorites (three states each)
+            if (d.effectiveDisfavorites && typeof d.effectiveDisfavorites === "object") {
+              if (Array.isArray(d.effectiveDisfavorites.labels))  setEffectiveDisfavorLabels(d.effectiveDisfavorites.labels);
+              if (Array.isArray(d.effectiveDisfavorites.set_ids)) setEffectiveDisfavorSetIds(new Set(d.effectiveDisfavorites.set_ids));
+              if (Array.isArray(d.effectiveDisfavorites.engine))  setEffectiveEngineDisfavorites(d.effectiveDisfavorites.engine);
+            }
+            if (d.effectiveFavorites && typeof d.effectiveFavorites === "object") {
+              if (Array.isArray(d.effectiveFavorites.labels))  setEffectiveFavoriteLabels(d.effectiveFavorites.labels);
+              if (Array.isArray(d.effectiveFavorites.set_ids)) setEffectiveFavoriteSetIds(new Set(d.effectiveFavorites.set_ids));
+              if (Array.isArray(d.effectiveFavorites.engine))  setEffectiveEngineFavorites(d.effectiveFavorites.engine);
+            }
+            // PSC constraints
+            if (d.myConstraints && Array.isArray(d.myConstraints.constraints)) {
+              setMyConstraints(d.myConstraints.constraints);
+            }
+            // UGC overlay — only set if shape looks right
+            if (d.ugcOverlay && typeof d.ugcOverlay === "object" && "WARMUP_OPTIONS" in d.ugcOverlay) {
+              setUgcOverlay(d.ugcOverlay);
+            }
+            // Goals
+            if (Array.isArray(d.goals)) setGoals(d.goals);
+            // Settings — applied through the shared applySettings helper so
+            // we don't refetch /api/settings post-bootstrap.
+            if (d.settings) applySettings(d.settings);
+          })
+          .catch(() => { /* tolerated; ref flip in finally */ })
+          .finally(() => {
+            if (!cancelled) bootstrapHydratingRef.current = false;
+          });
+        return () => { cancelled = true; };
+      }, [authenticated]);
 
       // Refresh me whenever the view changes — keeps the admin feedback-count
       // badge accurate after triage (mark new → reviewed/resolved/dismissed
       // happens inside AdminView; we re-pull here when the user navigates
       // back so the badge reflects the new count). Cheap GET, indexed query.
+      // Suppressed on first load by bootstrap ref — bootstrap hydrates `me`.
       useEffect(() => {
         if (!authenticated) return;
+        if (bootstrapHydratingRef.current) return;
         fetch("/api/me").then(r => r.ok ? r.json() : null).then(d => { if (d) setMe(d); }).catch(() => {});
       }, [view, authenticated]);
 
-      // On mount: fetch live history from the API, merge with localStorage cache
+      // On mount: fetch live history from the API, merge with localStorage cache.
+      // Suppressed on first load by bootstrap ref — bootstrap hydrates history.
       useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
         let cancelled = false;
         fetch(`${API_BASE}/workouts`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : [])
@@ -24511,32 +24589,36 @@
         return () => { cancelled = true; };
       }, []);
 
-      // On mount: fetch favorites
+      // On mount: fetch favorites — suppressed on first load by bootstrap.
       useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
         fetch(`${API_BASE}/favorites`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : [])
           .then(data => { if (Array.isArray(data)) setFavorites(data); })
           .catch(() => {});
       }, []);
 
-      // v1.2 — On mount: fetch disfavorites (inverse of favorites)
+      // v1.2 — On mount: fetch disfavorites — suppressed on first load by bootstrap.
       useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
         fetch(`${API_BASE}/disfavorites`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : [])
           .then(data => { if (Array.isArray(data)) setDisfavorites(data); })
           .catch(() => {});
       }, []);
 
-      // On mount: fetch per-user set-favorites
+      // On mount: fetch per-user set-favorites — suppressed on first load by bootstrap.
       useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
         fetch(`${API_BASE}/favorite-sets`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : [])
           .then(data => { if (Array.isArray(data)) setFavoriteSets(new Set(data)); })
           .catch(() => {});
       }, []);
 
-      // v1.5 — On mount: fetch per-user set-disfavorites (mirror of above)
+      // v1.5 — On mount: fetch per-user set-disfavorites — suppressed on first load by bootstrap.
       useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
         fetch(`${API_BASE}/disfavor-sets`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : [])
           .then(data => { if (Array.isArray(data)) setDisfavorSets(new Set(data)); })
@@ -24557,7 +24639,10 @@
           })
           .catch(() => {});
       }, []);
-      useEffect(() => { refreshEffectiveDisfavorites(); }, [refreshEffectiveDisfavorites]);
+      useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
+        refreshEffectiveDisfavorites();
+      }, [refreshEffectiveDisfavorites]);
       // Periodic refresh (2026-05-22) — coach updates while swimmer is logged
       // in stay stale until next page load. 5-min poll keeps the swimmer's
       // picker effectively current without forcing a reload. Cheap relative
@@ -24580,7 +24665,10 @@
           })
           .catch(() => {});
       }, []);
-      useEffect(() => { refreshEffectiveFavorites(); }, [refreshEffectiveFavorites]);
+      useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
+        refreshEffectiveFavorites();
+      }, [refreshEffectiveFavorites]);
       // Periodic refresh mirror of the disfavor side.
       useEffect(() => {
         const id = setInterval(refreshEffectiveFavorites, 5 * 60 * 1000);
@@ -24600,7 +24688,10 @@
           })
           .catch(() => {});
       }, []);
-      useEffect(() => { refreshMyConstraints(); }, [refreshMyConstraints]);
+      useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
+        refreshMyConstraints();
+      }, [refreshMyConstraints]);
       useEffect(() => {
         const id = setInterval(refreshMyConstraints, 5 * 60 * 1000);
         return () => clearInterval(id);
@@ -24621,7 +24712,10 @@
           })
           .catch(() => {});
       }, []);
-      useEffect(() => { refreshUgcOverlay(); }, [refreshUgcOverlay]);
+      useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
+        refreshUgcOverlay();
+      }, [refreshUgcOverlay]);
       useEffect(() => {
         const id = setInterval(refreshUgcOverlay, 5 * 60 * 1000);
         return () => clearInterval(id);
@@ -24634,72 +24728,86 @@
           .then(data => { if (Array.isArray(data)) setGoals(data); })
           .catch(() => {});
       }, []);
-      useEffect(() => { refreshGoals(); }, [refreshGoals]);
+      useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
+        refreshGoals();
+      }, [refreshGoals]);
 
-      // On mount: fetch user settings (slider range + default pace)
+      // Apply a settings payload to the matching React state. Extracted from
+      // refreshSettings so the bootstrap useEffect can hydrate settings from
+      // /api/me/bootstrap without firing an extra /api/settings GET.
+      const applySettings = useCallback((s) => {
+        if (!s || typeof s !== "object") return;
+        if (s.sliderMin) setSliderMin(s.sliderMin);
+        if (s.sliderMax) { setSliderMax(s.sliderMax); setMaxYards(v => Math.min(v, s.sliderMax)); }
+        if (s.paceInput) setPaceInput(s.paceInput);
+        if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
+        // Q: next-event countdown lives in settings.extra; dbGetSettings
+        // spreads extra into the top-level response.
+        setNextEvent(s.next_event && s.next_event.name && s.next_event.date ? s.next_event : null);
+        // N5: phase also in settings.extra (single string id).
+        setPhase(s.phase && PHASES[s.phase] ? s.phase : null);
+        // W1: audio_cues persisted per-user; default ON when unset.
+        if (typeof s.audio_cues === "boolean") setAudioCues(s.audio_cues);
+        // Run-screen v1: lap_button persisted per-user; default ON when unset.
+        if (typeof s.lap_button === "boolean") setLapButton(s.lap_button);
+        // F: equipment_modes is a per-item map { kickboard: "off"|"preferred"|"required", ... }
+        if (s.equipment_modes && typeof s.equipment_modes === "object") {
+          setEquipment(prev => {
+            const next = { ...prev };
+            for (const k of Object.keys(prev)) {
+              // Normalize unknown values through equipMode() (handles legacy booleans).
+              next[k] = equipMode(s.equipment_modes, k);
+            }
+            return next;
+          });
+        }
+        // S3 — template engine per-section toggle + anti-repeat memory
+        if (s.engine_section_sources && typeof s.engine_section_sources === "object") {
+          setSectionSources(prev => ({ ...prev, ...s.engine_section_sources }));
+        }
+        if (Array.isArray(s.engine_recent_templates)) {
+          setRecentEngineTemplates(s.engine_recent_templates.slice(0, 10));
+        }
+        // v1.3 — engine disfavorites
+        if (Array.isArray(s.engine_disfavorites)) {
+          setEngineDisfavorites(s.engine_disfavorites.slice(0, 50));
+        }
+        // v1.13 — own engine favorites (settings.extra.engine_favorites)
+        if (Array.isArray(s.engine_favorites)) {
+          setEngineFavorites(s.engine_favorites.slice(0, 50));
+        }
+        // v2.0 polish — multi-lane persisted state (enabled + lanes)
+        if (s.multi_lane && typeof s.multi_lane === "object") {
+          if (typeof s.multi_lane.enabled === "boolean") {
+            setMultiLaneMode(s.multi_lane.enabled);
+          }
+          if (Array.isArray(s.multi_lane.lanes) && s.multi_lane.lanes.length > 0) {
+            setManualLanesPace(s.multi_lane.lanes.slice(0, 12).map((l, i) => ({
+              lane_label: l.lane_label || `Lane ${i + 1}`,
+              pace: l.pace || "",
+            })));
+          }
+        }
+        // v1.8 — disfavor mode (downweight | exclude)
+        if (s.disfavor_mode === "downweight" || s.disfavor_mode === "exclude") {
+          setDisfavorMode(s.disfavor_mode);
+        }
+      }, []);
+
+      // On mount: fetch user settings (slider range + default pace). Suppressed
+      // on first load by the bootstrap ref guard — bootstrap calls applySettings
+      // directly. Post-bootstrap (programmatic refresh) it still GETs.
       const refreshSettings = useCallback(() => {
         return fetch(`${API_BASE}/settings`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : {})
-          .then(s => {
-            if (s.sliderMin) setSliderMin(s.sliderMin);
-            if (s.sliderMax) { setSliderMax(s.sliderMax); setMaxYards(v => Math.min(v, s.sliderMax)); }
-            if (s.paceInput) setPaceInput(s.paceInput);
-            if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
-            // Q: next-event countdown lives in settings.extra; dbGetSettings
-            // spreads extra into the top-level response.
-            setNextEvent(s.next_event && s.next_event.name && s.next_event.date ? s.next_event : null);
-            // N5: phase also in settings.extra (single string id).
-            setPhase(s.phase && PHASES[s.phase] ? s.phase : null);
-            // W1: audio_cues persisted per-user; default ON when unset.
-            if (typeof s.audio_cues === "boolean") setAudioCues(s.audio_cues);
-            // Run-screen v1: lap_button persisted per-user; default ON when unset.
-            if (typeof s.lap_button === "boolean") setLapButton(s.lap_button);
-            // F: equipment_modes is a per-item map { kickboard: "off"|"preferred"|"required", ... }
-            if (s.equipment_modes && typeof s.equipment_modes === "object") {
-              setEquipment(prev => {
-                const next = { ...prev };
-                for (const k of Object.keys(prev)) {
-                  // Normalize unknown values through equipMode() (handles legacy booleans).
-                  next[k] = equipMode(s.equipment_modes, k);
-                }
-                return next;
-              });
-            }
-            // S3 — template engine per-section toggle + anti-repeat memory
-            if (s.engine_section_sources && typeof s.engine_section_sources === "object") {
-              setSectionSources(prev => ({ ...prev, ...s.engine_section_sources }));
-            }
-            if (Array.isArray(s.engine_recent_templates)) {
-              setRecentEngineTemplates(s.engine_recent_templates.slice(0, 10));
-            }
-            // v1.3 — engine disfavorites
-            if (Array.isArray(s.engine_disfavorites)) {
-              setEngineDisfavorites(s.engine_disfavorites.slice(0, 50));
-            }
-            // v1.13 — own engine favorites (settings.extra.engine_favorites)
-            if (Array.isArray(s.engine_favorites)) {
-              setEngineFavorites(s.engine_favorites.slice(0, 50));
-            }
-            // v2.0 polish — multi-lane persisted state (enabled + lanes)
-            if (s.multi_lane && typeof s.multi_lane === "object") {
-              if (typeof s.multi_lane.enabled === "boolean") {
-                setMultiLaneMode(s.multi_lane.enabled);
-              }
-              if (Array.isArray(s.multi_lane.lanes) && s.multi_lane.lanes.length > 0) {
-                setManualLanesPace(s.multi_lane.lanes.slice(0, 12).map((l, i) => ({
-                  lane_label: l.lane_label || `Lane ${i + 1}`,
-                  pace: l.pace || "",
-                })));
-              }
-            }
-            // v1.8 — disfavor mode (downweight | exclude)
-            if (s.disfavor_mode === "downweight" || s.disfavor_mode === "exclude") {
-              setDisfavorMode(s.disfavor_mode);
-            }
-          })
+          .then(applySettings)
           .catch(() => {});
-      }, []);
-      useEffect(() => { refreshSettings(); }, [refreshSettings]);
+      }, [applySettings]);
+      useEffect(() => {
+        if (bootstrapHydratingRef.current) return;
+        refreshSettings();
+      }, [refreshSettings]);
 
       // W1: persist the audio_cues toggle to settings.extra without disturbing
       // other extra keys. Optimistic local update; best-effort save.
