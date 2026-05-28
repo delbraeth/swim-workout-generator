@@ -22541,6 +22541,14 @@
           url = `/api/admin/users/${encodeURIComponent(sub)}/support-role`;
           payload = { granted: action === "support-grant" };
         }
+        else if (action === "tier-grant-coach" || action === "tier-grant-program" || action === "tier-revoke") {
+          url = `/api/admin/users/${encodeURIComponent(sub)}/tier`;
+          payload = {
+            tier: action === "tier-grant-coach" ? "coach"
+                : action === "tier-grant-program" ? "program"
+                : "free",
+          };
+        }
         else if (action === "delete") {
           if (!confirm(`Delete user ${sub.slice(0, 10)}…?\n\nThis cascades and wipes all their workouts, favorites, settings, and sessions. Audit events stay (anonymized). NOT REVERSIBLE.`)) return;
           url = `/api/admin/users/${encodeURIComponent(sub)}`;
@@ -22585,6 +22593,7 @@
                     {u.is_admin     && <span style={{ background: "var(--color-primary)", color: "var(--color-bg)", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>admin</span>}
                     {u.is_coach     && <span style={{ background: "var(--color-primary)", color: "var(--color-bg)", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>coach</span>}
                     {u.support_role && <span style={{ background: "#7c3aed", color: "#fff", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>support</span>}
+                    {u.tier && u.tier !== "free" && <span title={u.tier_source ? `Granted via ${u.tier_source} on ${u.tier_granted_at ? new Date(u.tier_granted_at).toLocaleDateString() : "?"}` : "Tier active"} style={{ background: "#0d9488", color: "#fff", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, marginRight: 4 }}>{u.tier}{u.tier_source === "admin_grant" ? " · comp" : ""}</span>}
                     {u.is_disabled  && <span style={{ background: "#7f1d1d", color: "#fee2e2", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>disabled</span>}
                   </td>
                   <td style={{ padding: "8px 6px" }}>
@@ -22623,6 +22632,23 @@
                         style={{ marginRight: 4, fontSize: 11, padding: "3px 8px", background: u.support_role ? "#7c3aed" : "var(--color-border)", border: "none", borderRadius: 4, color: u.support_role ? "#fff" : "#cbd5e1", cursor: "pointer" }}>
                         {u.support_role ? "Un-support" : "Support"}
                       </button>
+                    )}
+                    {me?.is_admin && (
+                      <select
+                        value={u.tier || "free"}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (next === u.tier) return;
+                          const label = next === "free" ? "revoke paid tier" : `grant ${next} tier (comp)`;
+                          if (!confirm(`${label} for ${u.display_name || u.sub.slice(0,10)}?`)) return;
+                          act(u.sub, next === "free" ? "tier-revoke" : `tier-grant-${next}`);
+                        }}
+                        title={u.tier_source ? `Tier source: ${u.tier_source}` : "Set paid tier (comps testers without Stripe). Free = revoke."}
+                        style={{ marginRight: 4, fontSize: 11, padding: "3px 6px", background: u.tier && u.tier !== "free" ? "#0d9488" : "var(--color-border)", border: "none", borderRadius: 4, color: u.tier && u.tier !== "free" ? "#fff" : "#cbd5e1", cursor: "pointer" }}>
+                        <option value="free">Free</option>
+                        <option value="coach">Coach</option>
+                        <option value="program">Program</option>
+                      </select>
                     )}
                     {canImpersonate && u.sub !== me?.sub && (
                       <button onClick={() => startImpersonate(u)}

@@ -743,6 +743,7 @@ export async function dbAdminListUsers() {
     SELECT u.sub, u.email, u.email_verified,
            u.display_name AS legacy_display_name, u.initials AS legacy_initials,
            u.is_admin, u.is_coach, u.is_disabled, u.support_role, u.created_at, u.last_login_at,
+           u.tier, u.tier_granted_at, u.tier_source, u.stripe_customer_id,
            p.first_name, p.last_name, p.preferred_name, p.initials AS person_initials,
            COALESCE(w.cnt, 0) AS workout_count
       FROM users u
@@ -759,6 +760,10 @@ export async function dbAdminListUsers() {
     initials: r.person_initials || r.legacy_initials,
     is_admin: !!r.is_admin, is_coach: !!r.is_coach, is_disabled: !!r.is_disabled,
     support_role: !!r.support_role,
+    tier:                 r.tier || "free",
+    tier_granted_at:      r.tier_granted_at,
+    tier_source:          r.tier_source,
+    has_stripe_customer:  !!r.stripe_customer_id,
     created_at: r.created_at, last_login_at: r.last_login_at,
     workout_count: Number(r.workout_count),
   }));
