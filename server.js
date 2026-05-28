@@ -196,7 +196,17 @@ app.use(helmet({
 // + payload JSON); feedback / profile patches are <5kb. 100kb gives ~2× headroom
 // without enabling pathological payloads. If a future feature needs more, raise
 // it per-route rather than globally.
-app.use(express.json({ limit: "100kb" }));
+//
+// Billing webhook exception — Stripe signature verification requires the
+// raw, unparsed request body to recompute the HMAC. If express.json() runs
+// first, req.body becomes a parsed object and stripe.webhooks.constructEvent
+// throws "No signatures found matching the expected signature" → 400. Skip
+// the JSON parser for /api/billing/webhook so the per-route express.raw()
+// at the webhook handler can do its job.
+app.use((req, res, next) => {
+  if (req.originalUrl === "/api/billing/webhook") return next();
+  return express.json({ limit: "100kb" })(req, res, next);
+});
 
 // ───── Rate limiters ──────────────────────────────────────────────────
 // Auth: 10/min/IP. Catches brute-force probes against /api/auth/*.
