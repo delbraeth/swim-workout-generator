@@ -24318,13 +24318,27 @@
       // Billing v1 — ?upgrade=success / ?upgrade=cancelled banner when
       // the user returns from Stripe Checkout. Clears the query param
       // from the URL after read so refresh doesn't re-show the banner.
+      // Also fires a delayed refreshBootstrap() so the new tier (set
+      // server-side by the Stripe webhook arriving asynchronously)
+      // propagates into App state without requiring a manual reload.
       const [upgradeBanner, setUpgradeBanner] = useState(null);
       useEffect(() => {
         try {
           const params = new URLSearchParams(window.location.search);
           const u = params.get("upgrade");
-          if (u === "success") setUpgradeBanner({ kind: "success", text: "Welcome to Coach tier — your 14-day free trial is active. Manage your subscription anytime from Profile → Subscription." });
-          else if (u === "cancelled") setUpgradeBanner({ kind: "info", text: "Checkout cancelled. Your account is still on the Swimmer (Free) tier. Subscribe from Profile → Subscription whenever you're ready." });
+          if (u === "success") {
+            setUpgradeBanner({ kind: "success", text: "Welcome to Coach tier — your 14-day free trial is active. Manage your subscription anytime from Profile → Subscription." });
+            // Webhook arrives async (~1-2s after Stripe redirect). Refresh
+            // bootstrap twice with a small delay so we usually catch the
+            // tier flip without forcing the user to wait or reload. First
+            // call is best-effort right away (covers fast webhooks); second
+            // covers the typical webhook latency window. If both miss, the
+            // 5-min poll OR next ProfileModal-open will pick it up.
+            refreshBootstrap();
+            setTimeout(() => { refreshBootstrap(); }, 3000);
+          } else if (u === "cancelled") {
+            setUpgradeBanner({ kind: "info", text: "Checkout cancelled. Your account is still on the Swimmer (Free) tier. Subscribe from Profile → Subscription whenever you're ready." });
+          }
           if (u) {
             // Clear the param so refresh doesn't re-trigger.
             params.delete("upgrade");
