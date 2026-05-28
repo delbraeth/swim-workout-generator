@@ -13870,6 +13870,13 @@
       const [engineFavoritesLocal, setEngineFavoritesLocal] = React.useState([]);
       // v3.0 — coach curation impact (last 30 days, aggregate counts)
       const [impactData, setImpactData] = React.useState(null);
+      // Billing v1 — subscription status + history. Status reads users.tier
+      // (always safe). History reads billing_history (empty until first
+      // invoice arrives via Stripe webhook).
+      const [billingStatus,  setBillingStatus]  = React.useState(null);
+      const [billingHistory, setBillingHistory] = React.useState([]);
+      const [billingBusy,    setBillingBusy]    = React.useState(false);
+      const [billingMsg,     setBillingMsg]     = React.useState(null);
       // v1.8 — disfavor mode: "downweight" (default 0.25×) or "exclude" (weight 0)
       const [disfavorModeLocal, setDisfavorModeLocal] = React.useState("downweight");
       // Team Curation v1 slice 5 — defaults inherited from any team the user is in.
@@ -13917,6 +13924,17 @@
               .then(d => { if (d) setImpactData(d); })
               .catch(() => {});
           }
+          // Billing v1 — fetch subscription status + history. Both are
+          // safe to call regardless of BILLING_ACTIVE state (status reads
+          // users.tier; history reads billing_history table).
+          fetch("/api/billing/status", { cache: "no-store" })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d) setBillingStatus(d); })
+            .catch(() => {});
+          fetch("/api/billing/history?limit=5", { cache: "no-store" })
+            .then(r => r.ok ? r.json() : [])
+            .then(d => { if (Array.isArray(d)) setBillingHistory(d); })
+            .catch(() => {});
           // v1.8 — disfavor mode
           if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
             setDisfavorModeLocal(settingsRes.disfavor_mode);
@@ -14454,6 +14472,157 @@
                               );
                             })}
                           </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Billing v1 — Subscription section. Always visible to
+                    authenticated users (swimmers see "Free", coaches see
+                    Subscribe / Manage). Reads /api/billing/status which is
+                    safe regardless of BILLING_ACTIVE. */}
+                <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                    Subscription
+                  </div>
+                  {!billingStatus ? (
+                    <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>Loading…</div>
+                  ) : (
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, color: "var(--color-text)" }}>Current tier:</span>
+                        <span style={{
+                          padding: "3px 10px", borderRadius: 4, fontSize: 12, fontWeight: 700,
+                          background: billingStatus.tier === "free" ? "var(--color-border)" : "#0d9488",
+                          color: billingStatus.tier === "free" ? "#cbd5e1" : "#fff",
+                          textTransform: "capitalize",
+                        }}>
+                          {billingStatus.tier}
+                        </span>
+                        {billingStatus.tier_source === "admin_grant" && (
+                          <span title="Comped by operator (no payment on file)" style={{ padding: "3px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700, background: "#7c3aed", color: "#fff" }}>
+                            Comped
+                          </span>
+                        )}
+                        {billingStatus.tier_granted_at && (
+                          <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+                            since {new Date(billingStatus.tier_granted_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {billingStatus.tier === "free" && (
+                        <div>
+                          <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10, lineHeight: 1.5 }}>
+                            Subscribe to Coach for <strong>$10/month</strong> with a 14-day free trial.
+                            Unlocks managed swimmers, teams, group assignments, multi-lane generate,
+                            coach reports, UGC authoring, and team curation.
+                            Cancel anytime before day 14 for no charge.
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (billingBusy) return;
+                              setBillingBusy(true); setBillingMsg(null);
+                              try {
+                                const r = await fetch("/api/billing/checkout", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                                });
+                                const d = await r.json().catch(() => ({}));
+                                if (!r.ok) {
+                                  if (d.error === "billing_not_configured") {
+                                    setBillingMsg("Billing isn't live in this environment yet.");
+                                  } else if (d.error === "no_price_id") {
+                                    setBillingMsg("Stripe price ID not configured. Contact the operator.");
+                                  } else {
+                                    setBillingMsg(`Couldn't start checkout: ${d.error || r.status}`);
+                                  }
+                                  setBillingBusy(false);
+                                  return;
+                                }
+                                // Redirect to Stripe-hosted checkout. setBillingBusy stays true
+                                // so the button doesn't allow a second click during the redirect.
+                                window.location.href = d.url;
+                              } catch (e) {
+                                setBillingMsg(`Network error: ${e.message}`);
+                                setBillingBusy(false);
+                              }
+                            }}
+                            disabled={billingBusy}
+                            style={{
+                              padding: "8px 16px", borderRadius: 6, border: "none",
+                              background: billingBusy ? "var(--color-border)" : "var(--color-primary)",
+                              color: "var(--color-bg)", fontSize: 13, fontWeight: 700,
+                              cursor: billingBusy ? "wait" : "pointer",
+                            }}>
+                            {billingBusy ? "Starting…" : "Start free trial"}
+                          </button>
+                        </div>
+                      )}
+
+                      {billingStatus.tier !== "free" && billingStatus.tier_source !== "admin_grant" && billingStatus.has_stripe_customer && (
+                        <button
+                          onClick={async () => {
+                            if (billingBusy) return;
+                            setBillingBusy(true); setBillingMsg(null);
+                            try {
+                              const r = await fetch("/api/billing/portal", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                              });
+                              const d = await r.json().catch(() => ({}));
+                              if (!r.ok) {
+                                setBillingMsg(`Couldn't open portal: ${d.error || r.status}`);
+                                setBillingBusy(false);
+                                return;
+                              }
+                              window.location.href = d.url;
+                            } catch (e) {
+                              setBillingMsg(`Network error: ${e.message}`);
+                              setBillingBusy(false);
+                            }
+                          }}
+                          disabled={billingBusy}
+                          style={{
+                            padding: "8px 16px", borderRadius: 6, border: "1px solid var(--color-border)",
+                            background: "transparent", color: "var(--color-text)", fontSize: 13, fontWeight: 600,
+                            cursor: billingBusy ? "wait" : "pointer",
+                          }}>
+                          {billingBusy ? "Opening…" : "Manage subscription"}
+                        </button>
+                      )}
+
+                      {billingStatus.tier !== "free" && billingStatus.tier_source === "admin_grant" && (
+                        <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic", lineHeight: 1.5 }}>
+                          You're on a comped {billingStatus.tier} tier (no payment method on file).
+                          Email hello@competitionaquatics.com with any questions.
+                        </div>
+                      )}
+
+                      {billingHistory.length > 0 && (
+                        <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--color-card)" }}>
+                          <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 6 }}>
+                            Recent invoices
+                          </div>
+                          {billingHistory.map(inv => (
+                            <div key={inv.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-dim)", padding: "3px 0" }}>
+                              <span>
+                                {inv.occurred_at ? new Date(inv.occurred_at).toLocaleDateString() : "—"}
+                                {" · "}
+                                <span style={{ color: inv.status === "paid" ? "var(--color-positive)" : inv.status === "refunded" ? "var(--color-warn)" : "var(--color-text-muted)" }}>{inv.status}</span>
+                              </span>
+                              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                                {inv.amount_cents < 0 ? "−" : ""}${Math.abs(inv.amount_cents / 100).toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {billingMsg && (
+                        <div style={{ fontSize: 12, color: "var(--color-warn)", marginTop: 10 }}>
+                          {billingMsg}
                         </div>
                       )}
                     </div>
@@ -24162,6 +24331,32 @@
         const id = setTimeout(() => setPersonaBlockMsg(null), 2500);
         return () => clearTimeout(id);
       }, [personaBlockMsg]);
+
+      // Billing v1 — ?upgrade=success / ?upgrade=cancelled banner when
+      // the user returns from Stripe Checkout. Clears the query param
+      // from the URL after read so refresh doesn't re-show the banner.
+      const [upgradeBanner, setUpgradeBanner] = useState(null);
+      useEffect(() => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const u = params.get("upgrade");
+          if (u === "success") setUpgradeBanner({ kind: "success", text: "Welcome to Coach tier — your 14-day free trial is active. Manage your subscription anytime from Profile → Subscription." });
+          else if (u === "cancelled") setUpgradeBanner({ kind: "info", text: "Checkout cancelled. Your account is still on the Swimmer (Free) tier. Subscribe from Profile → Subscription whenever you're ready." });
+          if (u) {
+            // Clear the param so refresh doesn't re-trigger.
+            params.delete("upgrade");
+            const q = params.toString();
+            window.history.replaceState({}, "", window.location.pathname + (q ? "?" + q : ""));
+          }
+        } catch (_) { /* URLSearchParams unsupported — skip */ }
+      }, []);
+      // Auto-clear upgrade banner after 8s (longer than persona-block since
+      // it's success-flow not error-flow).
+      useEffect(() => {
+        if (!upgradeBanner) return;
+        const id = setTimeout(() => setUpgradeBanner(null), 8000);
+        return () => clearTimeout(id);
+      }, [upgradeBanner]);
       // v2 entry/exit handler. On entering view-as, wipe data state for a
       // fresh-new-user simulation. On exit, force window.location.reload()
       // to restore admin's real data cleanly — avoids racing N fetch chains.
@@ -25997,6 +26192,28 @@
                   cursor: "pointer",
                 }}>
                 Exit (reload)
+              </button>
+            </div>
+          )}
+          {/* Billing v1 — post-Stripe-redirect banner. Auto-clears in 8s.
+              Renders above the persona-block toast (higher z-index). */}
+          {upgradeBanner && (
+            <div className="screen-only" style={{
+              position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
+              zIndex: 9060, maxWidth: 560, width: "calc(100% - 32px)",
+              background: upgradeBanner.kind === "success" ? "var(--color-positive)" : "rgba(30, 41, 59, 0.95)",
+              color: "#fff",
+              padding: "12px 18px", borderRadius: 8,
+              fontSize: 13, fontWeight: 600, lineHeight: 1.5,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+              border: upgradeBanner.kind === "success" ? "none" : "1px solid var(--color-primary)",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            }}>
+              <span>{upgradeBanner.kind === "success" ? "✓ " : "ⓘ "}{upgradeBanner.text}</span>
+              <button onClick={() => setUpgradeBanner(null)}
+                aria-label="Dismiss"
+                style={{ background: "transparent", border: "none", color: "inherit", fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1 }}>
+                ×
               </button>
             </div>
           )}
