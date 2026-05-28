@@ -701,16 +701,20 @@ export async function dbGetBootstrapForUser(userSub) {
     dbListGoals(userSub),                      // 10
     dbListAnchorsForMemberSwimmer(userSub),    // 11
     dbListMyActiveConstraints(userSub),        // 12
+    dbListSessions(userSub),                   // 13 — added in B for ProfileModal-open
+    dbListTeamDefaultsForUser(userSub),        // 14 — added in B for ProfileModal-open
   ]);
   const sectionNames = [
     "me", "workouts", "settings", "favorites", "disfavorites",
     "favoriteSets", "disfavorSets", "effectiveFavorites", "effectiveDisfavorites",
     "ugcOverlay", "goals", "groupAnchors", "myConstraints",
+    "sessions", "teamDefaults",
   ];
   const fallbacks = [
     null, [], {}, [], [],
     [], [], null, null,
     {}, [], {}, { constraints: [] },
+    [], [],
   ];
   const out = {};
   const errs = [];

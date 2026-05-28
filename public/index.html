@@ -13842,25 +13842,26 @@
       );
     }
 
-    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints }) {
-      // Burst-mitigation — seed local state from App-level props (already
-      // hydrated by /api/me/bootstrap) instead of re-fetching on open. The
-      // loadAll fetch chain below skips these 6 endpoints. ProfileModal still
-      // owns local state for in-modal edits; on close/onProfileChange the App
-      // re-fetches what it needs.
+    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites }) {
+      // Burst-mitigation B — seed ALL local state from App-level props.
+      // /api/me/bootstrap returns everything ProfileModal needs (sessions +
+      // team-defaults + billing-status added in B). loadAll's Promise.all is
+      // now empty; only billing-history + coach-impact remain as on-demand
+      // fetches (sequenced post-mount, not part of the open burst).
       const [me, setMe]             = React.useState(() => appMe || null);
-      const [sessions, setSessions] = React.useState([]);
+      const [sessions, setSessions] = React.useState(() => Array.isArray(appSessions) ? appSessions : []);
       const [goals, setGoals]       = React.useState(() => Array.isArray(appGoals) ? appGoals : []);
-      const [nextEvent, setNextEventLocal] = React.useState(null); // { name, date } | null
-      const [phase, setPhaseLocal]  = React.useState(null);        // N5
-      const [level, setLevelLocal]  = React.useState(null);        // J — swimmer-level preset
+      const [nextEvent, setNextEventLocal] = React.useState(() => appNextEvent || null);
+      const [phase, setPhaseLocal]  = React.useState(() => appPhase || null);
+      const [level, setLevelLocal]  = React.useState(() => appLevel || null);
       const [loading, setLoading]   = React.useState(true);
       const [revoking, setRevoking] = React.useState(false);
       const [revokeMsg, setRevokeMsg] = React.useState(null);
       // v1.4 — disfavorites audit panel
       const [bankDisfavorites, setBankDisfavorites] = React.useState(() =>
         Array.isArray(appDisfavorites) ? appDisfavorites : []);
-      const [engineDisfavoritesLocal, setEngineDisfavoritesLocal] = React.useState([]);
+      const [engineDisfavoritesLocal, setEngineDisfavoritesLocal] = React.useState(() =>
+        Array.isArray(appEngineDisfavorites) ? appEngineDisfavorites : []);
       // v1.10 — set-level disfavorites for the audit panel — seeded from
       // App-level disfavorSets (Set), which arrived via bootstrap.
       const [setDisfavoritesLocal, setSetDisfavoritesLocal] = React.useState(() =>
@@ -13871,66 +13872,44 @@
       const [setFavoritesLocal, setSetFavoritesLocal] = React.useState(() =>
         appFavoriteSets instanceof Set ? Array.from(appFavoriteSets) : []);
       // v1.13 — engine favorites in the audit panel (mirror of v1.4 engine disfavorites)
-      const [engineFavoritesLocal, setEngineFavoritesLocal] = React.useState([]);
+      const [engineFavoritesLocal, setEngineFavoritesLocal] = React.useState(() =>
+        Array.isArray(appEngineFavorites) ? appEngineFavorites : []);
       // v3.0 — coach curation impact (last 30 days, aggregate counts)
       const [impactData, setImpactData] = React.useState(null);
       // Billing v1 — subscription status + history. Status reads users.tier
       // (always safe). History reads billing_history (empty until first
       // invoice arrives via Stripe webhook).
-      const [billingStatus,  setBillingStatus]  = React.useState(null);
+      const [billingStatus,  setBillingStatus]  = React.useState(() => appBillingStatus || null);
       const [billingHistory, setBillingHistory] = React.useState([]);
       const [billingBusy,    setBillingBusy]    = React.useState(false);
       const [billingMsg,     setBillingMsg]     = React.useState(null);
       // v1.8 — disfavor mode: "downweight" (default 0.25×) or "exclude" (weight 0)
-      const [disfavorModeLocal, setDisfavorModeLocal] = React.useState("downweight");
+      const [disfavorModeLocal, setDisfavorModeLocal] = React.useState(() =>
+        (appDisfavorMode === "downweight" || appDisfavorMode === "exclude") ? appDisfavorMode : "downweight");
       // Team Curation v1 slice 5 — defaults inherited from any team the user is in.
       // Array of { team_id, team_name, default_pace_base, default_disfavor_mode, default_equipment_modes }.
-      const [teamDefaults, setTeamDefaults] = React.useState([]);
+      const [teamDefaults, setTeamDefaults] = React.useState(() =>
+        Array.isArray(appTeamDefaults) ? appTeamDefaults : []);
 
       const loadAll = React.useCallback(async () => {
+        // Burst mitigation B — every section ProfileModal needs that's
+        // available pre-open arrives via /api/me/bootstrap (which already
+        // ran before the user opened the modal). Local state is seeded from
+        // the App props in the useState initializers above. loadAll's
+        // Promise.all is now empty. Only two on-demand fetches remain,
+        // sequenced one tick apart so they don't form a burst:
+        //   - billing-history: subscription invoices (rarely non-empty;
+        //     loaded only because the Subscription panel shows them inline).
+        //   - coach-impact: 30-day curation reach + effectiveness, coach-only.
+        // Both are best-effort; failures don't block the modal.
         setLoading(true);
         try {
-          // Burst mitigation — dropped 6 fetches that bootstrap already
-          // populated at App level (me, goals, favorites, disfavorites,
-          // favorite-sets, disfavor-sets). Local state for those was seeded
-          // from the App props in the useState initializers above. /api/settings
-          // stays because `level` lives there and isn't lifted to App state.
-          // Remaining parallel burst on open: 3 GETs (settings, sessions,
-          // team-defaults). Billing + coach-impact are sequenced AFTER the
-          // Promise.all to avoid a same-tick burst.
-          const [sessRes, settingsRes, teamDefRes] = await Promise.all([
-            fetch("/api/auth/sessions", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
-            fetch("/api/settings", { cache: "no-store" }).then(r => r.ok ? r.json() : {}),
-            fetch("/api/me/team-defaults", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
-          ]);
-          setSessions(Array.isArray(sessRes) ? sessRes : []);
-          setNextEventLocal(settingsRes?.next_event && settingsRes.next_event.name && settingsRes.next_event.date ? settingsRes.next_event : null);
-          setPhaseLocal(settingsRes?.phase && PHASES[settingsRes.phase] ? settingsRes.phase : null);
-          setLevelLocal(settingsRes?.level && LEVEL_PRESETS[settingsRes.level] ? settingsRes.level : null);
-          setEngineDisfavoritesLocal(Array.isArray(settingsRes?.engine_disfavorites) ? settingsRes.engine_disfavorites : []);
-          // v1.13 — engine favorites (settings.extra.engine_favorites)
-          setEngineFavoritesLocal(Array.isArray(settingsRes?.engine_favorites) ? settingsRes.engine_favorites : []);
-          // TC slice 5 — team defaults inherited from group memberships
-          setTeamDefaults(Array.isArray(teamDefRes) ? teamDefRes : []);
-          // v1.8 — disfavor mode
-          if (settingsRes?.disfavor_mode === "downweight" || settingsRes?.disfavor_mode === "exclude") {
-            setDisfavorModeLocal(settingsRes.disfavor_mode);
-          }
-          // Sequenced post-Promise.all so they fire in a later tick — avoids
-          // tripping Hyperlift's burst threshold. v3.0 coach impact + Billing
-          // v1 status + history. Coach-impact gated on EFFECTIVE coach role
-          // so view-as solo also skips. All best-effort; failures don't break
-          // the modal open.
           if (appEffectiveMe ? appEffectiveMe.is_coach : appMe?.is_coach) {
             fetch("/api/coach/curation-impact", { cache: "no-store" })
               .then(r => r.ok ? r.json() : null)
               .then(d => { if (d) setImpactData(d); })
               .catch(() => {});
           }
-          fetch("/api/billing/status", { cache: "no-store" })
-            .then(r => r.ok ? r.json() : null)
-            .then(d => { if (d) setBillingStatus(d); })
-            .catch(() => {});
           fetch("/api/billing/history?limit=5", { cache: "no-store" })
             .then(r => r.ok ? r.json() : [])
             .then(d => { if (Array.isArray(d)) setBillingHistory(d); })
@@ -24177,6 +24156,14 @@
       const [goals, setGoals]                     = useState([]);
       const [nextEvent, setNextEvent]             = useState(null); // { name, date } | null
       const [phase, setPhase]                     = useState(null); // N5: "base"|"build"|"peak"|"taper"|"recovery"|null
+      // B (bootstrap extension) — lifted to App so ProfileModal can read from
+      // props instead of re-fetching /api/settings just to get `level`.
+      const [level, setLevel]                     = useState(null); // J — swimmer-level preset id | null
+      // B — sessions + team-defaults + billing-status arrive in bootstrap so
+      // ProfileModal-open doesn't need their three GETs anymore.
+      const [sessions, setSessions]               = useState([]);   // auth/sessions
+      const [teamDefaults, setTeamDefaults]       = useState([]);   // team-defaults inherited
+      const [billingStatus, setBillingStatus]     = useState(null); // { tier, ... } | null
       const [audioCues, setAudioCues]             = useState(true); // W1: rest-timer beeps default ON
       const [lapButton, setLapButton]             = useState(true); // Run-screen v1: ✓ Lap button default ON
       const [loadedFromHistoryId, setLoadedFromHistoryId] = useState(null);
@@ -24544,6 +24531,13 @@
         }
         // Goals
         if (Array.isArray(d.goals)) setGoals(d.goals);
+        // B — sessions (auth devices list), team-defaults (inherited
+        // settings preview), billing-status (subscription tier). All read
+        // by ProfileModal; lifting to App-level state means the modal can
+        // seed from props instead of fetching on open.
+        if (Array.isArray(d.sessions))     setSessions(d.sessions);
+        if (Array.isArray(d.teamDefaults)) setTeamDefaults(d.teamDefaults);
+        if (d.billing && d.billing.status) setBillingStatus(d.billing.status);
         // Settings — applied through the shared applySettings helper so
         // we don't refetch /api/settings post-bootstrap. applySettings is
         // a stable useCallback defined later in this component; deliberately
@@ -24763,6 +24757,8 @@
         setNextEvent(s.next_event && s.next_event.name && s.next_event.date ? s.next_event : null);
         // N5: phase also in settings.extra (single string id).
         setPhase(s.phase && PHASES[s.phase] ? s.phase : null);
+        // J: level preset id (settings.extra). Validated against LEVEL_PRESETS.
+        setLevel(s.level && LEVEL_PRESETS[s.level] ? s.level : null);
         // W1: audio_cues persisted per-user; default ON when unset.
         if (typeof s.audio_cues === "boolean") setAudioCues(s.audio_cues);
         // Run-screen v1: lap_button persisted per-user; default ON when unset.
@@ -27639,7 +27635,20 @@
               appDisfavorites={disfavorites}
               appFavoriteSets={favoriteSets}
               appDisfavorSets={disfavorSets}
-              appMyConstraints={myConstraints} />
+              appMyConstraints={myConstraints}
+              /* B (bootstrap extension) — sessions + team-defaults +
+                 billing-status + level + settings-derived bits passed in so
+                 ProfileModal can drop the /api/settings + /api/auth/sessions
+                 + /api/me/team-defaults fetches on open. */
+              appSessions={sessions}
+              appTeamDefaults={teamDefaults}
+              appBillingStatus={billingStatus}
+              appLevel={level}
+              appNextEvent={nextEvent}
+              appPhase={phase}
+              appDisfavorMode={disfavorMode}
+              appEngineDisfavorites={engineDisfavorites}
+              appEngineFavorites={engineFavorites} />
           )}
           {showFeedback && (
             <FeedbackModal onClose={() => setShowFeedback(false)} />
