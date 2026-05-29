@@ -3047,6 +3047,127 @@ export async function dbSetTeamSchool({ teamId, school }) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// ── Team practice facilities (Locations P1, LOCATIONS_SCOPE.md) ─────────
+// A team's pool(s). Generalizes teams.school. course mirrors pool_mode.
+const _FACILITY_COURSES = ["25y", "25m", "50m"];
+
+// Create/update the optional address row for a facility. Returns address_id
+// (existing or new) or null when no address fields are provided.
+async function _upsertFacilityAddress(addressId, a) {
+  const has = a && (a.line1 || a.line2 || a.city || a.region || a.postal_code);
+  if (!has) return addressId || null;
+  const vals = [a.line1 || null, a.line2 || null, a.city || null, a.region || null, a.postal_code || null, a.country || "US"];
+  if (addressId) {
+    await pool.query(
+      "UPDATE `addresses` SET `line1`=?,`line2`=?,`city`=?,`region`=?,`postal_code`=?,`country`=? WHERE `id`=?",
+      [...vals, addressId]
+    );
+    return addressId;
+  }
+  const r = await pool.query(
+    "INSERT INTO `addresses` (`line1`,`line2`,`city`,`region`,`postal_code`,`country`) VALUES (?,?,?,?,?,?)",
+    vals
+  );
+  return Number(r.insertId);
+}
+
+// When a facility becomes the team's primary, clear other primaries and
+// mirror its name onto teams.school (kept as a convenience until P5).
+async function _setPrimaryFacility(teamId, facilityId, name) {
+  await pool.query("UPDATE `team_facilities` SET `is_primary` = 0 WHERE `team_id` = ? AND `id` <> ?", [teamId, facilityId]);
+  await pool.query("UPDATE `team_facilities` SET `is_primary` = 1 WHERE `id` = ?", [facilityId]);
+  await pool.query("UPDATE `teams` SET `school` = ? WHERE `id` = ?", [String(name).slice(0, 120), teamId]);
+}
+
+export async function dbListTeamFacilities(teamId) {
+  if (!teamId) return [];
+  const rows = await pool.query(
+    "SELECT f.`id`, f.`team_id`, f.`name`, f.`course`, f.`lanes`, f.`is_primary`, f.`address_id`, " +
+    "       a.`line1`, a.`line2`, a.`city`, a.`region`, a.`postal_code`, a.`country` " +
+    "  FROM `team_facilities` f LEFT JOIN `addresses` a ON a.`id` = f.`address_id` " +
+    " WHERE f.`team_id` = ? AND f.`archived_at` IS NULL " +
+    " ORDER BY f.`is_primary` DESC, f.`name` ASC",
+    [teamId]
+  );
+  return rows.map(r => ({
+    id: Number(r.id), team_id: r.team_id, name: r.name, course: r.course,
+    lanes: r.lanes == null ? null : Number(r.lanes), is_primary: !!r.is_primary,
+    address: r.address_id ? { line1: r.line1, line2: r.line2, city: r.city, region: r.region, postal_code: r.postal_code, country: r.country } : null,
+  }));
+}
+
+export async function dbCreateTeamFacility({ teamId, name, course = null, lanes = null, is_primary = false, address = null }) {
+  if (!teamId || !name || typeof name !== "string" || !name.trim()) return { ok: false, reason: "name_required" };
+  if (name.length > 120) return { ok: false, reason: "name_too_long" };
+  if (course !== null && course !== "" && !_FACILITY_COURSES.includes(course)) return { ok: false, reason: "bad_course" };
+  const lanesVal = (lanes == null || lanes === "") ? null : (Number.isInteger(Number(lanes)) && Number(lanes) > 0 && Number(lanes) <= 127 ? Number(lanes) : undefined);
+  if (lanesVal === undefined) return { ok: false, reason: "bad_lanes" };
+  // First facility for a team is primary by default.
+  const existing = await pool.query("SELECT COUNT(*) AS n FROM `team_facilities` WHERE `team_id` = ? AND `archived_at` IS NULL", [teamId]);
+  const makePrimary = is_primary || Number(existing[0]?.n || 0) === 0;
+  const addressId = await _upsertFacilityAddress(null, address || {});
+  const r = await pool.query(
+    "INSERT INTO `team_facilities` (`team_id`,`name`,`address_id`,`course`,`lanes`,`is_primary`) VALUES (?,?,?,?,?,?)",
+    [teamId, name.trim(), addressId, course || null, lanesVal, makePrimary ? 1 : 0]
+  );
+  const id = Number(r.insertId);
+  if (makePrimary) await _setPrimaryFacility(teamId, id, name.trim());
+  return { ok: true, id };
+}
+
+export async function dbUpdateTeamFacility(id, teamId, patch) {
+  if (!id || !teamId) return { ok: false, reason: "missing_args" };
+  const rows = await pool.query("SELECT `team_id`, `name`, `address_id`, `is_primary` FROM `team_facilities` WHERE `id` = ? AND `team_id` = ? AND `archived_at` IS NULL", [id, teamId]);
+  if (!rows[0]) return { ok: false, reason: "not_found" };
+  const cur = rows[0];
+  const sets = [], vals = [];
+  if ("name" in patch) {
+    if (!patch.name || typeof patch.name !== "string" || !patch.name.trim() || patch.name.length > 120) return { ok: false, reason: "bad_name" };
+    sets.push("`name` = ?"); vals.push(patch.name.trim());
+  }
+  if ("course" in patch) {
+    if (patch.course !== null && patch.course !== "" && !_FACILITY_COURSES.includes(patch.course)) return { ok: false, reason: "bad_course" };
+    sets.push("`course` = ?"); vals.push(patch.course || null);
+  }
+  if ("lanes" in patch) {
+    const lv = (patch.lanes == null || patch.lanes === "") ? null : (Number.isInteger(Number(patch.lanes)) && Number(patch.lanes) > 0 && Number(patch.lanes) <= 127 ? Number(patch.lanes) : undefined);
+    if (lv === undefined) return { ok: false, reason: "bad_lanes" };
+    sets.push("`lanes` = ?"); vals.push(lv);
+  }
+  if ("address" in patch) {
+    const addrId = await _upsertFacilityAddress(cur.address_id, patch.address || {});
+    sets.push("`address_id` = ?"); vals.push(addrId);
+  }
+  if (sets.length) {
+    vals.push(id);
+    await pool.query(`UPDATE \`team_facilities\` SET ${sets.join(", ")} WHERE \`id\` = ?`, vals);
+  }
+  // Primary toggle (only setting TRUE is meaningful — one primary per team).
+  const newName = ("name" in patch && patch.name) ? patch.name.trim() : cur.name;
+  if (patch.is_primary === true && !cur.is_primary) {
+    await _setPrimaryFacility(cur.team_id, id, newName);
+  } else if (cur.is_primary && "name" in patch) {
+    // Renaming the current primary → keep teams.school mirror in sync.
+    await pool.query("UPDATE `teams` SET `school` = ? WHERE `id` = ?", [String(newName).slice(0, 120), cur.team_id]);
+  }
+  return { ok: true };
+}
+
+export async function dbArchiveTeamFacility(id, teamId) {
+  if (!id || !teamId) return { ok: false, reason: "missing_args" };
+  const rows = await pool.query("SELECT `team_id`, `is_primary` FROM `team_facilities` WHERE `id` = ? AND `team_id` = ? AND `archived_at` IS NULL", [id, teamId]);
+  if (!rows[0]) return { ok: false, reason: "not_found" };
+  await pool.query("UPDATE `team_facilities` SET `archived_at` = NOW(), `is_primary` = 0 WHERE `id` = ?", [id]);
+  // If we archived the primary, promote the next remaining facility (if any)
+  // and re-sync teams.school; else clear school.
+  if (rows[0].is_primary) {
+    const next = await pool.query("SELECT `id`, `name` FROM `team_facilities` WHERE `team_id` = ? AND `archived_at` IS NULL ORDER BY `created_at` ASC LIMIT 1", [rows[0].team_id]);
+    if (next[0]) await _setPrimaryFacility(rows[0].team_id, Number(next[0].id), next[0].name);
+    else await pool.query("UPDATE `teams` SET `school` = NULL WHERE `id` = ?", [rows[0].team_id]);
+  }
+  return { ok: true };
+}
+
 export async function dbSetTeamDefault({ teamId, field, value }) {
   if (!teamId || !field) return { ok: false, reason: "missing_args" };
   if (!TEAM_DEFAULT_FIELDS.includes(field)) return { ok: false, reason: "bad_field" };
