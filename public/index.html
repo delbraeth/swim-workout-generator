@@ -498,6 +498,23 @@
     };
     const LEVEL_ORDER = ["recreational", "masters", "competitive"];
 
+    // Onboarding tour — a lightweight spotlight walkthrough of the
+    // generator setup flow, ending at the Generate button. Each step
+    // targets a data-tour="..." anchor that already exists in the markup.
+    // Only PRE-generation controls are included (favorite-toggle and
+    // celebrate anchors render only after a workout exists). The anchor
+    // named "step-swimmer-level" is actually on the profile button, so it
+    // is intentionally not used here. Persisted-seen flag lives in
+    // settings.extra.tour_seen (see applySettings / handleTourFinish).
+    const TOUR_STEPS = [
+      { sel: "step-pool-mode",      title: "Pick your pool",        body: "Choose your course — short-course yards or meters, or long-course. This sets the distances and the pace math for everything below." },
+      { sel: "step-type-cards",     title: "Choose a workout type", body: "Pick today's focus — sprint, distance, IM and more. Each type shapes the sets the generator builds." },
+      { sel: "step-pace-input",     title: "Set your pace",         body: "Enter your base pace as M:SS per 100. Intervals and target times are calculated from this number." },
+      { sel: "step-equipment",      title: "Mark your equipment",   body: "Tell the generator what you have — fins, paddles, kickboard, snorkel. Sets will use or avoid gear to match." },
+      { sel: "step-yardage-slider", title: "Dial in the distance",  body: "Slide to set the total distance for the session. The generator fills it with balanced warmup, main and cooldown work." },
+      { sel: "step-generate-button", title: "Build your first set", body: "When you're ready, tap Generate — your workout appears below, ready to print or run on the pace clock." },
+    ];
+
     // Heuristic zone inference from a single set's text + interval + distance.
     // Returns one of ZONE_ORDER. Keyword cues in desc/focus dominate; interval
     // tightness (work/total ratio) is the tie-breaker when text is ambiguous.
@@ -13842,7 +13859,7 @@
       );
     }
 
-    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites }) {
+    function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites }) {
       // Burst-mitigation B — seed ALL local state from App-level props.
       // /api/me/bootstrap returns everything ProfileModal needs (sessions +
       // team-defaults + billing-status added in B). loadAll's Promise.all is
@@ -14345,6 +14362,13 @@
                       </a>
                     )}
                   </div>
+                  {onStartTour && (
+                    <button onClick={() => { onClose(); onStartTour(); }}
+                      title="Replay the quick walkthrough of the workout generator"
+                      style={{ width: "100%", marginTop: 8, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                      👋 Take the tour
+                    </button>
+                  )}
                 </div>
 
                 )}
@@ -24122,6 +24146,124 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  ONBOARDING TOUR OVERLAY
+    // ═══════════════════════════════════════════════════════════════
+    // Spotlight coachmark over a data-tour anchor + a tooltip card.
+    // No external libraries. The dim ring uses a large box-shadow "hole"
+    // and is pointer-events:none so the highlighted control stays
+    // clickable (so the final "tap Generate" step actually works). If an
+    // anchor is missing, the card falls back to screen-center so the tour
+    // never dead-ends.
+    function TourOverlay({ steps, stepIndex, onNext, onBack, onSkip, onFinish }) {
+      const step = steps[stepIndex];
+      const isLast = stepIndex === steps.length - 1;
+      const [rect, setRect] = React.useState(null);
+      const cardRef = React.useRef(null);
+
+      React.useLayoutEffect(() => {
+        if (!step) return;
+        let raf = 0;
+        const measure = () => {
+          const el = document.querySelector(`[data-tour="${step.sel}"]`);
+          if (!el) { setRect(null); return; }
+          const r = el.getBoundingClientRect();
+          setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+        };
+        const el = document.querySelector(`[data-tour="${step.sel}"]`);
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" });
+        raf = requestAnimationFrame(measure);
+        window.addEventListener("resize", measure);
+        window.addEventListener("scroll", measure, true);
+        return () => {
+          cancelAnimationFrame(raf);
+          window.removeEventListener("resize", measure);
+          window.removeEventListener("scroll", measure, true);
+        };
+      }, [step]);
+
+      React.useEffect(() => {
+        const onKey = (e) => {
+          if (e.key === "Escape") { onSkip(); }
+          else if (e.key === "ArrowRight" || e.key === "Enter") { isLast ? onFinish() : onNext(); }
+          else if (e.key === "ArrowLeft") { if (stepIndex > 0) onBack(); }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+      }, [stepIndex, isLast, onNext, onBack, onSkip, onFinish]);
+
+      React.useEffect(() => { if (cardRef.current) cardRef.current.focus(); }, [stepIndex]);
+
+      if (!step) return null;
+
+      const pad = 6;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const CARD_W = Math.min(320, vw - 24);
+      // Card placement: below the anchor if it fits, else above, else centered.
+      let cardStyle;
+      if (rect) {
+        const below = rect.top + rect.height + 150 < vh;
+        const top = below ? rect.top + rect.height + pad + 8 : Math.max(12, rect.top - 8 - 150);
+        let left = rect.left + rect.width / 2 - CARD_W / 2;
+        left = Math.max(12, Math.min(left, vw - CARD_W - 12));
+        cardStyle = { position: "fixed", top, left, width: CARD_W };
+      } else {
+        cardStyle = { position: "fixed", top: "50%", left: "50%", width: CARD_W, transform: "translate(-50%, -50%)" };
+      }
+
+      return (
+        <div role="dialog" aria-modal="true" aria-label={`Tour: ${step.title}`}>
+          {/* Dim + spotlight ring (or full dim when anchor missing) */}
+          {rect ? (
+            <div style={{
+              position: "fixed", top: rect.top - pad, left: rect.left - pad,
+              width: rect.width + pad * 2, height: rect.height + pad * 2,
+              borderRadius: 10, border: "2px solid var(--color-primary)",
+              boxShadow: "0 0 0 9999px rgba(0,0,0,0.62)",
+              pointerEvents: "none", zIndex: 9000, transition: "all 0.18s ease",
+            }} />
+          ) : (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", pointerEvents: "none", zIndex: 9000 }} />
+          )}
+
+          {/* Tooltip card */}
+          <div ref={cardRef} tabIndex={-1} style={{
+            ...cardStyle, zIndex: 9001, background: "var(--color-card)",
+            border: "1px solid var(--color-border-strong)", borderRadius: 12,
+            padding: 16, boxShadow: "0 8px 28px rgba(0,0,0,0.4)", outline: "none",
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-dim)", marginBottom: 4 }}>
+              Step {stepIndex + 1} of {steps.length}
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--color-text)", marginBottom: 6 }}>
+              {step.title}
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--color-text-dim)", marginBottom: 14 }}>
+              {step.body}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <button onClick={onSkip} style={{
+                padding: "6px 10px", borderRadius: 8, border: "none", background: "transparent",
+                color: "var(--color-text-dim)", fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>Skip tour</button>
+              <div style={{ display: "flex", gap: 8 }}>
+                {stepIndex > 0 && (
+                  <button onClick={onBack} style={{
+                    padding: "7px 12px", borderRadius: 8, border: "1px solid var(--color-border)",
+                    background: "var(--color-bg)", color: "var(--color-text)", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  }}>Back</button>
+                )}
+                <button onClick={isLast ? onFinish : onNext} style={{
+                  padding: "7px 14px", borderRadius: 8, border: "none",
+                  background: "var(--color-primary)", color: "var(--color-bg)", fontSize: 13, fontWeight: 800, cursor: "pointer",
+                }}>{isLast ? "Done" : "Next"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  MAIN APP
     // ═══════════════════════════════════════════════════════════════
 
@@ -24130,6 +24272,14 @@
       const [maxYards, setMaxYards]         = useState(2400);
       const [poolMode, setPoolMode]         = useState("25y");
       const [paceInput, setPaceInput]       = useState("2:00");
+      // Onboarding tour. tourStep -1 = inactive, 0..N-1 = active step.
+      // tourSeen defaults true so the tour never flashes before settings
+      // resolve; applySettings sets the real value (unset → false → auto-run
+      // once). tourSeenWriteRef guards the one-time persist.
+      const [tourStep, setTourStep]         = useState(-1);
+      const [tourSeen, setTourSeen]         = useState(true);
+      const tourAutoRef     = React.useRef(false);
+      const tourSeenWriteRef = React.useRef(false);
       // v2.0 — multi-lane mode (coach-only). When ON, picker filters
       // options to those whose intervals fit ALL lane paces, and the
       // generate flow auto-routes to MultiPacePrintView. manualLanesPace
@@ -24907,6 +25057,9 @@
         if (typeof s.audio_cues === "boolean") setAudioCues(s.audio_cues);
         // Run-screen v1: lap_button persisted per-user; default ON when unset.
         if (typeof s.lap_button === "boolean") setLapButton(s.lap_button);
+        // Onboarding tour: tour_seen persisted per-user. Unset (new user) →
+        // false → the auto-start effect runs the tour once.
+        setTourSeen(s.tour_seen === true);
         // F: equipment_modes is a per-item map { kickboard: "off"|"preferred"|"required", ... }
         if (s.equipment_modes && typeof s.equipment_modes === "object") {
           setEquipment(prev => {
@@ -24985,6 +25138,30 @@
           headers: { "Content-Type": "application/json", ...csrfHeaders() },
           body: JSON.stringify({ lap_button: next }),
         }).catch(() => {});
+      }, []);
+
+      // Onboarding tour controls. Auto-start once for users whose tour_seen
+      // is unset (resolves to false in applySettings). startTour replays it
+      // on demand. finishTour ends it and persists tour_seen=true so it
+      // won't auto-run again (best-effort; one write per session via ref).
+      useEffect(() => {
+        if (!tourAutoRef.current && tourSeen === false) {
+          tourAutoRef.current = true;
+          setTourStep(0);
+        }
+      }, [tourSeen]);
+      const startTour = useCallback(() => { setTourStep(0); }, []);
+      const finishTour = useCallback(() => {
+        setTourStep(-1);
+        setTourSeen(true);
+        if (!tourSeenWriteRef.current) {
+          tourSeenWriteRef.current = true;
+          fetch(`${API_BASE}/settings/extra`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ tour_seen: true }),
+          }).catch(() => {});
+        }
       }, []);
 
       // v2.0 polish — Persist multi-lane state (enabled + lanes) to
@@ -27765,6 +27942,7 @@
               }}
               authMode={authMode}
               onSendFeedback={() => setShowFeedback(true)}
+              onStartTour={startTour}
               appEffectiveMe={effectiveMe}
               appViewAsRole={viewAsRole}
               appSetViewAsRole={setViewAsRole}
@@ -27796,6 +27974,16 @@
           )}
           {showFeedback && (
             <FeedbackModal onClose={() => setShowFeedback(false)} />
+          )}
+          {tourStep >= 0 && (
+            <TourOverlay
+              steps={TOUR_STEPS}
+              stepIndex={tourStep}
+              onNext={() => setTourStep(s => Math.min(TOUR_STEPS.length - 1, s + 1))}
+              onBack={() => setTourStep(s => Math.max(0, s - 1))}
+              onSkip={finishTour}
+              onFinish={finishTour}
+            />
           )}
           {showImpersonationModal && (
             <ImpersonationStartModal
