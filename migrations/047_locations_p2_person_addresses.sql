@@ -14,9 +14,14 @@
 -- (decision 2). Active-pair unique via a STORED generated column (NULL for
 -- removed rows → re-add allowed; migration 043 precedent) so the same
 -- address can't be linked twice while active.
+-- IMPORTANT: person_id is explicitly utf8mb4_unicode_ci to match persons.id
+-- (the FK target). `DEFAULT CHARSET=utf8mb4` alone defaults columns to the
+-- charset's default collation (general_ci), which mismatches the unified
+-- unicode_ci persons.id → FK errno 150. So set the collation explicitly on
+-- both the table and the FK column.
 CREATE TABLE IF NOT EXISTS `person_addresses` (
   `id`               BIGINT AUTO_INCREMENT PRIMARY KEY,
-  `person_id`        VARCHAR(16) NOT NULL,
+  `person_id`        VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `address_id`       BIGINT      NOT NULL,
   `kind`             ENUM('home','mailing','other') NOT NULL DEFAULT 'home',
   `is_primary`       TINYINT(1)  NOT NULL DEFAULT 1,
@@ -27,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `person_addresses` (
   UNIQUE KEY `uq_active_person_address` (`person_id`, `active_link_key`),
   FOREIGN KEY (`person_id`)  REFERENCES `persons`(`id`)   ON DELETE CASCADE,
   FOREIGN KEY (`address_id`) REFERENCES `addresses`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Guardian-controlled consent toggle (per swimmer). Default 0 = coaches
 -- cannot see the home address. Set by a guardian or the swimmer themselves.
