@@ -561,9 +561,11 @@ export async function dbGetMe(sub) {
       "       u.`created_at`, u.`last_login_at`, " +
       "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
       "       p.`initials` AS person_initials, " +
-      "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
+      "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
+      "       xe.`external_id` AS usa_swimming_id " +
       "  FROM `users` u " +
       "  LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
+      "  LEFT JOIN `person_external_ids` xe ON xe.`person_id` = u.`person_id` AND xe.`system` = 'usa_swimming' " +
       " WHERE u.`sub` = ?",
       [sub]
     );
@@ -645,6 +647,9 @@ export async function dbGetMe(sub) {
       dob:                     dateToYmd(dob),
       is_minor:                isMinor(dob),                                   // null when DOB unset
       gender:                  gender,                                          // M/F/X/prefer_not_to_say/null
+      class_year:              u.person_class_year != null ? Number(u.person_class_year) : null,
+      grade:                   gradeFromClassYear(u.person_class_year),         // derived; null if class_year unset
+      usa_swimming_id:         u.usa_swimming_id || null,
       is_admin:                !!u.is_admin,
       // Coach is granted by either explicit is_coach flag OR is_admin (admin
       // implicitly has coach capability). Mirrors dbIsCoach's check.
@@ -702,18 +707,24 @@ export async function dbGetBootstrapForUser(userSub) {
     dbListMyActiveConstraints(userSub),        // 12
     dbListSessions(userSub),                   // 13 — added in B for ProfileModal-open
     dbListTeamDefaultsForUser(userSub),        // 14 — added in B for ProfileModal-open
+    (async () => {                             // 15 — pending parent invites (explicit-accept card)
+      const ur = await pool.query("SELECT `email`, `email_verified` FROM `users` WHERE `sub` = ? LIMIT 1", [userSub]);
+      const u = ur[0];
+      if (!u || !u.email || !u.email_verified) return [];
+      return dbListPendingInvitesForUser(userSub, u.email);
+    })(),
   ]);
   const sectionNames = [
     "me", "workouts", "settings", "favorites", "disfavorites",
     "favoriteSets", "disfavorSets", "effectiveFavorites", "effectiveDisfavorites",
     "ugcOverlay", "goals", "groupAnchors", "myConstraints",
-    "sessions", "teamDefaults",
+    "sessions", "teamDefaults", "pendingInvites",
   ];
   const fallbacks = [
     null, [], {}, [], [],
     [], [], null, null,
     {}, [], {}, { constraints: [] },
-    [], [],
+    [], [], [],
   ];
   const out = {};
   const errs = [];
@@ -967,7 +978,7 @@ export async function dbUpdateMe(sub, patch) {
   }
   // Person-side fields.
   const personPatch = {};
-  for (const k of ["display_name", "initials", "gender", "class_year"]) {
+  for (const k of ["display_name", "initials", "gender", "class_year", "usa_swimming_id"]) {
     if (k in patch) personPatch[k] = patch[k];
   }
   if (Object.keys(personPatch).length) {
@@ -997,7 +1008,7 @@ export async function dbAdminUpdateUser(sub, patch) {
     await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
   }
   const personPatch = {};
-  for (const k of ["display_name", "initials", "gender", "class_year"]) {
+  for (const k of ["display_name", "initials", "gender", "class_year", "usa_swimming_id"]) {
     if (k in patch) personPatch[k] = patch[k];
   }
   if (Object.keys(personPatch).length) {
@@ -3031,7 +3042,7 @@ export async function dbListTeamCuration(teamId) {
 export async function dbGetTeamSettings(teamId) {
   if (!teamId) return null;
   const rows = await pool.query(
-    "SELECT `default_pace_base`, `default_disfavor_mode`, `default_equipment_modes` " +
+    "SELECT `default_pace_base`, `default_disfavor_mode`, `default_equipment_modes`, `school` " +
     "FROM `teams` WHERE `id` = ? LIMIT 1",
     [teamId]
   );
@@ -3046,7 +3057,16 @@ export async function dbGetTeamSettings(teamId) {
     default_pace_base:        r.default_pace_base,
     default_disfavor_mode:    r.default_disfavor_mode,
     default_equipment_modes:  equipment,
+    school:                   r.school || null,
   };
+}
+
+// Set (or clear, value=null/"") a team's school/club affiliation.
+export async function dbSetTeamSchool({ teamId, school }) {
+  if (!teamId) return { ok: false, reason: "missing_args" };
+  const v = (school === null || school === "") ? null : String(school).slice(0, 120);
+  const r = await pool.query("UPDATE `teams` SET `school` = ? WHERE `id` = ?", [v, teamId]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
 export async function dbSetTeamDefault({ teamId, field, value }) {
@@ -3308,6 +3328,101 @@ export async function dbConsumePendingInvitesForUser(userSub, verifiedEmail) {
     accepted++;
   }
   return { accepted, errors };
+}
+
+// Light name lookup for a person behind a user sub (persons-derived).
+async function _nameForUserSub(sub) {
+  if (!sub) return null;
+  const rows = await pool.query(
+    "SELECT p.`first_name`, p.`last_name`, p.`preferred_name` FROM `users` u " +
+    "LEFT JOIN `persons` p ON p.`id` = u.`person_id` WHERE u.`sub` = ? LIMIT 1",
+    [sub]
+  );
+  return rows[0] ? displayNameInline(rows[0]) : null;
+}
+async function _nameForManagedId(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT p.`first_name`, p.`last_name`, p.`preferred_name` FROM `coach_managed_swimmers` m " +
+    "LEFT JOIN `persons` p ON p.`id` = m.`person_id` WHERE m.`id` = ? LIMIT 1",
+    [id]
+  );
+  return rows[0] ? displayNameInline(rows[0]) : null;
+}
+
+// Explicit parent-invite consent (replaces silent auto-consume). The
+// parent sees pending invites and Accepts/Declines each. Match is on the
+// invite's parent_email == the user's VERIFIED email (the security gate —
+// only the invited address can act on an invite).
+export async function dbListPendingInvitesForUser(userSub, verifiedEmail) {
+  if (!userSub || !verifiedEmail) return [];
+  const email = String(verifiedEmail).trim().toLowerCase();
+  const rows = await pool.query(
+    "SELECT `id`, `swimmer_managed_id`, `swimmer_sub`, `invited_by_coach_sub`, `created_at`, `expires_at` " +
+    "FROM `parent_invites` WHERE `parent_email` = ? AND `state` = 'pending' AND `expires_at` > NOW() " +
+    "ORDER BY `created_at` DESC",
+    [email]
+  );
+  const out = [];
+  for (const inv of rows) {
+    const swimmerName = inv.swimmer_managed_id
+      ? await _nameForManagedId(inv.swimmer_managed_id)
+      : await _nameForUserSub(inv.swimmer_sub);
+    const coachName = await _nameForUserSub(inv.invited_by_coach_sub);
+    out.push({
+      id:           Number(inv.id),
+      swimmer_name: swimmerName || "your swimmer",
+      coach_name:   coachName || "a coach",
+      created_at:   dtToIso(inv.created_at),
+      expires_at:   dtToIso(inv.expires_at),
+    });
+  }
+  return out;
+}
+
+async function _loadInviteForActor(inviteId, verifiedEmail) {
+  const email = String(verifiedEmail || "").trim().toLowerCase();
+  const rows = await pool.query(
+    "SELECT `id`, `swimmer_managed_id`, `swimmer_sub`, `parent_email`, `invited_by_coach_sub`, `state`, `expires_at` " +
+    "FROM `parent_invites` WHERE `id` = ?",
+    [Number(inviteId)]
+  );
+  const inv = rows[0];
+  if (!inv) return { error: "not_found" };
+  if (String(inv.parent_email).toLowerCase() !== email) return { error: "not_your_invite" };
+  return { inv };
+}
+
+export async function dbAcceptParentInvite(inviteId, userSub, verifiedEmail) {
+  if (!inviteId || !userSub || !verifiedEmail) return { ok: false, reason: "missing_args" };
+  const { inv, error } = await _loadInviteForActor(inviteId, verifiedEmail);
+  if (error) return { ok: false, reason: error };
+  if (inv.state !== "pending") return { ok: false, reason: "not_pending" };
+  if (inv.expires_at && new Date(inv.expires_at) < new Date()) return { ok: false, reason: "expired" };
+  const guardianPersonId = await _swimmerPersonId({ swimmerSub: userSub });
+  if (!guardianPersonId) return { ok: false, reason: "parent_has_no_person" };
+  const swimmerPid = await _swimmerPersonId({ managedId: inv.swimmer_managed_id, swimmerSub: inv.swimmer_sub });
+  if (!swimmerPid) return { ok: false, reason: "swimmer_not_found" };
+  try {
+    await pool.query(
+      "INSERT INTO `guardians` (`swimmer_person_id`, `guardian_person_id`, `relationship`, `added_by_sub`) VALUES (?, ?, 'guardian', ?)",
+      [swimmerPid, guardianPersonId, inv.invited_by_coach_sub]
+    );
+  } catch (e) {
+    if (e.code !== "ER_DUP_ENTRY" && !/duplicate/i.test(e.message || "")) return { ok: false, reason: e.message || String(e) };
+  }
+  await pool.query("UPDATE `parent_invites` SET `state` = 'accepted', `accepted_at` = CURRENT_TIMESTAMP WHERE `id` = ?", [inv.id]);
+  return { ok: true };
+}
+
+export async function dbDeclineParentInvite(inviteId, userSub, verifiedEmail) {
+  if (!inviteId || !userSub || !verifiedEmail) return { ok: false, reason: "missing_args" };
+  const { inv, error } = await _loadInviteForActor(inviteId, verifiedEmail);
+  if (error) return { ok: false, reason: error };
+  if (inv.state !== "pending") return { ok: false, reason: "not_pending" };
+  // 'revoked' state reused for parent-declined (enum has no 'declined').
+  await pool.query("UPDATE `parent_invites` SET `state` = 'revoked' WHERE `id` = ? AND `state` = 'pending'", [inv.id]);
+  return { ok: true };
 }
 
 // List active guardians (parents) for a swimmer. Used by coach view to
@@ -3765,6 +3880,9 @@ function rowToManagedSwimmer(r) {
     is_minor:             isMinor(dob),
     is_coppa_protected:   isCoppaProtected(dob),
     gender:               gender,
+    class_year:           r.person_class_year != null ? Number(r.person_class_year) : null,
+    grade:                gradeFromClassYear(r.person_class_year),
+    usa_swimming_id:      r.usa_swimming_id || null,
     parental_contact:     r.parental_contact,
     parent_managed_flag:  !!r.parent_managed_flag,
     pace_scy_100:         r.pace_scy_100,
@@ -3788,7 +3906,7 @@ async function coachIsOnTeam(coachSub, teamId) {
   return rows.length > 0;
 }
 
-export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, team_id = null, initials = null, class_year = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
+export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, team_id = null, initials = null, class_year = null, usa_swimming_id = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
   if (!ownerSub) throw new Error("ownerSub required");
   if (!display_name || typeof display_name !== "string") throw new Error("display_name required");
   if (display_name.length > 120) throw new Error("display_name max 120 chars");
@@ -3828,6 +3946,12 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
       personId,
     ]
   );
+  if (usa_swimming_id) {
+    await pool.query(
+      "INSERT INTO `person_external_ids` (`person_id`, `system`, `external_id`) VALUES (?, 'usa_swimming', ?)",
+      [personId, String(usa_swimming_id).slice(0, 255)]
+    );
+  }
   return { ok: true, id };
 }
 
@@ -3842,9 +3966,11 @@ export async function dbGetManagedSwimmer(id) {
     "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
-    "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
+    "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
+    "       xe.`external_id` AS usa_swimming_id " +
     "  FROM `coach_managed_swimmers` m " +
     "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
+    "  LEFT JOIN `person_external_ids` xe ON xe.`person_id` = m.`person_id` AND xe.`system` = 'usa_swimming' " +
     " WHERE m.`id` = ?",
     [id]
   );
@@ -3864,9 +3990,11 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
     "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
-    "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
+    "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
+    "       xe.`external_id` AS usa_swimming_id " +
     "  FROM `coach_managed_swimmers` m " +
     "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
+    "  LEFT JOIN `person_external_ids` xe ON xe.`person_id` = m.`person_id` AND xe.`system` = 'usa_swimming' " +
     " WHERE m.`owner_coach_sub` = ? " + whereArchived +
     " ORDER BY m.`archived` ASC, m.`display_name` ASC",
     [coachSub]
@@ -3930,8 +4058,9 @@ export async function dbUpdateManagedSwimmer(id, patch) {
     if (patch.initials != null && patch.initials !== "" && (typeof patch.initials !== "string" || patch.initials.length > 4)) return { ok: false, reason: "bad_initials" };
     personPatch.initials = patch.initials;
   }
-  if ("gender" in patch)     personPatch.gender = patch.gender;          // helper validates enum
-  if ("class_year" in patch) personPatch.class_year = patch.class_year;  // helper validates range
+  if ("gender" in patch)          personPatch.gender = patch.gender;          // helper validates enum
+  if ("class_year" in patch)      personPatch.class_year = patch.class_year;  // helper validates range
+  if ("usa_swimming_id" in patch) personPatch.usa_swimming_id = patch.usa_swimming_id;
   if ("dob" in patch) {
     const dobCheck = validateDob(patch.dob);
     if (!dobCheck.ok) return { ok: false, reason: dobCheck.reason };
@@ -4151,7 +4280,7 @@ export async function dbUpdatePersonById(personId, patch, conn = pool) {
   let initialsExplicit = false;
   if ("initials" in patch) {
     sets.push("`initials` = ?");
-    vals.push(patch.initials === "" || patch.initials == null ? null : String(patch.initials).slice(0, 4));
+    vals.push(patch.initials === "" || patch.initials == null ? null : String(patch.initials).slice(0, 8));
     initialsExplicit = true;
   }
   if ("display_name" in patch && patch.display_name != null && patch.display_name !== "") {
@@ -4175,28 +4304,84 @@ export async function dbUpdatePersonById(personId, patch, conn = pool) {
     if (!cy.ok) return { ok: false, reason: "bad_class_year" };
     sets.push("`class_year` = ?"); vals.push(cy.value);
   }
-  if (!sets.length) return { ok: true, affected: 0 };
-  vals.push(personId);
-  const r = await (conn || pool).query(`UPDATE \`persons\` SET ${sets.join(", ")} WHERE \`id\` = ?`, vals);
-  return { ok: true, affected: Number(r.affectedRows || 0) };
+  // USA-Swimming ID lives in person_external_ids (system='usa_swimming'),
+  // not on the persons row. Upsert on value, delete on null/empty. Handled
+  // before the empty-sets short-circuit so a USA-S-only patch still writes.
+  if ("usa_swimming_id" in patch) {
+    const v = patch.usa_swimming_id;
+    if (v === null || v === "") {
+      await (conn || pool).query("DELETE FROM `person_external_ids` WHERE `person_id` = ? AND `system` = 'usa_swimming'", [personId]);
+    } else {
+      await (conn || pool).query(
+        "INSERT INTO `person_external_ids` (`person_id`, `system`, `external_id`) VALUES (?, 'usa_swimming', ?) " +
+        "ON DUPLICATE KEY UPDATE `external_id` = VALUES(`external_id`)",
+        [personId, String(v).slice(0, 255)]
+      );
+    }
+  }
+  if (sets.length) {
+    vals.push(personId);
+    await (conn || pool).query(`UPDATE \`persons\` SET ${sets.join(", ")} WHERE \`id\` = ?`, vals);
+  }
+  return { ok: true };
+}
+
+// Ensure a persons row exists for a given parent table (users /
+// coach_managed_swimmers) and return its id. Self-heals two states that
+// would otherwise make a write silently no-op: (a) person_id NULL (a
+// pre-I-B backfill gap or a row created before the persons table), and
+// (b) person_id pointing at a missing persons row (orphaned pointer).
+// Creates a placeholder persons row in either case so the caller's UPDATE
+// always lands. parentTable + idCol are server-side constants (never user
+// input). Returns the resolved person id, or null if the parent row
+// itself is missing.
+async function _ensurePersonId(parentTable, idCol, idVal, conn) {
+  const q = conn || pool;
+  // Read person_id plus the legacy name/initials to seed a new persons row
+  // (so an initials-only edit on a user who never got a persons row doesn't
+  // wipe their existing name). The try/catch lets this keep working after
+  // migration 045 drops the legacy columns — by which point every row has a
+  // person_id and the create branch never fires anyway.
+  let pid = null, legacyName = null, legacyInit = null;
+  try {
+    const rows = await q.query("SELECT `person_id`, `display_name`, `initials` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
+    if (!rows[0]) return null;                                // parent row gone
+    pid = rows[0].person_id; legacyName = rows[0].display_name; legacyInit = rows[0].initials;
+  } catch (e) {
+    const rows = await q.query("SELECT `person_id` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
+    if (!rows[0]) return null;
+    pid = rows[0].person_id;
+  }
+  if (pid) {
+    const exists = await q.query("SELECT 1 FROM `persons` WHERE `id` = ? LIMIT 1", [pid]);
+    if (exists.length) return pid;                            // healthy
+  }
+  // Create (or recreate) a persons row seeded from legacy name, point parent at it.
+  if (!pid) pid = genPersonId();
+  const parsed = parseDisplayName(legacyName);
+  const init = (legacyInit && String(legacyInit).slice(0, 4)) || genInitialsFromParts(parsed.first, parsed.last);
+  await q.query(
+    "INSERT INTO `persons` (`id`, `first_name`, `last_name`, `initials`) VALUES (?, ?, ?, ?)",
+    [pid, parsed.first, parsed.last, init]
+  );
+  await q.query("UPDATE `" + parentTable + "` SET `person_id` = ? WHERE `" + idCol + "` = ?", [pid, idVal]);
+  return pid;
 }
 
 // Resolve a user's person_id then update the persons row. Used by the
-// self/admin profile writers.
+// self/admin profile writers. Self-heals a missing/orphaned person_id.
 export async function dbUpdatePersonFromUserSub(sub, patch, conn = pool) {
   if (!sub) return { ok: false, reason: "no_sub" };
-  const rows = await (conn || pool).query("SELECT `person_id` FROM `users` WHERE `sub` = ?", [sub]);
-  const pid = rows[0]?.person_id;
-  if (!pid) return { ok: false, reason: "no_person" };
+  const pid = await _ensurePersonId("users", "sub", sub, conn);
+  if (!pid) return { ok: false, reason: "no_user" };
   return dbUpdatePersonById(pid, patch, conn);
 }
 
 // Resolve a managed swimmer's person_id then update the persons row.
 export async function dbUpdatePersonFromManagedId(managedId, patch, conn = pool) {
   if (!managedId) return { ok: false, reason: "no_managed" };
-  const rows = await (conn || pool).query("SELECT `person_id` FROM `coach_managed_swimmers` WHERE `id` = ?", [managedId]);
-  const pid = rows[0]?.person_id;
-  if (!pid) return { ok: false, reason: "no_person" };
+  const pid = await _ensurePersonId("coach_managed_swimmers", "id", managedId, conn);
+  if (!pid) return { ok: false, reason: "not_found" };
   return dbUpdatePersonById(pid, patch, conn);
 }
 

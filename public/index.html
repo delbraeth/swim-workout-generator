@@ -14329,6 +14329,46 @@
                     {/* Gender — custom row (EditableProfileField is input-only,
                         gender needs a select). Saves through the same PATCH /api/me. */}
                     <ProfileGenderRow me={me} setMe={setMe} onProfileChange={onProfileChange} />
+                    {/* Class year (graduation year). Grade is derived server-side
+                        from class_year, shown as a read-only badge. */}
+                    <EditableProfileField
+                      label="Class year"
+                      value={me.class_year ? String(me.class_year) : ""}
+                      placeholder="Graduation year, e.g. 2027"
+                      maxLength={4}
+                      transform={(v) => v.replace(/\D/g, "").slice(0, 4)}
+                      badge={me.grade != null ? <span style={{ color: "var(--color-text-dim)", fontSize: 11, marginLeft: 4 }}>{me.grade >= 1 && me.grade <= 12 ? `Grade ${me.grade}` : me.grade > 12 ? "Graduated" : "Pre-HS"}</span> : null}
+                      onSave={async (v) => {
+                        const res = await fetch("/api/me", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                          body: JSON.stringify({ class_year: v === "" ? null : Number(v) }),
+                        });
+                        if (!res.ok) {
+                          const body = await res.json().catch(() => ({}));
+                          throw new Error(body.error || `HTTP ${res.status}`);
+                        }
+                        setMe(prev => prev ? { ...prev, class_year: v === "" ? null : Number(v) } : prev);
+                        if (onProfileChange) onProfileChange();
+                      }} />
+                    <EditableProfileField
+                      label="USA-S ID"
+                      value={me.usa_swimming_id}
+                      placeholder="USA Swimming member ID (optional)"
+                      maxLength={255}
+                      onSave={async (v) => {
+                        const res = await fetch("/api/me", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                          body: JSON.stringify({ usa_swimming_id: v === "" ? null : v }),
+                        });
+                        if (!res.ok) {
+                          const body = await res.json().catch(() => ({}));
+                          throw new Error(body.error || `HTTP ${res.status}`);
+                        }
+                        setMe(prev => prev ? { ...prev, usa_swimming_id: v || null } : prev);
+                        if (onProfileChange) onProfileChange();
+                      }} />
                     <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 16px", marginTop: 4 }}>
                       <span style={{ color: "var(--color-text-dim)" }}>Member since:</span>
                       <span style={{ color: "var(--color-text)" }}>{fmtDate(me.created_at)}</span>
@@ -15398,6 +15438,7 @@
       const [newFav, setNewFav]     = React.useState("");
       const [newDisfav, setNewDisfav] = React.useState("");
       const [paceDraft, setPaceDraft] = React.useState("");                   // pending edit
+      const [schoolDraft, setSchoolDraft] = React.useState("");               // school/club affiliation
       const [busy, setBusy]         = React.useState(false);
 
       const load = React.useCallback(async () => {
@@ -15413,6 +15454,7 @@
           setCuration(c);
           setSettings(s);
           setPaceDraft(s.default_pace_base || "");
+          setSchoolDraft(s.school || "");
         } catch (e) {
           setMsg(`Error loading: ${e.message}`);
           setCuration({ favorites: [], disfavorites: [] });
@@ -15471,6 +15513,24 @@
             method: "PATCH",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
             body: JSON.stringify({ pace_base: value }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          await load();
+        } catch (e) { setMsg(`Save failed: ${e.message}`); }
+        finally { setBusy(false); }
+      };
+
+      const saveSchool = async () => {
+        const value = schoolDraft.trim() || null;
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/teams/${teamId}/settings`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ school: value }),
           });
           if (!res.ok) {
             const j = await res.json().catch(() => ({}));
@@ -15594,6 +15654,25 @@
             <p style={{ color: "var(--color-text-dim)", fontSize: 11, margin: "0 0 12px", lineHeight: 1.5, fontStyle: "italic" }}>
               Defaults apply when a brand-new swimmer joins a group on this team. Use "Push to roster" to apply to your current swimmers (one-time).
             </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "120px 1fr auto", gap: 10, alignItems: "center", marginBottom: 10 }}>
+              <label style={{ color: "var(--color-text-muted)", fontSize: 12, fontWeight: 600 }}>School / club</label>
+              {canWrite && !archived ? (
+                <input value={schoolDraft}
+                  onChange={e => setSchoolDraft(e.target.value)}
+                  placeholder="e.g. Lincoln High School"
+                  maxLength={120}
+                  style={{ padding: "6px 9px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+              ) : (
+                <span style={{ color: "var(--color-text)", fontSize: 13 }}>{settings.school || "—"}</span>
+              )}
+              {canWrite && !archived && (
+                <button onClick={saveSchool} disabled={busy || schoolDraft === (settings.school || "")}
+                  style={{ padding: "6px 12px", background: (busy || schoolDraft === (settings.school || "")) ? "var(--color-border)" : "var(--color-primary)", color: (busy || schoolDraft === (settings.school || "")) ? "#cbd5e1" : "#fff", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: (busy || schoolDraft === (settings.school || "")) ? "not-allowed" : "pointer" }}>
+                  Save
+                </button>
+              )}
+            </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "120px 1fr auto", gap: 10, alignItems: "center", marginBottom: 10 }}>
               <label style={{ color: "var(--color-text-muted)", fontSize: 12, fontWeight: 600 }}>Pace baseline</label>
@@ -20500,7 +20579,7 @@
 
       function emptyForm() {
         return {
-          display_name: "", initials: "", dob: "", gender: "", team_id: "",
+          display_name: "", initials: "", dob: "", gender: "", class_year: "", usa_swimming_id: "", team_id: "",
           pace_scy_100: "", pace_scm_100: "", pace_lcm_100: "",
           parental_contact: "", parent_managed_flag: false,
         };
@@ -20531,6 +20610,8 @@
             initials:            d.initials || "",
             dob:                 d.dob || "",
             gender:              d.gender || "",
+            class_year:          d.class_year ? String(d.class_year) : "",
+            usa_swimming_id:     d.usa_swimming_id || "",
             team_id:             d.team_id || "",
             pace_scy_100:        d.pace_scy_100 || "",
             pace_scm_100:        d.pace_scm_100 || "",
@@ -20576,6 +20657,8 @@
               initials:            form.initials.trim() || null,
               dob:                 form.dob,
               gender:              form.gender || null,
+              class_year:          form.class_year ? Number(form.class_year) : null,
+              usa_swimming_id:     form.usa_swimming_id.trim() || null,
               team_id:             form.team_id || null,
               pace_scy_100:        form.pace_scy_100.trim() || null,
               pace_scm_100:        form.pace_scm_100.trim() || null,
@@ -20607,6 +20690,8 @@
               initials:            form.initials.trim() || null,
               dob:                 form.dob,
               gender:              form.gender || null,
+              class_year:          form.class_year ? Number(form.class_year) : null,
+              usa_swimming_id:     form.usa_swimming_id.trim() || null,
               team_id:             form.team_id || null,
               pace_scy_100:        form.pace_scy_100.trim() || null,
               pace_scm_100:        form.pace_scm_100.trim() || null,
@@ -20696,6 +20781,7 @@
                   <div>Initials: <strong>{detail.initials || "—"}</strong></div>
                   <div>DOB: <strong>{detail.dob}</strong></div>
                   <div>Gender: <strong>{genderLabel(detail.gender) || "—"}</strong></div>
+                  <div>Class year: <strong>{detail.class_year || "—"}</strong>{detail.grade != null && detail.grade >= 1 && detail.grade <= 12 ? <span style={{ color: "var(--color-text-dim)", marginLeft: 6 }}>(Grade {detail.grade})</span> : detail.grade != null && detail.grade > 12 ? <span style={{ color: "var(--color-text-dim)", marginLeft: 6 }}>(Graduated)</span> : null}</div>
                   <div>Team: <strong>{detail.team_id ? ((teams || []).find(t => t.id === detail.team_id)?.name || detail.team_id) : "— none —"}</strong></div>
                   <div>Paces — SCY: <strong>{detail.pace_scy_100 || "—"}</strong> · SCM: <strong>{detail.pace_scm_100 || "—"}</strong> · LCM: <strong>{detail.pace_lcm_100 || "—"}</strong></div>
                   <div>Parental contact: <strong>{detail.parental_contact || "—"}</strong></div>
@@ -20913,6 +20999,17 @@
           <div style={{ fontSize: 10, color: "var(--color-text-dim)", marginTop: 4 }}>
             DOB is required to derive minor-protection rules. Stored privately; only the swimmer's age and minor status are surfaced. Gender is optional; used for heat assignment when groups land.
           </div>
+
+          <label style={labelStyle}>Class year (graduation year)</label>
+          <input value={form.class_year} onChange={e => upd("class_year", e.target.value.replace(/\D/g, "").slice(0, 4))}
+            placeholder="e.g. 2027" maxLength={4} inputMode="numeric" style={inputStyle} />
+          <div style={{ fontSize: 10, color: "var(--color-text-dim)", marginTop: 4 }}>
+            Optional. Grade level is derived automatically from the graduation year.
+          </div>
+
+          <label style={labelStyle}>USA Swimming ID</label>
+          <input value={form.usa_swimming_id} onChange={e => upd("usa_swimming_id", e.target.value)}
+            placeholder="USA-S member ID (optional)" maxLength={255} style={inputStyle} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             <div>
@@ -24264,6 +24361,58 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  PARENT INVITE ACCEPT CARDS
+    // ═══════════════════════════════════════════════════════════════
+    // Explicit-consent surface: a parent with pending invites (from
+    // bootstrap.pending_invites) sees one card per invite and must Accept
+    // (creates the guardian link) or Decline. Replaces the old silent
+    // auto-consume. Renders for any signed-in user with a pending invite,
+    // even before they're a linked parent.
+    function ParentInviteCards({ invites, onResolved }) {
+      const [busyId, setBusyId] = React.useState(null);
+      const [err, setErr] = React.useState(null);
+      if (!Array.isArray(invites) || invites.length === 0) return null;
+      const act = async (id, action) => {
+        setBusyId(id); setErr(null);
+        try {
+          const res = await fetch(`${API_BASE}/parent/invites/${id}/${action}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          });
+          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `HTTP ${res.status}`); }
+          if (onResolved) onResolved();
+        } catch (e) { setErr(e.message || String(e)); }
+        finally { setBusyId(null); }
+      };
+      return (
+        <div className="screen-only" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 16px", background: "var(--color-bg)" }}>
+          {invites.map(inv => (
+            <div key={inv.id} style={{
+              display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12,
+              background: "var(--color-card)", border: "1px solid var(--color-primary)",
+              borderRadius: 10, padding: "12px 14px",
+            }}>
+              <div style={{ flex: 1, minWidth: 200, fontSize: 13, color: "var(--color-text)" }}>
+                👪 <strong>{inv.coach_name}</strong> invited you to follow <strong>{inv.swimmer_name}</strong> on SetForge as a parent/guardian.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => act(inv.id, "accept")} disabled={busyId === inv.id}
+                  style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "var(--color-primary)", color: "var(--color-bg)", fontSize: 13, fontWeight: 800, cursor: busyId === inv.id ? "default" : "pointer" }}>
+                  {busyId === inv.id ? "…" : "Accept"}
+                </button>
+                <button onClick={() => act(inv.id, "decline")} disabled={busyId === inv.id}
+                  style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-dim)", fontSize: 13, fontWeight: 600, cursor: busyId === inv.id ? "default" : "pointer" }}>
+                  Decline
+                </button>
+              </div>
+              {err && <div style={{ flexBasis: "100%", color: "#fca5a5", fontSize: 12 }}>{err}</div>}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  MAIN APP
     // ═══════════════════════════════════════════════════════════════
 
@@ -24443,6 +24592,7 @@
       // ProfileModal-open doesn't need their three GETs anymore.
       const [sessions, setSessions]               = useState([]);   // auth/sessions
       const [teamDefaults, setTeamDefaults]       = useState([]);   // team-defaults inherited
+      const [pendingInvites, setPendingInvites]   = useState([]);   // parent invites awaiting accept
       const [billingStatus, setBillingStatus]     = useState(null); // { tier, ... } | null
       const [audioCues, setAudioCues]             = useState(true); // W1: rest-timer beeps default ON
       const [lapButton, setLapButton]             = useState(true); // Run-screen v1: ✓ Lap button default ON
@@ -24831,6 +24981,7 @@
         // seed from props instead of fetching on open.
         if (Array.isArray(d.sessions))     setSessions(d.sessions);
         if (Array.isArray(d.teamDefaults)) setTeamDefaults(d.teamDefaults);
+        if (Array.isArray(d.pendingInvites)) setPendingInvites(d.pendingInvites);
         if (d.billing && d.billing.status) setBillingStatus(d.billing.status);
         // Settings — applied through the shared applySettings helper so
         // we don't refetch /api/settings post-bootstrap. applySettings is
@@ -26635,6 +26786,11 @@
                 Exit (reload)
               </button>
             </div>
+          )}
+          {/* Parent invite accept cards — explicit consent for any pending
+              invites matching this user's verified email (from bootstrap). */}
+          {authenticated && pendingInvites.length > 0 && (
+            <ParentInviteCards invites={pendingInvites} onResolved={refreshBootstrap} />
           )}
           {/* Billing v1 — post-Stripe-redirect banner. Auto-clears in 8s.
               Renders above the persona-block toast (higher z-index). */}
