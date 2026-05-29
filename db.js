@@ -561,9 +561,11 @@ export async function dbGetMe(sub) {
       "       u.`created_at`, u.`last_login_at`, " +
       "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
       "       p.`initials` AS person_initials, " +
-      "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
+      "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
+      "       xe.`external_id` AS usa_swimming_id " +
       "  FROM `users` u " +
       "  LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
+      "  LEFT JOIN `person_external_ids` xe ON xe.`person_id` = u.`person_id` AND xe.`system` = 'usa_swimming' " +
       " WHERE u.`sub` = ?",
       [sub]
     );
@@ -645,6 +647,9 @@ export async function dbGetMe(sub) {
       dob:                     dateToYmd(dob),
       is_minor:                isMinor(dob),                                   // null when DOB unset
       gender:                  gender,                                          // M/F/X/prefer_not_to_say/null
+      class_year:              u.person_class_year != null ? Number(u.person_class_year) : null,
+      grade:                   gradeFromClassYear(u.person_class_year),         // derived; null if class_year unset
+      usa_swimming_id:         u.usa_swimming_id || null,
       is_admin:                !!u.is_admin,
       // Coach is granted by either explicit is_coach flag OR is_admin (admin
       // implicitly has coach capability). Mirrors dbIsCoach's check.
@@ -967,7 +972,7 @@ export async function dbUpdateMe(sub, patch) {
   }
   // Person-side fields.
   const personPatch = {};
-  for (const k of ["display_name", "initials", "gender", "class_year"]) {
+  for (const k of ["display_name", "initials", "gender", "class_year", "usa_swimming_id"]) {
     if (k in patch) personPatch[k] = patch[k];
   }
   if (Object.keys(personPatch).length) {
@@ -997,7 +1002,7 @@ export async function dbAdminUpdateUser(sub, patch) {
     await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
   }
   const personPatch = {};
-  for (const k of ["display_name", "initials", "gender", "class_year"]) {
+  for (const k of ["display_name", "initials", "gender", "class_year", "usa_swimming_id"]) {
     if (k in patch) personPatch[k] = patch[k];
   }
   if (Object.keys(personPatch).length) {
@@ -3031,7 +3036,7 @@ export async function dbListTeamCuration(teamId) {
 export async function dbGetTeamSettings(teamId) {
   if (!teamId) return null;
   const rows = await pool.query(
-    "SELECT `default_pace_base`, `default_disfavor_mode`, `default_equipment_modes` " +
+    "SELECT `default_pace_base`, `default_disfavor_mode`, `default_equipment_modes`, `school` " +
     "FROM `teams` WHERE `id` = ? LIMIT 1",
     [teamId]
   );
@@ -3046,7 +3051,16 @@ export async function dbGetTeamSettings(teamId) {
     default_pace_base:        r.default_pace_base,
     default_disfavor_mode:    r.default_disfavor_mode,
     default_equipment_modes:  equipment,
+    school:                   r.school || null,
   };
+}
+
+// Set (or clear, value=null/"") a team's school/club affiliation.
+export async function dbSetTeamSchool({ teamId, school }) {
+  if (!teamId) return { ok: false, reason: "missing_args" };
+  const v = (school === null || school === "") ? null : String(school).slice(0, 120);
+  const r = await pool.query("UPDATE `teams` SET `school` = ? WHERE `id` = ?", [v, teamId]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
 export async function dbSetTeamDefault({ teamId, field, value }) {
@@ -3765,6 +3779,9 @@ function rowToManagedSwimmer(r) {
     is_minor:             isMinor(dob),
     is_coppa_protected:   isCoppaProtected(dob),
     gender:               gender,
+    class_year:           r.person_class_year != null ? Number(r.person_class_year) : null,
+    grade:                gradeFromClassYear(r.person_class_year),
+    usa_swimming_id:      r.usa_swimming_id || null,
     parental_contact:     r.parental_contact,
     parent_managed_flag:  !!r.parent_managed_flag,
     pace_scy_100:         r.pace_scy_100,
@@ -3788,7 +3805,7 @@ async function coachIsOnTeam(coachSub, teamId) {
   return rows.length > 0;
 }
 
-export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, team_id = null, initials = null, class_year = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
+export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, team_id = null, initials = null, class_year = null, usa_swimming_id = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
   if (!ownerSub) throw new Error("ownerSub required");
   if (!display_name || typeof display_name !== "string") throw new Error("display_name required");
   if (display_name.length > 120) throw new Error("display_name max 120 chars");
@@ -3828,6 +3845,12 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
       personId,
     ]
   );
+  if (usa_swimming_id) {
+    await pool.query(
+      "INSERT INTO `person_external_ids` (`person_id`, `system`, `external_id`) VALUES (?, 'usa_swimming', ?)",
+      [personId, String(usa_swimming_id).slice(0, 255)]
+    );
+  }
   return { ok: true, id };
 }
 
@@ -3842,9 +3865,11 @@ export async function dbGetManagedSwimmer(id) {
     "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
-    "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
+    "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
+    "       xe.`external_id` AS usa_swimming_id " +
     "  FROM `coach_managed_swimmers` m " +
     "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
+    "  LEFT JOIN `person_external_ids` xe ON xe.`person_id` = m.`person_id` AND xe.`system` = 'usa_swimming' " +
     " WHERE m.`id` = ?",
     [id]
   );
@@ -3864,9 +3889,11 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
     "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
-    "       p.`dob` AS person_dob, p.`gender` AS person_gender " +
+    "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
+    "       xe.`external_id` AS usa_swimming_id " +
     "  FROM `coach_managed_swimmers` m " +
     "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
+    "  LEFT JOIN `person_external_ids` xe ON xe.`person_id` = m.`person_id` AND xe.`system` = 'usa_swimming' " +
     " WHERE m.`owner_coach_sub` = ? " + whereArchived +
     " ORDER BY m.`archived` ASC, m.`display_name` ASC",
     [coachSub]
@@ -3930,8 +3957,9 @@ export async function dbUpdateManagedSwimmer(id, patch) {
     if (patch.initials != null && patch.initials !== "" && (typeof patch.initials !== "string" || patch.initials.length > 4)) return { ok: false, reason: "bad_initials" };
     personPatch.initials = patch.initials;
   }
-  if ("gender" in patch)     personPatch.gender = patch.gender;          // helper validates enum
-  if ("class_year" in patch) personPatch.class_year = patch.class_year;  // helper validates range
+  if ("gender" in patch)          personPatch.gender = patch.gender;          // helper validates enum
+  if ("class_year" in patch)      personPatch.class_year = patch.class_year;  // helper validates range
+  if ("usa_swimming_id" in patch) personPatch.usa_swimming_id = patch.usa_swimming_id;
   if ("dob" in patch) {
     const dobCheck = validateDob(patch.dob);
     if (!dobCheck.ok) return { ok: false, reason: dobCheck.reason };
@@ -4175,10 +4203,26 @@ export async function dbUpdatePersonById(personId, patch, conn = pool) {
     if (!cy.ok) return { ok: false, reason: "bad_class_year" };
     sets.push("`class_year` = ?"); vals.push(cy.value);
   }
-  if (!sets.length) return { ok: true, affected: 0 };
-  vals.push(personId);
-  const r = await (conn || pool).query(`UPDATE \`persons\` SET ${sets.join(", ")} WHERE \`id\` = ?`, vals);
-  return { ok: true, affected: Number(r.affectedRows || 0) };
+  // USA-Swimming ID lives in person_external_ids (system='usa_swimming'),
+  // not on the persons row. Upsert on value, delete on null/empty. Handled
+  // before the empty-sets short-circuit so a USA-S-only patch still writes.
+  if ("usa_swimming_id" in patch) {
+    const v = patch.usa_swimming_id;
+    if (v === null || v === "") {
+      await (conn || pool).query("DELETE FROM `person_external_ids` WHERE `person_id` = ? AND `system` = 'usa_swimming'", [personId]);
+    } else {
+      await (conn || pool).query(
+        "INSERT INTO `person_external_ids` (`person_id`, `system`, `external_id`) VALUES (?, 'usa_swimming', ?) " +
+        "ON DUPLICATE KEY UPDATE `external_id` = VALUES(`external_id`)",
+        [personId, String(v).slice(0, 255)]
+      );
+    }
+  }
+  if (sets.length) {
+    vals.push(personId);
+    await (conn || pool).query(`UPDATE \`persons\` SET ${sets.join(", ")} WHERE \`id\` = ?`, vals);
+  }
+  return { ok: true };
 }
 
 // Ensure a persons row exists for a given parent table (users /
