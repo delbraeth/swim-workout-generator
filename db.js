@@ -555,8 +555,6 @@ export async function dbGetMe(sub) {
     // "(unknown)" rather than crashing.
     const userRows = await conn.query(
       "SELECT u.`sub`, u.`email`, u.`email_verified`, " +
-      "       u.`initials` AS legacy_initials, u.`display_name` AS legacy_display_name, " +
-      "       u.`dob` AS legacy_dob, u.`gender` AS legacy_gender, " +
       "       u.`is_admin`, u.`is_coach`, " +
       "       u.`created_at`, u.`last_login_at`, " +
       "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
@@ -571,14 +569,10 @@ export async function dbGetMe(sub) {
     );
     if (!userRows[0]) return null;
     const u = userRows[0];
-    const displayName = u.first_name
-      ? displayNameInline({ first_name: u.first_name, last_name: u.last_name, preferred_name: u.preferred_name })
-      : u.legacy_display_name;
-    const initials = u.person_initials || u.legacy_initials;
-    // Pre-I-F: prefer persons-side dob/gender, fall back to legacy. After
-    // I-F drops users.dob/gender, only the person side will exist.
-    const dob    = u.person_dob != null ? u.person_dob : u.legacy_dob;
-    const gender = u.person_gender != null ? u.person_gender : u.legacy_gender;
+    const displayName = displayNameInline({ first_name: u.first_name, last_name: u.last_name, preferred_name: u.preferred_name });
+    const initials = u.person_initials;
+    const dob    = u.person_dob;
+    const gender = u.person_gender;
     const statsRows = await conn.query(
       "SELECT `pool_mode`, COUNT(*) AS n, SUM(`total_yards`) AS total FROM `workouts` WHERE `user_sub` = ? GROUP BY `pool_mode`",
       [sub]
@@ -797,20 +791,17 @@ export async function dbListCoachesForPicker(excludeSub) {
   // I-F when legacy column is dropped.
   const rows = await pool.query(
     "SELECT u.`sub`, " +
-    "       u.`display_name` AS legacy_display_name, u.`initials` AS legacy_initials, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
     "  FROM `users` u " +
     "  LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
     " WHERE (u.`is_coach` = 1 OR u.`is_admin` = 1) AND u.`is_disabled` = 0 AND u.`sub` != ? " +
-    " ORDER BY u.`display_name` ASC, u.`initials` ASC",
+    " ORDER BY p.`last_name` ASC, p.`first_name` ASC",
     [excludeSub || ""]
   );
   return rows.map(r => ({
     sub:          r.sub,
-    display_name: r.first_name
-                    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                    : r.legacy_display_name,
-    initials:     r.person_initials || r.legacy_initials,
+    display_name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+    initials:     r.person_initials,
   }));
 }
 
@@ -820,7 +811,6 @@ export async function dbAdminListUsers() {
   // Legacy u.display_name + u.initials kept as fallback; dropped in I-F.
   const rows = await pool.query(`
     SELECT u.sub, u.email, u.email_verified,
-           u.display_name AS legacy_display_name, u.initials AS legacy_initials,
            u.is_admin, u.is_coach, u.is_disabled, u.support_role, u.created_at, u.last_login_at,
            u.tier, u.tier_granted_at, u.tier_source, u.stripe_customer_id,
            p.first_name, p.last_name, p.preferred_name, p.initials AS person_initials,
@@ -833,10 +823,8 @@ export async function dbAdminListUsers() {
   `);
   return rows.map(r => ({
     sub: r.sub, email: r.email, email_verified: !!r.email_verified,
-    display_name: r.first_name
-                    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                    : r.legacy_display_name,
-    initials: r.person_initials || r.legacy_initials,
+    display_name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+    initials: r.person_initials,
     is_admin: !!r.is_admin, is_coach: !!r.is_coach, is_disabled: !!r.is_disabled,
     support_role: !!r.support_role,
     tier:                 r.tier || "free",
@@ -1032,7 +1020,6 @@ export async function dbAdminListInvites() {
   const rows = await pool.query(`
     SELECT ic.code, ic.note, ic.max_uses, ic.times_used,
            ic.expires_at, ic.created_at, ic.created_by,
-           u.initials AS legacy_initials,
            p.initials AS person_initials
       FROM invite_codes ic
       LEFT JOIN users u   ON u.sub = ic.created_by
@@ -1044,7 +1031,7 @@ export async function dbAdminListInvites() {
     max_uses: Number(r.max_uses), times_used: Number(r.times_used),
     expires_at: r.expires_at, created_at: r.created_at,
     created_by: r.created_by,
-    created_by_initials: r.person_initials || r.legacy_initials,
+    created_by_initials: r.person_initials,
     status: r.expires_at && new Date(r.expires_at) < new Date() ? "expired"
           : Number(r.times_used) >= Number(r.max_uses) ? "exhausted"
           : "active",
@@ -2233,7 +2220,7 @@ export async function dbListPendingUgc({ limit = 100, offset = 0 } = {}) {
   const rows = await pool.query(
     "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, bo.`pool_mode`, " +
     "       bo.`label`, bo.`total_yards`, bo.`author_sub`, bo.`created_at`, bo.`updated_at`, " +
-    "       u.`display_name` AS legacy_author_name, u.`initials` AS legacy_author_initials, u.`email` AS author_email, " +
+    "       u.`email` AS author_email, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
     "FROM `bank_options` bo " +
     "LEFT JOIN `users` u   ON u.`sub` = bo.`author_sub` " +
@@ -2252,10 +2239,8 @@ export async function dbListPendingUgc({ limit = 100, offset = 0 } = {}) {
     label:            r.label,
     total_yards:      r.total_yards,
     author_sub:       r.author_sub,
-    author_name:      r.first_name
-                        ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                        : r.legacy_author_name,
-    author_initials:  r.person_initials || r.legacy_author_initials,
+    author_name:      displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+    author_initials:  r.person_initials,
     author_email:     r.author_email,
     created_at:       r.created_at,
     updated_at:       r.updated_at,
@@ -2399,7 +2384,7 @@ export async function dbListPromotableUgc({ limit = 100, offset = 0 } = {}) {
   const rows = await pool.query(
     "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, bo.`pool_mode`, " +
     "       bo.`label`, bo.`total_yards`, bo.`author_sub`, bo.`created_at`, bo.`updated_at`, " +
-    "       u.`display_name` AS legacy_author_name, u.`initials` AS legacy_author_initials, u.`email` AS author_email, " +
+    "       u.`email` AS author_email, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
     "       (SELECT MAX(`reviewed_at`) FROM `bank_option_reviews` r " +
     "          WHERE r.`option_id` = bo.`id` AND r.`decision` = 'approve') AS approved_at " +
@@ -2420,10 +2405,8 @@ export async function dbListPromotableUgc({ limit = 100, offset = 0 } = {}) {
     label:            r.label,
     total_yards:      r.total_yards,
     author_sub:       r.author_sub,
-    author_name:      r.first_name
-                        ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                        : r.legacy_author_name,
-    author_initials:  r.person_initials || r.legacy_author_initials,
+    author_name:      displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+    author_initials:  r.person_initials,
     author_email:     r.author_email,
     created_at:       r.created_at,
     updated_at:       r.updated_at,
@@ -2635,10 +2618,9 @@ export async function dbAdminListFeedback({ status = null, userSub = null, limit
   const rows = await pool.query(
     "SELECT f.`id`, f.`user_sub`, f.`category`, f.`subject`, f.`body`, f.`page`, " +
     "       f.`user_agent`, f.`status`, f.`reviewed_by`, f.`reviewed_at`, f.`admin_note`, f.`created_at`, " +
-    "       COALESCE(pu.`initials`, u.`initials`) AS submitter_initials, " +
-    "       u.`display_name` AS submitter_legacy_name, " +
+    "       pu.`initials` AS submitter_initials, " +
     "       pu.`first_name` AS submitter_first, pu.`last_name` AS submitter_last, pu.`preferred_name` AS submitter_preferred, " +
-    "       COALESCE(pr.`initials`, r.`initials`) AS reviewer_initials " +
+    "       pr.`initials` AS reviewer_initials " +
     "FROM `feedback` f " +
     "LEFT JOIN `users` u    ON u.`sub` = f.`user_sub` " +
     "LEFT JOIN `users` r    ON r.`sub` = f.`reviewed_by` " +
@@ -2653,9 +2635,7 @@ export async function dbAdminListFeedback({ status = null, userSub = null, limit
     id:                 Number(r.id),
     user_sub:           r.user_sub,
     submitter_initials: r.submitter_initials,
-    submitter_name:     r.submitter_first
-                          ? displayNameInline({ first_name: r.submitter_first, last_name: r.submitter_last, preferred_name: r.submitter_preferred })
-                          : r.submitter_legacy_name,
+    submitter_name:     displayNameInline({ first_name: r.submitter_first, last_name: r.submitter_last, preferred_name: r.submitter_preferred }),
     category:           r.category,
     subject:            r.subject,
     body:               r.body,
@@ -2820,7 +2800,7 @@ export async function dbListTeamCoaches(teamId) {
   // Legacy u.display_name / u.initials kept as fallback; dropped in I-F.
   const rows = await pool.query(
     "SELECT tc.`coach_sub`, tc.`role`, tc.`added_at`, " +
-    "       u.`display_name` AS legacy_display_name, u.`initials` AS legacy_initials, u.`email`, " +
+    "       u.`email`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
     "FROM `team_coaches` tc " +
     "LEFT JOIN `users` u ON u.`sub` = tc.`coach_sub` " +
@@ -2832,10 +2812,8 @@ export async function dbListTeamCoaches(teamId) {
   return rows.map(r => ({
     coach_sub:    r.coach_sub,
     role:         r.role,
-    display_name: r.first_name
-                    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                    : r.legacy_display_name,
-    initials:     r.person_initials || r.legacy_initials,
+    display_name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+    initials:     r.person_initials,
     email:        r.email,
     added_at:     dtToIso(r.added_at),
   }));
@@ -3866,14 +3844,10 @@ function rowToManagedSwimmer(r) {
   // Otherwise fall back to the legacy r.display_name column. Same
   // fallback shape as dbGetMe. Callers WITHOUT the JOIN (e.g., the
   // pre-claim diff path) still work because r.first_name is undefined.
-  const displayName = r.first_name
-    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-    : r.display_name;
-  const initials = r.person_initials || r.initials;
-  // Pre-I-F: prefer persons-side dob/gender when projected, fall back to
-  // legacy cms columns. Callers without the JOIN still see legacy values.
-  const dob    = r.person_dob != null ? r.person_dob : r.dob;
-  const gender = r.person_gender != null ? r.person_gender : r.gender;
+  const displayName = displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name });
+  const initials = r.person_initials;
+  const dob    = r.person_dob;
+  const gender = r.person_gender;
   return {
     id:                   r.id,
     owner_coach_sub:      r.owner_coach_sub,
@@ -3966,8 +3940,7 @@ export async function dbGetManagedSwimmer(id) {
   // computes display_name from the projection.
   const rows = await pool.query(
     "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
-    "       m.`display_name`, m.`initials`, " +
-    "       m.`dob`, m.`gender`, m.`parental_contact`, m.`parent_managed_flag`, " +
+    "       m.`parental_contact`, m.`parent_managed_flag`, " +
     "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
@@ -3990,8 +3963,7 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
   // legacy m.display_name (in sync with persons-derived inline name).
   const rows = await pool.query(
     "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
-    "       m.`display_name`, m.`initials`, " +
-    "       m.`dob`, m.`gender`, m.`parental_contact`, m.`parent_managed_flag`, " +
+    "       m.`parental_contact`, m.`parent_managed_flag`, " +
     "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
@@ -4001,7 +3973,7 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
     "  LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
     "  LEFT JOIN `person_external_ids` xe ON xe.`person_id` = m.`person_id` AND xe.`system` = 'usa_swimming' " +
     " WHERE m.`owner_coach_sub` = ? " + whereArchived +
-    " ORDER BY m.`archived` ASC, m.`display_name` ASC",
+    " ORDER BY m.`archived` ASC, p.`last_name` ASC, p.`first_name` ASC",
     [coachSub]
   );
   return rows.map(rowToManagedSwimmer);
@@ -4342,26 +4314,24 @@ export async function dbUpdatePersonById(personId, patch, conn = pool) {
 // itself is missing.
 async function _ensurePersonId(parentTable, idCol, idVal, conn) {
   const q = conn || pool;
-  // Read person_id plus the legacy name/initials to seed a new persons row
-  // (so an initials-only edit on a user who never got a persons row doesn't
-  // wipe their existing name). The try/catch lets this keep working after
-  // migration 045 drops the legacy columns — by which point every row has a
-  // person_id and the create branch never fires anyway.
-  let pid = null, legacyName = null, legacyInit = null;
-  try {
-    const rows = await q.query("SELECT `person_id`, `display_name`, `initials` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
-    if (!rows[0]) return null;                                // parent row gone
-    pid = rows[0].person_id; legacyName = rows[0].display_name; legacyInit = rows[0].initials;
-  } catch (e) {
-    const rows = await q.query("SELECT `person_id` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
-    if (!rows[0]) return null;
-    pid = rows[0].person_id;
-  }
+  // Common path: just the person_id. No legacy columns touched, so this is
+  // clean both before and after migration 045 drops them.
+  const rows = await q.query("SELECT `person_id` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
+  if (!rows[0]) return null;                                  // parent row gone
+  let pid = rows[0].person_id;
   if (pid) {
     const exists = await q.query("SELECT 1 FROM `persons` WHERE `id` = ? LIMIT 1", [pid]);
-    if (exists.length) return pid;                            // healthy
+    if (exists.length) return pid;                            // healthy — the overwhelming common case
   }
-  // Create (or recreate) a persons row seeded from legacy name, point parent at it.
+  // Rare create/repair branch (missing or orphaned person_id). Best-effort
+  // seed of name/initials from the legacy columns IF they still exist
+  // (pre-045); post-drop this throws and we fall back to placeholders. By
+  // then every row has a person_id so this branch effectively never fires.
+  let legacyName = null, legacyInit = null;
+  try {
+    const lr = await q.query("SELECT `display_name`, `initials` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
+    legacyName = lr[0]?.display_name; legacyInit = lr[0]?.initials;
+  } catch (_) { /* legacy columns dropped (post-045) — seed placeholders */ }
   if (!pid) pid = genPersonId();
   const parsed = parseDisplayName(legacyName);
   const init = (legacyInit && String(legacyInit).slice(0, 4)) || genInitialsFromParts(parsed.first, parsed.last);
@@ -4416,8 +4386,8 @@ async function groupHasMinorMember(groupId) {
   // persons-side dob wins when present, falls back to legacy column. After
   // I-F drops legacy dob columns, only the persons JOIN remains as source.
   const rows = await pool.query(
-    "SELECT COALESCE(up.`dob`, u.`dob`) AS udob, " +
-    "       COALESCE(mp.`dob`, m.`dob`) AS mdob " +
+    "SELECT up.`dob` AS udob, " +
+    "       mp.`dob` AS mdob " +
     "FROM `group_members` gm " +
     "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id`  = gm.`member_managed_id` " +
@@ -4602,7 +4572,7 @@ export async function dbListGroupCoaches(groupId) {
   // Legacy u.display_name / u.initials kept as fallback; dropped in I-F.
   const rows = await pool.query(
     "SELECT gc.`coach_sub`, gc.`role`, gc.`added_at`, " +
-    "       u.`display_name` AS legacy_display_name, u.`initials` AS legacy_initials, u.`email`, " +
+    "       u.`email`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
     "FROM `group_coaches` gc " +
     "LEFT JOIN `users` u ON u.`sub` = gc.`coach_sub` " +
@@ -4614,10 +4584,8 @@ export async function dbListGroupCoaches(groupId) {
   return rows.map(r => ({
     coach_sub:    r.coach_sub,
     role:         r.role,
-    display_name: r.first_name
-                    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                    : r.legacy_display_name,
-    initials:     r.person_initials || r.legacy_initials,
+    display_name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+    initials:     r.person_initials,
     email:        r.email,
     added_at:     dtToIso(r.added_at),
   }));
@@ -4682,20 +4650,19 @@ export async function dbListGroupMembers(groupId) {
   const rows = await pool.query(
     "SELECT gm.`id`, gm.`member_swimmer_sub`, gm.`member_managed_id`, gm.`role`, " +
     "       gm.`joined_at`, gm.`left_at`, gm.`reason`, " +
-    "       COALESCE(m.`display_name`, u.`display_name`) AS legacy_display_name, " +
-    "       COALESCE(mp.`initials`, up.`initials`, m.`initials`, u.`initials`) AS initials, " +
+    "       COALESCE(mp.`initials`, up.`initials`) AS initials, " +
     "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
     "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
     "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name, " +
-    "       COALESCE(mp.`dob`, up.`dob`, m.`dob`, u.`dob`)             AS dob, " +
-    "       COALESCE(mp.`gender`, up.`gender`, m.`gender`, u.`gender`) AS gender " +
+    "       COALESCE(mp.`dob`, up.`dob`)             AS dob, " +
+    "       COALESCE(mp.`gender`, up.`gender`) AS gender " +
     "FROM `group_members` gm " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
     "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
     "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
     "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
     "WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL " +
-    "ORDER BY legacy_display_name ASC",
+    "ORDER BY COALESCE(mp.`last_name`, up.`last_name`) ASC, COALESCE(mp.`first_name`, up.`first_name`) ASC",
     [groupId]
   );
   return rows.map(r => ({
@@ -4704,9 +4671,7 @@ export async function dbListGroupMembers(groupId) {
     member_managed_id:   r.member_managed_id,
     role:                r.role,
     joined_at:           dtToIso(r.joined_at),
-    display_name:        r.first_name
-                           ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                           : r.legacy_display_name,
+    display_name:        displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
     initials:            r.initials,
     dob:                 dateToYmd(r.dob),
     age:                 computeAge(r.dob),
@@ -5500,8 +5465,7 @@ export async function dbGetClaimToken(token) {
   const rows = await pool.query(
     "SELECT t.`token`, t.`managed_id`, t.`issued_by_coach`, t.`issued_at`, " +
     "       t.`expires_at`, t.`redeemed_at`, t.`redeemed_by_swimmer_sub`, " +
-    "       m.`display_name` AS legacy_managed_name, m.`owner_coach_sub`, " +
-    "       cu.`display_name` AS legacy_coach_name, " +
+    "       m.`owner_coach_sub`, " +
     "       mp.`first_name` AS m_first, mp.`last_name` AS m_last, mp.`preferred_name` AS m_preferred, " +
     "       pc.`first_name` AS c_first, pc.`last_name` AS c_last, pc.`preferred_name` AS c_preferred " +
     "FROM `managed_swimmer_claim_tokens` t " +
@@ -5517,13 +5481,9 @@ export async function dbGetClaimToken(token) {
   return {
     token:                   r.token,
     managed_id:              r.managed_id,
-    managed_name:            r.m_first
-                               ? displayNameInline({ first_name: r.m_first, last_name: r.m_last, preferred_name: r.m_preferred })
-                               : r.legacy_managed_name,
+    managed_name:            displayNameInline({ first_name: r.m_first, last_name: r.m_last, preferred_name: r.m_preferred }),
     owner_coach_sub:         r.owner_coach_sub,
-    coach_name:              r.c_first
-                               ? displayNameInline({ first_name: r.c_first, last_name: r.c_last, preferred_name: r.c_preferred })
-                               : r.legacy_coach_name,
+    coach_name:              displayNameInline({ first_name: r.c_first, last_name: r.c_last, preferred_name: r.c_preferred }),
     issued_by_coach:         r.issued_by_coach,
     issued_at:               dtToIso(r.issued_at),
     expires_at:              dtToIso(r.expires_at),
@@ -5746,9 +5706,7 @@ function rowToCoachNote(r) {
   // Phase 4 Identity I-D slice 7: prefer persons-derived display when the
   // caller JOINed persons + projected first_name. Falls back to legacy
   // u.display_name alias for callers that didn't add the JOIN.
-  const authorName = r.first_name
-    ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-    : (r.author_name || null);
+  const authorName = displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name });
   return {
     id:                 Number(r.id),
     target_swimmer_sub: r.target_swimmer_sub,
@@ -5795,7 +5753,7 @@ export async function dbGetCoachNote(id) {
   if (!id) return null;
   // Phase 4 Identity I-D slice 7: JOIN persons for author display.
   const rows = await pool.query(
-    "SELECT n.*, u.`display_name` AS author_name, " +
+    "SELECT n.*, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name` " +
     "FROM `coach_swimmer_notes` n " +
     "LEFT JOIN `users` u   ON u.`sub` = n.`author_coach_sub` " +
@@ -5848,7 +5806,7 @@ export async function dbListCoachNotesForTarget({
   const cap = Math.min(500, Math.max(1, Number(limit) || 100));
   // Phase 4 Identity I-D slice 7: JOIN persons for author display.
   const rows = await pool.query(
-    "SELECT n.*, u.`display_name` AS author_name, " +
+    "SELECT n.*, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name` " +
     "FROM `coach_swimmer_notes` n " +
     "LEFT JOIN `users` u   ON u.`sub` = n.`author_coach_sub` " +
@@ -6429,8 +6387,7 @@ export async function dbGetGroupRosterAsOf(groupId, scheduledDate) {
   const rows = await pool.query(
     "SELECT gm.`id`, gm.`member_swimmer_sub`, gm.`member_managed_id`, gm.`role`, " +
     "       gm.`joined_at`, gm.`left_at`, " +
-    "       COALESCE(m.`display_name`, u.`display_name`) AS legacy_display_name, " +
-    "       COALESCE(mp.`initials`, up.`initials`, m.`initials`, u.`initials`) AS initials, " +
+    "       COALESCE(mp.`initials`, up.`initials`) AS initials, " +
     "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
     "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
     "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name " +
@@ -6440,7 +6397,7 @@ export async function dbGetGroupRosterAsOf(groupId, scheduledDate) {
     "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
     "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
     "WHERE gm.`group_id` = ? AND gm.`joined_at` <= ? AND (gm.`left_at` IS NULL OR gm.`left_at` > ?) " +
-    "ORDER BY legacy_display_name ASC",
+    "ORDER BY COALESCE(mp.`last_name`, up.`last_name`) ASC, COALESCE(mp.`first_name`, up.`first_name`) ASC",
     [groupId, eod, eod]
   );
   return rows.map(r => ({
@@ -6449,9 +6406,7 @@ export async function dbGetGroupRosterAsOf(groupId, scheduledDate) {
     member_managed_id:   r.member_managed_id != null ? Number(r.member_managed_id) : null,
     role:                r.role,
     joined_at:           dtToIso(r.joined_at),
-    display_name:        r.first_name
-                           ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                           : r.legacy_display_name,
+    display_name:        displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
     initials:            r.initials,
   }));
 }
@@ -7295,8 +7250,7 @@ export async function dbListAssignmentsForWorkout(workoutId) {
     "       wa.`target_swimmer_sub`, wa.`target_managed_id`, wa.`lane_idx`, wa.`lane_label`, wa.`lane_pace`, " +
     "       wa.`assigned_at`, wa.`completion_state`, wa.`completed_at`, wa.`completed_by_coach_sub`, " +
     "       wa.`difficulty`, wa.`focus_note`, " +
-    "       COALESCE(m.`display_name`, u.`display_name`) AS legacy_target_name, " +
-    "       COALESCE(mp.`initials`, up.`initials`, m.`initials`, u.`initials`) AS target_initials, " +
+    "       COALESCE(mp.`initials`, up.`initials`) AS target_initials, " +
     "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
     "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
     "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name, " +
@@ -7308,7 +7262,7 @@ export async function dbListAssignmentsForWorkout(workoutId) {
     "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
     "LEFT JOIN `groups` g                 ON g.`id`  = wa.`assigned_via_group_id` " +
     "WHERE wa.`workout_id` = ? " +
-    "ORDER BY legacy_target_name ASC",
+    "ORDER BY COALESCE(mp.`last_name`, up.`last_name`) ASC, COALESCE(mp.`first_name`, up.`first_name`) ASC",
     [String(workoutId)]
   );
   return rows.map(r => ({
@@ -7318,9 +7272,7 @@ export async function dbListAssignmentsForWorkout(workoutId) {
     assigned_via_lane_plan_id: r.assigned_via_lane_plan_id,
     target_swimmer_sub:       r.target_swimmer_sub,
     target_managed_id:        r.target_managed_id,
-    target_name:              r.first_name
-                                ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                                : r.legacy_target_name,
+    target_name:              displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
     target_initials:          r.target_initials,
     group_name:               r.group_name,
     lane_idx:                 r.lane_idx,
@@ -7360,7 +7312,6 @@ export async function dbListAssignmentsForSwimmer(swimmerSub, { state = null, in
     "       w.`saved_at`, w.`type`, w.`total_yards`, w.`pool_mode`, w.`payload`, " +
     "       w.`user_sub` AS coach_sub, " +
     "       g.`name`                                AS group_name, " +
-    "       cu.`display_name`                       AS legacy_coach_name, " +
     "       pc.`first_name` AS c_first, pc.`last_name` AS c_last, pc.`preferred_name` AS c_preferred " +
     "FROM `workout_assignments` wa " +
     "JOIN `workouts` w  ON w.`id`  = wa.`workout_id` " +
@@ -7379,9 +7330,7 @@ export async function dbListAssignmentsForSwimmer(swimmerSub, { state = null, in
     assigned_via_lane_plan_id: r.assigned_via_lane_plan_id,
     group_name:               r.group_name,
     coach_sub:                r.coach_sub,
-    coach_name:               r.c_first
-                                ? displayNameInline({ first_name: r.c_first, last_name: r.c_last, preferred_name: r.c_preferred })
-                                : r.legacy_coach_name,
+    coach_name:               displayNameInline({ first_name: r.c_first, last_name: r.c_last, preferred_name: r.c_preferred }),
     lane_idx:                 r.lane_idx,
     lane_label:               r.lane_label,
     lane_pace:                r.lane_pace,
@@ -7424,7 +7373,6 @@ export async function dbListAssignmentsForGroup(groupId, { state = null, limit =
     "       wa.`assigned_at`, wa.`completion_state`, wa.`completed_at`, wa.`completed_by_coach_sub`, " +
     "       wa.`difficulty`, wa.`focus_note`, " +
     "       w.`type`, w.`total_yards`, w.`saved_at`, " +
-    "       COALESCE(m.`display_name`, u.`display_name`) AS legacy_target_name, " +
     "       COALESCE(mp.`first_name`, up.`first_name`)    AS first_name, " +
     "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
     "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name " +
@@ -7435,7 +7383,7 @@ export async function dbListAssignmentsForGroup(groupId, { state = null, limit =
     "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
     "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
     "WHERE " + where.join(" AND ") + " " +
-    "ORDER BY wa.`assigned_at` DESC, legacy_target_name ASC " +
+    "ORDER BY wa.`assigned_at` DESC, COALESCE(mp.`last_name`, up.`last_name`) ASC, COALESCE(mp.`first_name`, up.`first_name`) ASC " +
     `LIMIT ${cap}`,
     vals
   );
@@ -7444,9 +7392,7 @@ export async function dbListAssignmentsForGroup(groupId, { state = null, limit =
     workout_id:               r.workout_id,
     target_swimmer_sub:       r.target_swimmer_sub,
     target_managed_id:        r.target_managed_id,
-    target_name:              r.first_name
-                                ? displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name })
-                                : r.legacy_target_name,
+    target_name:              displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
     lane_idx:                 r.lane_idx,
     lane_label:               r.lane_label,
     lane_pace:                r.lane_pace,
