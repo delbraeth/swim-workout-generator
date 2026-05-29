@@ -92,7 +92,7 @@ import {
   dbAssertTeamWriter,
   dbAddTeamFavorite, dbRemoveTeamFavorite,
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
-  dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
+  dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault, dbSetTeamSchool,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListGuardiansForSwimmer, dbListParentInvitesForSwimmer, dbRemoveGuardian,
@@ -836,6 +836,22 @@ app.get("/api/me", requireAuth, async (req, res) => {
 // helpers that failed so the client can decide to re-fetch lazily.
 app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
   try {
+    // Parent Portal: also consume pending invites on page load (not just at
+    // sign-in), so an already-signed-in parent who gets invited to a new
+    // swimmer (e.g. a second/sibling) is linked on their next load without
+    // having to sign out and back in. Runs BEFORE the bootstrap read so the
+    // returned `me.is_parent` + parent data reflect any new guardian rows.
+    // Best-effort + cheap (indexed lookup; no-op for non-invited users).
+    try {
+      const ur = await pool.query("SELECT `email`, `email_verified` FROM `users` WHERE `sub` = ? LIMIT 1", [req.userSub]);
+      const u = ur[0];
+      if (u && u.email && u.email_verified) {
+        const r = await dbConsumePendingInvitesForUser(req.userSub, u.email);
+        if (r.accepted > 0) {
+          dbAuditEvent({ userSub: req.userSub, eventType: "parent.invite.accepted", ...reqMeta(req), details: { count: r.accepted, via: "bootstrap" } });
+        }
+      }
+    } catch (e) { console.warn(`[bootstrap] invite consume failed for ${req.userSub}: ${e.message}`); }
     const [bootstrap, billingStatus] = await Promise.all([
       dbGetBootstrapForUser(req.userSub),
       getBillingStatusFor(req.userSub).catch(err => {
@@ -855,7 +871,7 @@ app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
 // email_verified (handled in dbUpdateMe).
 app.patch("/api/me", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const allowed = ["email", "display_name", "initials", "gender"];
+    const allowed = ["email", "display_name", "initials", "gender", "class_year", "usa_swimming_id"];
     const patch = {};
     for (const k of allowed) if (k in (req.body || {})) patch[k] = req.body[k];
     if ("email" in patch && patch.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.email)) {
@@ -866,6 +882,12 @@ app.patch("/api/me", checkOrigin, requireAuth, requireCsrf, writeLimiter, async 
     }
     if ("initials" in patch && patch.initials && String(patch.initials).length > 8) {
       return res.status(400).json({ error: "initials max 8 chars" });
+    }
+    if ("class_year" in patch && patch.class_year !== null && patch.class_year !== "") {
+      const cy = Number(patch.class_year);
+      if (!Number.isInteger(cy) || cy < 1990 || cy > 2100) {
+        return res.status(400).json({ error: "class_year must be a year between 1990 and 2100" });
+      }
     }
     // Gender validation happens in db.js (enum check). Server just passes through.
     const r = await dbUpdateMe(req.userSub, patch);
@@ -890,7 +912,7 @@ app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
 
 app.patch("/api/admin/users/:sub", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
   try {
-    const allowed = ["email", "initials", "display_name"];
+    const allowed = ["email", "initials", "display_name", "gender", "class_year", "usa_swimming_id"];
     const patch = {};
     for (const k of allowed) if (k in (req.body || {})) patch[k] = req.body[k];
     if ("email" in patch && patch.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.email)) {
@@ -2999,6 +3021,12 @@ app.patch("/api/teams/:id/settings", checkOrigin, requireAuth, requireCsrf, writ
         updates.push({ field, value: body[field], affected: r.affected });
       }
     }
+    // school lives on teams.school directly (not a default_* column).
+    if ("school" in body) {
+      const r = await dbSetTeamSchool({ teamId: req.params.id, school: body.school });
+      if (!r.ok) return res.status(400).json({ error: `school: ${r.reason}` });
+      updates.push({ field: "school", value: body.school, affected: r.affected });
+    }
     if (updates.length === 0) return res.status(400).json({ error: "no fields to update" });
     for (const u of updates) {
       dbAuditEvent({
@@ -3238,6 +3266,8 @@ app.post("/api/managed-swimmers", checkOrigin, requireAuth, requireCoach, requir
       display_name:        b.display_name,
       dob:                 b.dob,
       initials:            b.initials,
+      class_year:          b.class_year,
+      usa_swimming_id:     b.usa_swimming_id,
       parental_contact:    b.parental_contact,
       parent_managed_flag: !!b.parent_managed_flag,
       pace_scy_100:        b.pace_scy_100,
