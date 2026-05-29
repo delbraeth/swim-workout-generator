@@ -99,7 +99,7 @@ Picks surfaced by the May code review (2026-05-29). Full diagnosis in `MAY_CODE_
 
 **Still open:**
 1. **Billing live-mode + cancellation E2E** (A5) — verification, not code; the two billing blockers above are now fixed, so this is unblocked. Run live-card checkout + cancellation end-to-end. Unblocks revenue. (~S)
-2. **Identity I-F** — drop the 8 legacy name/dob/gender columns (users + coach_managed_swimmers) now that reads go through `persons`. Refactor writers → persons-only + bundled DROP migration applied manually after a smoke. Decisions locked 2026-05-27; **no fixed soak gate — compressed to days at Cap'n's discretion** (pilot mode). `parental_contact` stays out of scope (waits for I-E). (~1–2h) — see [[swim-generator-i-f-decisions]]
+2. ~~**Identity I-F**~~ — ✅ **SHIPPED 2026-05-29** (migration 045 applied). Dropped the 8 legacy name/dob/gender columns (users + coach_managed_swimmers); writers + all readers now on `persons`. Identity refactor I-A→I-F complete; `persons` is the sole identity store. `parental_contact` retained (awaits I-E). Also shipped this pass: **normalization** — `class_year` (+ derived grade), team `school`, USA-S ID via person_external_ids. Commits incl. `5bbb150`. See [[swim-generator-i-f-decisions]].
 3. **PSC real substitution / non-managed coach panel** (v1.1) and **Reporting v1.1 charts** — opportunistic, see CLEAN_SLATE / MAY_CODE_REVIEW §5.
 
 ## Bigger threads (each now mapped to a PHASED_PLAN phase, or CUT)
