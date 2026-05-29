@@ -341,7 +341,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "4dfb45d-dirty · 2026-05-29 20:37 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "496ce0c · 2026-05-29 20:47 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -24361,6 +24361,58 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  PARENT INVITE ACCEPT CARDS
+    // ═══════════════════════════════════════════════════════════════
+    // Explicit-consent surface: a parent with pending invites (from
+    // bootstrap.pending_invites) sees one card per invite and must Accept
+    // (creates the guardian link) or Decline. Replaces the old silent
+    // auto-consume. Renders for any signed-in user with a pending invite,
+    // even before they're a linked parent.
+    function ParentInviteCards({ invites, onResolved }) {
+      const [busyId, setBusyId] = React.useState(null);
+      const [err, setErr] = React.useState(null);
+      if (!Array.isArray(invites) || invites.length === 0) return null;
+      const act = async (id, action) => {
+        setBusyId(id); setErr(null);
+        try {
+          const res = await fetch(`${API_BASE}/parent/invites/${id}/${action}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+          });
+          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `HTTP ${res.status}`); }
+          if (onResolved) onResolved();
+        } catch (e) { setErr(e.message || String(e)); }
+        finally { setBusyId(null); }
+      };
+      return (
+        <div className="screen-only" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 16px", background: "var(--color-bg)" }}>
+          {invites.map(inv => (
+            <div key={inv.id} style={{
+              display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12,
+              background: "var(--color-card)", border: "1px solid var(--color-primary)",
+              borderRadius: 10, padding: "12px 14px",
+            }}>
+              <div style={{ flex: 1, minWidth: 200, fontSize: 13, color: "var(--color-text)" }}>
+                👪 <strong>{inv.coach_name}</strong> invited you to follow <strong>{inv.swimmer_name}</strong> on SetForge as a parent/guardian.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => act(inv.id, "accept")} disabled={busyId === inv.id}
+                  style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "var(--color-primary)", color: "var(--color-bg)", fontSize: 13, fontWeight: 800, cursor: busyId === inv.id ? "default" : "pointer" }}>
+                  {busyId === inv.id ? "…" : "Accept"}
+                </button>
+                <button onClick={() => act(inv.id, "decline")} disabled={busyId === inv.id}
+                  style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-dim)", fontSize: 13, fontWeight: 600, cursor: busyId === inv.id ? "default" : "pointer" }}>
+                  Decline
+                </button>
+              </div>
+              {err && <div style={{ flexBasis: "100%", color: "#fca5a5", fontSize: 12 }}>{err}</div>}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  MAIN APP
     // ═══════════════════════════════════════════════════════════════
 
@@ -24540,6 +24592,7 @@
       // ProfileModal-open doesn't need their three GETs anymore.
       const [sessions, setSessions]               = useState([]);   // auth/sessions
       const [teamDefaults, setTeamDefaults]       = useState([]);   // team-defaults inherited
+      const [pendingInvites, setPendingInvites]   = useState([]);   // parent invites awaiting accept
       const [billingStatus, setBillingStatus]     = useState(null); // { tier, ... } | null
       const [audioCues, setAudioCues]             = useState(true); // W1: rest-timer beeps default ON
       const [lapButton, setLapButton]             = useState(true); // Run-screen v1: ✓ Lap button default ON
@@ -24928,6 +24981,7 @@
         // seed from props instead of fetching on open.
         if (Array.isArray(d.sessions))     setSessions(d.sessions);
         if (Array.isArray(d.teamDefaults)) setTeamDefaults(d.teamDefaults);
+        if (Array.isArray(d.pendingInvites)) setPendingInvites(d.pendingInvites);
         if (d.billing && d.billing.status) setBillingStatus(d.billing.status);
         // Settings — applied through the shared applySettings helper so
         // we don't refetch /api/settings post-bootstrap. applySettings is
@@ -26732,6 +26786,11 @@
                 Exit (reload)
               </button>
             </div>
+          )}
+          {/* Parent invite accept cards — explicit consent for any pending
+              invites matching this user's verified email (from bootstrap). */}
+          {authenticated && pendingInvites.length > 0 && (
+            <ParentInviteCards invites={pendingInvites} onResolved={refreshBootstrap} />
           )}
           {/* Billing v1 — post-Stripe-redirect banner. Auto-clears in 8s.
               Renders above the persona-block toast (higher z-index). */}
