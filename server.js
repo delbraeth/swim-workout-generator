@@ -100,7 +100,7 @@ import {
   dbListGuardiansForSwimmer, dbListParentInvitesForSwimmer, dbRemoveGuardian,
   dbCanAccessPersonAddress, dbIsGuardianOrSelf, dbListPersonAddresses,
   dbAddPersonAddress, dbUpdatePersonAddress, dbRemovePersonAddress,
-  dbGetHomeAddrConsent, dbSetHomeAddrConsent,
+  dbGetHomeAddrConsent, dbSetHomeAddrConsent, dbGetHouseholdSiblings,
   dbListSwimmersForParent, dbGetWeeklyDigestPayload, dbQueueWeeklyDigests,
   dbAuthzCoachOfSwimmer,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
@@ -3231,6 +3231,27 @@ app.patch("/api/swimmers/:ref/address-consent", checkOrigin, requireAuth, requir
     await dbSetHomeAddrConsent(gs.personId, coach_visible);
     dbAuditEvent({ userSub: req.userSub, eventType: "person.address.consent", ...reqMeta(req), details: { person_id: gs.personId, coach_visible } });
     res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Household / siblings (Locations P3) — DERIVED (shared address + guardian).
+// Gate: viewer must have address-read on the target; then each sibling is
+// only included if the viewer ALSO has address-read on that sibling (so a
+// coach without consent on a sibling never learns of them). requireAuth +
+// the same per-target authz as addresses.
+app.get("/api/swimmers/:ref/household", requireAuth, async (req, res) => {
+  try {
+    const acc = await dbCanAccessPersonAddress(req.userSub, _parseSwimmerRef(req.params.ref));
+    if (!acc.read) return res.status(403).json({ error: "not authorized" });
+    const raw = await dbGetHouseholdSiblings(acc.personId);
+    const out = [];
+    for (const s of raw) {
+      const sref = s.managed_id ? { managedId: s.managed_id } : (s.swimmer_sub ? { swimmerSub: s.swimmer_sub } : null);
+      if (!sref) continue;
+      const sacc = await dbCanAccessPersonAddress(req.userSub, sref);
+      if (sacc.read) out.push({ display_name: s.display_name, ref: s.managed_id || s.swimmer_sub });
+    }
+    res.json({ siblings: out });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
