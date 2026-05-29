@@ -3587,17 +3587,22 @@ export async function dbGetWeeklyDigestPayloadForSwimmer({ managedId = null, swi
   // Attendance — scheduled_workouts marked done in the week. Match
   // user_sub for full-account swimmers; managed swimmers don't have
   // scheduled_workouts of their own (those land on the coach's account).
-  let attendance = { done: 0, total: 0 };
-  if (swimmerSub) {
-    const att = await pool.query(
-      "SELECT COUNT(*) AS total, " +
-      "       SUM(CASE WHEN `completed_at` IS NOT NULL THEN 1 ELSE 0 END) AS done " +
-      "  FROM `scheduled_workouts` " +
-      " WHERE `user_sub` = ? AND `scheduled_date` >= ? AND `scheduled_date` < ?",
-      [swimmerSub, wsStr, eowStr]
-    );
-    attendance = { done: Number(att[0]?.done || 0), total: Number(att[0]?.total || 0) };
-  }
+  // Attendance = practice_attendance rows (present / total recorded) for
+  // this swimmer in the week. Works for BOTH managed and full-account
+  // swimmers — the table keys on swimmer_sub XOR managed_id — joined to
+  // scheduled_workouts for the date window. (Previously this read the
+  // swimmer's own scheduled_workouts, which managed swimmers don't have
+  // and which measured self-scheduling, not attendance.)
+  const attTgtCol = managedId ? "pa.`managed_id`" : "pa.`swimmer_sub`";
+  const att = await pool.query(
+    "SELECT COUNT(*) AS total, " +
+    "       SUM(CASE WHEN pa.`present` = 1 THEN 1 ELSE 0 END) AS done " +
+    "  FROM `practice_attendance` pa " +
+    "  JOIN `scheduled_workouts` sw ON sw.`id` = pa.`scheduled_workout_id` " +
+    " WHERE " + attTgtCol + " = ? AND sw.`scheduled_date` >= ? AND sw.`scheduled_date` < ?",
+    [tgtVal, wsStr, eowStr]
+  );
+  const attendance = { done: Number(att[0]?.done || 0), total: Number(att[0]?.total || 0) };
   return { assigned, done, yardage, upcoming, attendance, weekStart: wsStr };
 }
 
