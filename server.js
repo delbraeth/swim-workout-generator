@@ -93,6 +93,7 @@ import {
   dbAddTeamFavorite, dbRemoveTeamFavorite,
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault, dbSetTeamSchool,
+  dbListTeamFacilities, dbCreateTeamFacility, dbUpdateTeamFacility, dbArchiveTeamFacility,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
@@ -3026,6 +3027,47 @@ app.post("/api/teams/:id/settings/apply-to-roster", checkOrigin, requireAuth, re
       ...reqMeta(req),
       details:   { team_id: req.params.id, field, value: r.value, count: r.count, role },
     });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Team practice facilities (Locations P1, LOCATIONS_SCOPE.md) ──────
+// Read = any team member; write = owner/admin (mirrors team settings).
+app.get("/api/teams/:id/facilities", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    res.json(await dbListTeamFacilities(req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/teams/:id/facilities", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const b = req.body || {};
+    const r = await dbCreateTeamFacility({ teamId: req.params.id, name: b.name, course: b.course ?? null, lanes: b.lanes ?? null, is_primary: !!b.is_primary, address: b.address || null });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.facility.create", ...reqMeta(req), details: { team_id: req.params.id, facility_id: r.id, name: b.name, role } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.patch("/api/teams/:id/facilities/:fid", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const r = await dbUpdateTeamFacility(Number(req.params.fid), req.params.id, req.body || {});
+    if (!r.ok) return res.status(r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.facility.update", ...reqMeta(req), details: { team_id: req.params.id, facility_id: req.params.fid, fields: Object.keys(req.body || {}), role } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/teams/:id/facilities/:fid", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await dbAssertTeamWriter(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "owner or admin required" });
+    const r = await dbArchiveTeamFacility(Number(req.params.fid), req.params.id);
+    if (!r.ok) return res.status(r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.facility.archive", ...reqMeta(req), details: { team_id: req.params.id, facility_id: req.params.fid, role } });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
