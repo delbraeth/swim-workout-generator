@@ -3693,6 +3693,41 @@ export async function dbRemovePersonAddress(linkId, personId) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// Household/siblings (Locations P3) — DERIVED, no stored flag. Other persons
+// who share BOTH an active home address AND an active guardian with this
+// person. (Shared guardian alone is unreliable — kinship/foster/coach-as-
+// guardian; the shared address is what makes it a real household.) Caller
+// must apply per-sibling address access gating (this returns the raw set).
+export async function dbGetHouseholdSiblings(personId) {
+  if (!personId) return [];
+  const rows = await pool.query(
+    "SELECT DISTINCT q.`id` AS person_id, q.`first_name`, q.`last_name`, q.`preferred_name`, " +
+    "       u.`sub` AS swimmer_sub, m.`id` AS managed_id " +
+    "  FROM `persons` q " +
+    "  LEFT JOIN `users` u ON u.`person_id` = q.`id` " +
+    "  LEFT JOIN `coach_managed_swimmers` m ON m.`person_id` = q.`id` AND m.`archived` = 0 " +
+    " WHERE q.`id` <> ? " +
+    "   AND EXISTS (SELECT 1 FROM `person_addresses` pap JOIN `person_addresses` paq ON pap.`address_id` = paq.`address_id` " +
+    "               WHERE pap.`person_id` = ? AND paq.`person_id` = q.`id` AND pap.`removed_at` IS NULL AND paq.`removed_at` IS NULL) " +
+    "   AND EXISTS (SELECT 1 FROM `guardians` gp JOIN `guardians` gq ON gp.`guardian_person_id` = gq.`guardian_person_id` " +
+    "               WHERE gp.`swimmer_person_id` = ? AND gq.`swimmer_person_id` = q.`id` AND gp.`removed_at` IS NULL AND gq.`removed_at` IS NULL)",
+    [personId, personId, personId]
+  );
+  const seen = new Set();
+  const out = [];
+  for (const r of rows) {
+    if (seen.has(r.person_id)) continue;
+    seen.add(r.person_id);
+    out.push({
+      person_id: r.person_id,
+      display_name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
+      swimmer_sub: r.swimmer_sub || null,
+      managed_id: r.managed_id || null,
+    });
+  }
+  return out;
+}
+
 export async function dbGetHomeAddrConsent(personId) {
   if (!personId) return false;
   const rows = await pool.query("SELECT `home_addr_coach_visible` FROM `persons` WHERE `id` = ? LIMIT 1", [personId]);
