@@ -20,6 +20,19 @@ Memos in `/Users/cassidy/Library/Application Support/Claude/.../memory/` are the
 
 ---
 
+## ⚠ Confirmed blockers — May code review (2026-05-29)
+
+Fresh-eyes deep review, every item below **verified by hand against source**. Full diagnosis + line numbers + clean bills of health in `MAY_CODE_REVIEW.md`. Fix the billing two **before live-mode** (A5).
+
+- ⛔ **Webhook never reprocesses failed events** — `server.js:2580`. Dedupe row is inserted *before* processing; a transiently-failed `subscription.created`/`invoice.paid` is marked `failed` but kept, so Stripe's retry hits `ER_DUP_ENTRY` → `200 deduped` → never reprocessed. Silent revenue/ledger loss. Fix: only short-circuit when `processed_status='processed'`.
+- ⛔ **Coach revoked on `past_due`** — `lib/billing.js:235`. `past_due` is a transient dunning state (first failed retry, dunning still running); including it locks a paying coach out mid-cycle on a card hiccup. Fix: revoke only on terminal states (`canceled`/`unpaid`/`incomplete_expired`/`subscription.deleted`); treat `past_due` as soft.
+- ⛔ **2nd re-anchor throws `ER_DUP_ENTRY`** — `migrations/036:28` `UNIQUE(group_id, active)` collides with the flip-to-0-then-insert in `dbSetGroupAnchor` (`db.js:4634`). Breaks the shipped meet-anchored taper on the *second* anchor change for any group. Fix: drop `active` from the unique key (app-layer "one active") or use a generated-column partial unique.
+- ⛔ **Duplicate `guardians` rows** — `migrations/039` guardians table has no `UNIQUE(swimmer_person_id, guardian_person_id)`, so the `ER_DUP_ENTRY` catch in `dbConsumePendingInvitesForUser` (`db.js:3299`) can never fire. Parents re-linking accumulate dupes (masked on the dashboard by a `Set`). Fix: add the unique (decide the soft-delete re-add story).
+
+Secondary (see review §2/§4): impersonation survives `support_role` revocation for ≤30min; collation-mismatch on `dbGetEffective*` JOINs (NEEDS `SHOW CREATE TABLE` confirm — hot path); out-of-order subscription webhooks; email-worker rows stranded in `status='sending'`.
+
+---
+
 ## Now (Phase 3 in progress — meet-anchored taper SHIPPED, PSC slice 1 SHIPPED)
 
 Phase 2 engineering closed 2026-05-26. Phase 3 build started same day per Cap'n's "wrap up phase 3" directive (billing thin slice stays gated on first paying pilot; PSC + taper + vendor paper kit do not).
@@ -45,7 +58,7 @@ Phase 2 engineering closed 2026-05-26. Phase 3 build started same day per Cap'n'
 
 **Phase 3 remaining:**
 
-- ⏳ **Billing thin slice** — gated on first paying pilot. Spec: `BILLING_SCOPE.md`.
+- ✅ **Billing thin slice v1 SHIPPED 2026-05-28** — Stripe Checkout + Customer Portal + webhook → tier grant end-to-end in test mode. Coach $10/mo + 14-day trial. `STRIPE_CONFIG` JSON-blob env var, `BILLING_ACTIVE` gate, admin tier-grant override for testers (bypasses Stripe entirely via `source='admin_grant'`). `?upgrade=success` triggers `refreshBootstrap()` so ProfileModal flips to trial state without manual reload. Admin diagnostic at Admin → Billing config shows STRIPE_CONFIG load state without echoing secrets. **Critical preservation:** global `express.json()` must skip `/api/billing/webhook` or signature verify breaks (today's all-day-debugging cautionary tale; see `feedback-stripe-webhook-raw-body` memo). Outstanding: live-mode pilot test with real card; cancellation E2E. **⚠ Fix the two billing blockers above (webhook reprocess + `past_due` revoke) BEFORE live-mode** — see May code review section. Spec: `BILLING_SCOPE.md`.
 
 **Phase 1 hand-work still outstanding** (engineering shipped 2026-05-25 last week, but `phase-1-complete` tag waits on these):
 - ⏳ **Founder bio + photo on `/about`** — replace `[FOUNDER NAME]` / `[FOUNDER BIO]` / `[photo coming soon]` placeholders. Visible amber callout on the page marks them as scaffolding.
@@ -75,7 +88,15 @@ All four Phase 3 + three Phase 4 scopes are written. Implementation of Phase 3 s
 
 ## Next (small, ready)
 
-_Empty. UGC v1 (now) is the active build._
+Picks surfaced by the May code review (2026-05-29). Fix the two billing blockers **before** live-mode (A5). Full diagnosis in `MAY_CODE_REVIEW.md`; details in the "⚠ Confirmed blockers" section above.
+
+1. **[blocker] Webhook reprocess** — `server.js:2580`. Short-circuit the dedupe only when `processed_status='processed'`, so a transiently-failed event gets reprocessed on Stripe retry instead of being lost. (~S)
+2. **[blocker] `past_due` revoke** — `lib/billing.js:235`. Drop `past_due` from the revoke list; treat as soft (no-change/warn). Revoke only on terminal states. (~S)
+3. **[blocker] group_anchors 2nd re-anchor** — `migrations/036:28` + `db.js:4634`. Replace `UNIQUE(group_id, active)` so the flip-then-insert doesn't collide on the 2nd anchor change. New migration. (~S)
+4. **[blocker] Duplicate guardians** — `migrations/039`. Add `UNIQUE(swimmer_person_id, guardian_person_id)` (decide soft-delete re-add story) so the existing `ER_DUP_ENTRY` catch actually fires. New migration. (~S)
+5. **Billing live-mode + cancellation E2E** (A5) — verification, not code; do AFTER #1+#2. Unblocks revenue. (~S)
+6. **Identity I-F** — drop legacy display-name columns; decisions locked, soak gate ≈ 2026-06-27. (~1–2h)
+7. **Onboarding tour** — 9 `data-tour` anchors already in the SPA with no driver; wire a 3-card walkthrough. Highest UX ROI. (~8–12h)
 
 ## Bigger threads (each now mapped to a PHASED_PLAN phase, or CUT)
 

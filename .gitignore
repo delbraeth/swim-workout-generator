@@ -9,6 +9,11 @@ swimdb.pub
 *.pem
 *.key
 id_rsa*
+config
+
+# Local operator scratch (commit messages, staging patches)
+_COMMIT_MSG*.txt
+*.patch
 
 # macOS noise
 .DS_Store
