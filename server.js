@@ -98,6 +98,9 @@ import {
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
   dbListGuardiansForSwimmer, dbListParentInvitesForSwimmer, dbRemoveGuardian,
+  dbCanAccessPersonAddress, dbIsGuardianOrSelf, dbListPersonAddresses,
+  dbAddPersonAddress, dbUpdatePersonAddress, dbRemovePersonAddress,
+  dbGetHomeAddrConsent, dbSetHomeAddrConsent,
   dbListSwimmersForParent, dbGetWeeklyDigestPayload, dbQueueWeeklyDigests,
   dbAuthzCoachOfSwimmer,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
@@ -3172,6 +3175,62 @@ app.post("/api/parent/invites/:id/decline", checkOrigin, requireAuth, requireCsr
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({ userSub: req.userSub, eventType: "parent.invite.declined", ...reqMeta(req), details: { invite_id: req.params.id } });
     res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ── Home/person addresses (Locations P2, LOCATIONS_SCOPE.md) ───────────
+// requireAuth + per-target authz (dbCanAccessPersonAddress): self +
+// guardians always; coach-of-swimmer only when the consent toggle is on.
+// Sensitive minor PII — writes + consent changes are audited. Self manages
+// own by passing their own sub as :ref.
+app.get("/api/swimmers/:ref/addresses", requireAuth, async (req, res) => {
+  try {
+    const acc = await dbCanAccessPersonAddress(req.userSub, _parseSwimmerRef(req.params.ref));
+    if (!acc.read) return res.status(403).json({ error: "not authorized" });
+    const [addresses, coachVisible] = await Promise.all([dbListPersonAddresses(acc.personId), dbGetHomeAddrConsent(acc.personId)]);
+    res.json({ addresses, coach_visible: coachVisible, can_write: acc.write });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/swimmers/:ref/addresses", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const acc = await dbCanAccessPersonAddress(req.userSub, _parseSwimmerRef(req.params.ref));
+    if (!acc.write) return res.status(403).json({ error: "not authorized" });
+    const b = req.body || {};
+    const r = await dbAddPersonAddress(acc.personId, { kind: b.kind || "home", is_primary: b.is_primary !== false, address: b.address || {} });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "person.address.add", ...reqMeta(req), details: { person_id: acc.personId, link_id: r.id } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.patch("/api/swimmers/:ref/addresses/:linkId", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const acc = await dbCanAccessPersonAddress(req.userSub, _parseSwimmerRef(req.params.ref));
+    if (!acc.write) return res.status(403).json({ error: "not authorized" });
+    const r = await dbUpdatePersonAddress(req.params.linkId, acc.personId, req.body || {});
+    if (!r.ok) return res.status(r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "person.address.update", ...reqMeta(req), details: { person_id: acc.personId, link_id: req.params.linkId } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/swimmers/:ref/addresses/:linkId", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const acc = await dbCanAccessPersonAddress(req.userSub, _parseSwimmerRef(req.params.ref));
+    if (!acc.write) return res.status(403).json({ error: "not authorized" });
+    const r = await dbRemovePersonAddress(req.params.linkId, acc.personId);
+    dbAuditEvent({ userSub: req.userSub, eventType: "person.address.remove", ...reqMeta(req), details: { person_id: acc.personId, link_id: req.params.linkId } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+// Consent toggle — guardian or self ONLY (a coach can't self-authorize access).
+app.patch("/api/swimmers/:ref/address-consent", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const gs = await dbIsGuardianOrSelf(req.userSub, _parseSwimmerRef(req.params.ref));
+    if (!gs.ok) return res.status(403).json({ error: "guardian or self only" });
+    const { coach_visible } = req.body || {};
+    if (typeof coach_visible !== "boolean") return res.status(400).json({ error: "coach_visible must be boolean" });
+    await dbSetHomeAddrConsent(gs.personId, coach_visible);
+    dbAuditEvent({ userSub: req.userSub, eventType: "person.address.consent", ...reqMeta(req), details: { person_id: gs.personId, coach_visible } });
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
