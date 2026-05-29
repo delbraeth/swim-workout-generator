@@ -2573,8 +2573,12 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
 
     // Step 2: idempotency insert. Stripe re-sends on retry; we record
     // the event_id with status=pending and rely on the PK to dedupe.
-    // ER_DUP_ENTRY means we've seen this event already — ack with 200
-    // and skip processing.
+    // ER_DUP_ENTRY means we've seen this event before — but we only skip
+    // processing if a PRIOR attempt already SUCCEEDED (processed_status=
+    // 'processed'). A row left 'pending'/'failed' means a previous attempt
+    // never completed (DB blip, Stripe API timeout); since we 200 even on
+    // failure, Stripe would otherwise never retry it — so we fall through
+    // and (re)process to avoid silently losing the event.
     try {
       await pool.query(
         "INSERT INTO `stripe_webhook_events` (`stripe_event_id`, `event_type`, `payload_json`) VALUES (?, ?, ?)",
@@ -2582,9 +2586,17 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
       );
     } catch (dupErr) {
       if (dupErr.code === "ER_DUP_ENTRY" || /duplicate/i.test(dupErr.message || "")) {
-        return res.status(200).json({ ok: true, deduped: true, event_id: stripeEvent.id });
+        const priorRows = await pool.query(
+          "SELECT `processed_status` FROM `stripe_webhook_events` WHERE `stripe_event_id` = ?",
+          [stripeEvent.id]
+        );
+        if (priorRows[0]?.processed_status === "processed") {
+          return res.status(200).json({ ok: true, deduped: true, event_id: stripeEvent.id });
+        }
+        // Prior attempt left the row pending/failed — fall through to reprocess.
+      } else {
+        throw dupErr;
       }
-      throw dupErr;
     }
 
     // Step 3: dispatch + mark processed. Errors here flip the row to
