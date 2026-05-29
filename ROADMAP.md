@@ -88,15 +88,19 @@ All four Phase 3 + three Phase 4 scopes are written. Implementation of Phase 3 s
 
 ## Next (small, ready)
 
-Picks surfaced by the May code review (2026-05-29). Fix the two billing blockers **before** live-mode (A5). Full diagnosis in `MAY_CODE_REVIEW.md`; details in the "⚠ Confirmed blockers" section above.
+Picks surfaced by the May code review (2026-05-29). Full diagnosis in `MAY_CODE_REVIEW.md`; details in the "⚠ Confirmed blockers" section above.
 
-1. **[blocker] Webhook reprocess** — `server.js:2580`. Short-circuit the dedupe only when `processed_status='processed'`, so a transiently-failed event gets reprocessed on Stripe retry instead of being lost. (~S)
-2. **[blocker] `past_due` revoke** — `lib/billing.js:235`. Drop `past_due` from the revoke list; treat as soft (no-change/warn). Revoke only on terminal states. (~S)
-3. **[blocker] group_anchors 2nd re-anchor** — `migrations/036:28` + `db.js:4634`. Replace `UNIQUE(group_id, active)` so the flip-then-insert doesn't collide on the 2nd anchor change. New migration. (~S)
-4. **[blocker] Duplicate guardians** — `migrations/039`. Add `UNIQUE(swimmer_person_id, guardian_person_id)` (decide soft-delete re-add story) so the existing `ER_DUP_ENTRY` catch actually fires. New migration. (~S)
-5. **Billing live-mode + cancellation E2E** (A5) — verification, not code; do AFTER #1+#2. Unblocks revenue. (~S)
-6. **Identity I-F** — drop legacy display-name columns; decisions locked, soak gate ≈ 2026-06-27. (~1–2h)
-7. **Onboarding tour** — 9 `data-tour` anchors already in the SPA with no driver; wire a 3-card walkthrough. Highest UX ROI. (~8–12h)
+**✅ Shipped 2026-05-29** (all four May-review blockers + onboarding tour, deployed to setforge.io):
+- ~~Webhook reprocess~~ — `server.js` dedupe now short-circuits only on `processed_status='processed'`. Commit `2df9ca2`.
+- ~~`past_due` revoke~~ — `lib/billing.js` revokes only on terminal states; `past_due` is soft. Commit `2df9ca2`.
+- ~~group_anchors 2nd re-anchor~~ — migration `043` active-only generated-column unique. Applied to DB. Commit `7bd4075`.
+- ~~Duplicate guardians~~ — migration `043` active-only unique + dedup cleanup. Applied to DB. Commit `7bd4075`.
+- ~~Onboarding tour~~ — 6-step spotlight walkthrough of the generator setup flow + Profile replay. Commit `2be3c34`. See [[swim-generator-onboarding-tour-v1]].
+
+**Still open:**
+1. **Billing live-mode + cancellation E2E** (A5) — verification, not code; the two billing blockers above are now fixed, so this is unblocked. Run live-card checkout + cancellation end-to-end. Unblocks revenue. (~S)
+2. **Identity I-F** — drop the 8 legacy name/dob/gender columns (users + coach_managed_swimmers) now that reads go through `persons`. Refactor writers → persons-only + bundled DROP migration applied manually after a smoke. Decisions locked 2026-05-27; **no fixed soak gate — compressed to days at Cap'n's discretion** (pilot mode). `parental_contact` stays out of scope (waits for I-E). (~1–2h) — see [[swim-generator-i-f-decisions]]
+3. **PSC real substitution / non-managed coach panel** (v1.1) and **Reporting v1.1 charts** — opportunistic, see CLEAN_SLATE / MAY_CODE_REVIEW §5.
 
 ## Bigger threads (each now mapped to a PHASED_PLAN phase, or CUT)
 
