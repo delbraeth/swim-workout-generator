@@ -54,7 +54,7 @@ import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
-import { BILLING_ACTIVE, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
+import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 
 import {
   pool, dbActive, pingDb,
@@ -196,7 +196,17 @@ app.use(helmet({
 // + payload JSON); feedback / profile patches are <5kb. 100kb gives ~2× headroom
 // without enabling pathological payloads. If a future feature needs more, raise
 // it per-route rather than globally.
-app.use(express.json({ limit: "100kb" }));
+//
+// Billing webhook exception — Stripe signature verification requires the
+// raw, unparsed request body to recompute the HMAC. If express.json() runs
+// first, req.body becomes a parsed object and stripe.webhooks.constructEvent
+// throws "No signatures found matching the expected signature" → 400. Skip
+// the JSON parser for /api/billing/webhook so the per-route express.raw()
+// at the webhook handler can do its job.
+app.use((req, res, next) => {
+  if (req.originalUrl === "/api/billing/webhook") return next();
+  return express.json({ limit: "100kb" })(req, res, next);
+});
 
 // ───── Rate limiters ──────────────────────────────────────────────────
 // Auth: 10/min/IP. Catches brute-force probes against /api/auth/*.
@@ -2563,8 +2573,12 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
 
     // Step 2: idempotency insert. Stripe re-sends on retry; we record
     // the event_id with status=pending and rely on the PK to dedupe.
-    // ER_DUP_ENTRY means we've seen this event already — ack with 200
-    // and skip processing.
+    // ER_DUP_ENTRY means we've seen this event before — but we only skip
+    // processing if a PRIOR attempt already SUCCEEDED (processed_status=
+    // 'processed'). A row left 'pending'/'failed' means a previous attempt
+    // never completed (DB blip, Stripe API timeout); since we 200 even on
+    // failure, Stripe would otherwise never retry it — so we fall through
+    // and (re)process to avoid silently losing the event.
     try {
       await pool.query(
         "INSERT INTO `stripe_webhook_events` (`stripe_event_id`, `event_type`, `payload_json`) VALUES (?, ?, ?)",
@@ -2624,6 +2638,17 @@ app.get("/api/billing/history", requireAuth, async (req, res) => {
   try {
     const rows = await getBillingHistoryFor(req.userSub, req.query?.limit || 10);
     res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Admin diagnostic — reports which STRIPE_CONFIG fields are populated
+// without exposing the secret values themselves. Use to confirm at-a-glance
+// that BILLING_ACTIVE is true and all four fields are loaded. Returns
+// { active, config_source, has_secret_key, has_webhook, has_price_id,
+//   portal_return }.
+app.get("/api/admin/billing/config", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(billingConfigState());
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

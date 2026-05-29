@@ -302,7 +302,7 @@
 
     <div class="nav-section">Settings</div>
     <a href="#user-settings">Your Settings</a>
-    <a href="#account">Account &amp; Sessions</a>
+    <a href="#account">Profile (Account / Curation / Subscription)</a>
     <a href="#admin">Admin (admins only)</a>
     <a href="#teams">Teams (coaches)</a>
     <a href="#swimmers">Managed Swimmers (coaches)</a>
@@ -382,7 +382,7 @@
       <p>Click the invite link, pick either <strong>Sign in with Apple</strong> or <strong>Sign in with Google</strong>, and you're in. The invite is consumed on first use; the same link won't admit a second account (unless the inviter configured it for multiple uses). If you see an <code>invite_invalid</code>, <code>invite_expired</code>, or <code>invite_exhausted</code> message, ask the inviter for a fresh link.</p>
 
       <h3>Sessions</h3>
-      <p>Once signed in, your session persists via a secure cookie for 30 days. You can see all your active sessions and sign out from individual devices via the <strong>👤 Account</strong> menu — see <a href="#account">Account &amp; Sessions</a>.</p>
+      <p>Once signed in, your session persists via a secure cookie for 30 days. You can see all your active sessions and sign out from individual devices via the <strong>👤 Account</strong> menu — see <a href="#account">Profile (Account / Curation / Subscription)</a>.</p>
     </section>
 
     <!-- ══ WORKOUT TYPES ══ -->
@@ -785,7 +785,7 @@
       <p>The catalog shows a <strong>☆</strong> on every option row — warmup, drill, main, and cool-down — alongside the 🚩 Flag button. Tapping it favorites that option's label. Each set <em>inside</em> the expanded option also gets the cycling <strong>☆ → ★ → 👎 → ☆</strong> button per row, so coaches can curate at the per-set level without first generating a workout. Sets without an authored ID show a dim "·" placeholder.</p>
 
       <h3>Auditing what you've curated</h3>
-      <p>Open your Profile to see two audit panels — <a href="#favorites-panel">Favorites</a> and <a href="#disfavorites-panel">Disfavorites</a> — that list everything you've curated across all three tiers, with one-click <strong>Remove</strong> per row. See those sections under <a href="#account">Account &amp; Sessions</a> for details.</p>
+      <p>Open your Profile to see two audit panels — <a href="#favorites-panel">Favorites</a> and <a href="#disfavorites-panel">Disfavorites</a> — that list everything you've curated across all three tiers, with one-click <strong>Remove</strong> per row. See those sections under <a href="#account">Profile (Account / Curation / Subscription)</a> for details.</p>
 
       <h3>Coach group propagation</h3>
       <p>If a coach has favorited or disfavored something, their picks silently propagate to every swimmer in their groups. The swimmer sees the picker bias but no UI indication that the coach's curation is in effect — their own audit panel still shows only what THEY personally curated. See <a href="#coach-propagation">Coach group propagation</a> under Coach docs for the details.</p>
@@ -1232,10 +1232,16 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       </table>
     </section>
 
-    <!-- ══ ACCOUNT & SESSIONS ══ -->
+    <!-- ══ PROFILE (ACCOUNT / CURATION / SUBSCRIPTION) ══ -->
     <section id="account">
-      <h2>Account &amp; Sessions</h2>
-      <p>Click the <strong>👤</strong> button in the top-right of the header to open the Account modal. It shows:</p>
+      <h2>Profile (Account / Curation / Subscription)</h2>
+      <p>Click the <strong>👤</strong> button in the top-right of the header to open the Profile modal. It's organized into three tabs at the top:</p>
+      <ul>
+        <li><strong>Account</strong> — identity (name, email, initials, gender, member-since), workout stats, goals, Community (Discord), admin View-as switcher, active sessions.</li>
+        <li><strong>Curation</strong> — active constraints (if any), favorites audit panel, coach Curation Impact (coaches only), disfavorites audit panel (with the Mode toggle and team-defaults inheritance disclosure).</li>
+        <li><strong>Subscription</strong> — current tier, Start trial / Manage subscription button, recent invoices. See <a href="#subscription">Subscription</a> for the full pricing model.</li>
+      </ul>
+      <p>The active tab is remembered in your browser, so if you live in <strong>Curation</strong> it stays there next time you open the modal. Below: what's in each section.</p>
 
       <h3>Identity</h3>
       <p>Three fields are inline-editable — click <strong>Edit</strong> on any row, type the new value, then press <kbd>Enter</kbd> or click <strong>Save</strong>:</p>
@@ -1301,8 +1307,28 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <div class="callout tip">
         <div class="callout-icon">🔐</div>
-        <div class="callout-body"><strong>Lost a device?</strong> Sign in from any other browser, open the Account modal, and revoke the missing session. The cookie on that device becomes invalid within one API call.</div>
+        <div class="callout-body"><strong>Lost a device?</strong> Sign in from any other browser, open the Profile modal, and revoke the missing session. The cookie on that device becomes invalid within one API call.</div>
       </div>
+
+      <h3 id="subscription">Subscription</h3>
+      <p>SetForge is free for swimmers (Swimmer / Free tier). Coaches who want to use the coach-specific features — managed swimmers, groups, team curation, parent portal, Reports — pay a <strong>Coach</strong> tier subscription at <strong>$10/month</strong> with a <strong>14-day free trial</strong>. Card on file at trial start; no charge until the trial ends; cancel anytime from the same panel.</p>
+
+      <h4>How the panel works</h4>
+      <ul>
+        <li><strong>Free tier</strong> (default): you see "Swimmer (Free)" and a <strong>Start free trial</strong> button. Clicking it opens Stripe Checkout in a new flow; you enter a card and return here. Within a few seconds, the panel flips to your trial state without needing a reload.</li>
+        <li><strong>Trial active</strong>: you see "Coach (trial)" with the days remaining and a <strong>Manage subscription</strong> button. Manage opens the Stripe Customer Portal where you can update payment method, cancel, or view invoices.</li>
+        <li><strong>Paid coach</strong>: same as trial but without the countdown. Manage → Customer Portal.</li>
+        <li><strong>Comped</strong>: if Cap'n granted your tier directly (testers, pilots, special arrangements), you see "Coach · comp" with no Stripe involvement. There's no Manage button because there's no Stripe customer to manage.</li>
+      </ul>
+
+      <h4>Recent invoices</h4>
+      <p>If you've ever been charged, the most recent 5 invoices appear below the tier badge with amount, status, and date. Empty during trial since no payment has happened yet.</p>
+
+      <h4>What you get</h4>
+      <p>The Coach tier unlocks all coach-only features documented elsewhere in this manual: managed swimmers + groups + team curation + parent portal + Reports + per-swimmer constraints + meet-anchored taper + coach Curation Impact + UGC team-share and public submission. The Free tier keeps everything a solo swimmer needs forever (workout generation, history, goals, the full bank + engine, multi-lane print, run-screen, favorites/disfavorites at the personal level) — that's a contractual commitment per <a href="/terms.html">Terms</a>, not marketing copy.</p>
+
+      <h4>Cancellation + refunds</h4>
+      <p>Cancel anytime from <strong>Manage subscription</strong> → Customer Portal. Cancellation takes effect at the end of the current billing period (you keep coach access until then). For the refund policy on partial periods, see <a href="/terms.html#subscriptions-and-billing">Terms § Subscriptions and billing</a>.</p>
     </section>
 
     <!-- ══ ADMIN ══ -->
