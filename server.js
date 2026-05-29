@@ -3206,8 +3206,13 @@ app.get("/api/parent/digest", requireAuth, requireParent, async (req, res) => {
       // Default to Monday of the just-ended week.
       const now = new Date();
       const dow = now.getUTCDay();              // 0=Sun
-      const daysSinceMon = (dow + 6) % 7;       // 0 if Mon, 6 if Sun
-      const daysBack = daysSinceMon + 7;        // last Mon
+      // Monday of the week ending the most recent Sunday on-or-before today.
+      // Matches the digest cron's recap window (cron uses Sunday − 6), so the
+      // dashboard default and the emailed digest cover the SAME week. On a
+      // Sunday this is the current Mon–Sun week (not the prior one, which the
+      // old `daysSinceMon+7` gave). (Residual sub-day UTC-vs-ET edge near
+      // midnight is acceptable.)
+      const daysBack = dow + 6;
       const d = new Date(now);
       d.setUTCDate(d.getUTCDate() - daysBack);
       week = d.toISOString().slice(0, 10);
