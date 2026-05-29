@@ -3622,9 +3622,14 @@ export async function dbCanAccessPersonAddress(callerSub, { swimmerSub = null, m
   }
   const isCoach = await dbAuthzCoachOfSwimmer(callerSub, { swimmerSub, managedId });
   if (isCoach) {
+    // MANAGED swimmer (coach-owned record, no real account/guardian yet):
+    // the coach manages its address like dob/gender — no consent toggle.
+    // REAL/claimed swimmer (swimmerSub): a person with a guardian/self who
+    // controls consent → coach access requires the toggle.
+    if (managedId) return { read: true, write: true, personId };
     const t = await pool.query("SELECT `home_addr_coach_visible` FROM `persons` WHERE `id` = ? LIMIT 1", [personId]);
     if (t[0] && (t[0].home_addr_coach_visible === 1 || t[0].home_addr_coach_visible === true)) {
-      return { read: true, write: true, personId };                                             // coach + consent
+      return { read: true, write: true, personId };                                             // coach + consent (real swimmer)
     }
   }
   return { ...deny, personId };
