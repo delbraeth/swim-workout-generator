@@ -26,9 +26,13 @@ CREATE TABLE IF NOT EXISTS `addresses` (
 -- match teams.id (tm_xxxxxx); NO FK into the legacy teams table (errno-150
 -- rule — use column + index + app-layer integrity). address_id FKs the new
 -- addresses table (both new → safe). course mirrors pool_mode values.
+-- NOTE: the DB was unified to utf8mb4_unicode_ci (2026-05-29 — the stray
+-- general_ci legacy tables were all converted). So team_id is unicode_ci to
+-- match teams.id and avoid the "Illegal mix of collations" (errno 1267) trap.
+-- New tables/columns: always unicode_ci (the DB default).
 CREATE TABLE IF NOT EXISTS `team_facilities` (
   `id`           BIGINT AUTO_INCREMENT PRIMARY KEY,
-  `team_id`      VARCHAR(32)  NOT NULL,
+  `team_id`      VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `name`         VARCHAR(120) NOT NULL,
   `address_id`   BIGINT       NULL,
   `course`       ENUM('25y','25m','50m') NULL,
@@ -40,9 +44,15 @@ CREATE TABLE IF NOT EXISTS `team_facilities` (
   FOREIGN KEY (`address_id`) REFERENCES `addresses`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Repair: coerce team_id to unicode_ci in case an earlier run created it as
+-- general_ci. No-op once it's already unicode_ci. Run BEFORE the backfill.
+ALTER TABLE `team_facilities`
+  MODIFY COLUMN `team_id` VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL;
+
 -- ── Backfill: one primary facility per team that already set teams.school.
 -- Guarded by NOT IN so re-running is a no-op. teams.school stays in place as
--- a mirror of the primary facility's name until P5 drops it.
+-- a mirror of the primary facility's name until P5 drops it. DB is unified to
+-- unicode_ci, so a plain comparison is safe (no COLLATE needed).
 INSERT INTO `team_facilities` (`team_id`, `name`, `is_primary`)
 SELECT t.`id`, t.`school`, 1
   FROM `teams` t
