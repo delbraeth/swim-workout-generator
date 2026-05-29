@@ -707,18 +707,24 @@ export async function dbGetBootstrapForUser(userSub) {
     dbListMyActiveConstraints(userSub),        // 12
     dbListSessions(userSub),                   // 13 — added in B for ProfileModal-open
     dbListTeamDefaultsForUser(userSub),        // 14 — added in B for ProfileModal-open
+    (async () => {                             // 15 — pending parent invites (explicit-accept card)
+      const ur = await pool.query("SELECT `email`, `email_verified` FROM `users` WHERE `sub` = ? LIMIT 1", [userSub]);
+      const u = ur[0];
+      if (!u || !u.email || !u.email_verified) return [];
+      return dbListPendingInvitesForUser(userSub, u.email);
+    })(),
   ]);
   const sectionNames = [
     "me", "workouts", "settings", "favorites", "disfavorites",
     "favoriteSets", "disfavorSets", "effectiveFavorites", "effectiveDisfavorites",
     "ugcOverlay", "goals", "groupAnchors", "myConstraints",
-    "sessions", "teamDefaults",
+    "sessions", "teamDefaults", "pendingInvites",
   ];
   const fallbacks = [
     null, [], {}, [], [],
     [], [], null, null,
     {}, [], {}, { constraints: [] },
-    [], [],
+    [], [], [],
   ];
   const out = {};
   const errs = [];
@@ -3322,6 +3328,101 @@ export async function dbConsumePendingInvitesForUser(userSub, verifiedEmail) {
     accepted++;
   }
   return { accepted, errors };
+}
+
+// Light name lookup for a person behind a user sub (persons-derived).
+async function _nameForUserSub(sub) {
+  if (!sub) return null;
+  const rows = await pool.query(
+    "SELECT p.`first_name`, p.`last_name`, p.`preferred_name` FROM `users` u " +
+    "LEFT JOIN `persons` p ON p.`id` = u.`person_id` WHERE u.`sub` = ? LIMIT 1",
+    [sub]
+  );
+  return rows[0] ? displayNameInline(rows[0]) : null;
+}
+async function _nameForManagedId(id) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT p.`first_name`, p.`last_name`, p.`preferred_name` FROM `coach_managed_swimmers` m " +
+    "LEFT JOIN `persons` p ON p.`id` = m.`person_id` WHERE m.`id` = ? LIMIT 1",
+    [id]
+  );
+  return rows[0] ? displayNameInline(rows[0]) : null;
+}
+
+// Explicit parent-invite consent (replaces silent auto-consume). The
+// parent sees pending invites and Accepts/Declines each. Match is on the
+// invite's parent_email == the user's VERIFIED email (the security gate —
+// only the invited address can act on an invite).
+export async function dbListPendingInvitesForUser(userSub, verifiedEmail) {
+  if (!userSub || !verifiedEmail) return [];
+  const email = String(verifiedEmail).trim().toLowerCase();
+  const rows = await pool.query(
+    "SELECT `id`, `swimmer_managed_id`, `swimmer_sub`, `invited_by_coach_sub`, `created_at`, `expires_at` " +
+    "FROM `parent_invites` WHERE `parent_email` = ? AND `state` = 'pending' AND `expires_at` > NOW() " +
+    "ORDER BY `created_at` DESC",
+    [email]
+  );
+  const out = [];
+  for (const inv of rows) {
+    const swimmerName = inv.swimmer_managed_id
+      ? await _nameForManagedId(inv.swimmer_managed_id)
+      : await _nameForUserSub(inv.swimmer_sub);
+    const coachName = await _nameForUserSub(inv.invited_by_coach_sub);
+    out.push({
+      id:           Number(inv.id),
+      swimmer_name: swimmerName || "your swimmer",
+      coach_name:   coachName || "a coach",
+      created_at:   dtToIso(inv.created_at),
+      expires_at:   dtToIso(inv.expires_at),
+    });
+  }
+  return out;
+}
+
+async function _loadInviteForActor(inviteId, verifiedEmail) {
+  const email = String(verifiedEmail || "").trim().toLowerCase();
+  const rows = await pool.query(
+    "SELECT `id`, `swimmer_managed_id`, `swimmer_sub`, `parent_email`, `invited_by_coach_sub`, `state`, `expires_at` " +
+    "FROM `parent_invites` WHERE `id` = ?",
+    [Number(inviteId)]
+  );
+  const inv = rows[0];
+  if (!inv) return { error: "not_found" };
+  if (String(inv.parent_email).toLowerCase() !== email) return { error: "not_your_invite" };
+  return { inv };
+}
+
+export async function dbAcceptParentInvite(inviteId, userSub, verifiedEmail) {
+  if (!inviteId || !userSub || !verifiedEmail) return { ok: false, reason: "missing_args" };
+  const { inv, error } = await _loadInviteForActor(inviteId, verifiedEmail);
+  if (error) return { ok: false, reason: error };
+  if (inv.state !== "pending") return { ok: false, reason: "not_pending" };
+  if (inv.expires_at && new Date(inv.expires_at) < new Date()) return { ok: false, reason: "expired" };
+  const guardianPersonId = await _swimmerPersonId({ swimmerSub: userSub });
+  if (!guardianPersonId) return { ok: false, reason: "parent_has_no_person" };
+  const swimmerPid = await _swimmerPersonId({ managedId: inv.swimmer_managed_id, swimmerSub: inv.swimmer_sub });
+  if (!swimmerPid) return { ok: false, reason: "swimmer_not_found" };
+  try {
+    await pool.query(
+      "INSERT INTO `guardians` (`swimmer_person_id`, `guardian_person_id`, `relationship`, `added_by_sub`) VALUES (?, ?, 'guardian', ?)",
+      [swimmerPid, guardianPersonId, inv.invited_by_coach_sub]
+    );
+  } catch (e) {
+    if (e.code !== "ER_DUP_ENTRY" && !/duplicate/i.test(e.message || "")) return { ok: false, reason: e.message || String(e) };
+  }
+  await pool.query("UPDATE `parent_invites` SET `state` = 'accepted', `accepted_at` = CURRENT_TIMESTAMP WHERE `id` = ?", [inv.id]);
+  return { ok: true };
+}
+
+export async function dbDeclineParentInvite(inviteId, userSub, verifiedEmail) {
+  if (!inviteId || !userSub || !verifiedEmail) return { ok: false, reason: "missing_args" };
+  const { inv, error } = await _loadInviteForActor(inviteId, verifiedEmail);
+  if (error) return { ok: false, reason: error };
+  if (inv.state !== "pending") return { ok: false, reason: "not_pending" };
+  // 'revoked' state reused for parent-declined (enum has no 'declined').
+  await pool.query("UPDATE `parent_invites` SET `state` = 'revoked' WHERE `id` = ? AND `state` = 'pending'", [inv.id]);
+  return { ok: true };
 }
 
 // List active guardians (parents) for a swimmer. Used by coach view to
