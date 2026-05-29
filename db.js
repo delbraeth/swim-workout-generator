@@ -3592,6 +3592,114 @@ export async function dbRemoveGuardian(guardianId) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// ── Person (home) addresses + consent (Locations P2, LOCATIONS_SCOPE.md) ─
+// SENSITIVE (minor PII). Access enforced via dbCanAccessPersonAddress.
+function _addrCols(a) {
+  return [a.line1 || null, a.line2 || null, a.city || null, a.region || null, a.postal_code || null, a.country || "US"];
+}
+async function _writeAddress(addressId, a) {
+  if (addressId) {
+    await pool.query("UPDATE `addresses` SET `line1`=?,`line2`=?,`city`=?,`region`=?,`postal_code`=?,`country`=? WHERE `id`=?", [..._addrCols(a), addressId]);
+    return addressId;
+  }
+  const r = await pool.query("INSERT INTO `addresses` (`line1`,`line2`,`city`,`region`,`postal_code`,`country`) VALUES (?,?,?,?,?,?)", _addrCols(a));
+  return Number(r.insertId);
+}
+
+// Read/write authority for person P's addresses. self + guardians → r+w;
+// coach-of-swimmer → r+w ONLY when home_addr_coach_visible (the recorded
+// consent) is on. Default-deny. Returns { read, write, personId }.
+export async function dbCanAccessPersonAddress(callerSub, { swimmerSub = null, managedId = null } = {}) {
+  const deny = { read: false, write: false, personId: null };
+  if (!callerSub) return deny;
+  const personId = await _swimmerPersonId({ swimmerSub, managedId });
+  if (!personId) return deny;
+  const callerPid = await _swimmerPersonId({ swimmerSub: callerSub });
+  if (callerPid && callerPid === personId) return { read: true, write: true, personId };       // self
+  if (callerPid) {
+    const g = await pool.query("SELECT 1 FROM `guardians` WHERE `swimmer_person_id` = ? AND `guardian_person_id` = ? AND `removed_at` IS NULL LIMIT 1", [personId, callerPid]);
+    if (g.length) return { read: true, write: true, personId };                                 // guardian
+  }
+  const isCoach = await dbAuthzCoachOfSwimmer(callerSub, { swimmerSub, managedId });
+  if (isCoach) {
+    const t = await pool.query("SELECT `home_addr_coach_visible` FROM `persons` WHERE `id` = ? LIMIT 1", [personId]);
+    if (t[0] && (t[0].home_addr_coach_visible === 1 || t[0].home_addr_coach_visible === true)) {
+      return { read: true, write: true, personId };                                             // coach + consent
+    }
+  }
+  return { ...deny, personId };
+}
+
+// Who may flip the consent toggle: self or guardian only (a coach can't
+// self-authorize). Returns { ok:boolean, personId }.
+export async function dbIsGuardianOrSelf(callerSub, { swimmerSub = null, managedId = null } = {}) {
+  if (!callerSub) return { ok: false, personId: null };
+  const personId = await _swimmerPersonId({ swimmerSub, managedId });
+  if (!personId) return { ok: false, personId: null };
+  const callerPid = await _swimmerPersonId({ swimmerSub: callerSub });
+  if (callerPid && callerPid === personId) return { ok: true, personId };
+  if (callerPid) {
+    const g = await pool.query("SELECT 1 FROM `guardians` WHERE `swimmer_person_id` = ? AND `guardian_person_id` = ? AND `removed_at` IS NULL LIMIT 1", [personId, callerPid]);
+    if (g.length) return { ok: true, personId };
+  }
+  return { ok: false, personId };
+}
+
+export async function dbListPersonAddresses(personId) {
+  if (!personId) return [];
+  const rows = await pool.query(
+    "SELECT pa.`id`, pa.`kind`, pa.`is_primary`, a.`line1`, a.`line2`, a.`city`, a.`region`, a.`postal_code`, a.`country` " +
+    "  FROM `person_addresses` pa JOIN `addresses` a ON a.`id` = pa.`address_id` " +
+    " WHERE pa.`person_id` = ? AND pa.`removed_at` IS NULL " +
+    " ORDER BY pa.`is_primary` DESC, pa.`added_at` ASC",
+    [personId]
+  );
+  return rows.map(r => ({ id: Number(r.id), kind: r.kind, is_primary: !!r.is_primary, line1: r.line1, line2: r.line2, city: r.city, region: r.region, postal_code: r.postal_code, country: r.country }));
+}
+
+export async function dbAddPersonAddress(personId, { kind = "home", is_primary = true, address = {} } = {}) {
+  if (!personId) return { ok: false, reason: "no_person" };
+  if (!["home", "mailing", "other"].includes(kind)) return { ok: false, reason: "bad_kind" };
+  const addressId = await _writeAddress(null, address || {});
+  const r = await pool.query("INSERT INTO `person_addresses` (`person_id`,`address_id`,`kind`,`is_primary`) VALUES (?,?,?,?)", [personId, addressId, kind, is_primary ? 1 : 0]);
+  if (is_primary) await pool.query("UPDATE `person_addresses` SET `is_primary` = 0 WHERE `person_id` = ? AND `id` <> ? AND `removed_at` IS NULL", [personId, Number(r.insertId)]);
+  return { ok: true, id: Number(r.insertId) };
+}
+
+export async function dbUpdatePersonAddress(linkId, personId, patch = {}) {
+  if (!linkId || !personId) return { ok: false, reason: "missing_args" };
+  const rows = await pool.query("SELECT `address_id` FROM `person_addresses` WHERE `id` = ? AND `person_id` = ? AND `removed_at` IS NULL", [Number(linkId), personId]);
+  if (!rows[0]) return { ok: false, reason: "not_found" };
+  if ("address" in patch) await _writeAddress(rows[0].address_id, patch.address || {});
+  if ("kind" in patch) {
+    if (!["home", "mailing", "other"].includes(patch.kind)) return { ok: false, reason: "bad_kind" };
+    await pool.query("UPDATE `person_addresses` SET `kind` = ? WHERE `id` = ?", [patch.kind, Number(linkId)]);
+  }
+  if (patch.is_primary === true) {
+    await pool.query("UPDATE `person_addresses` SET `is_primary` = 1 WHERE `id` = ?", [Number(linkId)]);
+    await pool.query("UPDATE `person_addresses` SET `is_primary` = 0 WHERE `person_id` = ? AND `id` <> ? AND `removed_at` IS NULL", [personId, Number(linkId)]);
+  }
+  return { ok: true };
+}
+
+export async function dbRemovePersonAddress(linkId, personId) {
+  if (!linkId || !personId) return { ok: false, reason: "missing_args" };
+  const r = await pool.query("UPDATE `person_addresses` SET `removed_at` = NOW() WHERE `id` = ? AND `person_id` = ? AND `removed_at` IS NULL", [Number(linkId), personId]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+export async function dbGetHomeAddrConsent(personId) {
+  if (!personId) return false;
+  const rows = await pool.query("SELECT `home_addr_coach_visible` FROM `persons` WHERE `id` = ? LIMIT 1", [personId]);
+  return !!(rows[0] && (rows[0].home_addr_coach_visible === 1 || rows[0].home_addr_coach_visible === true));
+}
+
+export async function dbSetHomeAddrConsent(personId, visible) {
+  if (!personId) return { ok: false, reason: "no_person" };
+  await pool.query("UPDATE `persons` SET `home_addr_coach_visible` = ? WHERE `id` = ?", [visible ? 1 : 0, personId]);
+  return { ok: true };
+}
+
 // Parent dashboard: list the swimmers this parent is linked to. Joins
 // guardians → swimmer's person → back to either cms or users (the
 // swimmer is one or the other). Returns shape consumable by the
