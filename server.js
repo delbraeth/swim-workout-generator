@@ -3074,15 +3074,13 @@ app.post("/api/swimmers/:swimmerRef/parent-invite", checkOrigin, requireAuth, re
         const swimmerName = swimmerRow?.display_name || "your swimmer";
         const coachName   = coachRow?.display_name || "Your swimmer's coach";
         await enqueueEmail({
-          to:        parent_email,
-          template:  "parent-invite",
-          payload:   {
-            swimmerName,
-            coachName,
-            inviteUrl: `${APP_URL}/`,
-          },
-          dedupKey:  `parent-invite:${r.id}`,
-          userSub:   req.userSub,
+          dedupKey:   `parent-invite:${r.id}`,
+          toEmail:    parent_email,
+          templateId: "parent-invite",
+          // template vars (spread at top level, not nested):
+          swimmerName,
+          coachName,
+          signInUrl:  `${APP_URL}/`,
         });
       } catch (e) {
         console.warn(`[parent-invite] email enqueue failed: ${e.message}`);
