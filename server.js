@@ -2333,7 +2333,10 @@ app.post("/api/feedback", checkOrigin, requireAuth, requireCsrf, writeLimiter, a
     // protection per scope §6 + §2 audience-is-adults-only. The DB row
     // is canonical; missing the Discord post degrades triage UX but
     // never user data integrity.
-    pool.query("SELECT `display_name`, `dob` FROM `users` WHERE `sub` = ?", [req.userSub])
+    pool.query(
+      "SELECT p.`first_name`, p.`last_name`, p.`preferred_name`, p.`dob` " +
+      "FROM `users` u LEFT JOIN `persons` p ON p.`id` = u.`person_id` WHERE u.`sub` = ?",
+      [req.userSub])
       .then(async (rows) => {
         const u = rows[0];
         if (!u) return;
@@ -2350,7 +2353,7 @@ app.post("/api/feedback", checkOrigin, requireAuth, requireCsrf, writeLimiter, a
         }
         const result = await postFeedbackToDiscord({
           category, subject, body, page,
-          displayName: u.display_name,
+          displayName: ((u.preferred_name || u.first_name || "") + " " + (u.last_name || "")).trim() || "(unknown)",
         });
         dbAuditEvent({
           userSub:   req.userSub,
@@ -2658,10 +2661,12 @@ app.post("/api/admin/email/test", checkOrigin, requireAuth, requireAdmin, requir
     // Vars passed through to the renderer. For welcome we look up the
     // admin's display_name. Future templates can pull other fields.
     const userRows = await pool.query(
-      "SELECT `display_name` FROM `users` WHERE `sub` = ?",
+      "SELECT p.`first_name`, p.`last_name`, p.`preferred_name` " +
+      "FROM `users` u LEFT JOIN `persons` p ON p.`id` = u.`person_id` WHERE u.`sub` = ?",
       [req.userSub]
     );
-    const displayName = userRows[0]?.display_name || null;
+    const _u = userRows[0];
+    const displayName = _u ? (((_u.preferred_name || _u.first_name || "") + " " + (_u.last_name || "")).trim() || null) : null;
 
     const result = await enqueueEmail({
       dedupKey:    `test:${templateId}:${req.userSub}:${Date.now()}`,
