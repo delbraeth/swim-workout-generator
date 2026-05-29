@@ -341,7 +341,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "a76275e · 2026-05-29 22:32 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "c755f75-dirty · 2026-05-29 22:48 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -15438,7 +15438,6 @@
       const [newFav, setNewFav]     = React.useState("");
       const [newDisfav, setNewDisfav] = React.useState("");
       const [paceDraft, setPaceDraft] = React.useState("");                   // pending edit
-      const [schoolDraft, setSchoolDraft] = React.useState("");               // school/club affiliation
       const [busy, setBusy]         = React.useState(false);
 
       const load = React.useCallback(async () => {
@@ -15454,7 +15453,6 @@
           setCuration(c);
           setSettings(s);
           setPaceDraft(s.default_pace_base || "");
-          setSchoolDraft(s.school || "");
         } catch (e) {
           setMsg(`Error loading: ${e.message}`);
           setCuration({ favorites: [], disfavorites: [] });
@@ -15513,24 +15511,6 @@
             method: "PATCH",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
             body: JSON.stringify({ pace_base: value }),
-          });
-          if (!res.ok) {
-            const j = await res.json().catch(() => ({}));
-            throw new Error(j.error || `HTTP ${res.status}`);
-          }
-          await load();
-        } catch (e) { setMsg(`Save failed: ${e.message}`); }
-        finally { setBusy(false); }
-      };
-
-      const saveSchool = async () => {
-        const value = schoolDraft.trim() || null;
-        setBusy(true); setMsg(null);
-        try {
-          const res = await fetch(`/api/teams/${teamId}/settings`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body: JSON.stringify({ school: value }),
           });
           if (!res.ok) {
             const j = await res.json().catch(() => ({}));
@@ -15647,6 +15627,8 @@
             {renderCurationList("disfav", curation.disfavorites, "var(--color-destructive)")}
           </div>
 
+          <TeamFacilitiesSection teamId={teamId} canWrite={canWrite && !archived} />
+
           <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 6 }}>
             <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
               Team Defaults
@@ -15654,25 +15636,6 @@
             <p style={{ color: "var(--color-text-dim)", fontSize: 11, margin: "0 0 12px", lineHeight: 1.5, fontStyle: "italic" }}>
               Defaults apply when a brand-new swimmer joins a group on this team. Use "Push to roster" to apply to your current swimmers (one-time).
             </p>
-
-            <div style={{ display: "grid", gridTemplateColumns: "120px 1fr auto", gap: 10, alignItems: "center", marginBottom: 10 }}>
-              <label style={{ color: "var(--color-text-muted)", fontSize: 12, fontWeight: 600 }}>School / club</label>
-              {canWrite && !archived ? (
-                <input value={schoolDraft}
-                  onChange={e => setSchoolDraft(e.target.value)}
-                  placeholder="e.g. Lincoln High School"
-                  maxLength={120}
-                  style={{ padding: "6px 9px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
-              ) : (
-                <span style={{ color: "var(--color-text)", fontSize: 13 }}>{settings.school || "—"}</span>
-              )}
-              {canWrite && !archived && (
-                <button onClick={saveSchool} disabled={busy || schoolDraft === (settings.school || "")}
-                  style={{ padding: "6px 12px", background: (busy || schoolDraft === (settings.school || "")) ? "var(--color-border)" : "var(--color-primary)", color: (busy || schoolDraft === (settings.school || "")) ? "#cbd5e1" : "#fff", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: (busy || schoolDraft === (settings.school || "")) ? "not-allowed" : "pointer" }}>
-                  Save
-                </button>
-              )}
-            </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "120px 1fr auto", gap: 10, alignItems: "center", marginBottom: 10 }}>
               <label style={{ color: "var(--color-text-muted)", fontSize: 12, fontWeight: 600 }}>Pace baseline</label>
@@ -24356,6 +24319,123 @@
               </div>
             </div>
           </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  TEAM PRACTICE FACILITIES (Locations P1)
+    // ═══════════════════════════════════════════════════════════════
+    // One-or-more pools per team (generalizes the old single "school"
+    // field). Read for any team member; add/edit/archive for owner/admin.
+    const FACILITY_COURSES = [
+      { v: "",    label: "—" },
+      { v: "25y", label: "SCY (25 yd)" },
+      { v: "25m", label: "SCM (25 m)" },
+      { v: "50m", label: "LCM (50 m)" },
+    ];
+    function courseLabel(v) { const o = FACILITY_COURSES.find(x => x.v === (v || "")); return o ? o.label : v; }
+    function TeamFacilitiesSection({ teamId, canWrite }) {
+      const [list, setList] = React.useState(null);
+      const [busy, setBusy] = React.useState(false);
+      const [msg, setMsg]   = React.useState(null);
+      const [adding, setAdding] = React.useState(false);
+      const emptyF = () => ({ name: "", course: "", lanes: "", is_primary: false, line1: "", city: "", region: "", postal_code: "" });
+      const [form, setForm] = React.useState(emptyF());
+      const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+      const load = React.useCallback(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/teams/${teamId}/facilities`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setList(await res.json());
+        } catch (e) { setMsg(`Load failed: ${e.message}`); setList([]); }
+      }, [teamId]);
+      React.useEffect(() => { load(); }, [load]);
+      const body = (f) => ({
+        name: f.name.trim(), course: f.course || null, lanes: f.lanes === "" ? null : Number(f.lanes), is_primary: !!f.is_primary,
+        address: (f.line1 || f.city || f.region || f.postal_code) ? { line1: f.line1 || null, city: f.city || null, region: f.region || null, postal_code: f.postal_code || null } : null,
+      });
+      const add = async () => {
+        if (!form.name.trim()) { setMsg("Facility name required."); return; }
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`${API_BASE}/teams/${teamId}/facilities`, { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify(body(form)) });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setForm(emptyF()); setAdding(false); await load();
+        } catch (e) { setMsg(`Add failed: ${e.message}`); } finally { setBusy(false); }
+      };
+      const makePrimary = async (id) => {
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`${API_BASE}/teams/${teamId}/facilities/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ is_primary: true }) });
+          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `HTTP ${res.status}`); }
+          await load();
+        } catch (e) { setMsg(`Update failed: ${e.message}`); } finally { setBusy(false); }
+      };
+      const archive = async (id, name) => {
+        if (!window.confirm(`Remove the facility "${name}"?`)) return;
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`${API_BASE}/teams/${teamId}/facilities/${id}`, { method: "DELETE", headers: { ...csrfHeaders() } });
+          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `HTTP ${res.status}`); }
+          await load();
+        } catch (e) { setMsg(`Remove failed: ${e.message}`); } finally { setBusy(false); }
+      };
+      const inputStyle = { padding: "5px 9px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 };
+      return (
+        <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 6 }}>
+          <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Practice facilities</div>
+          {list === null ? (
+            <div style={{ color: "var(--color-text-dim)", fontSize: 12 }}>Loading…</div>
+          ) : list.length === 0 ? (
+            <div style={{ color: "var(--color-text-dim)", fontSize: 12, marginBottom: 8 }}>No facilities yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+              {list.map(f => (
+                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", background: "var(--color-bg)", borderRadius: 6 }}>
+                  <span style={{ fontWeight: 700, color: "var(--color-text)", fontSize: 13 }}>{f.name}</span>
+                  {f.is_primary && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 4, padding: "1px 6px" }}>PRIMARY</span>}
+                  {f.course && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>{courseLabel(f.course)}</span>}
+                  {f.lanes != null && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>{f.lanes} lanes</span>}
+                  {f.address && (f.address.city || f.address.line1) && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>· {[f.address.line1, f.address.city, f.address.region].filter(Boolean).join(", ")}</span>}
+                  {canWrite && (
+                    <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                      {!f.is_primary && <button onClick={() => makePrimary(f.id)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Make primary</button>}
+                      <button onClick={() => archive(f.id, f.name)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Remove</button>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {canWrite && (adding ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px", background: "var(--color-bg)", borderRadius: 6 }}>
+              <input value={form.name} onChange={e => upd("name", e.target.value)} placeholder="Facility name (e.g. Lincoln HS Natatorium)" maxLength={120} style={inputStyle} />
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <select value={form.course} onChange={e => upd("course", e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                  {FACILITY_COURSES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                </select>
+                <input value={form.lanes} onChange={e => upd("lanes", e.target.value.replace(/\D/g, "").slice(0, 3))} placeholder="Lanes" inputMode="numeric" style={{ ...inputStyle, width: 80 }} />
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--color-text-dim)" }}>
+                  <input type="checkbox" checked={form.is_primary} onChange={e => upd("is_primary", e.target.checked)} /> Primary
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <input value={form.line1} onChange={e => upd("line1", e.target.value)} placeholder="Address (optional)" maxLength={160} style={{ ...inputStyle, flex: 2, minWidth: 160 }} />
+                <input value={form.city} onChange={e => upd("city", e.target.value)} placeholder="City" maxLength={80} style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
+                <input value={form.region} onChange={e => upd("region", e.target.value)} placeholder="State" maxLength={80} style={{ ...inputStyle, width: 70 }} />
+                <input value={form.postal_code} onChange={e => upd("postal_code", e.target.value)} placeholder="ZIP" maxLength={20} style={{ ...inputStyle, width: 80 }} />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={add} disabled={busy || !form.name.trim()} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: (busy || !form.name.trim()) ? "var(--color-border)" : "var(--color-primary)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: (busy || !form.name.trim()) ? "not-allowed" : "pointer" }}>{busy ? "Saving…" : "Add facility"}</button>
+                <button onClick={() => { setAdding(false); setForm(emptyF()); setMsg(null); }} disabled={busy} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-dim)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setAdding(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Add facility</button>
+          ))}
+          {msg && <div style={{ color: "var(--color-warn)", fontSize: 12, marginTop: 8 }}>{msg}</div>}
         </div>
       );
     }
