@@ -15303,9 +15303,11 @@
             )}
           </div>
 
-          {/* Home address (Locations P2) — guardian manages + consent toggle */}
+          {/* Home address (Locations P2) — guardian manages + consent toggle.
+              Household/siblings (P3) shown below it. */}
           <div className="card" style={{ padding: 14, borderRadius: 10, marginBottom: 14 }}>
             <AddressManager key={selected.managed_id || selected.swimmer_sub} swimmerRef={selected.managed_id || selected.swimmer_sub} showConsent={true} />
+            <HouseholdSiblings key={"hh-" + (selected.managed_id || selected.swimmer_sub)} swimmerRef={selected.managed_id || selected.swimmer_sub} />
           </div>
 
           {/* Pause digest toggle */}
@@ -20761,6 +20763,8 @@
                   <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--color-card)" }}>
                     {/* Home address — coach sees it only if a guardian shared it (consent). */}
                     <AddressManager key={detail.id} swimmerRef={detail.id} showConsent={false} />
+                    {/* Siblings (P3) — consent-gated per sibling server-side. */}
+                    <HouseholdSiblings key={"hh-" + detail.id} swimmerRef={detail.id} />
                   </div>
                 </div>
               )}
@@ -24541,6 +24545,27 @@
             </label>
           )}
           {msg && <div style={{ color: "var(--color-warn)", fontSize: 12, marginTop: 6 }}>{msg}</div>}
+        </div>
+      );
+    }
+
+    // Household/siblings (Locations P3) — read-only derived display. Server
+    // gates it (shared address+guardian, per-sibling consent), so we just
+    // render whatever names come back; nothing if none/not-authorized.
+    function HouseholdSiblings({ swimmerRef }) {
+      const [sibs, setSibs] = React.useState(null);
+      React.useEffect(() => {
+        let cancelled = false;
+        fetch(`${API_BASE}/swimmers/${encodeURIComponent(swimmerRef)}/household`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : { siblings: [] })
+          .then(d => { if (!cancelled) setSibs(Array.isArray(d.siblings) ? d.siblings : []); })
+          .catch(() => { if (!cancelled) setSibs([]); });
+        return () => { cancelled = true; };
+      }, [swimmerRef]);
+      if (!sibs || sibs.length === 0) return null;
+      return (
+        <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginTop: 8 }}>
+          👪 Household: <span style={{ color: "var(--color-text)" }}>{sibs.map(s => s.display_name).join(", ")}</span>
         </div>
       );
     }
