@@ -3459,10 +3459,15 @@ export async function dbListGuardiansForSwimmer({ managedId = null, swimmerSub =
 export async function dbListParentInvitesForSwimmer({ managedId = null, swimmerSub = null }) {
   if ((managedId == null) === (swimmerSub == null)) return [];
   const where = managedId ? "`swimmer_managed_id` = ?" : "`swimmer_sub` = ?";
+  // Only PENDING, non-expired invites — this feeds the coach's "Pending
+  // invites" section. Accepted invites surface as guardians; revoked/expired
+  // shouldn't linger (otherwise a revoked row reappears and revoke looks
+  // broken). State filter lives here, the section's single consumer.
   const rows = await pool.query(
     "SELECT `id`, `parent_email`, `invited_by_coach_sub`, `state`, " +
     "       `created_at`, `expires_at`, `accepted_at` " +
-    "  FROM `parent_invites` WHERE " + where + " ORDER BY `created_at` DESC",
+    "  FROM `parent_invites` WHERE " + where + " AND `state` = 'pending' AND `expires_at` > NOW() " +
+    "ORDER BY `created_at` DESC",
     [managedId || swimmerSub]
   );
   return rows.map(r => ({
