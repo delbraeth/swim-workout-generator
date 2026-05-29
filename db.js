@@ -160,9 +160,11 @@ export async function dbEnsureUser(userSub, initials = null, displayName = null)
     [personId, parse.first, parse.last, personInitials]
   );
   try {
+    // I-F: users no longer stores name/initials — persons (created above)
+    // is the source of truth. Only sub + person_id go on the users row.
     await pool.query(
-      "INSERT INTO `users` (`sub`, `initials`, `display_name`, `person_id`) VALUES (?, ?, ?, ?)",
-      [userSub, initials, displayName, personId]
+      "INSERT INTO `users` (`sub`, `person_id`) VALUES (?, ?)",
+      [userSub, personId]
     );
   } catch (e) {
     if (e.code === "ER_DUP_ENTRY" || /duplicate/i.test(e.message || "")) {
@@ -342,12 +344,9 @@ export async function dbUpsertSettings(userSub, patch) {
   if (!userSub) return;
   await dbEnsureUser(userSub);
   const map = { sliderMin: "slider_min", sliderMax: "slider_max", paceInput: "pace_input" };
-  // If patch carries `initials`, store on users.initials (not settings)
+  // If patch carries `initials`, store on the person (I-F: not users.initials)
   if ("initials" in patch && patch.initials != null) {
-    await pool.query(
-      "UPDATE `users` SET `initials` = ? WHERE `sub` = ?",
-      [patch.initials, userSub]
-    );
+    await dbUpdatePersonFromUserSub(userSub, { initials: patch.initials });
   }
   const cur = await dbGetSettings(userSub);
   const merged = { ...cur, ...patch };
@@ -945,7 +944,8 @@ export async function dbValidateImpersonationHeader(adminSub, claimedTargetSub) 
 const GENDER_VALUES = ["M", "F", "X", "prefer_not_to_say"];
 export async function dbUpdateMe(sub, patch) {
   if (!sub) return { ok: false, reason: "no_sub" };
-  const allowed = { email: "email", display_name: "display_name", initials: "initials" };
+  // I-F split: email + email_verified live on `users`; name/initials/gender/
+  // class_year live on `persons` (routed through dbUpdatePersonFromUserSub).
   const sets = [], vals = [];
   // If email is changing, also blank `email_verified` so the UI badge
   // reflects reality. We have to read the current value to know if it
@@ -957,62 +957,54 @@ export async function dbUpdateMe(sub, patch) {
     const oldEmail = current[0]?.email || null;
     const newEmail = patch.email === "" ? null : patch.email;
     if (oldEmail !== newEmail) resetVerified = true;
-  }
-  for (const [k, col] of Object.entries(allowed)) {
-    if (k in patch) {
-      sets.push(`\`${col}\` = ?`);
-      vals.push(patch[k] === "" ? null : patch[k]);
-    }
-  }
-  // Gender is opt-in for the user; null means unset. Reject unknown values.
-  if ("gender" in patch) {
-    const g = patch.gender;
-    if (g !== null && g !== "" && !GENDER_VALUES.includes(g)) {
-      return { ok: false, reason: "bad_gender" };
-    }
-    sets.push("`gender` = ?");
-    vals.push(g === "" ? null : g);
+    sets.push("`email` = ?");
+    vals.push(newEmail);
   }
   if (resetVerified) sets.push("`email_verified` = 0");
-  if (!sets.length) return { ok: true, affected: 0 };
-  vals.push(sub);
-  const r = await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
-  return { ok: true, affected: Number(r.affectedRows || 0) };
+  if (sets.length) {
+    vals.push(sub);
+    await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
+  }
+  // Person-side fields.
+  const personPatch = {};
+  for (const k of ["display_name", "initials", "gender", "class_year"]) {
+    if (k in patch) personPatch[k] = patch[k];
+  }
+  if (Object.keys(personPatch).length) {
+    const pr = await dbUpdatePersonFromUserSub(sub, personPatch);
+    if (!pr.ok) return pr;
+  }
+  return { ok: true };
 }
 
 export async function dbAdminUpdateUser(sub, patch) {
   if (!sub) return { ok: false, reason: "no_sub" };
-  const allowed = { email: "email", initials: "initials", display_name: "display_name" };
+  // I-F split, mirror of dbUpdateMe: email/email_verified on `users`,
+  // name/initials/gender/class_year on `persons`.
   const sets = [], vals = [];
-  // Mirror dbUpdateMe: if admin changes the email, clear the verified badge
-  // so it doesn't keep claiming the old address is verified.
   let resetVerified = false;
   if ("email" in patch) {
     const current = await pool.query("SELECT `email` FROM `users` WHERE `sub` = ?", [sub]);
     const oldEmail = current[0]?.email || null;
     const newEmail = patch.email === "" ? null : patch.email;
     if (oldEmail !== newEmail) resetVerified = true;
-  }
-  for (const [k, col] of Object.entries(allowed)) {
-    if (k in patch) {
-      sets.push(`\`${col}\` = ?`);
-      vals.push(patch[k] === "" ? null : patch[k]);
-    }
-  }
-  // Gender is admin-editable too. Same enum validation as dbUpdateMe.
-  if ("gender" in patch) {
-    const g = patch.gender;
-    if (g !== null && g !== "" && !GENDER_VALUES.includes(g)) {
-      return { ok: false, reason: "bad_gender" };
-    }
-    sets.push("`gender` = ?");
-    vals.push(g === "" ? null : g);
+    sets.push("`email` = ?");
+    vals.push(newEmail);
   }
   if (resetVerified) sets.push("`email_verified` = 0");
-  if (!sets.length) return { ok: true, affected: 0 };
-  vals.push(sub);
-  const r = await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
-  return { ok: true, affected: Number(r.affectedRows || 0) };
+  if (sets.length) {
+    vals.push(sub);
+    await pool.query(`UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`, vals);
+  }
+  const personPatch = {};
+  for (const k of ["display_name", "initials", "gender", "class_year"]) {
+    if (k in patch) personPatch[k] = patch[k];
+  }
+  if (Object.keys(personPatch).length) {
+    const pr = await dbUpdatePersonFromUserSub(sub, personPatch);
+    if (!pr.ok) return pr;
+  }
+  return { ok: true };
 }
 
 export async function dbAdminDeleteUser(sub) {
@@ -3402,7 +3394,7 @@ export async function dbListSwimmersForParent(parentSub) {
   // Project minimal display info; per-swimmer detail comes from
   // dbGetWeeklyDigestPayload.
   const cmsRows = await pool.query(
-    "SELECT m.`id` AS managed_id, m.`person_id`, m.`dob`, m.`gender`, " +
+    "SELECT m.`id` AS managed_id, m.`person_id`, p.`dob`, p.`gender`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` " +
     "  FROM `coach_managed_swimmers` m " +
     "  JOIN `persons` p ON p.`id` = m.`person_id` " +
@@ -3410,7 +3402,7 @@ export async function dbListSwimmersForParent(parentSub) {
     swimmerPids
   );
   const userRows = await pool.query(
-    "SELECT u.`sub` AS swimmer_sub, u.`person_id`, u.`dob`, u.`gender`, " +
+    "SELECT u.`sub` AS swimmer_sub, u.`person_id`, p.`dob`, p.`gender`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` " +
     "  FROM `users` u " +
     "  JOIN `persons` p ON p.`id` = u.`person_id` " +
@@ -3796,7 +3788,7 @@ async function coachIsOnTeam(coachSub, teamId) {
   return rows.length > 0;
 }
 
-export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, team_id = null, initials = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
+export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, team_id = null, initials = null, class_year = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
   if (!ownerSub) throw new Error("ownerSub required");
   if (!display_name || typeof display_name !== "string") throw new Error("display_name required");
   if (display_name.length > 120) throw new Error("display_name max 120 chars");
@@ -3805,6 +3797,8 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
   if (initials && initials.length > 4) throw new Error("initials max 4 chars");
   if (parental_contact && parental_contact.length > 255) throw new Error("parental_contact max 255 chars");
   if (gender !== null && gender !== "" && !GENDER_VALUES.includes(gender)) throw new Error("bad gender");
+  const cyChk = _normClassYear(class_year);
+  if (!cyChk.ok) throw new Error("bad class_year");
   // team_id is OPTIONAL. If provided, verify the coach belongs to it.
   if (team_id) {
     const ok = await coachIsOnTeam(ownerSub, team_id);
@@ -3812,25 +3806,23 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
   }
   await dbEnsureUser(ownerSub);
   const id = genManagedId();
-  // Phase 4 Identity I-C: every coach_managed_swimmers row must have a
-  // person_id once migration 040 applies NOT NULL + FK. Parse the
-  // display_name + create the persons row first, then INSERT cms with
-  // person_id set. dob + gender + initials propagate to both rows
-  // since they're the same physical attributes of the same person.
+  // I-F: persons is the source of truth for name/initials/dob/gender/
+  // class_year. The cms row carries only the relationship/pace data + the
+  // person_id FK — no legacy name columns.
   const parse = parseDisplayName(display_name);
   const personId = genPersonId();
   const personInitials = initials || genInitialsFromParts(parse.first, parse.last);
   await pool.query(
-    "INSERT INTO `persons` (`id`, `first_name`, `last_name`, `initials`, `dob`, `gender`) VALUES (?, ?, ?, ?, ?, ?)",
-    [personId, parse.first, parse.last, personInitials, dob, gender || null]
+    "INSERT INTO `persons` (`id`, `first_name`, `last_name`, `initials`, `dob`, `gender`, `class_year`) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [personId, parse.first, parse.last, personInitials, dob, gender || null, cyChk.value]
   );
   await pool.query(
     "INSERT INTO `coach_managed_swimmers` " +
-    "(`id`, `owner_coach_sub`, `team_id`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, `parent_managed_flag`, " +
+    "(`id`, `owner_coach_sub`, `team_id`, `parental_contact`, `parent_managed_flag`, " +
     " `pace_scy_100`, `pace_scm_100`, `pace_lcm_100`, `person_id`) " +
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
-      id, ownerSub, team_id || null, display_name.trim(), initials || null, dob, gender || null,
+      id, ownerSub, team_id || null,
       parental_contact || null, parent_managed_flag ? 1 : 0,
       pace_scy_100 || null, pace_scm_100 || null, pace_lcm_100 || null,
       personId,
@@ -3885,10 +3877,9 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
 // Update allowed-fields whitelist. dob can be updated; same validation as create.
 export async function dbUpdateManagedSwimmer(id, patch) {
   if (!id || !MS_ID_RE.test(id)) return { ok: false, reason: "bad_id" };
-  const allowed = {
-    display_name:        v => (typeof v === "string" && v.trim().length > 0 && v.length <= 120) ? v.trim() : null,
-    initials:            v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 4) ? v : undefined,
-    gender:              v => (v == null || v === "") ? null : (GENDER_VALUES.includes(v) ? v : undefined),
+  // I-F: name/initials/gender/dob/class_year live on persons; only the
+  // relationship + pace fields (and team_id) stay on coach_managed_swimmers.
+  const cmsAllowed = {
     parental_contact:    v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 255) ? v : undefined,
     parent_managed_flag: v => (typeof v === "boolean") ? (v ? 1 : 0) : (v === 0 || v === 1) ? v : undefined,
     pace_scy_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
@@ -3896,19 +3887,13 @@ export async function dbUpdateManagedSwimmer(id, patch) {
     pace_lcm_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
   };
   const sets = [], vals = [];
-  for (const [k, validator] of Object.entries(allowed)) {
+  for (const [k, validator] of Object.entries(cmsAllowed)) {
     if (k in patch) {
       const cleaned = validator(patch[k]);
       if (cleaned === undefined) return { ok: false, reason: `bad_${k}` };
       sets.push(`\`${k}\` = ?`);
       vals.push(cleaned);
     }
-  }
-  if ("dob" in patch) {
-    const dobCheck = validateDob(patch.dob);
-    if (!dobCheck.ok) return { ok: false, reason: dobCheck.reason };
-    sets.push("`dob` = ?");
-    vals.push(patch.dob);
   }
   // team_id needs the owning-coach-on-team check; we need the owner_sub from
   // the row to validate. Caller (server route) verifies ownership separately;
@@ -3927,13 +3912,36 @@ export async function dbUpdateManagedSwimmer(id, patch) {
     sets.push("`team_id` = ?");
     vals.push(newTeamId);
   }
-  if (!sets.length) return { ok: true, affected: 0 };
-  vals.push(id);
-  const r = await pool.query(
-    `UPDATE \`coach_managed_swimmers\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
-    vals
-  );
-  return { ok: true, affected: Number(r.affectedRows || 0) };
+  if (sets.length) {
+    vals.push(id);
+    await pool.query(
+      `UPDATE \`coach_managed_swimmers\` SET ${sets.join(", ")} WHERE \`id\` = ?`,
+      vals
+    );
+  }
+  // Person-side fields → persons via the managed row's person_id.
+  const personPatch = {};
+  if ("display_name" in patch) {
+    const dn = patch.display_name;
+    if (!(typeof dn === "string" && dn.trim().length > 0 && dn.length <= 120)) return { ok: false, reason: "bad_display_name" };
+    personPatch.display_name = dn.trim();
+  }
+  if ("initials" in patch) {
+    if (patch.initials != null && patch.initials !== "" && (typeof patch.initials !== "string" || patch.initials.length > 4)) return { ok: false, reason: "bad_initials" };
+    personPatch.initials = patch.initials;
+  }
+  if ("gender" in patch)     personPatch.gender = patch.gender;          // helper validates enum
+  if ("class_year" in patch) personPatch.class_year = patch.class_year;  // helper validates range
+  if ("dob" in patch) {
+    const dobCheck = validateDob(patch.dob);
+    if (!dobCheck.ok) return { ok: false, reason: dobCheck.reason };
+    personPatch.dob = patch.dob;
+  }
+  if (Object.keys(personPatch).length) {
+    const pr = await dbUpdatePersonFromManagedId(id, personPatch);
+    if (!pr.ok) return pr;
+  }
+  return { ok: true };
 }
 
 export async function dbArchiveManagedSwimmer(id, archived = true) {
@@ -3996,11 +4004,8 @@ export async function dbUpdateMeDob(sub, dob) {
   if (!sub) return { ok: false, reason: "no_sub" };
   const dobCheck = validateDob(dob);
   if (!dobCheck.ok) return { ok: false, reason: dobCheck.reason };
-  const r = await pool.query(
-    "UPDATE `users` SET `dob` = ? WHERE `sub` = ?",
-    [dob, sub]
-  );
-  return { ok: true, affected: Number(r.affectedRows || 0) };
+  // I-F: dob lives on persons now.
+  return dbUpdatePersonFromUserSub(sub, { dob });
 }
 
 // ─── Groups (Stage 2 / R-C) ───────────────────────────────────────────
@@ -4104,6 +4109,135 @@ export function displayNameSortable(person) {
   const last  = person.last_name || "";
   if (last && first) return last + ", " + first;
   return (last || first || "(unknown)").trim();
+}
+
+// Phase 4 Identity I-F / normalization. class_year is the SOURCE OF TRUTH;
+// grade level is DERIVED so it never goes stale. US K-12 convention: a
+// student graduates at the end of grade 12 in the spring. The academic
+// year rolls over in August, so from Aug–Dec the "current senior" cohort
+// is next calendar year. Returns an integer grade (may be <1 for
+// pre-school-age or >12 for already-graduated — caller decides how to
+// render those); null when class_year is unknown/non-numeric.
+export function gradeFromClassYear(classYear, now = new Date()) {
+  const cy = Number(classYear);
+  if (!Number.isFinite(cy)) return null;
+  const m = now.getMonth() + 1;                 // 1–12
+  const seniorCohort = m >= 8 ? now.getFullYear() + 1 : now.getFullYear();
+  const grade = 12 - (cy - seniorCohort);
+  return Number.isFinite(grade) ? grade : null;
+}
+
+// Validate a class_year value for writes. Accepts null/"" (clear), or an
+// integer in a sane graduation-year window. Returns { ok, value } or
+// { ok:false }.
+function _normClassYear(v) {
+  if (v === null || v === "" || v === undefined) return { ok: true, value: null };
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1990 || n > 2100) return { ok: false };
+  return { ok: true, value: n };
+}
+
+// Phase 4 Identity I-F: the single write path into `persons`. Every legacy
+// writer routes name/initials/dob/gender/class_year here instead of the
+// old users/coach_managed_swimmers columns. Accepts an optional `conn` so
+// the claim/merge transaction can participate. `patch` keys:
+//   display_name (parsed → first/last, regenerates initials unless initials
+//   also given), first_name, last_name, preferred_name, initials, dob,
+//   gender, class_year. Unknown keys ignored. Returns { ok, affected } or
+//   { ok:false, reason }.
+export async function dbUpdatePersonById(personId, patch, conn = pool) {
+  if (!personId) return { ok: false, reason: "no_person" };
+  const sets = [], vals = [];
+  let initialsExplicit = false;
+  if ("initials" in patch) {
+    sets.push("`initials` = ?");
+    vals.push(patch.initials === "" || patch.initials == null ? null : String(patch.initials).slice(0, 4));
+    initialsExplicit = true;
+  }
+  if ("display_name" in patch && patch.display_name != null && patch.display_name !== "") {
+    const parsed = parseDisplayName(patch.display_name);
+    sets.push("`first_name` = ?", "`last_name` = ?");
+    vals.push(parsed.first, parsed.last);
+    if (!initialsExplicit) { sets.push("`initials` = ?"); vals.push(genInitialsFromParts(parsed.first, parsed.last)); }
+  } else {
+    if ("first_name" in patch) { sets.push("`first_name` = ?"); vals.push(patch.first_name || "(unknown)"); }
+    if ("last_name"  in patch) { sets.push("`last_name` = ?");  vals.push(patch.last_name  || "(unknown)"); }
+  }
+  if ("preferred_name" in patch) { sets.push("`preferred_name` = ?"); vals.push(patch.preferred_name === "" ? null : patch.preferred_name); }
+  if ("dob" in patch) { sets.push("`dob` = ?"); vals.push(patch.dob === "" ? null : patch.dob); }
+  if ("gender" in patch) {
+    const g = patch.gender;
+    if (g !== null && g !== "" && !GENDER_VALUES.includes(g)) return { ok: false, reason: "bad_gender" };
+    sets.push("`gender` = ?"); vals.push(g === "" ? null : g);
+  }
+  if ("class_year" in patch) {
+    const cy = _normClassYear(patch.class_year);
+    if (!cy.ok) return { ok: false, reason: "bad_class_year" };
+    sets.push("`class_year` = ?"); vals.push(cy.value);
+  }
+  if (!sets.length) return { ok: true, affected: 0 };
+  vals.push(personId);
+  const r = await (conn || pool).query(`UPDATE \`persons\` SET ${sets.join(", ")} WHERE \`id\` = ?`, vals);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Ensure a persons row exists for a given parent table (users /
+// coach_managed_swimmers) and return its id. Self-heals two states that
+// would otherwise make a write silently no-op: (a) person_id NULL (a
+// pre-I-B backfill gap or a row created before the persons table), and
+// (b) person_id pointing at a missing persons row (orphaned pointer).
+// Creates a placeholder persons row in either case so the caller's UPDATE
+// always lands. parentTable + idCol are server-side constants (never user
+// input). Returns the resolved person id, or null if the parent row
+// itself is missing.
+async function _ensurePersonId(parentTable, idCol, idVal, conn) {
+  const q = conn || pool;
+  // Read person_id plus the legacy name/initials to seed a new persons row
+  // (so an initials-only edit on a user who never got a persons row doesn't
+  // wipe their existing name). The try/catch lets this keep working after
+  // migration 045 drops the legacy columns — by which point every row has a
+  // person_id and the create branch never fires anyway.
+  let pid = null, legacyName = null, legacyInit = null;
+  try {
+    const rows = await q.query("SELECT `person_id`, `display_name`, `initials` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
+    if (!rows[0]) return null;                                // parent row gone
+    pid = rows[0].person_id; legacyName = rows[0].display_name; legacyInit = rows[0].initials;
+  } catch (e) {
+    const rows = await q.query("SELECT `person_id` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
+    if (!rows[0]) return null;
+    pid = rows[0].person_id;
+  }
+  if (pid) {
+    const exists = await q.query("SELECT 1 FROM `persons` WHERE `id` = ? LIMIT 1", [pid]);
+    if (exists.length) return pid;                            // healthy
+  }
+  // Create (or recreate) a persons row seeded from legacy name, point parent at it.
+  if (!pid) pid = genPersonId();
+  const parsed = parseDisplayName(legacyName);
+  const init = (legacyInit && String(legacyInit).slice(0, 4)) || genInitialsFromParts(parsed.first, parsed.last);
+  await q.query(
+    "INSERT INTO `persons` (`id`, `first_name`, `last_name`, `initials`) VALUES (?, ?, ?, ?)",
+    [pid, parsed.first, parsed.last, init]
+  );
+  await q.query("UPDATE `" + parentTable + "` SET `person_id` = ? WHERE `" + idCol + "` = ?", [pid, idVal]);
+  return pid;
+}
+
+// Resolve a user's person_id then update the persons row. Used by the
+// self/admin profile writers. Self-heals a missing/orphaned person_id.
+export async function dbUpdatePersonFromUserSub(sub, patch, conn = pool) {
+  if (!sub) return { ok: false, reason: "no_sub" };
+  const pid = await _ensurePersonId("users", "sub", sub, conn);
+  if (!pid) return { ok: false, reason: "no_user" };
+  return dbUpdatePersonById(pid, patch, conn);
+}
+
+// Resolve a managed swimmer's person_id then update the persons row.
+export async function dbUpdatePersonFromManagedId(managedId, patch, conn = pool) {
+  if (!managedId) return { ok: false, reason: "no_managed" };
+  const pid = await _ensurePersonId("coach_managed_swimmers", "id", managedId, conn);
+  if (!pid) return { ok: false, reason: "not_found" };
+  return dbUpdatePersonById(pid, patch, conn);
 }
 
 function rowToGroup(r) {
@@ -5314,22 +5448,32 @@ export async function dbRedeemClaimToken(token, swimmerSub) {
     if (t.redeemed_at)                                { await conn.rollback(); return { ok: false, reason: "already_redeemed" }; }
     if (t.expires_at && new Date(t.expires_at) < new Date()) { await conn.rollback(); return { ok: false, reason: "expired" }; }
 
+    // I-F: name/initials/dob/gender come from persons (JOINed via person_id),
+    // not the legacy cms columns. FOR UPDATE locks both the cms + persons rows.
     const msRows = await conn.query(
-      "SELECT `id`, `owner_coach_sub`, `display_name`, `initials`, `dob`, `gender`, `parental_contact`, " +
-      "       `pace_scy_100`, `pace_scm_100`, `pace_lcm_100` " +
-      "FROM `coach_managed_swimmers` WHERE `id` = ? FOR UPDATE",
+      "SELECT m.`id`, m.`owner_coach_sub`, m.`parental_contact`, " +
+      "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
+      "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials`, p.`dob`, p.`gender` " +
+      "FROM `coach_managed_swimmers` m LEFT JOIN `persons` p ON p.`id` = m.`person_id` " +
+      "WHERE m.`id` = ? FOR UPDATE",
       [t.managed_id]
     );
     if (!msRows[0])                                   { await conn.rollback(); return { ok: false, reason: "managed_missing" }; }
     const ms = msRows[0];
+    const msName = displayNameInline(ms);
 
     // ── Step 2: lock target swimmer row + capture diff ─────────────────
+    // I-F: target identity also comes from persons (via users.person_id).
     const swRows = await conn.query(
-      "SELECT `sub`, `display_name`, `initials`, `dob`, `gender` FROM `users` WHERE `sub` = ? FOR UPDATE",
+      "SELECT u.`sub`, u.`person_id`, p.`first_name`, p.`last_name`, p.`preferred_name`, " +
+      "       p.`initials`, p.`dob`, p.`gender` " +
+      "FROM `users` u LEFT JOIN `persons` p ON p.`id` = u.`person_id` WHERE u.`sub` = ? FOR UPDATE",
       [swimmerSub]
     );
     if (!swRows[0])                                   { await conn.rollback(); return { ok: false, reason: "swimmer_missing" }; }
     const sw = swRows[0];
+    const swName = displayNameInline(sw);
+    const targetPersonId = sw.person_id;
     // Diff: only fields where managed has a value AND it differs from current swimmer value
     const diff = [];
     const idChanges = {};
@@ -5339,10 +5483,10 @@ export async function dbRedeemClaimToken(token, swimmerSub) {
       const b = swVal == null ? "" : (swVal instanceof Date ? swVal.toISOString().slice(0,10) : String(swVal));
       if (a !== b) { diff.push({ field, from: b || null, to: a }); idChanges[field] = msVal; }
     }
-    maybeChange("display_name", ms.display_name, sw.display_name);
-    maybeChange("initials",     ms.initials,     sw.initials);
-    maybeChange("dob",          ms.dob,          sw.dob);
-    maybeChange("gender",       ms.gender,       sw.gender);
+    maybeChange("display_name", msName,       swName);
+    maybeChange("initials",     ms.initials,  sw.initials);
+    maybeChange("dob",          ms.dob,       sw.dob);
+    maybeChange("gender",       ms.gender,    sw.gender);
 
     // ── Step 3: check group conflicts (#21/#33) before repoint ─────────
     const conflictRows = await conn.query(
@@ -5371,15 +5515,12 @@ export async function dbRedeemClaimToken(token, swimmerSub) {
       }
     }
 
-    // ── Step 4: update user identity fields ────────────────────────────
-    if (Object.keys(idChanges).length > 0) {
-      const sets = Object.keys(idChanges).map(k => `\`${k}\` = ?`);
-      const vals = Object.values(idChanges);
-      vals.push(swimmerSub);
-      await conn.query(
-        `UPDATE \`users\` SET ${sets.join(", ")} WHERE \`sub\` = ?`,
-        vals
-      );
+    // ── Step 4: update target identity fields (I-F: on persons) ────────
+    if (Object.keys(idChanges).length > 0 && targetPersonId) {
+      // idChanges keys are display_name/initials/dob/gender; dbUpdatePersonById
+      // parses display_name → first/last and writes the persons row inside
+      // this transaction (conn).
+      await dbUpdatePersonById(targetPersonId, idChanges, conn);
     }
 
     // ── Step 5: repoint workout_assignments ────────────────────────────
