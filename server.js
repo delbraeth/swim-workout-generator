@@ -2572,9 +2572,17 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
       );
     } catch (dupErr) {
       if (dupErr.code === "ER_DUP_ENTRY" || /duplicate/i.test(dupErr.message || "")) {
-        return res.status(200).json({ ok: true, deduped: true, event_id: stripeEvent.id });
+        const priorRows = await pool.query(
+          "SELECT `processed_status` FROM `stripe_webhook_events` WHERE `stripe_event_id` = ?",
+          [stripeEvent.id]
+        );
+        if (priorRows[0]?.processed_status === "processed") {
+          return res.status(200).json({ ok: true, deduped: true, event_id: stripeEvent.id });
+        }
+        // Prior attempt left the row pending/failed — fall through to reprocess.
+      } else {
+        throw dupErr;
       }
-      throw dupErr;
     }
 
     // Step 3: dispatch + mark processed. Errors here flip the row to
