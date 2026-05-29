@@ -4151,7 +4151,7 @@ export async function dbUpdatePersonById(personId, patch, conn = pool) {
   let initialsExplicit = false;
   if ("initials" in patch) {
     sets.push("`initials` = ?");
-    vals.push(patch.initials === "" || patch.initials == null ? null : String(patch.initials).slice(0, 4));
+    vals.push(patch.initials === "" || patch.initials == null ? null : String(patch.initials).slice(0, 8));
     initialsExplicit = true;
   }
   if ("display_name" in patch && patch.display_name != null && patch.display_name !== "") {
