@@ -95,6 +95,7 @@ import {
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault, dbSetTeamSchool,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
+  dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
   dbListGuardiansForSwimmer, dbListParentInvitesForSwimmer, dbRemoveGuardian,
   dbListSwimmersForParent, dbGetWeeklyDigestPayload, dbQueueWeeklyDigests,
   dbAuthzCoachOfSwimmer,
@@ -618,26 +619,10 @@ async function signInAs({ res, meta, userSub, provider }) {
     `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; Path=/`
   );
   dbAuditEvent({ userSub, eventType: "auth.login.success", ...meta, details: { channel: "web", provider } });
-  // Parent Portal MVP: on every sign-in, check if this user has any
-  // pending parent invites matching their verified email. No-op for
-  // most users; consumes silently before redirect so ParentDashboard
-  // sees the new guardian rows on first page load. Best-effort —
-  // failure here doesn't block sign-in.
-  try {
-    const userRow = await pool.query(
-      "SELECT `email`, `email_verified` FROM `users` WHERE `sub` = ? LIMIT 1",
-      [userSub]
-    );
-    const u = userRow[0];
-    if (u && u.email && u.email_verified) {
-      const r = await dbConsumePendingInvitesForUser(userSub, u.email);
-      if (r.accepted > 0) {
-        dbAuditEvent({ userSub, eventType: "parent.invite.accepted", ...meta, details: { count: r.accepted } });
-      }
-    }
-  } catch (err) {
-    console.warn(`[parent-invite] consume failed for ${userSub}: ${err.message}`);
-  }
+  // Parent Portal: invites are NO LONGER auto-consumed on sign-in. A parent
+  // with pending invites sees an explicit "You've been invited to <swimmer>"
+  // accept card (surfaced via bootstrap.pending_invites) and must Accept to
+  // create the guardian link — clearer consent. See /api/parent/invites/*.
   res.redirect("/");
 }
 
@@ -836,22 +821,6 @@ app.get("/api/me", requireAuth, async (req, res) => {
 // helpers that failed so the client can decide to re-fetch lazily.
 app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
   try {
-    // Parent Portal: also consume pending invites on page load (not just at
-    // sign-in), so an already-signed-in parent who gets invited to a new
-    // swimmer (e.g. a second/sibling) is linked on their next load without
-    // having to sign out and back in. Runs BEFORE the bootstrap read so the
-    // returned `me.is_parent` + parent data reflect any new guardian rows.
-    // Best-effort + cheap (indexed lookup; no-op for non-invited users).
-    try {
-      const ur = await pool.query("SELECT `email`, `email_verified` FROM `users` WHERE `sub` = ? LIMIT 1", [req.userSub]);
-      const u = ur[0];
-      if (u && u.email && u.email_verified) {
-        const r = await dbConsumePendingInvitesForUser(req.userSub, u.email);
-        if (r.accepted > 0) {
-          dbAuditEvent({ userSub: req.userSub, eventType: "parent.invite.accepted", ...reqMeta(req), details: { count: r.accepted, via: "bootstrap" } });
-        }
-      }
-    } catch (e) { console.warn(`[bootstrap] invite consume failed for ${req.userSub}: ${e.message}`); }
     const [bootstrap, billingStatus] = await Promise.all([
       dbGetBootstrapForUser(req.userSub),
       getBillingStatusFor(req.userSub).catch(err => {
@@ -3131,6 +3100,35 @@ app.delete("/api/parent-invites/:id", checkOrigin, requireAuth, requireCoach, re
       ...reqMeta(req),
       details:   { invite_id: req.params.id, affected: r.affected },
     });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Parent-side explicit consent: accept / decline a pending invite. Not
+// requireParent — a not-yet-linked invitee isn't is_parent yet. The
+// verified-email match (inside the db helper) is the authorization gate.
+async function _verifiedEmailFor(userSub) {
+  const ur = await pool.query("SELECT `email`, `email_verified` FROM `users` WHERE `sub` = ? LIMIT 1", [userSub]);
+  const u = ur[0];
+  return (u && u.email && u.email_verified) ? u.email : null;
+}
+app.post("/api/parent/invites/:id/accept", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const email = await _verifiedEmailFor(req.userSub);
+    if (!email) return res.status(403).json({ error: "verified email required" });
+    const r = await dbAcceptParentInvite(req.params.id, req.userSub, email);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "parent.invite.accepted", ...reqMeta(req), details: { invite_id: req.params.id, via: "explicit" } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/parent/invites/:id/decline", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const email = await _verifiedEmailFor(req.userSub);
+    if (!email) return res.status(403).json({ error: "verified email required" });
+    const r = await dbDeclineParentInvite(req.params.id, req.userSub, email);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "parent.invite.declined", ...reqMeta(req), details: { invite_id: req.params.id } });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
