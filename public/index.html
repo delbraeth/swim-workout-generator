@@ -3593,6 +3593,55 @@
           { id: "s_t846eu", reps: 4, dist: 100, desc: "BROKEN 100 fly: race-pace 25 + 10s rest + race-pace 25 + 10s rest + race-pace 25 + 10s rest + race-pace 25. Target your 100 fly race-pace per 25. Record splits.", interval: "On 5:00", focus: "Race-pace 100 fly with rest you'd never get in a meet — train the speed" },
           { id: "s_r1akco", reps: 1, dist: 400, desc: "Easy choice — long flush", interval: "On 9:00", focus: "Cool down — lactate recovery" },
         ]},
+      // ── VO2max mains (SCY) — aerobic-power sets, ~95% effort, short rest.
+      //    Tagged so they surface for endurance/distance/mixed (+ im/stroke);
+      //    "VO2" keyword + vo2-band send-offs classify them as vo2.
+      { label: "VO2 8×100 Free", totalYards: 800, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2y01", reps: 8, dist: 100, desc: "Freestyle — VO2 effort, hold strong tempo to the wall", interval: "On 1:30", focus: "Aerobic power — short rest, repeatable just under race pace" },
+        ]},
+      { label: "VO2 6×150 Free", totalYards: 900, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2y02", reps: 6, dist: 150, desc: "Freestyle — fast, VO2 effort, hold form under fatigue", interval: "On 2:15", focus: "Sustained aerobic power across the 150" },
+        ]},
+      { label: "VO2 5×200 Free", totalYards: 1000, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2y03", reps: 5, dist: 200, desc: "Freestyle — VO2, even pace just under 200 race speed", interval: "On 3:00", focus: "High-end aerobic — negative-split each 200 if you can" },
+        ]},
+      { label: "VO2 10×100 Free Descend", totalYards: 1000, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2y04", reps: 10, dist: 100, desc: "Freestyle — descend 1 to 5, then hold all of 6 to 10 fast (VO2)", interval: "On 1:30", focus: "Find VO2 pace, then hold it fatigued" },
+        ]},
+      { label: "VO2 12×75 Free", totalYards: 900, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2y05", reps: 12, dist: 75, desc: "Freestyle — fast 75s, VO2 effort, strong final 25", interval: "On 1:05", focus: "Aerobic power with a close — short rest" },
+        ]},
+      { label: "VO2 16×50 Free", totalYards: 800, types: ["endurance","mixed","distance"], strokes: [], sets: [
+          { id: "s_vo2y06", reps: 16, dist: 50, desc: "Freestyle — fast 50s, VO2 effort, hold stroke length under fatigue", interval: "On 0:45", focus: "High turnover at short rest — aerobic power" },
+        ]},
+      { label: "VO2 4×200 Free Build", totalYards: 800, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2y07", reps: 4, dist: 200, desc: "Freestyle — build each 200 to VO2 by the third 50, fast final 50", interval: "On 3:00", focus: "Progressive aerobic-power 200s" },
+        ]},
+      { label: "VO2 8×125 Free", totalYards: 1000, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2y08", reps: 8, dist: 125, desc: "Freestyle — fast effort, VO2, hold tempo through the odd distance", interval: "On 1:50", focus: "Aerobic power over an off-distance — stay long" },
+        ]},
+      { label: "VO2 8×100 IM", totalYards: 800, types: ["im","mixed"], strokes: [], sets: [
+          { id: "s_vo2y09", reps: 8, dist: 100, desc: "100 IM — VO2 effort, hold legal stroke and tempo under fatigue", interval: "On 1:40", focus: "Aerobic power across all four strokes" },
+        ]},
+      { label: "VO2 6×150 IM", totalYards: 900, types: ["im","mixed"], strokes: [], sets: [
+          { id: "s_vo2y10", reps: 6, dist: 150, desc: "150 IM (no free) — fast effort, VO2, strong transitions", interval: "On 2:30", focus: "Stroke-change power at high heart rate" },
+        ]},
+      { label: "VO2 8×100 Back", totalYards: 800, types: ["endurance","mixed"], strokes: ["back"], sets: [
+          { id: "s_vo2y11", reps: 8, dist: 100, desc: "Backstroke — VO2 effort, steady fast tempo, hold hip rotation", interval: "On 1:40", focus: "Aerobic power on back — short rest" },
+        ]},
+      { label: "VO2 8×100 Breast", totalYards: 800, types: ["endurance","mixed"], strokes: ["breast"], sets: [
+          { id: "s_vo2y12", reps: 8, dist: 100, desc: "Breaststroke — VO2 effort, strong pullouts, hold stroke length", interval: "On 1:50", focus: "Aerobic power on breast — repeatable just under race" },
+        ]},
+      { label: "VO2 6×100 Fly", totalYards: 600, types: ["endurance","mixed"], strokes: ["fly"], sets: [
+          { id: "s_vo2y13", reps: 6, dist: 100, desc: "Butterfly — VO2 effort, swim fly while form holds then strong free finish", interval: "On 1:40", focus: "Fly aerobic power without form breakdown" },
+        ]},
+      { label: "VO2 20×50 Free", totalYards: 1000, types: ["endurance","mixed","distance"], strokes: [], sets: [
+          { id: "s_vo2y14", reps: 20, dist: 50, desc: "Freestyle — fast 50s, VO2 effort, consistent send-off across all 20", interval: "On 0:45", focus: "Aerobic-power volume — hold pace, no fade" },
+        ]},
+      { label: "VO2 6×100 + 6×50 Free", totalYards: 900, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2y15a", reps: 6, dist: 100, desc: "Freestyle — VO2 effort, hold tempo", interval: "On 1:30", focus: "Aerobic power" },
+          { id: "s_vo2y15b", reps: 6, dist: 50, desc: "Freestyle — fast, VO2, quicker than the 100 pace", interval: "On 0:45", focus: "Speed-up to close the set" },
+        ]},
     ];
 
     const COOLDOWN_OPTIONS = [
@@ -3916,6 +3965,40 @@
         ]},
       { label: "Fly 100s Long Repeat Unit", totalYards: 600, types: [], strokes: ["fly"], sets: [
           { id: "s_tvni5r", reps: 6, dist: 100, desc: "50m butterfly / 50m easy freestyle — consistent effort each round", interval: "On 3:00", focus: "Butterfly endurance volume — designed to repeat 2–3×" },
+        ]},
+      // ── VO2max mains (LCM, long-course meters) — aerobic-power sets.
+      { label: "VO2 8×100 Free", totalYards: 800, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2l01", reps: 8, dist: 100, desc: "Freestyle — VO2 effort, hold strong tempo through the long-course 100", interval: "On 1:35", focus: "Aerobic power — short rest, just under race pace" },
+        ]},
+      { label: "VO2 6×150 Free", totalYards: 900, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2l02", reps: 6, dist: 150, desc: "Freestyle — fast, VO2 effort, hold form on the back half", interval: "On 2:20", focus: "Sustained aerobic power, long-course tempo" },
+        ]},
+      { label: "VO2 5×200 Free", totalYards: 1000, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2l03", reps: 5, dist: 200, desc: "Freestyle — VO2, even pace just under 200 race speed", interval: "On 3:10", focus: "High-end aerobic — hold pace with no walls to rest on" },
+        ]},
+      { label: "VO2 10×100 Free Descend", totalYards: 1000, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2l04", reps: 10, dist: 100, desc: "Freestyle — descend 1 to 5, then hold all of 6 to 10 fast (VO2)", interval: "On 1:35", focus: "Find VO2 pace, then hold it fatigued" },
+        ]},
+      { label: "VO2 16×50 Free", totalYards: 800, types: ["endurance","mixed","distance"], strokes: [], sets: [
+          { id: "s_vo2l05", reps: 16, dist: 50, desc: "Freestyle — fast long-course 50s, VO2 effort, hold stroke length", interval: "On 0:48", focus: "High turnover at short rest — aerobic power" },
+        ]},
+      { label: "VO2 4×200 Free Build", totalYards: 800, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2l06", reps: 4, dist: 200, desc: "Freestyle — build each 200 to VO2 by the back 100, fast final 50", interval: "On 3:10", focus: "Progressive aerobic-power 200s" },
+        ]},
+      { label: "VO2 8×100 IM", totalYards: 800, types: ["im","mixed"], strokes: [], sets: [
+          { id: "s_vo2l07", reps: 8, dist: 100, desc: "100 IM — VO2 effort, hold legal stroke and tempo under fatigue", interval: "On 1:45", focus: "Aerobic power across all four strokes" },
+        ]},
+      { label: "VO2 6×150 IM", totalYards: 900, types: ["im","mixed"], strokes: [], sets: [
+          { id: "s_vo2l08", reps: 6, dist: 150, desc: "150 IM (fly/back/breast) — fast effort, VO2, strong transitions", interval: "On 2:35", focus: "Stroke-change power at high heart rate" },
+        ]},
+      { label: "VO2 8×100 Back", totalYards: 800, types: ["endurance","mixed"], strokes: ["back"], sets: [
+          { id: "s_vo2l09", reps: 8, dist: 100, desc: "Backstroke — VO2 effort, steady fast tempo, hold hip rotation", interval: "On 1:45", focus: "Aerobic power on back — short rest" },
+        ]},
+      { label: "VO2 8×100 Breast", totalYards: 800, types: ["endurance","mixed"], strokes: ["breast"], sets: [
+          { id: "s_vo2l10", reps: 8, dist: 100, desc: "Breaststroke — VO2 effort, strong pullouts, hold stroke length", interval: "On 1:55", focus: "Aerobic power on breast — repeatable just under race" },
+        ]},
+      { label: "VO2 6×100 Fly", totalYards: 600, types: ["endurance","mixed"], strokes: ["fly"], sets: [
+          { id: "s_vo2l11", reps: 6, dist: 100, desc: "Butterfly — VO2 effort, swim fly while form holds then strong free finish", interval: "On 1:45", focus: "Fly aerobic power without form breakdown" },
         ]},
     ];
 
@@ -6616,6 +6699,53 @@
       { label: "Fly Build Repeat Unit", totalYards: 600, types: [], strokes: ["fly"], sets: [
           { id: "s_uiq9nn", reps: 4, dist: 100, desc: "25 fly / 75 free — fly strong on lead 25, hold rhythm on the free", interval: "On 2:20", focus: "Fly volume without burnout — build fly quality each round" },
           { id: "s_sn9rvg", reps: 4, dist: 50, desc: "25 fly ALL OUT / 25 free easy", interval: "On 1:25", focus: "Top-speed fly to close each round" },
+        ]},
+      // ── VO2max mains (SCM, meters) — aerobic-power sets, ~95% effort.
+      { label: "VO2 8×100 Free", totalYards: 800, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2s01", reps: 8, dist: 100, desc: "Freestyle — VO2 effort, hold strong tempo to the wall", interval: "On 1:35", focus: "Aerobic power — short rest, just under race pace" },
+        ]},
+      { label: "VO2 6×150 Free", totalYards: 900, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2s02", reps: 6, dist: 150, desc: "Freestyle — fast, VO2 effort, hold form under fatigue", interval: "On 2:20", focus: "Sustained aerobic power across the 150" },
+        ]},
+      { label: "VO2 5×200 Free", totalYards: 1000, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2s03", reps: 5, dist: 200, desc: "Freestyle — VO2, even pace just under 200 race speed", interval: "On 3:10", focus: "High-end aerobic — negative-split each 200 if you can" },
+        ]},
+      { label: "VO2 10×100 Free Descend", totalYards: 1000, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2s04", reps: 10, dist: 100, desc: "Freestyle — descend 1 to 5, then hold all of 6 to 10 fast (VO2)", interval: "On 1:35", focus: "Find VO2 pace, then hold it fatigued" },
+        ]},
+      { label: "VO2 12×75 Free", totalYards: 900, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2s05", reps: 12, dist: 75, desc: "Freestyle — fast 75s, VO2 effort, strong final 25", interval: "On 1:08", focus: "Aerobic power with a close — short rest" },
+        ]},
+      { label: "VO2 16×50 Free", totalYards: 800, types: ["endurance","mixed","distance"], strokes: [], sets: [
+          { id: "s_vo2s06", reps: 16, dist: 50, desc: "Freestyle — fast 50s, VO2 effort, hold stroke length under fatigue", interval: "On 0:48", focus: "High turnover at short rest — aerobic power" },
+        ]},
+      { label: "VO2 4×200 Free Build", totalYards: 800, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2s07", reps: 4, dist: 200, desc: "Freestyle — build each 200 to VO2 by the third 50, fast final 50", interval: "On 3:10", focus: "Progressive aerobic-power 200s" },
+        ]},
+      { label: "VO2 8×125 Free", totalYards: 1000, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2s08", reps: 8, dist: 125, desc: "Freestyle — fast effort, VO2, hold tempo through the odd distance", interval: "On 1:55", focus: "Aerobic power over an off-distance — stay long" },
+        ]},
+      { label: "VO2 8×100 IM", totalYards: 800, types: ["im","mixed"], strokes: [], sets: [
+          { id: "s_vo2s09", reps: 8, dist: 100, desc: "100 IM — VO2 effort, hold legal stroke and tempo under fatigue", interval: "On 1:45", focus: "Aerobic power across all four strokes" },
+        ]},
+      { label: "VO2 6×150 IM", totalYards: 900, types: ["im","mixed"], strokes: [], sets: [
+          { id: "s_vo2s10", reps: 6, dist: 150, desc: "150 IM (no free) — fast effort, VO2, strong transitions", interval: "On 2:35", focus: "Stroke-change power at high heart rate" },
+        ]},
+      { label: "VO2 8×100 Back", totalYards: 800, types: ["endurance","mixed"], strokes: ["back"], sets: [
+          { id: "s_vo2s11", reps: 8, dist: 100, desc: "Backstroke — VO2 effort, steady fast tempo, hold hip rotation", interval: "On 1:45", focus: "Aerobic power on back — short rest" },
+        ]},
+      { label: "VO2 8×100 Breast", totalYards: 800, types: ["endurance","mixed"], strokes: ["breast"], sets: [
+          { id: "s_vo2s12", reps: 8, dist: 100, desc: "Breaststroke — VO2 effort, strong pullouts, hold stroke length", interval: "On 1:55", focus: "Aerobic power on breast — repeatable just under race" },
+        ]},
+      { label: "VO2 6×100 Fly", totalYards: 600, types: ["endurance","mixed"], strokes: ["fly"], sets: [
+          { id: "s_vo2s13", reps: 6, dist: 100, desc: "Butterfly — VO2 effort, swim fly while form holds then strong free finish", interval: "On 1:45", focus: "Fly aerobic power without form breakdown" },
+        ]},
+      { label: "VO2 20×50 Free", totalYards: 1000, types: ["endurance","mixed","distance"], strokes: [], sets: [
+          { id: "s_vo2s14", reps: 20, dist: 50, desc: "Freestyle — fast 50s, VO2 effort, consistent send-off across all 20", interval: "On 0:48", focus: "Aerobic-power volume — hold pace, no fade" },
+        ]},
+      { label: "VO2 6×100 + 6×50 Free", totalYards: 900, types: ["distance","endurance","mixed"], strokes: [], sets: [
+          { id: "s_vo2s15a", reps: 6, dist: 100, desc: "Freestyle — VO2 effort, hold tempo", interval: "On 1:35", focus: "Aerobic power" },
+          { id: "s_vo2s15b", reps: 6, dist: 50, desc: "Freestyle — fast, VO2, quicker than the 100 pace", interval: "On 0:48", focus: "Speed-up to close the set" },
         ]},
     ];
 
