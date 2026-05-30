@@ -372,15 +372,33 @@
     // server needs to rewrite req.userSub; the server validates the
     // header against an active session row on every request (see
     // server.js requireAuth).
+    // Also makes every fetch resilient to HTTP 429. Hyperlift rate-limits
+    // bursts of parallel GETs (opening a team or swimmer fans out 5-7 reads
+    // at once); a 429 means the request was REJECTED before the handler ran,
+    // so a short backoff-retry is safe for reads AND writes (the write never
+    // executed). Without this, callers' catch blocks silently render the 429
+    // as empty — e.g. the Groups tab showing "No groups yet" for a team that
+    // actually has groups. Retries only on 429; all other statuses pass
+    // straight through. Honors Retry-After when the server sends it.
     if (typeof window !== "undefined" && window.fetch && !window.__sfImpersonationFetchWrapped) {
       const _origFetch = window.fetch.bind(window);
-      window.fetch = function(input, init) {
+      const _sfSleep = ms => new Promise(r => setTimeout(r, ms));
+      const _SF_MAX_429_RETRIES = 4;
+      window.fetch = async function(input, init) {
         const url = typeof input === "string" ? input : (input && input.url) || "";
         if (impersonation.active && impersonation.active.target_sub && url.startsWith("/api/")) {
           init = init || {};
           init.headers = { ...(init.headers || {}), "X-Impersonate-Sub": impersonation.active.target_sub };
         }
-        return _origFetch(input, init);
+        let attempt = 0;
+        while (true) {
+          const res = await _origFetch(input, init);
+          if (res.status !== 429 || attempt >= _SF_MAX_429_RETRIES) return res;
+          const ra = parseFloat(res.headers.get("retry-after"));
+          const backoff = Number.isFinite(ra) ? ra * 1000 : Math.min(2000, 200 * Math.pow(2, attempt));
+          await _sfSleep(backoff + Math.random() * 150);
+          attempt++;
+        }
       };
       window.__sfImpersonationFetchWrapped = true;
     }
@@ -15813,13 +15831,32 @@
         }
       }, []);
 
+      // Composite team-detail loader — one GET seeds detail + groups + events
+      // (was 3 parallel fetches). Cuts the team-select burst that, with the
+      // managed-roster fetch, tripped 429s. Per-section loaders above stay for
+      // post-mutation refresh (onChanged → loadGroups, create → loadEvents).
+      const loadTeamDetail = React.useCallback(async (id) => {
+        if (!id) { setDetail(null); setGroups(null); setEvents(null); return; }
+        setDetail(null); setGroups(null); setEvents(null);
+        try {
+          const res = await fetch(`/api/teams/${id}/detail`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const d = await res.json();
+          setDetail(d.team);
+          setRenameVal(d.team.name);
+          setGroups(Array.isArray(d.groups) ? d.groups : []);
+          setEvents(Array.isArray(d.events) ? d.events : []);
+        } catch (err) {
+          setMsg(`Error loading team: ${err.message}`);
+          setGroups([]); setEvents([]);
+        }
+      }, []);
+
       React.useEffect(() => { loadList(); }, [loadList]);
       React.useEffect(() => {
-        loadDetail(selectedId);
-        loadGroups(selectedId);
-        loadEvents(selectedId);
+        loadTeamDetail(selectedId);
         loadManagedInTeam(selectedId);
-      }, [selectedId, loadDetail, loadGroups, loadEvents, loadManagedInTeam]);
+      }, [selectedId, loadTeamDetail, loadManagedInTeam]);
 
       // Load the coach pool on first detail-open. Reused across visits to the
       // same team session; if a coach is added/removed they'll appear/disappear
@@ -16634,8 +16671,8 @@
     // token issuer. Per scope §10 + decision #16: confirmation dialog before
     // issuing because claim is destructive (managed row dies after redeem).
     // Per #28: blocked for under-13 (COPPA) and for parent_managed_flag.
-    function ClaimTokensPanel({ managedId, isMinor, isCoppa, parentManaged }) {
-      const [tokens,        setTokens]        = React.useState(null);
+    function ClaimTokensPanel({ managedId, isMinor, isCoppa, parentManaged, seedTokens = null }) {
+      const [tokens,        setTokens]        = React.useState(seedTokens ?? null);
       const [latestIssued,  setLatestIssued]  = React.useState(null);
       const [copied,        setCopied]        = React.useState(false);
       const [err,           setErr]           = React.useState(null);
@@ -16647,7 +16684,10 @@
           setTokens(await res.json());
         } catch (e) { setErr(e.message); setTokens([]); }
       }, [managedId]);
-      React.useEffect(() => { load(); }, [load]);
+      // Seeded from the composite detail fetch — skip the initial load; still
+      // refetch after issue/revoke. Ref guards only the first effect run.
+      const skipInitial = React.useRef(seedTokens != null);
+      React.useEffect(() => { if (skipInitial.current) { skipInitial.current = false; return; } load(); }, [load]);
 
       const blocked = isCoppa || parentManaged;
       const blockedReason = isCoppa     ? "Under-13 (COPPA-protected) — claim is blocked."
@@ -16924,8 +16964,8 @@
     // Visibility per-note: private / group_coaches / team_coaches. Default
     // visibility derived from the swimmer's team_type (high_school →
     // team_coaches; everyone else → private).
-    function CoachNotesPanel({ targetManagedId, targetSwimmerSub, teamId, mySub }) {
-      const [notes,       setNotes]        = React.useState(null);
+    function CoachNotesPanel({ targetManagedId, targetSwimmerSub, teamId, mySub, seedNotes = null }) {
+      const [notes,       setNotes]        = React.useState(seedNotes ?? null);
       const [team,        setTeam]         = React.useState(null);   // for team_type lookup
       const [draftBody,   setDraftBody]    = React.useState("");
       const [draftVis,    setDraftVis]     = React.useState("private");
@@ -16946,7 +16986,10 @@
           setNotes(await res.json());
         } catch (e) { setNotes([]); setErr(e.message); }
       }, [targetQuery]);
-      React.useEffect(() => { load(); }, [load]);
+      // Seeded from the composite detail fetch — skip the initial load; still
+      // refetch after add/edit/delete. Ref guards only the first effect run.
+      const skipInitial = React.useRef(seedNotes != null);
+      React.useEffect(() => { if (skipInitial.current) { skipInitial.current = false; return; } load(); }, [load]);
 
       // Fetch the team (once) so we can apply the per-team-type default
       // visibility on the create form.
@@ -20276,8 +20319,11 @@
     // the join completes server-side. Already-linked guardians can be
     // removed (one-way; the parent has to be re-invited if removed).
     // Pending invites can be revoked before the parent acts on them.
-    function ParentsPanel({ swimmerRef, swimmerName }) {
-      const [data,   setData]   = React.useState(null);                    // { guardians, invites }
+    function ParentsPanel({ swimmerRef, swimmerName, seedGuardians = null, seedInvites = null }) {
+      const seeded = seedGuardians != null || seedInvites != null;
+      const [data,   setData]   = React.useState(seeded
+        ? { guardians: Array.isArray(seedGuardians) ? seedGuardians : [], invites: Array.isArray(seedInvites) ? seedInvites : [] }
+        : null);                                                          // { guardians, invites }
       const [email,  setEmail]  = React.useState("");
       const [busy,   setBusy]   = React.useState(false);
       const [msg,    setMsg]    = React.useState(null);
@@ -20294,7 +20340,10 @@
           });
         } catch (e) { setMsg(`Load failed: ${e.message}`); setData({ guardians: [], invites: [] }); }
       }, [swimmerRef]);
-      React.useEffect(() => { load(); }, [load]);
+      // Seeded from the composite detail fetch — skip the initial load; still
+      // refetch after invite/revoke/remove. Ref guards only the first run.
+      const skipInitial = React.useRef(seeded);
+      React.useEffect(() => { if (skipInitial.current) { skipInitial.current = false; return; } load(); }, [load]);
 
       const submitInvite = async () => {
         if (busy) return;
@@ -20446,8 +20495,8 @@
 
     // Per-managed-swimmer Constraints subsection. Slots into the swimmer
     // detail view between ClaimTokensPanel and CoachNotesPanel.
-    function ConstraintsPanel({ managedId }) {
-      const [rows, setRows] = React.useState(null);
+    function ConstraintsPanel({ managedId, seedConstraints = null }) {
+      const [rows, setRows] = React.useState(Array.isArray(seedConstraints) ? seedConstraints : null);
       const [err,  setErr]  = React.useState(null);
       const [modalOpen, setModalOpen] = React.useState(false);
       const [editRow,   setEditRow]   = React.useState(null);  // prefill row for Edit
@@ -20460,7 +20509,10 @@
           setRows(Array.isArray(j.constraints) ? j.constraints : []);
         } catch (e) { setErr(e.message); setRows([]); }
       }, [managedId]);
-      React.useEffect(() => { load(); }, [load]);
+      // Seeded from the composite detail fetch — skip the initial load; still
+      // refetch after add/edit/remove. Ref guards only the first run.
+      const skipInitial = React.useRef(Array.isArray(seedConstraints));
+      React.useEffect(() => { if (skipInitial.current) { skipInitial.current = false; return; } load(); }, [load]);
 
       const handleRemove = async (id, confirmMsg) => {
         if (confirmMsg && !window.confirm(confirmMsg)) return false;
@@ -20545,6 +20597,11 @@
       const [showArch,   setShowArch]   = React.useState(false);
       const [selectedId, setSelectedId] = React.useState(null);
       const [detail,     setDetail]     = React.useState(null);
+      // Composite payload from /api/managed-swimmers/:id/detail — seeds the
+      // panels below so opening a swimmer is ONE request, not ~7 (the burst
+      // that tripped 429s). Panels still keep their own fetch for post-edit
+      // refresh; the seed just skips the initial load. null until loaded.
+      const [bundle,     setBundle]     = React.useState(null);
       const [creating,   setCreating]   = React.useState(false);
       const [importing,  setImporting]  = React.useState(false);
       const [form,       setForm]       = React.useState(() => emptyForm());
@@ -20573,12 +20630,14 @@
       }, [showArch]);
 
       const loadDetail = React.useCallback(async (id) => {
-        if (!id) { setDetail(null); return; }
-        setDetail(null);
+        if (!id) { setDetail(null); setBundle(null); return; }
+        setDetail(null); setBundle(null);
         try {
-          const res = await fetch(`/api/managed-swimmers/${id}`, { cache: "no-store" });
+          const res = await fetch(`/api/managed-swimmers/${id}/detail`, { cache: "no-store" });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const d = await res.json();
+          const payload = await res.json();
+          setBundle(payload);
+          const d = payload.swimmer;
           setDetail(d);
           setForm({
             display_name:        d.display_name || "",
@@ -20762,9 +20821,11 @@
                   <div>Parental contact: <strong>{detail.parental_contact || "—"}</strong></div>
                   <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--color-card)" }}>
                     {/* Home address — coach sees it only if a guardian shared it (consent). */}
-                    <AddressManager key={detail.id} swimmerRef={detail.id} showConsent={false} />
+                    <AddressManager key={detail.id} swimmerRef={detail.id} showConsent={false}
+                      seedAddresses={bundle?.addresses} seedCanWrite={bundle?.address_can_write} />
                     {/* Siblings (P3) — consent-gated per sibling server-side. */}
-                    <HouseholdSiblings key={"hh-" + detail.id} swimmerRef={detail.id} />
+                    <HouseholdSiblings key={"hh-" + detail.id} swimmerRef={detail.id}
+                      seedHousehold={bundle?.household} />
                   </div>
                 </div>
               )}
@@ -20794,29 +20855,35 @@
             {/* R-I: claim token issuer for this managed profile */}
             {!detail.archived && (
               <ClaimTokensPanel
+                key={"ct-" + detail.id}
                 managedId={detail.id}
                 isMinor={detail.is_minor}
                 isCoppa={detail.is_coppa_protected}
                 parentManaged={detail.parent_managed_flag}
+                seedTokens={bundle?.claim_tokens}
               />
             )}
 
             {/* Phase 3 PSC slice 3 — per-swimmer constraints (injury / equipment / cap restrictions) */}
             {!detail.archived && (
-              <ConstraintsPanel managedId={detail.id} />
+              <ConstraintsPanel key={"con-" + detail.id} managedId={detail.id}
+                seedConstraints={bundle?.constraints} />
             )}
 
             {/* Parent Portal MVP — invite/revoke parents on this profile */}
             {!detail.archived && (
-              <ParentsPanel swimmerRef={detail.id} swimmerName={detail.display_name} />
+              <ParentsPanel key={"pp-" + detail.id} swimmerRef={detail.id} swimmerName={detail.display_name}
+                seedGuardians={bundle?.parents?.guardians} seedInvites={bundle?.parents?.invites} />
             )}
 
             {/* R-H: coach notes journal for this managed profile */}
             {!detail.archived && (
               <CoachNotesPanel
+                key={"cn-" + detail.id}
                 targetManagedId={detail.id}
                 teamId={detail.team_id}
                 mySub={mySub}
+                seedNotes={bundle?.coach_notes}
               />
             )}
 
@@ -24465,8 +24532,13 @@
     // The server gates access (self+guardians always; coach only with the
     // consent toggle on) — a 403 just renders "not shared". showConsent adds
     // the guardian/self consent toggle ("coaches may view this address").
-    function AddressManager({ swimmerRef, showConsent }) {
-      const [data, setData] = React.useState(null);
+    function AddressManager({ swimmerRef, showConsent, seedAddresses = null, seedCanWrite = null }) {
+      // Seeded from the composite detail fetch (owner-coach context, where
+      // access is always granted) — skip the initial GET; mutations still
+      // refetch. noaccess only arises from a real 403 on the fallback fetch.
+      const [data, setData] = React.useState(Array.isArray(seedAddresses)
+        ? { addresses: seedAddresses, can_write: !!seedCanWrite, coach_visible: false }
+        : null);
       const [adding, setAdding] = React.useState(false);
       const emptyF = () => ({ line1: "", city: "", region: "", postal_code: "" });
       const [form, setForm] = React.useState(emptyF());
@@ -24481,7 +24553,8 @@
           setData(await res.json());
         } catch (e) { setMsg(`Load failed: ${e.message}`); setData({ addresses: [], can_write: false, coach_visible: false }); }
       }, [swimmerRef]);
-      React.useEffect(() => { load(); }, [load]);
+      const skipInitial = React.useRef(Array.isArray(seedAddresses));
+      React.useEffect(() => { if (skipInitial.current) { skipInitial.current = false; return; } load(); }, [load]);
       const reqJson = async (url, method, payload) => {
         const res = await fetch(`${API_BASE}${url}`, { method, headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: payload ? JSON.stringify(payload) : undefined });
         if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `HTTP ${res.status}`); }
@@ -24552,9 +24625,11 @@
     // Household/siblings (Locations P3) — read-only derived display. Server
     // gates it (shared address+guardian, per-sibling consent), so we just
     // render whatever names come back; nothing if none/not-authorized.
-    function HouseholdSiblings({ swimmerRef }) {
-      const [sibs, setSibs] = React.useState(null);
+    function HouseholdSiblings({ swimmerRef, seedHousehold = null }) {
+      const [sibs, setSibs] = React.useState(Array.isArray(seedHousehold) ? seedHousehold : null);
       React.useEffect(() => {
+        // Seeded from the composite detail fetch — skip the initial GET.
+        if (Array.isArray(seedHousehold)) return;
         let cancelled = false;
         fetch(`${API_BASE}/swimmers/${encodeURIComponent(swimmerRef)}/household`, { cache: "no-store" })
           .then(r => r.ok ? r.json() : { siblings: [] })

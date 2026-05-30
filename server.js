@@ -2740,6 +2740,28 @@ app.get("/api/teams/:id", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// Composite team-detail bootstrap — one GET returns the team (with coaches +
+// viewer_role), its groups, and its events, so opening a team fires ONE
+// request instead of 3 parallel ones (the burst that, combined with the
+// roster + managed-roster fetches, tripped Hyperlift's 429 and made the
+// Groups tab render "No groups yet"). Same play as /api/me/bootstrap. The
+// TeamsView seeds detail/groups/events from this; the per-section loaders
+// stay for post-mutation refresh.
+app.get("/api/teams/:id/detail", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const [coaches, groups, events] = await Promise.all([
+      dbListTeamCoaches(req.params.id),
+      dbListGroupsForTeam(req.params.id, { includeArchived: false }),
+      dbListTeamEvents(req.params.id),
+    ]);
+    res.json({ team: { ...team, viewer_role: role, coaches }, groups, events });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // Rename a team. Owner only.
 app.patch("/api/teams/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
@@ -3417,6 +3439,53 @@ app.get("/api/managed-swimmers/:id", requireAuth, requireCoach, async (req, res)
     const ms = await dbGetManagedSwimmer(req.params.id);
     if (!ms) return res.status(404).json({ error: "not found" });
     res.json(ms);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Composite detail bootstrap — one GET returns the swimmer + everything the
+// detail panels need, so opening a managed swimmer fires ONE request instead
+// of ~7 (the burst that tripped Hyperlift's platform rate-limit → 429s).
+// Same play as /api/me/bootstrap. Panels seed from this; they keep their own
+// fetch as a post-mutation refresh fallback.
+app.get("/api/managed-swimmers/:id/detail", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const owned = await dbIsManagedSwimmerOwnedBy(id, req.userSub);
+    if (!owned) return res.status(403).json({ error: "not owner of this profile" });
+    const tgt = { managedId: id };
+    const [swimmer, claim_tokens, constraintsRes, guardians, invites, coach_notes, acc] = await Promise.all([
+      dbGetManagedSwimmer(id),
+      dbListClaimTokensForManaged(id, {}),
+      dbListConstraintsForSwimmer(tgt, {}),
+      dbListGuardiansForSwimmer(tgt),
+      dbListParentInvitesForSwimmer(tgt),
+      dbListCoachNotesForTarget({ managedId: id, callerSub: req.userSub }),
+      dbCanAccessPersonAddress(req.userSub, tgt),
+    ]);
+    if (!swimmer) return res.status(404).json({ error: "not found" });
+    // Address + household are address-access-gated (acc). For an owned managed
+    // swimmer the owner-coach has access (P2 decision), so this normally fills.
+    let addresses = [], coach_visible = false, household = [];
+    if (acc.read && acc.personId) {
+      addresses = await dbListPersonAddresses(acc.personId);
+      coach_visible = await dbGetHomeAddrConsent(acc.personId);
+      const raw = await dbGetHouseholdSiblings(acc.personId);
+      for (const s of raw) {
+        const sref = s.managed_id ? { managedId: s.managed_id } : (s.swimmer_sub ? { swimmerSub: s.swimmer_sub } : null);
+        if (!sref) continue;
+        const sacc = await dbCanAccessPersonAddress(req.userSub, sref);
+        if (sacc.read) household.push({ display_name: s.display_name, ref: s.managed_id || s.swimmer_sub });
+      }
+    }
+    res.json({
+      swimmer,
+      claim_tokens,
+      constraints: Array.isArray(constraintsRes) ? constraintsRes : (constraintsRes?.constraints || constraintsRes || []),
+      parents: { guardians, invites },
+      coach_notes,
+      addresses, address_can_write: acc.write, coach_visible,
+      household,
+    });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -4312,6 +4381,7 @@ app.post("/api/scheduled-workouts", checkOrigin, requireAuth, requireCsrf, write
       payload:       b.payload || null,
       intentParams:  b.intent_params || null,
       notes:         b.notes || null,
+      facilityId:    b.facility_id != null ? b.facility_id : null,
     });
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({
