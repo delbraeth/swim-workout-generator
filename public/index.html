@@ -341,7 +341,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "205890b · 2026-05-30 00:44 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "33bdf56 · 2026-05-30 00:56 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -406,6 +406,13 @@
     // Normalize raw initials input: trim, uppercase, alphanumeric only, max 4 chars.
     function normalizeInitials(raw) {
       return (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+    }
+
+    // Pool-mode → human label. Top-level so any component can use it (there's
+    // also a component-local `poolLabel` with the same mapping; this is the
+    // shared one for IntentForm / WeekView / facility chips).
+    function poolModeLabel(m) {
+      return ({ "25y": "SCY (25y)", "25m": "SCM (25m)", "50m": "LCM (50m)", "yds": "SCY (legacy)" })[m] || m;
     }
 
     const HISTORY_LOCAL_KEY = "swim_history_v1";
@@ -17215,7 +17222,7 @@
       { id: "long_main",    label: "Long main" },
     ];
 
-    function IntentForm({ initialDate, initialIntent, editingId, onClose, onSaved }) {
+    function IntentForm({ initialDate, initialIntent, editingId, initialFacilityId = null, onClose, onSaved }) {
       const safeInitial = initialIntent || {};
       const [date,       setDate]       = React.useState(initialDate || "");
       const [type,       setType]       = React.useState(safeInitial.type || (WORKOUT_TYPES[0] && WORKOUT_TYPES[0].id) || "");
@@ -17229,6 +17236,12 @@
       const [lanePlanId, setLanePlanId] = React.useState(safeInitial.lane_plan_id || "");
       const [coachTargets, setCoachTargets] = React.useState([]); // [] = none / not-coach
       const [lanePlans, setLanePlans]   = React.useState([]);     // [] when no group or no plans
+      // P4 — facility lives on scheduled_workouts (NOT intent_params). It's a
+      // team-level resource, so the picker only appears once a group (→team)
+      // is chosen. Selecting a facility defaults pool_mode to its course at
+      // generation time. "" = none / inherit.
+      const [facilityId, setFacilityId] = React.useState(initialFacilityId != null ? String(initialFacilityId) : "");
+      const [facilities, setFacilities] = React.useState([]);     // [] when no group / team has none
       const [busy,       setBusy]       = React.useState(false);
       const [err,        setErr]        = React.useState(null);
 
@@ -17255,6 +17268,26 @@
         else if (lanePlanId && !lanePlans.some(p => p.id === lanePlanId)) setLanePlanId("");
       }, [groupId, lanePlans]);
 
+      // P4 — load the selected group's team facilities. Facilities are
+      // team-level; the group carries team_id via coach-targets.
+      React.useEffect(() => {
+        if (!groupId) { setFacilities([]); return; }
+        const g = coachTargets.find(t => t.id === groupId);
+        if (!g || !g.team_id) { setFacilities([]); return; }
+        fetch(`/api/teams/${g.team_id}/facilities`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(list => setFacilities(Array.isArray(list) ? list : []))
+          .catch(() => setFacilities([]));
+      }, [groupId, coachTargets]);
+
+      // Clear a stale facility when switching groups (different team). Guard on
+      // facilities.length > 0 so an edit-mode prefill isn't wiped during the
+      // async window where the list hasn't loaded yet.
+      React.useEffect(() => {
+        if (!groupId) { setFacilityId(""); return; }
+        if (facilityId && facilities.length > 0 && !facilities.some(f => String(f.id) === String(facilityId))) setFacilityId("");
+      }, [groupId, facilities]);
+
       const submit = async () => {
         setErr(null);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { setErr("Pick a valid date"); return; }
@@ -17275,11 +17308,14 @@
         }
         setBusy(true);
         try {
+          // P4 — facility_id is a top-level column (not in intent_params).
+          // null when self-only or no facility chosen.
+          const facility_id = (groupId && facilityId) ? Number(facilityId) : null;
           if (editingId) {
             const res = await fetch(`/api/scheduled-workouts/${editingId}`, {
               method:  "PATCH",
               headers: { "Content-Type": "application/json", ...csrfHeaders() },
-              body:    JSON.stringify({ scheduled_date: date, intent_params, notes: notes.trim() || null }),
+              body:    JSON.stringify({ scheduled_date: date, intent_params, notes: notes.trim() || null, facility_id }),
             });
             const j = await res.json();
             if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
@@ -17287,7 +17323,7 @@
             const res = await fetch("/api/scheduled-workouts", {
               method:  "POST",
               headers: { "Content-Type": "application/json", ...csrfHeaders() },
-              body:    JSON.stringify({ scheduled_date: date, intent_params, notes: notes.trim() || null }),
+              body:    JSON.stringify({ scheduled_date: date, intent_params, notes: notes.trim() || null, facility_id }),
             });
             const j = await res.json();
             if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
@@ -17351,6 +17387,28 @@
                   <div style={{ color: "var(--color-text-dim)", fontSize: 11, fontStyle: "italic", marginBottom: 12 }}>
                     No lane plans for this group — fanout uses each member's stored pace.
                   </div>
+                )}
+                {groupId && facilities.length > 0 && (
+                  <>
+                    <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Facility (optional)</label>
+                    <select value={facilityId} onChange={(e) => setFacilityId(e.target.value)}
+                      style={{ width: "100%", padding: "7px 9px", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, fontSize: 13, marginBottom: facilityId ? 4 : 12 }}>
+                      <option value="">No facility</option>
+                      {facilities.map(f => (
+                        <option key={f.id} value={f.id}>
+                          🏊 {f.name}{f.course ? ` (${poolModeLabel(f.course)})` : ""}{f.is_primary ? " · primary" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {facilityId && (() => {
+                      const f = facilities.find(x => String(x.id) === String(facilityId));
+                      return f && f.course
+                        ? <div style={{ color: "var(--color-text-dim)", fontSize: 11, fontStyle: "italic", marginBottom: 12 }}>
+                            Generates in {poolModeLabel(f.course)} by default (this facility's course).
+                          </div>
+                        : <div style={{ marginBottom: 12 }} />;
+                    })()}
+                  </>
                 )}
               </>
             )}
@@ -18793,7 +18851,9 @@
             maxYards:     Number(ip.maxYards) || 2400,
             equipment:    ip.equipment || {},
             favorites:    [],
-            poolMode:     "25y",
+            // P4 — default to the scheduled facility's course (25y/25m/50m)
+            // when one is set; else the historical 25y default.
+            poolMode:     sw.facility_course || "25y",
             userMin:      1200,
             pinnedBlocks: {},
             recentLabels: [],
@@ -18946,6 +19006,12 @@
                               → {groupName}
                             </span>
                           )}
+                          {sw.facility_name && (
+                            <span title={`At ${sw.facility_name}${sw.facility_course ? ` · ${poolModeLabel(sw.facility_course)}` : ""}`}
+                              style={{ marginLeft: 6, fontSize: 10, color: "var(--color-primary)", background: "rgba(59,130,246,0.12)", border: "1px solid var(--color-primary)", borderRadius: 4, padding: "1px 6px", fontWeight: 700, letterSpacing: "0.04em" }}>
+                              🏊 {sw.facility_name}
+                            </span>
+                          )}
                           <span style={{ color: "var(--color-text-dim)", fontWeight: 400, marginLeft: 6 }}>{yards.toLocaleString()} {unit}{isIntent && " (target)"}</span>
                           {isIntent && sw.notes && <span style={{ marginLeft: 8, fontSize: 11, color: "var(--color-text-muted)", fontStyle: "italic" }}>· {sw.notes}</span>}
                         </span>
@@ -18954,7 +19020,7 @@
                             <button onClick={() => handleGenerateFromIntent(sw)}
                               title="Generate a workout from this intent + preview it"
                               style={{ padding: "3px 10px", border: "1px solid var(--color-warn)", borderRadius: 5, background: "transparent", color: "var(--color-warn)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>▶ Generate</button>
-                            <button onClick={() => setIntentForm({ date: sw.scheduled_date, intent: sw.intent_params, editingId: sw.id })}
+                            <button onClick={() => setIntentForm({ date: sw.scheduled_date, intent: sw.intent_params, editingId: sw.id, facilityId: sw.facility_id })}
                               title="Edit this intent"
                               style={{ padding: "3px 10px", border: "1px solid var(--color-primary)", borderRadius: 5, background: "transparent", color: "var(--color-primary)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit intent</button>
                           </>
@@ -19035,6 +19101,7 @@
               initialDate={intentForm.date}
               initialIntent={intentForm.intent}
               editingId={intentForm.editingId}
+              initialFacilityId={intentForm.facilityId}
               onClose={() => setIntentForm(null)}
               onSaved={() => { load(); }}
             />
