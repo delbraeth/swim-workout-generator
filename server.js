@@ -1276,14 +1276,25 @@ function validateWorkoutEntry(entry) {
   if (!Number.isFinite(entry.totalYards) || entry.totalYards <= 0)
                                                        return "entry.totalYards must be a positive number";
   if (!VALID_POOL_MODES.has(entry.poolMode))           return `entry.poolMode must be one of: ${[...VALID_POOL_MODES].join(", ")}`;
-  if (!Array.isArray(entry.blocks) || entry.blocks.length !== 4)
-                                                       return "entry.blocks must be an array of 4 sections (warmup, drill, main, cooldown)";
-  for (let i = 0; i < REQUIRED_SECTIONS.length; i++) {
+  // Section model (2026-05-30): blocks are no longer a fixed 4. Coaches can
+  // skip warmup/drill/cooldown (Part A) and add dryland blocks (Part B). Rule:
+  // a non-empty list, exactly one of the swim sections is "main", swim blocks
+  // carry non-empty sets, dryland blocks carry an exercises array.
+  if (!Array.isArray(entry.blocks) || entry.blocks.length === 0)
+                                                       return "entry.blocks must be a non-empty array";
+  let hasMain = false;
+  for (let i = 0; i < entry.blocks.length; i++) {
     const b = entry.blocks[i];
     if (!b || typeof b !== "object")                   return `entry.blocks[${i}] must be an object`;
-    if (b.section !== REQUIRED_SECTIONS[i])            return `entry.blocks[${i}].section must be "${REQUIRED_SECTIONS[i]}" (got "${b.section}")`;
+    if (b.kind === "dryland") {
+      if (!Array.isArray(b.exercises))                 return `entry.blocks[${i}] (dryland) must have an exercises array`;
+      continue;
+    }
+    if (!REQUIRED_SECTIONS.includes(b.section))        return `entry.blocks[${i}].section must be one of ${REQUIRED_SECTIONS.join(", ")} (got "${b.section}")`;
     if (!Array.isArray(b.sets) || b.sets.length === 0) return `entry.blocks[${i}].sets must be a non-empty array`;
+    if (b.section === "main") hasMain = true;
   }
+  if (!hasMain)                                        return "entry.blocks must include a main section";
   return null;
 }
 

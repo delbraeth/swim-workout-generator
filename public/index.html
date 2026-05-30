@@ -14012,7 +14012,13 @@
                           {block.label && block.name && block.label !== block.name ? <span style={{ fontWeight: 400, fontStyle: "italic", textTransform: "none", letterSpacing: 0, marginLeft: 6 }}>— {block.label}</span> : null}
                         </td>
                       </tr>
-                      {(block.sets || []).map((s, si) => {
+                      {block.kind === "dryland"
+                        ? (block.exercises || []).map((ex, ei) => (
+                            <tr key={"dl" + ei}><td colSpan={1 + lanes.length} style={{ padding: "3pt 4pt", borderBottom: "0.25pt solid #ccc" }}>
+                              <b>{ex.sets > 1 ? `${ex.sets} × ${ex.reps}` : ex.reps}</b> — {ex.name}{ex.rest ? ` (rest ${ex.rest})` : ""}
+                            </td></tr>
+                          ))
+                        : (block.sets || []).map((s, si) => {
                         const setKey = bi + "-" + si;
                         return (
                           <tr key={setKey} className="multipace-matrix-row">
@@ -14123,7 +14129,13 @@
                           ⚠ {blockNotes.join(" · ")}
                         </div>
                       )}
-                      {(block.sets || []).map((s, si) => {
+                      {block.kind === "dryland"
+                        ? (block.exercises || []).map((ex, ei) => (
+                            <div key={"dl" + ei} style={{ marginBottom: 3, fontSize: "11pt" }}>
+                              <b>{ex.sets > 1 ? `${ex.sets} × ${ex.reps}` : ex.reps}</b> — {ex.name}{ex.rest ? ` (rest ${ex.rest})` : ""}
+                            </div>
+                          ))
+                        : (block.sets || []).map((s, si) => {
                         const setNotes = perSetAnnotations[`${bi}-${si}`] || [];
                         return (
                           <div key={si} style={{ marginBottom: 3, fontSize: "11pt" }}>
@@ -24160,6 +24172,8 @@
       const [logError, setLogError]     = useState(null);
       // E: flat array of all splits captured this session — {blockIdx, setIdx, rep, actual_secs, expected_secs, delta}
       const [allSplits, setAllSplits]   = useState([]);
+      // Section model B3 — dryland checklist tick state (keyed "blockIdx:exIdx").
+      const [drylandChecked, setDrylandChecked] = useState(() => new Set());
       const blocks  = workout.blocks;
 
       // Wall-clock elapsed timer — pauses once the workout is finished
@@ -24254,6 +24268,50 @@
             </div>
           </div>
 
+          {/* Section model B3 — dryland blocks render a tick-off checklist
+              instead of the pace-card sets. */}
+          {block.kind === "dryland" ? (
+          <>
+            <div style={{ background: "#f0e2cc", padding: "24px 20px 20px" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#7a4a12", textTransform: "uppercase", letterSpacing: "0.12em", opacity: 0.7, marginBottom: 6 }}>
+                Section {idx + 1} of {total} · Dryland
+              </div>
+              <div style={{ fontSize: 34, fontWeight: 900, color: "#7a4a12", lineHeight: 1.1, marginBottom: 6 }}>
+                🏋 {block.name}
+              </div>
+              <div style={{ fontSize: 15, color: "#7a4a12", opacity: 0.85, fontWeight: 600 }}>
+                {block.placement === "post" ? "After pool" : "Before pool"} · tap to check off
+              </div>
+            </div>
+            <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {(block.exercises || []).map((ex, i) => {
+                const ck = `${idx}:${i}`;
+                const done = drylandChecked.has(ck);
+                return (
+                  <div key={i}
+                    onClick={() => setDrylandChecked(prev => { const n = new Set(prev); n.has(ck) ? n.delete(ck) : n.add(ck); return n; })}
+                    style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--color-card)", borderRadius: 14,
+                      border: `1px solid ${done ? "#16a34a" : "var(--color-border)"}`, padding: "16px 18px", cursor: "pointer",
+                      WebkitTapHighlightColor: "transparent", opacity: done ? 0.6 : 1, minHeight: 54 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                      border: `2px solid ${done ? "#16a34a" : "var(--color-border-strong)"}`,
+                      background: done ? "#16a34a" : "transparent", color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{done ? "✓" : ""}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", lineHeight: 1.1, textDecoration: done ? "line-through" : "none" }}>
+                        {ex.sets > 1 ? `${ex.sets} × ${ex.reps}` : ex.reps}
+                      </div>
+                      <div style={{ fontSize: 16, color: "var(--color-text)", marginTop: 2 }}>
+                        {ex.name}{ex.rest ? <span style={{ color: "var(--color-text-dim)", fontSize: 13 }}> · rest {ex.rest}</span> : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+          ) : (
+          <>
           {/* Section header */}
           <div style={{ background: s.headerBg, padding: "24px 20px 20px" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: s.headerText, textTransform: "uppercase", letterSpacing: "0.12em", opacity: 0.7, marginBottom: 6 }}>
@@ -24310,6 +24368,8 @@
               </div>
             ))}
           </div>
+          </>
+          )}
 
           {/* Pace clock — rendered over this overlay when a set is tapped */}
           {paceIdx !== null && (
