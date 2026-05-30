@@ -629,7 +629,7 @@
     <!-- ══ SECTIONS ══ -->
     <section id="sections">
       <h2>Workout Sections</h2>
-      <p>Every workout has four sections displayed as color-coded blocks:</p>
+      <p>A workout is built from up to four swim sections (you can skip some — see below) plus optional <a href="#sections">dryland</a>, displayed as color-coded blocks:</p>
 
       <table>
         <thead><tr><th>Section</th><th>Color</th><th>Purpose</th></tr></thead>
@@ -642,6 +642,18 @@
       </table>
 
       <p>Each block shows its name, total yardage, and a table of sets. The main set block also shows a <strong>⭐ favorite</strong> button and an optional repeat indicator (e.g. <strong>×2 rounds</strong>).</p>
+
+      <h3>Choosing which sections to include</h3>
+      <p>Above the workout-type cards, a <strong>Sections</strong> row lets you skip a section before generating — tap <strong>Warmup</strong>, <strong>Drill</strong>, or <strong>Cooldown</strong> to toggle it off (it shows struck-through). The <strong>Main</strong> set is always included. When you skip a section, its yardage is redistributed across the sections you kept, so the workout still hits your target distance rather than coming up short. The same toggles appear on the <a href="#plan-intent">Plan-Intent</a> form, so a scheduled practice can drop a section too.</p>
+
+      <h3>Dryland blocks</h3>
+      <p>You can add a <strong>dryland</strong> block to any generated workout — a list of exercises (sets × reps, optional rest) rather than swim sets. Below the workout, tap <strong>🏋 + Add dryland</strong>, pick a preset (Pre-Pool Activation, Core Circuit, Shoulder Prehab, Mobility Flow, Power/Plyometrics, Lower-Body Strength, and more) and a placement (<em>before</em> or <em>after</em> pool), then <strong>Add</strong>. The block appears in its own amber card.</p>
+      <ul>
+        <li><strong>Edit it</strong> — tap the <strong>✎</strong> on the dryland card to change the name or any exercise (sets / reps / name / rest), add exercises with <strong>+ Add exercise</strong>, or remove them. Tap <strong>✓ Done</strong> to save.</li>
+        <li><strong>Run mode</strong> — a dryland block shows as a tap-to-check <strong>checklist</strong> (no pace clock); tick each exercise as you finish it.</li>
+        <li><strong>Print, copy, save, history</strong> — dryland blocks are included everywhere the workout goes, and they're excluded from the yardage totals and reports (they have no distance).</li>
+        <li><strong>On an intent</strong> — the Plan-Intent form has a <em>Dryland (optional)</em> picker, so a scheduled practice can pre-include a dryland block that's added automatically when you generate on the day.</li>
+      </ul>
     </section>
 
     <!-- ══ TEMPLATE ENGINE ══ -->
@@ -1959,6 +1971,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>Guided tour for new users</strong> — <strong>v1 live</strong>. The first time you open SetForge, a short 6-step walkthrough highlights the workout-generator controls in order — pool mode, workout type, pace, equipment, total distance — and ends by pointing at the <em>Generate</em> button. Each step dims the rest of the screen and rings the control it's describing; use <em>Next</em>/<em>Back</em>, the arrow keys, or <em>Skip tour</em> (Esc) to move through it. It shows once automatically and then stays out of your way. Want it again? Open <em>Profile → Account</em> and click <strong>👋 Take the tour</strong> to replay it anytime.</li>
         <li><strong>Swimmer profile fields</strong> — <strong>v1 live</strong>. Profiles (your own and coach-managed swimmers) now carry a few more normalized details: <em>class year</em> (graduation year — your grade level is derived from it automatically and never goes stale) and a <em>USA Swimming ID</em>. All optional. Under the hood this completes the identity cleanup so every name, DOB and detail lives in one place. (The old team-level "school / club" field has been generalized into <a href="#teams">team practice facilities</a>.)</li>
         <li><strong>Locations — facilities, addresses &amp; household</strong> — <strong>v1 live</strong>. Teams can record one or more <a href="#teams">practice facilities</a> (pool name + course + lanes + address, one marked primary) under <em>Team → Settings</em>, replacing the old single school field. When a coach plans a practice for a group they can pick the facility, and its course sets the default pool mode at generation (<a href="#plan-intent">Plan an Intent</a>). Swimmer profiles can hold <a href="#swimmers">home addresses</a> with a guardian/self-controlled "coaches may view" consent toggle, and a derived 👪 <em>household</em> view groups swimmers who share an address and a guardian — every cross-view respects the same consent gate.</li>
+        <li><strong>Flexible sections + dryland</strong> — <strong>v1 live</strong>. You can now <a href="#sections">skip a section</a> (warmup / drill / cooldown; main is always in) before generating, and the skipped yardage redistributes so the workout still hits your target. You can also add <strong>dryland</strong> blocks — pick from a 12-preset bank (activation, core, prehab, mobility, power, strength, stretch, foam-roll…), place them before or after the pool, edit the exercises inline, and run them as a tap-off checklist. Both work on scheduled <a href="#plan-intent">intents</a> too. Dryland carries no yardage, so it's excluded from totals and reports.</li>
       </ul>
 
       <h3>Planned</h3>
