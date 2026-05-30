@@ -57,6 +57,12 @@
       --color-text-dim:    #8b95a6;   /* lifted from slate-500 #64748b to pass WCAG AA 4.5:1 over --color-card (Phase 1 item 8, 2026-05-26) */
     }
     *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      /* Phone: stop any single wide element (table, grid) from scrolling the
+         whole page sideways. Real overflow sources are wrapped individually;
+         this is the backstop. */
+      overflow-x: hidden;
+    }
     body {
       background: var(--color-bg);
       margin: 0;
@@ -87,6 +93,38 @@
        getting squeezed alongside. */
     @media (max-width: 640px) {
       .pool-mode-buttons { flex-basis: calc(100% - 70px); }
+    }
+
+    /* ── Phone UI pass (PHONE_UI_REVIEW.md) ───────────────────────────── */
+    /* Reusable horizontal-scroll wrapper for wide tables — the CONTAINER
+       scrolls, not the page. Apply to a div wrapping any coach table. */
+    .hscroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
+    /* Touch devices: give the shared .btn a real tap target (≥44px Apple HIG).
+       Desktop (pointer:fine) is untouched, so dense toolbars stay compact. */
+    @media (pointer: coarse) {
+      .btn { min-height: 40px; }
+    }
+    /* Set-editor row: a 7-column grid is unusable < ~640px. Stack the cells
+       (the JSX carries the desktop grid inline; this class overrides it on
+       narrow screens — see the add-row editor). */
+    @media (max-width: 640px) {
+      .editor-row {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 6px !important;
+      }
+      .editor-row > .editor-row-wide { grid-column: 1 / -1; }
+      /* Workout-type cards: 3-up is too tight on a phone — drop to 2. */
+      .type-card-grid { grid-template-columns: repeat(2, 1fr) !important; }
+      /* Wide coach/admin/report tables: let the TABLE scroll horizontally on
+         a phone instead of clipping (body overflow-x is hidden) or pushing the
+         whole page sideways. Standard responsive-table trick — the table
+         becomes its own horizontal scroll container. */
+      table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+      table thead, table tbody { width: 100%; }
     }
 
     /* Phase 4 CSS refactor — button design system (slice 5).
@@ -341,7 +379,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "e6c664f-dirty · 2026-05-30 02:00 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "81d7d30 · 2026-05-30 03:17 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -22352,13 +22390,13 @@
             </p>
             <div style={{ marginBottom: 16 }}>
               {sets.map((s, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 60px 1fr 100px 1fr 90px 30px", gap: 6, marginBottom: 6, alignItems: "start" }}>
+                <div key={i} className="editor-row" style={{ display: "grid", gridTemplateColumns: "60px 60px 1fr 100px 1fr 90px 30px", gap: 6, marginBottom: 6, alignItems: "start" }}>
                   <input type="number" min="1" value={s.reps} onChange={(e) => updateSet(i, { reps: e.target.value })} placeholder="reps" style={fieldStyle}
                     ref={i === sets.length - 1 ? newRowRepsRef : null} />
                   <input type="number" min="1" value={s.dist} onChange={(e) => updateSet(i, { dist: e.target.value })} placeholder="dist" style={fieldStyle} />
-                  <input value={s.desc} onChange={(e) => updateSet(i, { desc: e.target.value })} placeholder="Description" style={fieldStyle} maxLength={500} />
-                  <input value={s.interval} onChange={(e) => updateSet(i, { interval: e.target.value })} placeholder="On 2:00" style={fieldStyle} />
-                  <input value={s.focus || ""} onChange={(e) => updateSet(i, { focus: e.target.value })} placeholder="Focus (optional)" style={fieldStyle} maxLength={240} />
+                  <input className="editor-row-wide" value={s.desc} onChange={(e) => updateSet(i, { desc: e.target.value })} placeholder="Description" style={fieldStyle} maxLength={500} />
+                  <input className="editor-row-wide" value={s.interval} onChange={(e) => updateSet(i, { interval: e.target.value })} placeholder="On 2:00" style={fieldStyle} />
+                  <input className="editor-row-wide" value={s.focus || ""} onChange={(e) => updateSet(i, { focus: e.target.value })} placeholder="Focus (optional)" style={fieldStyle} maxLength={240} />
                   <select value={s.eq || ""} onChange={(e) => updateSet(i, { eq: e.target.value || null })} style={fieldStyle} title="Equipment required for this set">
                     <option value="">— eq —</option>
                     <option value="kick">kick</option>
@@ -27219,7 +27257,7 @@
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                <nav aria-label="Primary" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <nav aria-label="Primary" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <button onClick={() => setView(v => v === "generator" ? "history" : "generator")}
                     style={{
                       padding: "8px 14px", borderRadius: 8,
@@ -27650,7 +27688,7 @@
             <p className="screen-only" style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
               Select Workout Type
             </p>
-            <div className="screen-only" data-tour="step-type-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+            <div className="screen-only type-card-grid" data-tour="step-type-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
               {WORKOUT_TYPES.map(t => {
                 const isSel = selectedType === t.id;
                 const isHov = hover === t.id;
