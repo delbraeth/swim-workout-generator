@@ -12,10 +12,10 @@
 | # | Item | Status |
 |---|------|--------|
 | Quick-launch | "Pick up where you left off" cards → compact single rows | ✅ shipped |
-| #1 | Wide tables scroll on phone | ✅ CSS `table{display:block;overflow-x:auto}` ≤640px — **verify report/catalog tables render right on device** |
+| #1 | Wide tables scroll on phone | ⏪ **reverted to baseline.** The `table{display:block}` rule broke `colSpan` rows on the workout-display + catalog tables and the sticky lane-plan header — too risky for the coach review. Proper fix = wrap only the genuinely-wide report/catalog tables in an `overflow-x:auto` div (keeps `display:table`). Deferred to after the demo. |
 | #2 | Set-editor 7-col grid stacks | ✅ `.editor-row` → 2-col + full-width desc/interval/focus ≤640px |
 | #3 | Tap targets | ✅ `.btn{min-height:40px}` under `pointer:coarse` + Quick-launch rows. ⚠ inline-styled (non-`.btn`) buttons still small — case-by-case later |
-| #4 | Body overflow-x guard | ✅ `html,body{overflow-x:hidden}` |
+| #4 | Body overflow-x guard | ⏪ **reverted** alongside #1 — without the table-scroll solution it would *clip* wide report tables (unscrollable). Back to baseline page-scroll until the per-table wrappers land. |
 | #5 | Safe-area / `viewport-fit=cover` | ⏸ **deliberately NOT enabled** — default keeps content inside the safe area already; enabling cover needs full top+bottom+overlay inset handling, net-negative without on-device testing. Revisit if you want edge-to-edge. |
 | #6 | Header nav crowding | ✅ nav `flex-wrap:wrap` |
 | #7 | Workout-type cards | ✅ `.type-card-grid` → 2-up ≤640px (3-up desktop preserved) |
