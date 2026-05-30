@@ -7292,7 +7292,16 @@
       ugcOverlay = null,                // UGC Phase B — caller's UGC overlay (12-key shape); merged into bank picker per exact pool mode.
       myConstraints = [],               // Phase 3 PSC slice 2 — caller's active swimmer_constraints rows. Step-0 hard-exclude. Skipped entirely in multi-lane mode (per scope §3.5; per-lane sub lands in slice 3).
       tonightOverrides = [],             // Phase 3 PSC slice 3 — in-memory constraint rows added at Generate time from the per-practice checklist. Unioned with myConstraints; never persisted.
+      includedSections = ["warmup", "drill", "main", "cooldown"],   // Section model A1 — which sections to build. Default = all 4 (byte-identical to pre-A1). `main` is always required. Subsetting wired in A2.
     } = {}) {
+      // Section model A1 — per-section inclusion flags. With the default all-4
+      // list every flag is true, so all downstream guards are inert.
+      const _incl = {
+        warmup:   includedSections.includes("warmup"),
+        drill:    includedSections.includes("drill"),
+        main:     true,                                     // main is never skippable
+        cooldown: includedSections.includes("cooldown"),
+      };
       // v1.8 — Resolve the multiplier once. "exclude" zeros the weight;
       // pickWeighted's existing "all weights zero → uniform fallback" is the
       // silent failsafe when hard-exclude would empty the eligible pool.
@@ -7379,10 +7388,10 @@
       const hasPins     = pinnedTotal > 0;
 
       // Per-section minimums (0 for pinned sections — they don't consume free budget)
-      const minWu = pinnedBlocks.warmup   ? 0 : Math.min(...allWarmups.map(o => o.totalYards));
-      const minDr = pinnedBlocks.drill    ? 0 : Math.min(...drillList.map(o => o.totalYards));
+      const minWu = (pinnedBlocks.warmup   || !_incl.warmup)   ? 0 : Math.min(...allWarmups.map(o => o.totalYards));
+      const minDr = (pinnedBlocks.drill    || !_incl.drill)    ? 0 : Math.min(...drillList.map(o => o.totalYards));
       const minMa = pinnedBlocks.main     ? 0 : Math.min(...mainList.map(o => o.totalYards));
-      const minCd = pinnedBlocks.cooldown ? 0 : Math.min(...allCooldowns.map(o => o.totalYards));
+      const minCd = (pinnedBlocks.cooldown || !_incl.cooldown) ? 0 : Math.min(...allCooldowns.map(o => o.totalYards));
 
       // C: recovery mode drops the absolute floor to 1200y (1300m) so a short
       // easy day is allowed regardless of the type's normal minimum.
@@ -7624,7 +7633,7 @@
           const _laneFitFallbackSections = useLaneFit
             ? Object.entries(laneFitFallback).filter(([_, v]) => v).map(([k]) => k)
             : [];
-          const _loopResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "loop", __genAttempts: attempt + 1 };
+          const _loopResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal, includedSections), __genPath: "loop", __genAttempts: attempt + 1 };
           if (_laneFitFallbackSections.length) _loopResult.__laneFitFallback = _laneFitFallbackSections;
           return _loopResult;
         }
@@ -7720,21 +7729,23 @@
       const _fallbackLaneFitSections = useLaneFit
         ? Object.entries(laneFitFallback).filter(([_, v]) => v).map(([k]) => k)
         : [];
-      const _fallbackResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal), __genPath: "fallback", __genAttempts: attempts };
+      const _fallbackResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal, includedSections), __genPath: "fallback", __genAttempts: attempts };
       if (_fallbackLaneFitSections.length) _fallbackResult.__laneFitFallback = _fallbackLaneFitSections;
       return _fallbackResult;
     }
 
-    function buildWorkout(typeId, wu, dr, ma, cd, total) {
+    function buildWorkout(typeId, wu, dr, ma, cd, total, includedSections = ["warmup", "drill", "main", "cooldown"]) {
       const mainName = ma.rounds > 1
         ? `Main Set — ${ma.label} ×${ma.rounds}`
         : `Main Set — ${ma.label}`;
+      // Section model A1 — assemble the four candidate blocks, then keep only
+      // included sections (default = all four → byte-identical to pre-A1).
       const blocks = [
         { name: "Warm-Up",              section: "warmup",   ...wu },
         { name: "Drill / Pre-Main Set", section: "drill",    ...dr },
         { name: mainName, section: "main", ...ma, roundRestSecs: ma.roundRestSecs ?? 30 },
         { name: "Cool-Down",            section: "cooldown", ...cd },
-      ];
+      ].filter(b => includedSections.includes(b.section));
       const estimatedMin = calcEstimatedMin(blocks);
       return { blocks, totalYards: total, estimatedMin, typeId };
       // NOTE: __laneFitFallback attachment happens at the buildWorkout
