@@ -360,7 +360,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "de0331b · 2026-05-30 05:30 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "d1a9012 · 2026-05-30 05:43 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9878,6 +9878,9 @@
       let totalSecs = 0;
       let totalBoundaries = 0;
       for (const block of blocks) {
+        // Section model B — dryland blocks have no swim sets/intervals; skip
+        // them in the swim time estimate (their reps×sets timing is informal).
+        if (!block || !Array.isArray(block.sets)) continue;
         const rounds = block.rounds || 1;
         let blockSecs = 0;
         for (const set of block.sets) {
@@ -10297,6 +10300,101 @@
             </span>
           </td>
         </tr>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  DRYLAND (Section model Part B) — non-swim blocks: exercises with
+    //  sets×reps, no distance/interval/pace. Live in the same workout
+    //  blocks[] array with kind:"dryland"; rendered by DrylandBlock (NOT
+    //  WorkoutBlock) via a call-site dispatch. Excluded from yardage math
+    //  (totalYards:0). Inserted post-generation, never engine-generated.
+    // ═══════════════════════════════════════════════════════════════
+    // Starter bank — curated dryland blocks a coach can drop in. `reps` is a
+    // free string ("12", "30s", "10 each side"). `placement` is the default
+    // (pre/post); the coach can override at insert time.
+    const DRYLAND_OPTIONS = [
+      { id: "dl_activation", name: "Pre-Pool Activation", placement: "pre", exercises: [
+        { name: "Arm circles (fwd/back)", sets: 1, reps: "20 each way", rest: null },
+        { name: "Leg swings (front/side)", sets: 1, reps: "10 each leg", rest: null },
+        { name: "Band pull-aparts", sets: 2, reps: "15", rest: null },
+        { name: "Scapular push-ups", sets: 2, reps: "12", rest: null },
+        { name: "Bodyweight squats", sets: 1, reps: "15", rest: null },
+      ]},
+      { id: "dl_core", name: "Core Circuit", placement: "post", exercises: [
+        { name: "Front plank", sets: 3, reps: "45s hold", rest: "20s" },
+        { name: "Dead bug", sets: 3, reps: "10 each side", rest: "20s" },
+        { name: "Hollow-body hold", sets: 3, reps: "30s hold", rest: "20s" },
+        { name: "Russian twists", sets: 3, reps: "20", rest: "20s" },
+      ]},
+      { id: "dl_shoulder", name: "Shoulder Prehab", placement: "pre", exercises: [
+        { name: "Band Y-T-W raises", sets: 2, reps: "10 each", rest: "20s" },
+        { name: "Band external rotation", sets: 2, reps: "15 each arm", rest: "20s" },
+        { name: "Scapular retraction holds", sets: 2, reps: "20s hold", rest: "20s" },
+      ]},
+      { id: "dl_strength", name: "Dryland Strength", placement: "post", exercises: [
+        { name: "Push-ups", sets: 3, reps: "12", rest: "45s" },
+        { name: "Walking lunges", sets: 3, reps: "10 each leg", rest: "45s" },
+        { name: "Pull-ups (or rows)", sets: 3, reps: "8", rest: "60s" },
+        { name: "Glute bridge", sets: 3, reps: "15", rest: "45s" },
+      ]},
+      { id: "dl_stretch", name: "Post-Pool Stretch", placement: "post", exercises: [
+        { name: "Lat stretch (each side)", sets: 1, reps: "30s hold", rest: null },
+        { name: "Pec / doorway stretch", sets: 1, reps: "30s hold", rest: null },
+        { name: "Cross-body shoulder", sets: 1, reps: "30s each", rest: null },
+        { name: "Hip-flexor lunge stretch", sets: 1, reps: "30s each", rest: null },
+      ]},
+    ];
+
+    // Make a fresh dryland block (deep-copies exercises so edits don't mutate
+    // the bank). `totalYards:0` keeps it out of all yardage math.
+    function makeDrylandBlock(option, placement) {
+      return {
+        kind: "dryland",
+        section: "dryland",
+        name: option.name,
+        placement: placement || option.placement || "pre",
+        exercises: (option.exercises || []).map(e => ({ ...e })),
+        totalYards: 0,
+      };
+    }
+
+    // Renderer for a dryland block. Exercise list (sets × reps, optional rest);
+    // no pace clock, no swap/interval/favorite affordances. `onRemove` optional.
+    function DrylandBlock({ block, onRemove = null }) {
+      const ex = Array.isArray(block.exercises) ? block.exercises : [];
+      return (
+        <div style={{
+          border: "1px solid #a3702c", borderRadius: 10, marginBottom: 14,
+          background: "#fbf6ee", overflow: "hidden",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+            background: "#f0e2cc", color: "#7a4a12", padding: "8px 14px", fontWeight: 700, fontSize: 14 }}>
+            <span>🏋 {block.name || "Dryland"}
+              <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", opacity: 0.7 }}>
+                Dryland · {block.placement === "post" ? "after pool" : "before pool"}
+              </span>
+            </span>
+            {onRemove && (
+              <button onClick={onRemove} title="Remove this dryland block"
+                style={{ background: "transparent", border: "none", color: "#a3702c", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>✕</button>
+            )}
+          </div>
+          <div style={{ padding: "8px 14px" }}>
+            {ex.length === 0 ? (
+              <div style={{ color: "#9a7b4f", fontSize: 12, fontStyle: "italic" }}>No exercises.</div>
+            ) : ex.map((e, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "4px 0",
+                borderTop: i > 0 ? "1px solid #ecddc3" : "none" }}>
+                <span style={{ minWidth: 70, fontWeight: 700, color: "#7a4a12", fontSize: 13, fontFamily: "ui-monospace, monospace" }}>
+                  {e.sets > 1 ? `${e.sets} × ${e.reps}` : `${e.reps}`}
+                </span>
+                <span style={{ flex: 1, color: "#5b4326", fontSize: 13 }}>{e.name}</span>
+                {e.rest && <span style={{ color: "#9a7b4f", fontSize: 11 }}>rest {e.rest}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
       );
     }
 
@@ -11696,7 +11794,9 @@
 
                 {isExpanded && entry.blocks && (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-border)" }}>
-                    {entry.blocks.map((b, i) => <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} recentMainLabels={recentMainLabels} poolMode={entry.poolMode || "25y"} />)}
+                    {entry.blocks.map((b, i) => b && b.kind === "dryland"
+                      ? <DrylandBlock key={i} block={b} />
+                      : <WorkoutBlock key={i} block={b} equipment={entry.equipment || {}} recentMainLabels={recentMainLabels} poolMode={entry.poolMode || "25y"} />)}
                   </div>
                 )}
               </div>
@@ -19612,7 +19712,9 @@
                         )}
                         {a.workout?.blocks && (
                           <div style={{ marginTop: 10 }}>
-                            {a.workout.blocks.map((b, i) => (
+                            {a.workout.blocks.map((b, i) => b && b.kind === "dryland" ? (
+                              <DrylandBlock key={i} block={b} />
+                            ) : (
                               <WorkoutBlock key={i} block={b} equipment={a.workout.equipment || {}}
                                 recentMainLabels={new Map()} poolMode={a.workout.poolMode || "25y"} />
                             ))}
@@ -28508,7 +28610,13 @@
                 </div>
 
                 {/* Workout blocks */}
-                {workout.blocks.map((block, i) => (
+                {workout.blocks.map((block, i) => block && block.kind === "dryland" ? (
+                  <DrylandBlock
+                    key={i}
+                    block={block}
+                    onRemove={() => setWorkout(w => w ? { ...w, blocks: w.blocks.filter((_, j) => j !== i) } : w)}
+                  />
+                ) : (
                   <WorkoutBlock
                     key={i}
                     block={block}
