@@ -360,7 +360,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "45569c6 · 2026-05-30 06:19 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "921f526 · 2026-05-30 06:41 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -17636,6 +17636,9 @@
       const [skipWarmup,   setSkipWarmup]   = React.useState(!_initInc.includes("warmup"));
       const [skipDrill,    setSkipDrill]    = React.useState(!_initInc.includes("drill"));
       const [skipCooldown, setSkipCooldown] = React.useState(!_initInc.includes("cooldown"));
+      // Section model — optional dryland block to attach to this intent. "" = none.
+      const [drylandPreset, setDrylandPreset] = React.useState(safeInitial.dryland?.preset || "");
+      const [drylandPlace,  setDrylandPlace]  = React.useState(safeInitial.dryland?.placement || "pre");
       const [notes,      setNotes]      = React.useState(safeInitial.notes || "");
       // I Phase 2b — coach group fanout. groupId="" means "Yourself" (self-only,
       // no fanout). Selecting a group reveals an optional lane-plan picker.
@@ -17722,6 +17725,11 @@
           inc.push("main");
           if (!skipCooldown) inc.push("cooldown");
           intent_params.includedSections = inc;
+        }
+        // Section model — attach a dryland block to the intent (resolved from
+        // the preset bank at generation time). Only when one is chosen.
+        if (drylandPreset) {
+          intent_params.dryland = { preset: drylandPreset, placement: drylandPlace };
         }
         setBusy(true);
         try {
@@ -17883,6 +17891,23 @@
                   </button>
                 );
               })}
+            </div>
+
+            {/* Section model — optional dryland block on this intent. */}
+            <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Dryland (optional)</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+              <select value={drylandPreset} onChange={(e) => setDrylandPreset(e.target.value)}
+                style={{ flex: 1, minWidth: 160, padding: "7px 9px", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, fontSize: 13 }}>
+                <option value="">No dryland</option>
+                {DRYLAND_OPTIONS.map(o => <option key={o.id} value={o.id}>🏋 {o.name}</option>)}
+              </select>
+              {drylandPreset && (
+                <select value={drylandPlace} onChange={(e) => setDrylandPlace(e.target.value)}
+                  style={{ padding: "7px 9px", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, fontSize: 13 }}>
+                  <option value="pre">Before pool</option>
+                  <option value="post">After pool</option>
+                </select>
+              )}
             </div>
 
             <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Notes (optional)</label>
@@ -19327,6 +19352,17 @@
                 phase:        g.current_phase || null,
               };
               if (ip.lane_plan_id) generated.assignment_target.lane_plan_id = ip.lane_plan_id;
+            }
+          }
+          // Section model — attach the intent's dryland block (resolved from
+          // the preset bank) at the chosen placement.
+          if (ip.dryland?.preset && Array.isArray(generated.blocks)) {
+            const opt = DRYLAND_OPTIONS.find(o => o.id === ip.dryland.preset);
+            if (opt) {
+              const blk = makeDrylandBlock(opt, ip.dryland.placement || "pre");
+              generated.blocks = ip.dryland.placement === "post"
+                ? [...generated.blocks, blk]
+                : [blk, ...generated.blocks];
             }
           }
           setIntentPreview({ sw, workout: generated });
