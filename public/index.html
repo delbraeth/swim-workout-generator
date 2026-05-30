@@ -7747,7 +7747,11 @@
         { name: "Cool-Down",            section: "cooldown", ...cd },
       ].filter(b => includedSections.includes(b.section));
       const estimatedMin = calcEstimatedMin(blocks);
-      return { blocks, totalYards: total, estimatedMin, typeId };
+      // Section model A2 — total reflects only the INCLUDED blocks: honest when
+      // a section is skipped, and identical to the passed `total` when all four
+      // are present (sum of the four blocks === finalTotal).
+      const includedTotal = blocks.reduce((s, b) => s + (b.totalYards || 0), 0);
+      return { blocks, totalYards: includedTotal, estimatedMin, typeId };
       // NOTE: __laneFitFallback attachment happens at the buildWorkout
       // call sites inside generateWorkout — buildWorkout is module-scope
       // and can't see generateWorkout's locals (useLaneFit, laneFitFallback).
@@ -17395,6 +17399,11 @@
       const [maxYards,   setMaxYards]   = React.useState(safeInitial.maxYards || 2400);
       const [mix,        setMix]        = React.useState(safeInitial.mix || "balanced");
       const [recovery,   setRecovery]   = React.useState(!!safeInitial.recovery);
+      // Section model A2 — include/skip per intent. main always on.
+      const _initInc = Array.isArray(safeInitial.includedSections) ? safeInitial.includedSections : ["warmup","drill","main","cooldown"];
+      const [skipWarmup,   setSkipWarmup]   = React.useState(!_initInc.includes("warmup"));
+      const [skipDrill,    setSkipDrill]    = React.useState(!_initInc.includes("drill"));
+      const [skipCooldown, setSkipCooldown] = React.useState(!_initInc.includes("cooldown"));
       const [notes,      setNotes]      = React.useState(safeInitial.notes || "");
       // I Phase 2b — coach group fanout. groupId="" means "Yourself" (self-only,
       // no fanout). Selecting a group reveals an optional lane-plan picker.
@@ -17471,6 +17480,16 @@
         if (groupId) {
           intent_params.group_id = groupId;
           if (lanePlanId) intent_params.lane_plan_id = lanePlanId;
+        }
+        // Section model A2 — only attach when something is skipped, so old
+        // all-4 intents produce identical JSON.
+        if (skipWarmup || skipDrill || skipCooldown) {
+          const inc = [];
+          if (!skipWarmup) inc.push("warmup");
+          if (!skipDrill)  inc.push("drill");
+          inc.push("main");
+          if (!skipCooldown) inc.push("cooldown");
+          intent_params.includedSections = inc;
         }
         setBusy(true);
         try {
@@ -17606,6 +17625,32 @@
               <label htmlFor="intent-recovery" style={{ color: "#cbd5e1", fontSize: 13, cursor: "pointer" }}>
                 Recovery day (easy mains, intervals +10%)
               </label>
+            </div>
+
+            {/* Section model A2 — include/skip sections for this intent. Main always on. */}
+            <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Sections</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {[
+                { label: "Warmup",   skip: skipWarmup,   toggle: () => setSkipWarmup(v => !v) },
+                { label: "Drill",    skip: skipDrill,    toggle: () => setSkipDrill(v => !v) },
+                { label: "Main",     locked: true },
+                { label: "Cooldown", skip: skipCooldown, toggle: () => setSkipCooldown(v => !v) },
+              ].map(s => {
+                const included = s.locked || !s.skip;
+                return (
+                  <button key={s.label} type="button" onClick={s.locked ? undefined : s.toggle}
+                    className="pill"
+                    style={{
+                      border: `1px solid ${included ? "var(--color-primary)" : "var(--color-border)"}`,
+                      background: included ? "rgba(59,130,246,0.12)" : "transparent",
+                      color: included ? "var(--color-primary)" : "var(--color-text-dim)",
+                      textDecoration: included ? "none" : "line-through",
+                      fontSize: 11, cursor: s.locked ? "default" : "pointer", opacity: s.locked ? 0.85 : 1,
+                    }}>
+                    {included ? "✓ " : ""}{s.label}
+                  </button>
+                );
+              })}
             </div>
 
             <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Notes (optional)</label>
@@ -19027,6 +19072,9 @@
             phase:        ip.phase || null,
             favoriteSetIds: null,
             sectionBias:  ip.mix || "balanced",
+            // Section model A2 — honor the intent's section choices if present
+            // (absent → generateWorkout defaults to all four).
+            ...(Array.isArray(ip.includedSections) ? { includedSections: ip.includedSections } : {}),
             myConstraints,                                                       // Phase 3 PSC slice 2 — passed in from App so intent-generates honor active constraints
           });
           if (generated && generated.__generateFailure) {
@@ -25130,6 +25178,20 @@
       const [pinnedSections, setPinnedSections]   = useState({});
       const [recoveryMode, setRecoveryMode]       = useState(false); // C: per-generation toggle, not persisted
       const [sectionBias, setSectionBias]         = useState("balanced"); // Section-proportion bias: balanced / warmup_heavy / drill_heavy / long_main. Per-generation, session-only.
+      // Section model A2 — which sections to include. `main` always on. Skipping
+      // a section drops it from the workout (a correspondingly shorter, honest
+      // total). Per-generation, session-only.
+      const [skipWarmup,   setSkipWarmup]   = useState(false);
+      const [skipDrill,    setSkipDrill]    = useState(false);
+      const [skipCooldown, setSkipCooldown] = useState(false);
+      const includedSections = React.useMemo(() => {
+        const out = [];
+        if (!skipWarmup) out.push("warmup");
+        if (!skipDrill)  out.push("drill");
+        out.push("main");
+        if (!skipCooldown) out.push("cooldown");
+        return out;
+      }, [skipWarmup, skipDrill, skipCooldown]);
       // S3 — per-section engine source (bank | engine | mix), default all bank.
       // Persisted to settings.extra.engine_section_sources on change. Read on
       // mount via the settings fetch elsewhere in this component.
@@ -26477,6 +26539,7 @@
           phase: effectivePhase,                                               // R-D: group-context override (#39)
           favoriteSetIds: new Set([...favoriteSets, ...effectiveFavoriteSetIds]),
           sectionBias,                                                          // Real-shift section-proportion controls (Mix pills)
+          includedSections,                                                     // Section model A2 — skip warmup/drill/cooldown per workout
           sectionSources,                                                       // S3 — Bank/Engine/Mix per section
           recentEngineTemplates,                                                // S3 — anti-repeat memory for engine
           // v1.13 — engine favorites union (own + coach-propagated)
@@ -26614,7 +26677,7 @@
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -27806,6 +27869,34 @@
                         transition: "all 0.15s",
                       }}>
                       {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Section model A2 — include/skip per workout. Main is always on.
+                  Skipping drops the section (a shorter, honest total). */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, color: "var(--color-border-strong)", marginRight: 4 }}>Sections:</span>
+                {[
+                  { key: "warmup",   label: "Warmup",   skip: skipWarmup,   toggle: () => setSkipWarmup(v => !v) },
+                  { key: "drill",    label: "Drill",    skip: skipDrill,    toggle: () => setSkipDrill(v => !v) },
+                  { key: "main",     label: "Main",     locked: true },
+                  { key: "cooldown", label: "Cooldown", skip: skipCooldown, toggle: () => setSkipCooldown(v => !v) },
+                ].map(s => {
+                  const included = s.locked || !s.skip;
+                  return (
+                    <button key={s.key} onClick={s.locked ? undefined : s.toggle}
+                      title={s.locked ? "Main set is always included" : (included ? `Skip ${s.label.toLowerCase()} on next generate` : `Include ${s.label.toLowerCase()}`)}
+                      className="pill"
+                      style={{
+                        border: `1px solid ${included ? "var(--color-primary)" : "var(--color-border)"}`,
+                        background: included ? "rgba(59,130,246,0.12)" : "transparent",
+                        color: included ? "var(--color-primary)" : "var(--color-text-dim)",
+                        textDecoration: included ? "none" : "line-through",
+                        fontSize: 11, cursor: s.locked ? "default" : "pointer", opacity: s.locked ? 0.85 : 1,
+                      }}>
+                      {included ? "✓ " : ""}{s.label}
                     </button>
                   );
                 })}

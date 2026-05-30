@@ -43,9 +43,9 @@
 **Touch points (Part A):** `generateWorkout` budget+assembly · section-bias coefficient renormalization · generator UI · `IntentForm` + `intent_params` shape · R1 report (already groups by sections present — verify it tolerates <4) · `pinnedBlocks` interaction (a pinned section can't also be skipped). Catalog, save/load, history, print: **no change** (blocks[] already generic).
 
 **Phasing within A:**
-- **A1 (refactor-only, zero behavior change):** introduce the `includedSections` abstraction with default = all 4 so output is byte-identical. Verify by diffing generated workouts before/after.
-- **A2:** include/skip UI + wire to generate + intent_params.
-- **A3:** section-bias renormalization + verification (yardage lands on target with a section skipped).
+- **A1 — ✅ SHIPPED 2026-05-30.** `includedSections` threaded through `generateWorkout` → per-section minimums → `buildWorkout` (filters to included sections). Verified byte-identical across 324 configs via `tools/_a1_verify.mjs` (seeds Math.random, snapshots blocks).
+- **A2 — ✅ SHIPPED 2026-05-30.** Include/skip toggles in the generator controls (Recovery/Mix row) + `IntentForm`; wired to the primary generate call and `intent_params` (additive — absent → all 4). `buildWorkout` total now reflects only included blocks (honest; byte-identical for all-4). Skipping a section yields a correspondingly **shorter** workout (freed yardage NOT yet redistributed). Verified: all-4 byte-identical; subsets honest (reported total === sum of blocks).
+- **A3 (next):** redistribute freed budget so a section-skipped workout still hits target (+ section-bias coefficient renormalization). The `_a1_verify` harness extends to assert target-yardage.
 
 ---
 
