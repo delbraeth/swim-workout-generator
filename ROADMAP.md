@@ -118,6 +118,8 @@ Picks surfaced by the May code review (2026-05-29). Full diagnosis in `MAY_CODE_
 
 ## Backlog (captured, low priority)
 
+- **Dedicated kick section/block** — captured 2026-05-30. Add a swim **kick** block as a first-class section (e.g. between warmup and main, or as a selectable section like warmup/drill/cooldown) so the generator can program a real kick set rather than burying kick in drill/warmup. Much cheaper now that the section model is pluggable ([[swim-generator-section-model-scope]] / `SECTION_MODEL_SCOPE.md`): a kick section reuses the `includedSections` skip/redistribute machinery + the per-section keyed maps (SECTION_STYLES, bias coefficients, NAME_BY_SECTION, CATALOG_SECTIONS, getBankOptions kind). Needs a small scope pass: kick bank content (kick sets per pool mode + stroke), where it sits in the default order, its zone classification (kick is its own effort profile — board vs streamline, fins), and whether it's on by default or opt-in. Distinct from dryland (this is in-water kick with distance/intervals, so it uses the normal swim machinery — NOT the dryland exercises[] shape).
+
 - **Per-type disfavor mode** — split v1.8's single toggle into bank/engine/sets columns. Advanced-user. Source: [[swim-generator-hard-exclude-v18]]
 - **Hard-include `favorite_mode`** — mirror of v1.8 hard-exclude. Cap'n flagged as likely overkill given 3× weight. Skip unless asked. Source: [[swim-generator-favorites-panel-v12]]
 - **Validator V5 + V7** — V5 needs mix-pill context (mix shipped; V5 still unwired). V7 only relevant if a future template uses cross-rep descending intervals (none do today). Source: [[swim-generator-template-engine-s25]]
