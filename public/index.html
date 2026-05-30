@@ -360,7 +360,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "450a35c · 2026-05-30 05:21 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "de0331b · 2026-05-30 05:30 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -7302,11 +7302,41 @@
         main:     true,                                     // main is never skippable
         cooldown: includedSections.includes("cooldown"),
       };
+      // Section model A3 — excluded sections behave as pinned EMPTY blocks: the
+      // solver's pinned path uses them as-is (0 yards, never picked from the
+      // pool), applyEngineOverrides leaves 0-yard blocks untouched, and they
+      // contribute 0 to pinnedTotal — so freeBudget is unchanged and flows to
+      // the remaining sections (main absorbs the slack), holding the target.
+      // buildWorkout then filters the empty blocks out of the output.
+      const _EMPTY_SECTION = { label: "", totalYards: 0, sets: [] };
+      pinnedBlocks = {
+        ...pinnedBlocks,
+        ...(_incl.warmup   ? {} : { warmup:   _EMPTY_SECTION }),
+        ...(_incl.drill    ? {} : { drill:    _EMPTY_SECTION }),
+        ...(_incl.cooldown ? {} : { cooldown: _EMPTY_SECTION }),
+      };
       // v1.8 — Resolve the multiplier once. "exclude" zeros the weight;
       // pickWeighted's existing "all weights zero → uniform fallback" is the
       // silent failsafe when hard-exclude would empty the eligible pool.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
-      const biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
+      let biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
+      // Section model A3 — when a section is skipped, renormalize the Mix bias
+      // shares over the INCLUDED sections so the freed share redistributes
+      // proportionally (without this, a skipped section's reserved % is lost).
+      // Guarded to the skipped case: the all-4 path keeps the literal ratios
+      // (no float drift), preserving byte-identical output.
+      if (biasRatios && (!_incl.warmup || !_incl.drill || !_incl.cooldown)) {
+        const _sum = ["warmup", "drill", "main", "cooldown"]
+          .reduce((s, k) => s + (_incl[k] ? (biasRatios[k] || 0) : 0), 0);
+        if (_sum > 0) {
+          biasRatios = {
+            warmup:   _incl.warmup   ? biasRatios.warmup   / _sum : 0,
+            drill:    _incl.drill    ? biasRatios.drill    / _sum : 0,
+            main:                      biasRatios.main      / _sum,
+            cooldown: _incl.cooldown ? biasRatios.cooldown / _sum : 0,
+          };
+        }
+      }
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
