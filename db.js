@@ -6288,6 +6288,9 @@ function rowToScheduledWorkout(r) {
     completed_at:          dtToIso(r.completed_at),
     completed_by_sub:      r.completed_by_sub || null,
     notes:                 r.notes || null,
+    facility_id:           r.facility_id != null ? Number(r.facility_id) : null,
+    facility_name:         r.facility_name || null,    // from LEFT JOIN team_facilities (list/get)
+    facility_course:       r.facility_course || null,
     created_at:            dtToIso(r.created_at),
     updated_at:            dtToIso(r.updated_at),
   };
@@ -6298,7 +6301,7 @@ function isYmd(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s
 // Create a scheduled row in either payload mode (full pre-generated workout
 // snapshot) OR intent mode (generator params only). Exactly one of payload /
 // intentParams must be non-null — app-layer invariant per migration 025.
-export async function dbCreateScheduledWorkout({ userSub, scheduledDate, payload = null, intentParams = null, notes = null }) {
+export async function dbCreateScheduledWorkout({ userSub, scheduledDate, payload = null, intentParams = null, notes = null, facilityId = null }) {
   if (!userSub) return { ok: false, reason: "no_user" };
   if (!isYmd(scheduledDate)) return { ok: false, reason: "bad_date" };
   if ((payload == null) === (intentParams == null)) {
@@ -6307,14 +6310,16 @@ export async function dbCreateScheduledWorkout({ userSub, scheduledDate, payload
   if (payload != null && typeof payload !== "object") return { ok: false, reason: "bad_payload" };
   if (intentParams != null && typeof intentParams !== "object") return { ok: false, reason: "bad_intent_params" };
   if (notes && String(notes).length > 500) return { ok: false, reason: "notes_too_long" };
+  const fid = (facilityId == null || facilityId === "") ? null : Number(facilityId);
   const r = await pool.query(
-    "INSERT INTO `scheduled_workouts` (`user_sub`, `scheduled_date`, `payload`, `intent_params`, `notes`) " +
-    "VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO `scheduled_workouts` (`user_sub`, `scheduled_date`, `payload`, `intent_params`, `notes`, `facility_id`) " +
+    "VALUES (?, ?, ?, ?, ?, ?)",
     [
       userSub, scheduledDate,
       payload != null ? JSON.stringify(payload) : null,
       intentParams != null ? JSON.stringify(intentParams) : null,
       notes || null,
+      Number.isFinite(fid) ? fid : null,
     ]
   );
   return { ok: true, id: Number(r.insertId), mode: payload ? "payload" : "intent" };
@@ -6323,7 +6328,9 @@ export async function dbCreateScheduledWorkout({ userSub, scheduledDate, payload
 export async function dbGetScheduledWorkout(id) {
   if (!id) return null;
   const rows = await pool.query(
-    "SELECT * FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
+    "SELECT sw.*, f.`name` AS facility_name, f.`course` AS facility_course " +
+    "  FROM `scheduled_workouts` sw LEFT JOIN `team_facilities` f ON f.`id` = sw.`facility_id` " +
+    " WHERE sw.`id` = ? LIMIT 1",
     [Number(id)]
   );
   return rows[0] ? rowToScheduledWorkout(rows[0]) : null;
@@ -6341,9 +6348,10 @@ export async function dbListScheduledWorkouts(userSub, { startDate, endDate = nu
   }
   if (!isYmd(endDate)) return [];
   const rows = await pool.query(
-    "SELECT * FROM `scheduled_workouts` " +
-    "WHERE `user_sub` = ? AND `scheduled_date` BETWEEN ? AND ? " +
-    "ORDER BY `scheduled_date` ASC, `id` ASC",
+    "SELECT sw.*, f.`name` AS facility_name, f.`course` AS facility_course " +
+    "  FROM `scheduled_workouts` sw LEFT JOIN `team_facilities` f ON f.`id` = sw.`facility_id` " +
+    " WHERE sw.`user_sub` = ? AND sw.`scheduled_date` BETWEEN ? AND ? " +
+    " ORDER BY sw.`scheduled_date` ASC, sw.`id` ASC",
     [userSub, startDate, endDate]
   );
   return rows.map(rowToScheduledWorkout);
@@ -6393,6 +6401,11 @@ export async function dbUpdateScheduledWorkout(id, callerSub, patch = {}) {
     const n = patch.notes;
     if (n != null && String(n).length > 500) return { ok: false, reason: "notes_too_long" };
     sets.push("`notes` = ?"); vals.push(n || null);
+  }
+  if ("facility_id" in patch) {
+    const fid = (patch.facility_id == null || patch.facility_id === "") ? null : Number(patch.facility_id);
+    if (fid !== null && !Number.isFinite(fid)) return { ok: false, reason: "bad_facility_id" };
+    sets.push("`facility_id` = ?"); vals.push(fid);
   }
   if (!sets.length) return { ok: true, affected: 0 };
   vals.push(Number(id));
