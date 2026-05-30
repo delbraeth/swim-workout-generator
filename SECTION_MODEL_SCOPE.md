@@ -68,10 +68,12 @@ Swim blocks implicitly remain `kind: "swim"` (default when absent — backward-c
 
 **Touch points (Part B):** `WorkoutBlock` kind-dispatch + new `DrylandBlock` · totalYards calc (exclude `kind==="dryland"`) · Run mode (rep-counter view vs pace clock — dryland skips the clock) · print/multi-pace layout (render exercises, no pace columns) · Reports R1 (exclude dryland from yardage mix; optionally count dryland minutes separately) · `inferSetZone`/zone math (skip — dryland has no zone) · UGC/catalog (dryland authoring is its own bucket if exposed) · save/load (already blocks[]; just carries the new fields).
 
+**Decisions (locked 2026-05-30):** dryland source = **curated starter bank + ad-hoc authoring**; Run mode = **checklist / rep-counter** (no pace clock); Reports = **excluded from yardage mix**; `main` stays un-skippable.
+
 **Phasing within B:**
-- **B1:** `block.kind` dispatch in `WorkoutBlock` + totalYards guard — inert until dryland blocks exist (safe to ship early).
-- **B2:** dryland data shape + a starter `DRYLAND_OPTIONS` bank + an "add dryland (pre/post)" insertion UI.
-- **B3:** Run-mode rep counter + print + Reports handling.
+- **B1 — ✅ SHIPPED 2026-05-30 (inert foundation).** `DrylandBlock` renderer (exercise list, no pace clock), `DRYLAND_OPTIONS` starter bank (5 presets: activation / core / shoulder prehab / strength / stretch), `makeDrylandBlock`, **call-site dispatch** (`b.kind === "dryland" ? <DrylandBlock> : <WorkoutBlock>`) at the 3 render sites (main display, history, assigned) — dispatch at the call site, NOT inside WorkoutBlock, to avoid hook-order errors when a dryland block shifts index keys. `calcEstimatedMin` skips non-`sets` blocks. Inert: nothing can create a dryland block yet, so prod is unchanged (engine byte-identical). Block shape: `{ kind:"dryland", section:"dryland", name, placement:"pre"|"post", exercises:[{name,sets,reps,rest}], totalYards:0 }`.
+- **B2 (next) — insert UI + CRASH-GUARDS.** A "+ Add dryland" picker (preset + pre/post) inserting into `workout.blocks`. **CRITICAL:** ~8 places iterate `block.sets` and will crash on a dryland block — must guard each first: rescale-all pace (~26345), save-to-history (~25276), Run mode (~24164), copy-text + print (~13756/14005), plus any others (grep `\.sets\.` on block vars). Guard pattern: `if (!Array.isArray(b.sets)) skip/passthrough`. The insert UI without these guards CRASHES on save/rescale/run/print — do NOT ship insert before guards.
+- **B3:** Run-mode rep-counter checklist for dryland + print rendering + (dryland already excluded from yardage reports via totalYards:0).
 
 ---
 
