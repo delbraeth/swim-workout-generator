@@ -360,7 +360,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "d1a9012 · 2026-05-30 05:43 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "5f60c2b · 2026-05-30 05:52 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9844,6 +9844,16 @@
       if (paceInput) lines.push(`Pace target: ${paceInput}/100`);
       lines.push("");
       for (const block of workout.blocks) {
+        // Section model B — dryland blocks (no swim sets) render as an
+        // exercise list in copied text.
+        if (block.kind === "dryland" || !Array.isArray(block.sets)) {
+          lines.push(`${(block.name || "DRYLAND").toUpperCase()}  (dryland · ${block.placement === "post" ? "after pool" : "before pool"})`);
+          for (const e of (block.exercises || [])) {
+            lines.push(`  ${e.sets > 1 ? e.sets + " × " : ""}${e.reps} — ${e.name}${e.rest ? ` (rest ${e.rest})` : ""}`);
+          }
+          lines.push("");
+          continue;
+        }
         const rounds = block.rounds || 1;
         const roundNote = rounds > 1 ? `  ×${rounds} rounds, ${block.roundRestSecs ?? 30}s rest between` : "";
         lines.push(`${block.name.toUpperCase()}  (${block.totalYards.toLocaleString()} ${unit})${roundNote}`);
@@ -13751,10 +13761,10 @@
       const secs = parsePaceMSS(paceStr);
       if (!secs) return blocks;
       const ratio = secs / 120; // PACE_BASELINE_SECS
-      return blocks.map(b => ({
+      return blocks.map(b => Array.isArray(b.sets) ? ({
         ...b,
         sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })),
-      }));
+      }) : b);   // Section model B — dryland blocks have no intervals; pass through.
     }
 
     function MultiPaceModal({ workout, generateForTarget, lanePlansForTarget, onClose, onPreview }) {
@@ -14002,7 +14012,7 @@
                           {block.label && block.name && block.label !== block.name ? <span style={{ fontWeight: 400, fontStyle: "italic", textTransform: "none", letterSpacing: 0, marginLeft: 6 }}>— {block.label}</span> : null}
                         </td>
                       </tr>
-                      {block.sets.map((s, si) => {
+                      {(block.sets || []).map((s, si) => {
                         const setKey = bi + "-" + si;
                         return (
                           <tr key={setKey} className="multipace-matrix-row">
@@ -14113,7 +14123,7 @@
                           ⚠ {blockNotes.join(" · ")}
                         </div>
                       )}
-                      {block.sets.map((s, si) => {
+                      {(block.sets || []).map((s, si) => {
                         const setNotes = perSetAnnotations[`${bi}-${si}`] || [];
                         return (
                           <div key={si} style={{ marginBottom: 3, fontSize: "11pt" }}>
@@ -24161,7 +24171,7 @@
 
       const allSets = useMemo(() =>
         blocks.flatMap((block, bIdx) =>
-          block.sets.map((set, sIdx) => ({ set, blockIdx: bIdx, setIdx: sIdx }))
+          (block.sets || []).map((set, sIdx) => ({ set, blockIdx: bIdx, setIdx: sIdx }))  // dryland: no swim sets
         ), [blocks]);
 
       // Marks the workout as completed — show the Finish screen instead of closing.
@@ -24264,9 +24274,9 @@
 
           {/* Sets — tap any card to open the pace clock */}
           <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-            {block.sets.map((set, i) => (
+            {(block.sets || []).map((set, i) => (
               <div key={i}
-                onClick={() => handleSetTap(blocks.slice(0, idx).reduce((acc, b) => acc + b.sets.length, 0) + i)}
+                onClick={() => handleSetTap(blocks.slice(0, idx).reduce((acc, b) => acc + (b.sets ? b.sets.length : 0), 0) + i)}
                 style={{
                   background: "var(--color-card)", borderRadius: 14,
                   border: `1px solid ${s.border}`, padding: "18px 18px 14px",
@@ -25324,6 +25334,10 @@
         if (!skipCooldown) out.push("cooldown");
         return out;
       }, [skipWarmup, skipDrill, skipCooldown]);
+      // Section model B2 — dryland insert picker (post-generation add).
+      const [drylandPickerOpen, setDrylandPickerOpen] = useState(false);
+      const [drylandPresetId,   setDrylandPresetId]   = useState(DRYLAND_OPTIONS[0].id);
+      const [drylandPlacement,  setDrylandPlacement]  = useState("pre");
       // S3 — per-section engine source (bank | engine | mix), default all bank.
       // Persisted to settings.extra.engine_section_sources on change. Read on
       // mount via the settings fetch elsewhere in this component.
@@ -26336,10 +26350,10 @@
         if (!userSecs || userSecs < 30 || userSecs > 300) return;
         const ratio = userSecs / PACE_BASELINE_SECS;
         setWorkout(prev => {
-          const newBlocks = prev.blocks.map(b => ({
+          const newBlocks = prev.blocks.map(b => Array.isArray(b.sets) ? ({
             ...b,
             sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })),
-          }));
+          }) : b);   // Section model B — dryland blocks have no intervals; pass through.
           return { ...prev, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
         });
       }, [paceInput]);
@@ -27031,7 +27045,13 @@
           maxYardsCap: maxYards,
           poolMode: poolMode,
           equipment: { ...equipment },
-          blocks: workout.blocks.map(b => ({
+          blocks: workout.blocks.map(b => b.kind === "dryland" ? ({
+            // Section model B — dryland blocks persist exercises, not swim sets.
+            kind: "dryland", section: "dryland", name: b.name,
+            placement: b.placement || "pre",
+            exercises: (b.exercises || []).map(e => ({ ...e })),
+            totalYards: 0,
+          }) : ({
             name: b.name, section: b.section, totalYards: b.totalYards,
             rounds: b.rounds, roundRestSecs: b.roundRestSecs,
             label: b.label,
@@ -27154,7 +27174,12 @@
           maxYardsCap: sourceWorkout.maxYardsCap,
           poolMode: sourceWorkout.poolMode || "25y",
           equipment: { ...(sourceWorkout.equipment || {}) },
-          blocks: sourceWorkout.blocks.map(b => ({
+          blocks: sourceWorkout.blocks.map(b => b.kind === "dryland" ? ({
+            kind: "dryland", section: "dryland", name: b.name,
+            placement: b.placement || "pre",
+            exercises: (b.exercises || []).map(e => ({ ...e })),
+            totalYards: 0,
+          }) : ({
             name: b.name, section: b.section, totalYards: b.totalYards,
             rounds: b.rounds, roundRestSecs: b.roundRestSecs,
             label: b.label,
@@ -28692,6 +28717,37 @@
                     }}
                   />
                 ))}
+
+                {/* Section model B2 — add a dryland block (before / after pool). */}
+                <div className="screen-only" style={{ marginTop: 12, marginBottom: 4 }}>
+                  {!drylandPickerOpen ? (
+                    <button onClick={() => setDrylandPickerOpen(true)}
+                      style={{ padding: "6px 12px", border: "1px dashed #a3702c", borderRadius: 8, background: "transparent", color: "#a3702c", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      🏋 + Add dryland
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", border: "1px solid #a3702c", borderRadius: 8, background: "#fbf6ee" }}>
+                      <select value={drylandPresetId} onChange={e => setDrylandPresetId(e.target.value)}
+                        style={{ padding: "5px 8px", fontSize: 13, borderRadius: 5, border: "1px solid #d8c19a", background: "#fff", color: "#5b4326" }}>
+                        {DRYLAND_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                      </select>
+                      <select value={drylandPlacement} onChange={e => setDrylandPlacement(e.target.value)}
+                        style={{ padding: "5px 8px", fontSize: 13, borderRadius: 5, border: "1px solid #d8c19a", background: "#fff", color: "#5b4326" }}>
+                        <option value="pre">Before pool</option>
+                        <option value="post">After pool</option>
+                      </select>
+                      <button onClick={() => {
+                        const opt = DRYLAND_OPTIONS.find(o => o.id === drylandPresetId) || DRYLAND_OPTIONS[0];
+                        const blk = makeDrylandBlock(opt, drylandPlacement);
+                        setWorkout(w => w ? { ...w, blocks: drylandPlacement === "pre" ? [blk, ...w.blocks] : [...w.blocks, blk] } : w);
+                        setDrylandPickerOpen(false);
+                      }}
+                        style={{ padding: "6px 14px", border: "none", borderRadius: 6, background: "#a3702c", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>
+                      <button onClick={() => setDrylandPickerOpen(false)}
+                        style={{ padding: "6px 12px", border: "1px solid #d8c19a", borderRadius: 6, background: "transparent", color: "#9a7b4f", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                    </div>
+                  )}
+                </div>
 
                 {/* Coach note (screen only — user opted not to include in print) */}
                 <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid var(--color-border)", color: "var(--color-text-muted)", fontSize: 13 }}>
