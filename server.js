@@ -92,7 +92,7 @@ import {
   dbAssertTeamWriter,
   dbAddTeamFavorite, dbRemoveTeamFavorite,
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
-  dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault, dbSetTeamSchool,
+  dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
   dbListTeamFacilities, dbCreateTeamFacility, dbUpdateTeamFacility, dbArchiveTeamFacility,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
@@ -3016,12 +3016,7 @@ app.patch("/api/teams/:id/settings", checkOrigin, requireAuth, requireCsrf, writ
         updates.push({ field, value: body[field], affected: r.affected });
       }
     }
-    // school lives on teams.school directly (not a default_* column).
-    if ("school" in body) {
-      const r = await dbSetTeamSchool({ teamId: req.params.id, school: body.school });
-      if (!r.ok) return res.status(400).json({ error: `school: ${r.reason}` });
-      updates.push({ field: "school", value: body.school, affected: r.affected });
-    }
+    // (teams.school removed in P5 — team facilities supersede it.)
     if (updates.length === 0) return res.status(400).json({ error: "no fields to update" });
     for (const u of updates) {
       dbAuditEvent({
