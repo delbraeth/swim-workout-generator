@@ -45,7 +45,7 @@
 **Phasing within A:**
 - **A1 — ✅ SHIPPED 2026-05-30.** `includedSections` threaded through `generateWorkout` → per-section minimums → `buildWorkout` (filters to included sections). Verified byte-identical across 324 configs via `tools/_a1_verify.mjs` (seeds Math.random, snapshots blocks).
 - **A2 — ✅ SHIPPED 2026-05-30.** Include/skip toggles in the generator controls (Recovery/Mix row) + `IntentForm`; wired to the primary generate call and `intent_params` (additive — absent → all 4). `buildWorkout` total now reflects only included blocks (honest; byte-identical for all-4). Skipping a section yields a correspondingly **shorter** workout (freed yardage NOT yet redistributed). Verified: all-4 byte-identical; subsets honest (reported total === sum of blocks).
-- **A3 (next):** redistribute freed budget so a section-skipped workout still hits target (+ section-bias coefficient renormalization). The `_a1_verify` harness extends to assert target-yardage.
+- **A3 — ✅ SHIPPED 2026-05-30.** Excluded sections are injected as **pinned EMPTY blocks** (0 yards, never picked; `applyEngineOverrides` skips 0-yard blocks; filtered by `buildWorkout`), so `freeBudget` is unchanged and flows to the remaining sections (main absorbs slack) — the workout holds its target. Plus **Mix-coefficient renormalization** over included sections (guarded to the skipped case so all-4 keeps the literal ratios — no float drift). Verified: all-4 byte-identical; skip cases now land within ~3% of target across all four Mix modes (e.g. drill_heavy + skip-drill: 2,850 → 2,979 of 3,000). **Part A (selectable swim sections) COMPLETE.** Part B (dryland) is next.
 
 ---
 
