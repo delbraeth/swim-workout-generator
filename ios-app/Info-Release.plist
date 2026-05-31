@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  RELEASE Info.plist. Wired via INFOPLIST_FILE on the Release config only.
+  GENERATE_INFOPLIST_FILE stays YES, so Xcode merges the auto-generated keys on
+  top. Registers ONLY the Google Sign-In URL scheme — no ATS exception (Release
+  stays HTTPS-only; the localhost exception is Debug-only in Info-Debug.plist).
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.954573648973-po6gk9nrdoarq8s7ncev7cmet5dmnkoc</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

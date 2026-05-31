@@ -57,6 +57,25 @@ struct SignInView: View {
                 .disabled(auth.isExchanging)
                 .opacity(auth.isExchanging ? 0.6 : 1)
 
+                #if canImport(GoogleSignIn)
+                Button {
+                    guard let vc = UIApplication.shared.activeRootViewController else { return }
+                    Task { await auth.signInWithGoogle(inviteCode: inviteCode, presenting: vc) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "g.circle.fill")
+                        Text("Continue with Google").font(.headline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                }
+                .buttonStyle(.bordered)
+                .tint(Brand.text)
+                .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
+                .disabled(auth.isExchanging)
+                .opacity(auth.isExchanging ? 0.6 : 1)
+                #endif
+
                 if auth.isExchanging {
                     ProgressView().tint(Brand.textMuted)
                 }

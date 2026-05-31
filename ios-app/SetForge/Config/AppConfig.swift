@@ -27,6 +27,11 @@ enum AppConfig {
     /// API prefix (the SPA uses a same-origin `/api`).
     static let apiPath = "/api"
 
+    /// Google Sign-In iOS OAuth client ID. Its reversed form is the URL scheme
+    /// registered in the app's Info (CFBundleURLTypes). The backend must accept
+    /// this as a token audience via `GOOGLE_NATIVE_CLIENT_ID`.
+    static let googleIOSClientID = "954573648973-po6gk9nrdoarq8s7ncev7cmet5dmnkoc.apps.googleusercontent.com"
+
     /// Platform rate limit (Hyperlift): 30 requests per minute, identical on
     /// every tier and not raisable. We never fan out parallel `/api/*` calls;
     /// we lean on the composite endpoints and retry 429s with backoff.

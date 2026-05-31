@@ -124,6 +124,11 @@ struct NativeAuthRequest: Encodable {
     let inviteCode: String?
 }
 
+struct GoogleAuthRequest: Encodable {
+    let idToken: String
+    let inviteCode: String?
+}
+
 struct NativeAuthResponse: Decodable {
     let ok: Bool
     let token: String?
@@ -133,3 +138,64 @@ struct NativeAuthResponse: Decodable {
 struct AuthStatus: Decodable {
     let authenticated: Bool?
 }
+
+// MARK: - Google Sign-In (gated on the GoogleSignIn SDK being linked)
+//
+// All SDK-touching code lives behind `#if canImport(GoogleSignIn)` so the app
+// builds and runs WITHOUT the package; add `google/GoogleSignIn-iOS` to the
+// target and `AuthManager.googleAvailable` flips true, lighting up the button.
+
+#if canImport(GoogleSignIn)
+import GoogleSignIn
+import UIKit
+
+extension AuthManager {
+    static var googleAvailable: Bool { true }
+
+    /// Present Google Sign-In, exchange the id_token at `/api/auth/google-native`.
+    func signInWithGoogle(inviteCode: String?, presenting: UIViewController) async {
+        isExchanging = true
+        lastError = nil
+        defer { isExchanging = false }
+
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: AppConfig.googleIOSClientID)
+        do {
+            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presenting)
+            guard let idToken = result.user.idToken?.tokenString else {
+                lastError = "Google didn't return an identity token. Try again."
+                return
+            }
+            let trimmed = inviteCode?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = GoogleAuthRequest(idToken: idToken,
+                                         inviteCode: (trimmed?.isEmpty == false) ? trimmed : nil)
+            let resp = try await api.post("auth/google-native", body: body, as: NativeAuthResponse.self)
+            guard resp.ok, let newToken = resp.token else {
+                lastError = "Sign-in failed. Please try again."
+                return
+            }
+            setToken(newToken)
+            state = .signedIn
+        } catch let err as APIError {
+            lastError = err.errorDescription
+        } catch {
+            // User-cancel is silent; surface anything else.
+            if (error as NSError).code == GIDSignInError.canceled.rawValue { return }
+            lastError = error.localizedDescription
+        }
+    }
+}
+
+extension UIApplication {
+    /// The frontmost view controller, for presenting the Google sign-in sheet.
+    var activeRootViewController: UIViewController? {
+        let scene = connectedScenes.first { $0.activationState == .foregroundActive } as? UIWindowScene
+        var vc = scene?.keyWindow?.rootViewController
+        while let presented = vc?.presentedViewController { vc = presented }
+        return vc
+    }
+}
+#else
+extension AuthManager {
+    static var googleAvailable: Bool { false }
+}
+#endif

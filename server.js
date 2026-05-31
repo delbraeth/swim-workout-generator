@@ -1236,6 +1236,83 @@ app.post("/api/auth/native", authLimiter, async (req, res) => {
   }
 });
 
+// Native Google sign-in (iOS). Mirrors /api/auth/google/callback's identity
+// resolution (provider-link → verified-email-link → invite-gated create) but
+// takes a GoogleSignIn id_token directly and returns a Bearer token (no cookie),
+// exactly like /api/auth/native does for Apple. Native tokens' audience is the
+// iOS OAuth client id, so we accept GOOGLE_NATIVE_CLIENT_ID in addition to the
+// web GOOGLE_CLIENT_ID.
+app.post("/api/auth/google-native", authLimiter, async (req, res) => {
+  if (!GOOGLE_AUTH_ACTIVE || !googleClient) return res.status(404).json({ error: "Google auth not configured" });
+  const meta = reqMeta(req);
+  try {
+    const { idToken, inviteCode } = req.body || {};
+    if (!idToken || typeof idToken !== "string") return res.status(400).json({ error: "idToken required" });
+
+    const audiences = [GOOGLE_CLIENT_ID, process.env.GOOGLE_NATIVE_CLIENT_ID].filter(Boolean);
+    const ticket = await googleClient.verifyIdToken({ idToken, audience: audiences });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.sub) return res.status(401).json({ error: "bad_id_token" });
+
+    const googleSub           = payload.sub;
+    const googleEmail         = payload.email || null;
+    const googleEmailVerified = payload.email_verified === true;
+    const googleGivenName     = payload.given_name || null;
+    console.log(`[auth/google-native] Google login: sub=${googleSub} email_verified=${googleEmailVerified}`);
+
+    // Step 1 — already-linked Google sub.
+    let userSub = await dbGetUserSubByProvider("google", googleSub);
+
+    // Step 2 — link by verified email to an existing user.
+    if (!userSub && googleEmailVerified && googleEmail) {
+      const matched = await dbFindUserByVerifiedEmail(googleEmail);
+      if (matched) {
+        await dbLinkOAuthProvider({ userSub: matched.sub, provider: "google", providerSub: googleSub });
+        dbAuditEvent({ userSub: matched.sub, eventType: "auth.provider.link", ...meta, details: { provider: "google", channel: "native" } });
+        userSub = matched.sub;
+      }
+    }
+
+    // Step 3 — brand-new user: invite-gated create.
+    if (!userSub) {
+      const inviteResult = await dbConsumeInviteCode(inviteCode);
+      if (!inviteResult.ok) {
+        console.warn(`[auth/google-native] Reject new Google sub ${googleSub}: invite ${inviteResult.reason}`);
+        dbAuditEvent({ userSub: null, eventType: "auth.login.reject", ...meta, details: { reason: `invite_${inviteResult.reason}`, channel: "native", provider: "google" } });
+        return res.status(403).json({ error: `invite_${inviteResult.reason}` });
+      }
+      const newSub = googleSub;
+      await dbEnsureUser(newSub, null, googleGivenName);
+      await dbLinkOAuthProvider({ userSub: newSub, provider: "google", providerSub: googleSub });
+      if (googleEmail) {
+        try {
+          await pool.query("UPDATE `users` SET `email` = ?, `email_verified` = ? WHERE `sub` = ?",
+            [googleEmail, googleEmailVerified ? 1 : 0, newSub]);
+        } catch (err) {
+          console.warn(`[auth/google-native] failed to store email on new user ${newSub}: ${err.message}`);
+        }
+      }
+      dbAuditEvent({ userSub: newSub, eventType: "invite.consume", ...meta, details: { code: inviteCode, channel: "native", provider: "google" } });
+      dbAuditEvent({ userSub: newSub, eventType: "auth.signup",    ...meta, details: { channel: "native", provider: "google" } });
+      enqueueEmail({
+        dedupKey:    `welcome:${newSub}`,
+        toUserSub:   newSub,
+        templateId:  "welcome",
+        displayName: googleGivenName,
+        manualUrl:   `${APP_URL}/manual.html`,
+      }).catch(err => console.warn(`[auth/google-native] welcome email enqueue failed for ${newSub}: ${err.message}`));
+      userSub = newSub;
+    }
+
+    const token = await dbCreateSession({ userSub, ip: meta.ip, userAgent: meta.userAgent, ttlSeconds: SESSION_MAX_AGE });
+    dbAuditEvent({ userSub, eventType: "auth.login.success", ...meta, details: { channel: "native", provider: "google" } });
+    res.json({ ok: true, token });
+  } catch (err) {
+    console.error("[auth/google-native]", err.message);
+    res.status(401).json({ error: err.message });
+  }
+});
+
 // Revoke current session and clear the cookie
 app.get("/api/auth/signout", async (req, res) => {
   const cookieVal = getCookie(req, SESSION_COOKIE);

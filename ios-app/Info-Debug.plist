@@ -6,10 +6,9 @@
   still YES, so Xcode merges the auto-generated keys (scene manifest, launch
   screen, orientations, etc.) on top of this file at build time.
 
-  Its sole purpose is to allow plain-HTTP requests to a local backend
-  (`node server.js` on :8080) from the Simulator. Scoped to localhost so no
-  other connection is downgraded. Release builds do not use this file and stay
-  HTTPS-only.
+  It allows plain-HTTP requests to a local backend (`node server.js` on :8080)
+  from the Simulator (scoped to localhost), and registers the Google Sign-In
+  URL scheme. Release uses Info-Release.plist (URL scheme only, no ATS exception).
 -->
 <plist version="1.0">
 <dict>
@@ -26,5 +25,14 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.954573648973-po6gk9nrdoarq8s7ncev7cmet5dmnkoc</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
