@@ -90,6 +90,10 @@ final class GenerateViewModel: ObservableObject {
         dict["id"]       = .string(Self.makeEntryId())
         dict["type"]     = .string(typeId)
         dict["poolMode"] = .string(pool.rawValue)
+        // Save as a generated workout, NOT a completed one. The server defaults
+        // `completed` to 1 unless the entry explicitly sends false (db.js
+        // entryToWorkoutRow). dateCompleted stays null.
+        dict["completed"] = .bool(false)
         // `blocks` and `totalYards` already come from the engine payload.
         do {
             _ = try await api.post("log-workout", body: AnyCodable.object(dict), as: LogWorkoutResponse.self)
