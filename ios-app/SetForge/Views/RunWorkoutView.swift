@@ -97,21 +97,31 @@ struct RunWorkoutView: View {
     }
 
     private var header: some View {
-        HStack {
-            Button { dismiss() } label: {
-                Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(Brand.textMuted)
+        VStack(spacing: 8) {
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(Brand.textMuted)
+                }
+                Spacer()
+                if !steps.isEmpty && phase != .finished {
+                    Text("Set \(stepIdx + 1) of \(steps.count)")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Brand.textMuted)
+                }
+                Spacer()
+                Button { running.toggle() } label: {
+                    Image(systemName: running ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.title2).foregroundStyle(Brand.primary)
+                }
+                .opacity(phase == .finished ? 0 : 1)
             }
-            Spacer()
-            if !steps.isEmpty && phase != .finished {
-                Text("Set \(stepIdx + 1) of \(steps.count)")
-                    .font(.subheadline.weight(.semibold)).foregroundStyle(Brand.textMuted)
+            if phase != .finished {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock").font(.caption2).foregroundStyle(Brand.textDim)
+                    Text("Elapsed").font(.caption2.weight(.semibold)).foregroundStyle(Brand.textDim)
+                    Text(Self.clock(totalElapsed))
+                        .font(.subheadline.weight(.bold).monospacedDigit()).foregroundStyle(Brand.textMuted)
+                }
             }
-            Spacer()
-            Button { running.toggle() } label: {
-                Image(systemName: running ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.title2).foregroundStyle(Brand.primary)
-            }
-            .opacity(phase == .finished ? 0 : 1)
         }
     }
 
