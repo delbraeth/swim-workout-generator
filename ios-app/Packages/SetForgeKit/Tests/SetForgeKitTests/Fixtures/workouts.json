@@ -1,0 +1,36 @@
+[
+  {
+    "id": "w_aaa111",
+    "sub": "001234.abcdef0123456789.0001",
+    "type": "im",
+    "totalYards": 3000,
+    "poolMode": "25y",
+    "savedAt": "2026-05-30T12:00:00.000Z",
+    "completed": true,
+    "dateCompleted": "2026-05-30",
+    "notes": "felt strong on the back half",
+    "userInitials": "DS",
+    "difficulty": 3,
+    "focusNote": "IM turns",
+    "payload": {
+      "blocks": [
+        { "label": "warmup", "reps": ["400 free", "200 kick"] },
+        { "label": "main", "reps": ["8x100 IM @ 1:40"] }
+      ]
+    }
+  },
+  {
+    "id": "w_bbb222",
+    "type": "sprint",
+    "totalYards": 1500,
+    "poolMode": "50m",
+    "savedAt": "2026-05-29T09:00:00.000Z",
+    "completed": false,
+    "dateCompleted": null,
+    "notes": null,
+    "userInitials": null,
+    "difficulty": null,
+    "focusNote": null,
+    "payload": null
+  }
+]

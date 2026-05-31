@@ -1,0 +1,12 @@
+# Generated Xcode project (regenerate with `xcodegen generate`)
+SetForge.xcodeproj/
+
+# Xcode / SwiftPM build artifacts
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+
+# macOS
+.DS_Store

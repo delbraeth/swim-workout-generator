@@ -1,0 +1,44 @@
+{
+  "me": {
+    "sub": "001234.abcdef0123456789.0001",
+    "email": "swimmer@example.com",
+    "email_verified": true,
+    "display_name": "Dana Swift",
+    "initials": "DS",
+    "is_admin": false,
+    "is_coach": false,
+    "workout_count": 42,
+    "stats_by_pool": [
+      { "pool_mode": "25y", "count": 30, "total": 120000 }
+    ]
+  },
+  "workouts": [
+    {
+      "id": "w_aaa111",
+      "type": "im",
+      "totalYards": 3000,
+      "poolMode": "25y",
+      "savedAt": "2026-05-30T12:00:00.000Z",
+      "completed": true,
+      "dateCompleted": "2026-05-30",
+      "payload": { "blocks": [] }
+    }
+  ],
+  "settings": {
+    "sliderMin": 60,
+    "sliderMax": 120,
+    "paceInput": "1:30",
+    "next_event": { "name": "Summer States", "date": "2026-07-15" },
+    "phase": "build",
+    "level": "competitive",
+    "lap_button": true,
+    "multi_lane": { "enabled": false, "lanes": [] },
+    "engine_section_sources": { "warmup": "bank", "main": "engine" }
+  },
+  "goals": [
+    { "metric": "workouts_per_week", "target_value": 5, "period_start": null, "period_end": null }
+  ],
+  "favorites": ["sprint ladder", "IM kick"],
+  "billing": { "status": { "tier": "free" } },
+  "_errors": []
+}
