@@ -1,0 +1,94 @@
+import Foundation
+
+/// A workout type for the Generate form (`GET /api/workout-types`). Mirrors the
+/// engine's WORKOUT_TYPES entries; we keep the display bits and ignore the
+/// web-only color fields.
+struct WorkoutType: Decodable, Identifiable, Hashable {
+    let id: String
+    let label: String?
+    let emoji: String?
+    let blurb: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, label, emoji
+        case blurb = "description"
+    }
+}
+
+struct WorkoutTypesResponse: Decodable {
+    let types: [WorkoutType]
+}
+
+/// Section-proportion presets (the "Mix" pills on web). Match SECTION_BIAS_RATIOS.
+enum SectionBias: String, CaseIterable, Identifiable {
+    case balanced, warmup_heavy, drill_heavy, long_main
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .balanced:     return "Balanced"
+        case .warmup_heavy: return "Warm-up"
+        case .drill_heavy:  return "Drill"
+        case .long_main:    return "Long main"
+        }
+    }
+}
+
+/// Pool course options the engine accepts.
+enum PoolCourse: String, CaseIterable, Identifiable {
+    case scy = "25y", scm = "25m", lcm = "50m"
+    var id: String { rawValue }
+    var short: String {
+        switch self {
+        case .scy: return "25y"
+        case .scm: return "25m"
+        case .lcm: return "50m"
+        }
+    }
+}
+
+/// The engine's equipment catalog (EQUIPMENT_LIST). `id` is the wire key the
+/// server expects in the `equipment` map.
+struct EquipmentItem: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let icon: String
+
+    static let all: [EquipmentItem] = [
+        .init(id: "kickboard", label: "Kickboard", icon: "🟦"),
+        .init(id: "fins",      label: "Fins",      icon: "🐬"),
+        .init(id: "paddles",   label: "Paddles",   icon: "🤚"),
+        .init(id: "pullBuoy",  label: "Pull buoy", icon: "🛟"),
+        .init(id: "snorkel",   label: "Snorkel",   icon: "🤿"),
+    ]
+}
+
+/// `POST /api/generate` request. Form inputs only — curation (favorites,
+/// constraints, …) is rehydrated server-side from the signed-in user's DB state.
+struct GenerateRequest: Encodable {
+    let typeId: String
+    let maxYards: Int
+    let poolMode: String
+    let equipment: [String: Bool]
+    let sectionBias: String
+}
+
+/// `POST /api/generate` response. The workout is kept as raw `AnyCodable` so it
+/// round-trips losslessly (every engine field survives) — important for a future
+/// Save via `POST /api/log-workout`, which must re-send the exact payload.
+struct GenerateResponse: Decodable {
+    let ok: Bool?
+    let workout: AnyCodable?
+
+    /// Re-decode the raw workout into the typed `Workout` for rendering.
+    func renderableWorkout() -> Workout? {
+        guard let workout else { return nil }
+        guard let data = try? JSONEncoder().encode(workout) else { return nil }
+        return try? JSONDecoder().decode(Workout.self, from: data)
+    }
+}
+
+/// `POST /api/log-workout` response (`{ ok, id, entry, … }`). We only need `ok`/`id`.
+struct LogWorkoutResponse: Decodable {
+    let ok: Bool?
+    let id: String?
+}
