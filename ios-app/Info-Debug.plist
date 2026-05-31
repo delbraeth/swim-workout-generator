@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  DEBUG-ONLY Info.plist. Wired in via INFOPLIST_FILE on the Debug build
+  configuration only (see SetForgeApp.xcodeproj). GENERATE_INFOPLIST_FILE is
+  still YES, so Xcode merges the auto-generated keys (scene manifest, launch
+  screen, orientations, etc.) on top of this file at build time.
+
+  Its sole purpose is to allow plain-HTTP requests to a local backend
+  (`node server.js` on :8080) from the Simulator. Scoped to localhost so no
+  other connection is downgraded. Release builds do not use this file and stay
+  HTTPS-only.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>
