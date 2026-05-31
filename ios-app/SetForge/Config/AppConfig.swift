@@ -27,6 +27,11 @@ enum AppConfig {
     /// API prefix (the SPA uses a same-origin `/api`).
     static let apiPath = "/api"
 
+    /// Google Sign-In iOS OAuth client ID. Its reversed form is the URL scheme
+    /// registered in the app's Info (CFBundleURLTypes). The backend must accept
+    /// this as a token audience via `GOOGLE_NATIVE_CLIENT_ID`.
+    static let googleIOSClientID = "954573648973-po6gk9nrdoarq8s7ncev7cmet5dmnkoc.apps.googleusercontent.com"
+
     /// Platform rate limit (Hyperlift): 30 requests per minute, identical on
     /// every tier and not raisable. We never fan out parallel `/api/*` calls;
     /// we lean on the composite endpoints and retry 429s with backoff.
@@ -57,5 +62,13 @@ extension Color {
         let g = Double((hex >> 8) & 0xFF) / 255.0
         let b = Double(hex & 0xFF) / 255.0
         self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
+    }
+}
+
+extension View {
+    /// Caps content to a comfortable reading width and centers it — keeps the
+    /// iPhone-designed screens from stretching edge-to-edge on iPad.
+    func readableWidth(_ maxWidth: CGFloat = 640) -> some View {
+        frame(maxWidth: maxWidth).frame(maxWidth: .infinity)
     }
 }

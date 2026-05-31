@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(GoogleSignIn)
+import GoogleSignIn
+#endif
 
 @main
 struct SetForgeApp: App {
@@ -11,6 +14,9 @@ struct SetForgeApp: App {
                 .tint(Brand.primary)
                 .preferredColorScheme(.dark)
                 .task { await auth.bootstrap() }
+                #if canImport(GoogleSignIn)
+                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
+                #endif
         }
     }
 }

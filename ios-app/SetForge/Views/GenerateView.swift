@@ -14,6 +14,10 @@ final class GenerateViewModel: ObservableObject {
     @Published var maxYards: Double = 3000
     @Published var pool: PoolCourse = .scy
     @Published var bias: SectionBias = .balanced
+    @Published var phase: TrainingPhase = .none
+    @Published var recoveryMode = false
+    /// Sections to include; `main` is always present and not removable.
+    @Published var includedSections: Set<String> = Set(WorkoutSectionKind.allCases.map(\.rawValue))
     @Published var equipmentOn: Set<String> = []
 
     @Published var generating = false
@@ -51,12 +55,19 @@ final class GenerateViewModel: ObservableObject {
         generating = true; genError = nil; result = nil; rawWorkout = nil
         saved = false; saveError = nil
         let equipment = Dictionary(uniqueKeysWithValues: EquipmentItem.all.map { ($0.id, equipmentOn.contains($0.id)) })
+        // Ordered, always-includes-main section list.
+        let sections = WorkoutSectionKind.allCases
+            .map(\.rawValue)
+            .filter { includedSections.contains($0) || $0 == WorkoutSectionKind.main.rawValue }
         let req = GenerateRequest(
             typeId: typeId,
             maxYards: Int(maxYards),
             poolMode: pool.rawValue,
             equipment: equipment,
-            sectionBias: bias.rawValue
+            sectionBias: bias.rawValue,
+            recoveryMode: recoveryMode,
+            phase: phase == .none ? nil : phase.rawValue,
+            includedSections: sections
         )
         do {
             let resp = try await api.post("generate", body: req, as: GenerateResponse.self)
@@ -112,6 +123,7 @@ final class GenerateViewModel: ObservableObject {
 
 struct GenerateView: View {
     @StateObject private var model = GenerateViewModel()
+    @State private var runningWorkout: Workout?
 
     var body: some View {
         ZStack {
@@ -128,6 +140,9 @@ struct GenerateView: View {
                             yardageControl
                             coursePicker
                             biasPicker
+                            phasePicker
+                            recoveryToggle
+                            sectionsPicker
                             equipmentPicker
                             generateButton
                             if let err = model.genError { InlineError(message: err, retry: nil) }
@@ -137,6 +152,7 @@ struct GenerateView: View {
                         }
                     }
                     .padding()
+                    .readableWidth()
                 }
                 .onChange(of: model.resultID) {
                     withAnimation(.easeInOut) { proxy.scrollTo("generated-result", anchor: .top) }
@@ -147,6 +163,7 @@ struct GenerateView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Brand.bg, for: .navigationBar)
         .task { await model.loadTypes() }
+        .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
     }
 
     // MARK: - Sections
@@ -216,6 +233,61 @@ struct GenerateView: View {
         }
     }
 
+    private var phasePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Training phase")
+            Picker("Phase", selection: $model.phase) {
+                ForEach(TrainingPhase.allCases) { p in Text(p.label).tag(p) }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var recoveryToggle: some View {
+        Toggle(isOn: $model.recoveryMode) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Recovery day").font(.subheadline.weight(.semibold)).foregroundStyle(Brand.text)
+                Text("Easier aerobic focus, lower intensity").font(.caption2).foregroundStyle(Brand.textDim)
+            }
+        }
+        .tint(Brand.primary)
+        .padding(12)
+        .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Brand.border, lineWidth: 1))
+    }
+
+    private var sectionsPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Sections")
+            HStack(spacing: 8) {
+                ForEach(WorkoutSectionKind.allCases) { section in
+                    let on = model.includedSections.contains(section.rawValue)
+                    Button {
+                        guard !section.isRequired else { return }   // main is locked on
+                        if on { model.includedSections.remove(section.rawValue) }
+                        else  { model.includedSections.insert(section.rawValue) }
+                    } label: {
+                        VStack(spacing: 3) {
+                            Text(section.label).font(.caption.weight(.semibold))
+                            if section.isRequired {
+                                Image(systemName: "lock.fill").font(.system(size: 8))
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(on ? Brand.text : Brand.textMuted)
+                        .padding(.vertical, 10)
+                        .background(on ? Brand.primary.opacity(0.2) : Brand.card,
+                                    in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .stroke(on ? Brand.primary : Brand.border, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(section.isRequired)
+                }
+            }
+        }
+    }
+
     private var equipmentPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionLabel("Equipment")
@@ -260,6 +332,17 @@ struct GenerateView: View {
                 .disabled(model.generating)
             }
             WorkoutCard(workout: workout)
+
+            Button {
+                runningWorkout = workout
+            } label: {
+                Label("Start workout", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Brand.primary)
 
             if model.saved {
                 Label("Saved to history", systemImage: "checkmark.circle.fill")
