@@ -86,3 +86,9 @@ struct GenerateResponse: Decodable {
         return try? JSONDecoder().decode(Workout.self, from: data)
     }
 }
+
+/// `POST /api/log-workout` response (`{ ok, id, entry, … }`). We only need `ok`/`id`.
+struct LogWorkoutResponse: Decodable {
+    let ok: Bool?
+    let id: String?
+}

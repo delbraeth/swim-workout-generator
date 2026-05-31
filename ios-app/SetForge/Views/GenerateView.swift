@@ -19,6 +19,12 @@ final class GenerateViewModel: ObservableObject {
     @Published var generating = false
     @Published var genError: String?
     @Published var result: Workout?
+    /// The raw engine payload, kept losslessly so Save can re-send every field.
+    private var rawWorkout: AnyCodable?
+
+    @Published var saving = false
+    @Published var saved = false
+    @Published var saveError: String?
 
     private let api: APIClient
     init(api: APIClient = .shared) { self.api = api }
@@ -40,7 +46,8 @@ final class GenerateViewModel: ObservableObject {
 
     func generate() async {
         guard let typeId = selectedTypeId else { return }
-        generating = true; genError = nil; result = nil
+        generating = true; genError = nil; result = nil; rawWorkout = nil
+        saved = false; saveError = nil
         let equipment = Dictionary(uniqueKeysWithValues: EquipmentItem.all.map { ($0.id, equipmentOn.contains($0.id)) })
         let req = GenerateRequest(
             typeId: typeId,
@@ -56,12 +63,34 @@ final class GenerateViewModel: ObservableObject {
                 generating = false; return
             }
             result = workout
+            rawWorkout = resp.workout
         } catch let err as APIError {
             genError = err.errorDescription ?? "Generation failed."
         } catch {
             genError = error.localizedDescription
         }
         generating = false
+    }
+
+    /// Save the generated workout to history (`POST /api/log-workout`). Re-sends
+    /// the raw engine payload (lossless) with the fields the server validator
+    /// requires: a fresh unique `id`, `type` (the generation type), and `poolMode`.
+    func save() async {
+        guard case .object(var dict)? = rawWorkout, let typeId = selectedTypeId else { return }
+        saving = true; saveError = nil
+        dict["id"]       = .string("ios_\(UUID().uuidString)")
+        dict["type"]     = .string(typeId)
+        dict["poolMode"] = .string(pool.rawValue)
+        // `blocks` and `totalYards` already come from the engine payload.
+        do {
+            _ = try await api.post("log-workout", body: AnyCodable.object(dict), as: LogWorkoutResponse.self)
+            saved = true
+        } catch let err as APIError {
+            saveError = err.errorDescription ?? "Couldn't save the workout."
+        } catch {
+            saveError = error.localizedDescription
+        }
+        saving = false
     }
 }
 
@@ -208,6 +237,30 @@ struct GenerateView: View {
                 .disabled(model.generating)
             }
             WorkoutCard(workout: workout)
+
+            if model.saved {
+                Label("Saved to history", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Brand.positive)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            } else {
+                Button {
+                    Task { await model.save() }
+                } label: {
+                    HStack {
+                        if model.saving { ProgressView().tint(.white) }
+                        Text(model.saving ? "Saving…" : "Save to history")
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Brand.positive)
+                .disabled(model.saving)
+            }
+            if let err = model.saveError { InlineError(message: err, retry: nil) }
         }
     }
 }
