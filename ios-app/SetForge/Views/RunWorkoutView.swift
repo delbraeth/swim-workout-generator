@@ -37,7 +37,10 @@ struct RunConfig {
 struct RunWorkoutView: View {
     let workout: Workout
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.verticalSizeClass) private var vSize   // .compact ⇒ landscape on iPhone
+    /// Wide = width > height. True for iPhone landscape AND iPad landscape —
+    /// size classes can't tell iPad orientation apart (both regular/regular),
+    /// so we measure. Drives the two-column run layout.
+    @State private var isWide = false
 
     private enum Phase { case swimming, resting, restManual, finished }
 
@@ -68,7 +71,11 @@ struct RunWorkoutView: View {
                     startRun()
                 } onCancel: { dismiss() }
             } else {
-                runUI
+                GeometryReader { geo in
+                    runUI
+                        .onAppear { isWide = geo.size.width > geo.size.height }
+                        .onChange(of: geo.size) { isWide = geo.size.width > geo.size.height }
+                }
             }
         }
         .onAppear {
@@ -85,7 +92,7 @@ struct RunWorkoutView: View {
 
     // MARK: - Run UI
 
-    private var landscape: Bool { vSize == .compact }
+    private var landscape: Bool { isWide }
 
     @ViewBuilder
     private var runUI: some View {
