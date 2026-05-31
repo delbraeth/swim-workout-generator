@@ -75,10 +75,19 @@ final class GenerateViewModel: ObservableObject {
     /// Save the generated workout to history (`POST /api/log-workout`). Re-sends
     /// the raw engine payload (lossless) with the fields the server validator
     /// requires: a fresh unique `id`, `type` (the generation type), and `poolMode`.
+    /// Mirrors the web SPA's `makeEntryId()` — short enough for the `workouts.id`
+    /// column (a full UUID overflows it). "w" + base36 ms timestamp + 6 random.
+    static func makeEntryId() -> String {
+        let ts = String(Int(Date().timeIntervalSince1970 * 1000), radix: 36)
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
+        let rand = String((0..<6).map { _ in alphabet.randomElement()! })
+        return "w" + ts + rand
+    }
+
     func save() async {
         guard case .object(var dict)? = rawWorkout, let typeId = selectedTypeId else { return }
         saving = true; saveError = nil
-        dict["id"]       = .string("ios_\(UUID().uuidString)")
+        dict["id"]       = .string(Self.makeEntryId())
         dict["type"]     = .string(typeId)
         dict["poolMode"] = .string(pool.rawValue)
         // `blocks` and `totalYards` already come from the engine payload.
