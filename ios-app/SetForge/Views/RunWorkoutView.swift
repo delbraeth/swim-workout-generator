@@ -37,6 +37,7 @@ struct RunConfig {
 struct RunWorkoutView: View {
     let workout: Workout
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.verticalSizeClass) private var vSize   // .compact ⇒ landscape on iPhone
 
     private enum Phase { case swimming, resting, restManual, finished }
 
@@ -84,76 +85,132 @@ struct RunWorkoutView: View {
 
     // MARK: - Run UI
 
+    private var landscape: Bool { vSize == .compact }
+
+    @ViewBuilder
     private var runUI: some View {
+        if phase == .finished {
+            VStack(spacing: 16) { Spacer(); finishedCard; Spacer(); controls }.padding()
+        } else if landscape {
+            landscapeRun
+        } else {
+            portraitRun
+        }
+    }
+
+    private var portraitRun: some View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Brand.border)
             Spacer(minLength: 0)
-            if phase == .finished { finishedCard } else { activeCard }
+            activeCard
             Spacer(minLength: 0)
             controls
         }
         .padding()
     }
 
+    /// Two columns: timer hero on the left, set details + controls on the right.
+    private var landscapeRun: some View {
+        HStack(spacing: 12) {
+            VStack(spacing: 6) {
+                HStack { closeButton; Spacer(); elapsedReadout }
+                Spacer(minLength: 0)
+                timerHero
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(16)
+            .background(Brand.card, in: RoundedRectangle(cornerRadius: 18))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Brand.border, lineWidth: 1))
+
+            VStack(spacing: 8) {
+                HStack { if !steps.isEmpty { setCountLabel }; Spacer(); pauseButton }
+                Spacer(minLength: 0)
+                setDetails
+                Spacer(minLength: 0)
+                controls
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(12)
+    }
+
+    // MARK: Chrome
+
+    private var closeButton: some View {
+        Button { dismiss() } label: {
+            Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(Brand.textMuted)
+        }
+    }
+    private var pauseButton: some View {
+        Button { running.toggle() } label: {
+            Image(systemName: running ? "pause.circle.fill" : "play.circle.fill")
+                .font(.title2).foregroundStyle(Brand.primary)
+        }
+    }
+    private var setCountLabel: some View {
+        Text("Set \(stepIdx + 1) of \(steps.count)")
+            .font(.subheadline.weight(.semibold)).foregroundStyle(Brand.textMuted)
+    }
+    private var elapsedReadout: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "clock").font(.caption2).foregroundStyle(Brand.textDim)
+            Text(Self.clock(totalElapsed))
+                .font(.subheadline.weight(.bold).monospacedDigit()).foregroundStyle(Brand.textMuted)
+        }
+    }
+
     private var header: some View {
         VStack(spacing: 8) {
             HStack {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(Brand.textMuted)
-                }
+                closeButton
                 Spacer()
-                if !steps.isEmpty && phase != .finished {
-                    Text("Set \(stepIdx + 1) of \(steps.count)")
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(Brand.textMuted)
-                }
+                if !steps.isEmpty { setCountLabel }
                 Spacer()
-                Button { running.toggle() } label: {
-                    Image(systemName: running ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.title2).foregroundStyle(Brand.primary)
-                }
-                .opacity(phase == .finished ? 0 : 1)
+                pauseButton
             }
-            if phase != .finished {
-                HStack(spacing: 6) {
-                    Image(systemName: "clock").font(.caption2).foregroundStyle(Brand.textDim)
-                    Text("Elapsed").font(.caption2.weight(.semibold)).foregroundStyle(Brand.textDim)
-                    Text(Self.clock(totalElapsed))
-                        .font(.subheadline.weight(.bold).monospacedDigit()).foregroundStyle(Brand.textMuted)
-                }
+            HStack(spacing: 6) {
+                Image(systemName: "clock").font(.caption2).foregroundStyle(Brand.textDim)
+                Text("Elapsed").font(.caption2.weight(.semibold)).foregroundStyle(Brand.textDim)
+                Text(Self.clock(totalElapsed))
+                    .font(.subheadline.weight(.bold).monospacedDigit()).foregroundStyle(Brand.textMuted)
             }
         }
     }
 
-    @ViewBuilder
-    private var activeCard: some View {
-        VStack(spacing: 14) {
-            // Big timer hero
-            if phase == .resting {
-                Text("REST").font(.caption.weight(.heavy)).foregroundStyle(Brand.warn)
-                Text(Self.clock(restLeft))
-                    .font(.system(size: 72, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(Brand.warn)
-                if let next = steps[safe: stepIdx + 1] {
-                    Text("Next: \(next.title)").font(.footnote).foregroundStyle(Brand.textDim)
-                }
-            } else if let step, step.intervalSecs != nil {
-                Text(phase == .restManual ? "SET DONE" : "ON \(Self.clock(step.intervalSecs!))")
-                    .font(.caption.weight(.heavy)).foregroundStyle(Brand.textMuted)
-                Text(Self.clock(phase == .restManual ? 0 : secsLeft))
-                    .font(.system(size: 72, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(running ? Brand.text : Brand.textMuted)
-            } else {
-                // Untimed set — no countdown.
-                Image(systemName: "figure.pool.swim").font(.system(size: 52)).foregroundStyle(Brand.primary)
-            }
+    // MARK: Shared content
 
+    @ViewBuilder
+    private var timerHero: some View {
+        let big: CGFloat = landscape ? 76 : 72
+        if phase == .resting {
+            Text("REST").font(.caption.weight(.heavy)).foregroundStyle(Brand.warn)
+            Text(Self.clock(restLeft))
+                .font(.system(size: big, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundStyle(Brand.warn)
+            if let next = steps[safe: stepIdx + 1] {
+                Text("Next: \(next.title)").font(.footnote).foregroundStyle(Brand.textDim).lineLimit(1)
+            }
+        } else if let step, step.intervalSecs != nil {
+            Text(phase == .restManual ? "SET DONE" : "ON \(Self.clock(step.intervalSecs!))")
+                .font(.caption.weight(.heavy)).foregroundStyle(Brand.textMuted)
+            Text(Self.clock(phase == .restManual ? 0 : secsLeft))
+                .font(.system(size: big, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundStyle(running ? Brand.text : Brand.textMuted)
+        } else {
+            Image(systemName: "figure.pool.swim").font(.system(size: 52)).foregroundStyle(Brand.primary)
+        }
+        if let step, step.reps > 1 && phase != .resting {
+            Text("Rep \(min(repIdx + 1, step.reps)) of \(step.reps)")
+                .font(.headline).foregroundStyle(Brand.text)
+        }
+    }
+
+    @ViewBuilder
+    private var setDetails: some View {
+        VStack(spacing: 10) {
             if let step {
-                if step.reps > 1 && phase != .resting {
-                    Text("Rep \(min(repIdx + 1, step.reps)) of \(step.reps)")
-                        .font(.headline).foregroundStyle(Brand.text)
-                }
-                Divider().overlay(Brand.border).padding(.vertical, 4)
                 Text(step.sectionLabel.uppercased())
                     .font(.caption2.weight(.heavy)).foregroundStyle(Brand.textMuted)
                 Text(step.title)
@@ -166,13 +223,21 @@ struct RunWorkoutView: View {
                     Text(f).font(.caption).italic().foregroundStyle(Brand.textDim).multilineTextAlignment(.center)
                 }
             }
-
             if let delta = lastDelta {
                 Text(delta == 0 ? "On pace" : (delta < 0 ? "\(delta)s under" : "+\(delta)s over"))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(delta <= 0 ? Brand.positive : Brand.warn)
                     .transition(.opacity)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var activeCard: some View {
+        VStack(spacing: 14) {
+            timerHero
+            Divider().overlay(Brand.border).padding(.vertical, 4)
+            setDetails
         }
         .frame(maxWidth: .infinity)
         .padding(24)
