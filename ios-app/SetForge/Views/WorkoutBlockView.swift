@@ -5,6 +5,8 @@ import SwiftUI
 /// rendering a pace clock for a dryland block.
 struct WorkoutCard: View {
     let workout: Workout
+    /// When set, shows a "Start" button that launches run mode for this workout.
+    var onStart: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -29,6 +31,15 @@ struct WorkoutCard: View {
                 } else {
                     SwimBlockView(block: block)
                 }
+            }
+
+            if let onStart, !workout.blocks.isEmpty {
+                Button(action: onStart) {
+                    Label("Start", systemImage: "play.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent).tint(Brand.primary)
             }
         }
         .padding()

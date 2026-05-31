@@ -38,6 +38,7 @@ struct HomeView: View {
     @State private var showSessions = false
     @State private var showProfile = false
     @State private var showFeedback = false
+    @State private var runningWorkout: Workout?
 
     var body: some View {
         NavigationStack {
@@ -58,6 +59,7 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showFeedback) { FeedbackView() }
+            .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
         }
         .task { await model.load() }
     }
@@ -101,7 +103,7 @@ struct HomeView: View {
                         .font(.headline)
                         .foregroundStyle(Brand.text)
                     ForEach(workouts.prefix(10)) { workout in
-                        WorkoutCard(workout: workout)
+                        WorkoutCard(workout: workout) { runningWorkout = workout }
                     }
                 }
             }
