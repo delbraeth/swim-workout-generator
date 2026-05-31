@@ -38,6 +38,8 @@ struct HomeView: View {
     @State private var showSessions = false
     @State private var showProfile = false
     @State private var showFeedback = false
+    @State private var showHistory = false
+    @State private var showAssigned = false
     @State private var runningWorkout: Workout?
 
     var body: some View {
@@ -59,6 +61,10 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showFeedback) { FeedbackView() }
+            .sheet(isPresented: $showHistory) {
+                HistoryView(workouts: model.bootstrap?.workouts ?? [])
+            }
+            .sheet(isPresented: $showAssigned) { AssignedView() }
             .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
         }
         .task { await model.load() }
@@ -99,11 +105,16 @@ struct HomeView: View {
                 if workouts.isEmpty {
                     EmptyWorkouts()
                 } else {
-                    Text("Recent workouts")
-                        .font(.headline)
-                        .foregroundStyle(Brand.text)
-                    ForEach(workouts.prefix(10)) { workout in
-                        WorkoutCard(workout: workout) { runningWorkout = workout }
+                    HStack {
+                        Text("Recent workouts").font(.headline).foregroundStyle(Brand.text)
+                        Spacer()
+                        if workouts.count > 3 {
+                            Button("See all (\(workouts.count))") { showHistory = true }
+                                .font(.caption.weight(.semibold)).tint(Brand.primary)
+                        }
+                    }
+                    ForEach(workouts.prefix(3)) { workout in
+                        CollapsibleWorkoutCard(workout: workout) { runningWorkout = workout }
                     }
                 }
             }
@@ -117,6 +128,16 @@ struct HomeView: View {
     private var toolbarMenu: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
+                Button {
+                    showAssigned = true
+                } label: {
+                    Label("Assigned to me", systemImage: "tray.and.arrow.down")
+                }
+                Button {
+                    showHistory = true
+                } label: {
+                    Label("All workouts", systemImage: "list.bullet.rectangle")
+                }
                 Button {
                     showProfile = true
                 } label: {

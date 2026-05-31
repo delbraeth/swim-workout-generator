@@ -48,6 +48,65 @@ struct WorkoutCard: View {
     }
 }
 
+/// A condensed, single-line workout summary that expands inline to the full
+/// block detail. Used for the home "recent" list and history.
+struct CollapsibleWorkoutCard: View {
+    let workout: Workout
+    var subtitle: String? = nil          // e.g. coach / group / date context
+    var onStart: (() -> Void)? = nil
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: expanded ? 12 : 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(workout.title ?? "Workout")
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(Brand.text)
+                        Text(summaryLine).font(.caption2).foregroundStyle(Brand.textDim).lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold)).foregroundStyle(Brand.textMuted)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                ForEach(workout.blocks) { block in
+                    if block.isDryland { DrylandBlockView(block: block) } else { SwimBlockView(block: block) }
+                }
+                if let onStart, !workout.blocks.isEmpty {
+                    Button(action: onStart) {
+                        Label("Start", systemImage: "play.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent).tint(Brand.primary)
+                }
+            }
+        }
+        .padding()
+        .background(Brand.card, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Brand.border, lineWidth: 1))
+    }
+
+    private var summaryLine: String {
+        var parts: [String] = []
+        if let y = workout.totalYards, y > 0 {
+            parts.append("\(y) \(workout.poolType == "25m" || workout.poolType == "50m" ? "m" : "yd")")
+        }
+        let blocks = workout.blocks.count
+        if blocks > 0 { parts.append("\(blocks) block\(blocks == 1 ? "" : "s")") }
+        if let subtitle { parts.append(subtitle) }
+        return parts.isEmpty ? "Tap to view" : parts.joined(separator: " · ")
+    }
+}
+
 /// A swim block: section header + a list of `sets[]` (reps × dist, interval, focus).
 struct SwimBlockView: View {
     let block: WorkoutBlock
