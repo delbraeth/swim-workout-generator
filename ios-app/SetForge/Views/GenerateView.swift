@@ -19,6 +19,8 @@ final class GenerateViewModel: ObservableObject {
     @Published var generating = false
     @Published var genError: String?
     @Published var result: Workout?
+    /// Bumped on each successful generate so the view can scroll to the result.
+    @Published var resultID = UUID()
     /// The raw engine payload, kept losslessly so Save can re-send every field.
     private var rawWorkout: AnyCodable?
 
@@ -64,6 +66,7 @@ final class GenerateViewModel: ObservableObject {
             }
             result = workout
             rawWorkout = resp.workout
+            resultID = UUID()
         } catch let err as APIError {
             genError = err.errorDescription ?? "Generation failed."
         } catch {
@@ -113,24 +116,31 @@ struct GenerateView: View {
     var body: some View {
         ZStack {
             Brand.bg.ignoresSafeArea()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if model.loadingTypes {
-                        ProgressView().tint(Brand.textMuted).frame(maxWidth: .infinity)
-                    } else if let err = model.typesError {
-                        InlineError(message: err) { Task { await model.loadTypes() } }
-                    } else {
-                        typePicker
-                        yardageControl
-                        coursePicker
-                        biasPicker
-                        equipmentPicker
-                        generateButton
-                        if let err = model.genError { InlineError(message: err, retry: nil) }
-                        if let workout = model.result { resultSection(workout) }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        if model.loadingTypes {
+                            ProgressView().tint(Brand.textMuted).frame(maxWidth: .infinity)
+                        } else if let err = model.typesError {
+                            InlineError(message: err) { Task { await model.loadTypes() } }
+                        } else {
+                            typePicker
+                            yardageControl
+                            coursePicker
+                            biasPicker
+                            equipmentPicker
+                            generateButton
+                            if let err = model.genError { InlineError(message: err, retry: nil) }
+                            if let workout = model.result {
+                                resultSection(workout).id("generated-result")
+                            }
+                        }
                     }
+                    .padding()
                 }
-                .padding()
+                .onChange(of: model.resultID) {
+                    withAnimation(.easeInOut) { proxy.scrollTo("generated-result", anchor: .top) }
+                }
             }
         }
         .navigationTitle("Generate")

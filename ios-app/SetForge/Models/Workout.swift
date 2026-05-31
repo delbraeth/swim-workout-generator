@@ -29,7 +29,9 @@ struct Workout: Decodable, Identifiable {
         poolType = try c.decodeIfPresent(String.self, forKey: .poolType)
         totalYards = try c.decodeIfPresent(Int.self, forKey: .totalYards)
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
-        blocks = (try? c.decode([WorkoutBlock].self, forKey: .blocks)) ?? []
+        // Lossy: a single malformed block drops just that block, not the
+        // whole workout (the silent-empty failure mode we hit before).
+        blocks = c.decodeLossyArray(WorkoutBlock.self, forKey: .blocks) ?? []
     }
 }
 
@@ -58,8 +60,9 @@ struct WorkoutBlock: Decodable, Identifiable {
         section = try c.decodeIfPresent(String.self, forKey: .section)
         totalYards = try c.decodeIfPresent(Int.self, forKey: .totalYards)
         placement = try c.decodeIfPresent(String.self, forKey: .placement)
-        sets = try c.decodeIfPresent([SwimSet].self, forKey: .sets)
-        exercises = try c.decodeIfPresent([DrylandExercise].self, forKey: .exercises)
+        // Lossy per-element: one bad set/exercise is skipped, the rest render.
+        sets = c.decodeLossyArray(SwimSet.self, forKey: .sets)
+        exercises = c.decodeLossyArray(DrylandExercise.self, forKey: .exercises)
     }
 }
 
