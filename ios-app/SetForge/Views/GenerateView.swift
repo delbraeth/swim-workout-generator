@@ -123,6 +123,7 @@ final class GenerateViewModel: ObservableObject {
 
 struct GenerateView: View {
     @StateObject private var model = GenerateViewModel()
+    @State private var runningWorkout: Workout?
 
     var body: some View {
         ZStack {
@@ -161,6 +162,7 @@ struct GenerateView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Brand.bg, for: .navigationBar)
         .task { await model.loadTypes() }
+        .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
     }
 
     // MARK: - Sections
@@ -329,6 +331,17 @@ struct GenerateView: View {
                 .disabled(model.generating)
             }
             WorkoutCard(workout: workout)
+
+            Button {
+                runningWorkout = workout
+            } label: {
+                Label("Start workout", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Brand.primary)
 
             if model.saved {
                 Label("Saved to history", systemImage: "checkmark.circle.fill")
