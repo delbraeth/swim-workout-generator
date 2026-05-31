@@ -36,6 +36,7 @@ struct HomeView: View {
     @EnvironmentObject private var auth: AuthManager
     @StateObject private var model = HomeViewModel()
     @State private var showSessions = false
+    @State private var showProfile = false
 
     var body: some View {
         NavigationStack {
@@ -49,6 +50,11 @@ struct HomeView: View {
             .toolbarBackground(Brand.bg, for: .navigationBar)
             .sheet(isPresented: $showSessions) {
                 SessionsView(initial: model.bootstrap?.sessions ?? [])
+            }
+            .sheet(isPresented: $showProfile) {
+                if let me = model.bootstrap?.me {
+                    ProfileView(me: me) { Task { await model.load(force: true) } }
+                }
             }
         }
         .task { await model.load() }
@@ -107,6 +113,11 @@ struct HomeView: View {
     private var toolbarMenu: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
+                Button {
+                    showProfile = true
+                } label: {
+                    Label("Edit profile", systemImage: "person.text.rectangle")
+                }
                 Button {
                     showSessions = true
                 } label: {
