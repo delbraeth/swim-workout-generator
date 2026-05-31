@@ -36,6 +36,11 @@ struct HomeView: View {
     @EnvironmentObject private var auth: AuthManager
     @StateObject private var model = HomeViewModel()
     @State private var showSessions = false
+    @State private var showProfile = false
+    @State private var showFeedback = false
+    @State private var showHistory = false
+    @State private var showAssigned = false
+    @State private var runningWorkout: Workout?
 
     var body: some View {
         NavigationStack {
@@ -50,6 +55,17 @@ struct HomeView: View {
             .sheet(isPresented: $showSessions) {
                 SessionsView(initial: model.bootstrap?.sessions ?? [])
             }
+            .sheet(isPresented: $showProfile) {
+                if let me = model.bootstrap?.me {
+                    ProfileView(me: me) { Task { await model.load(force: true) } }
+                }
+            }
+            .sheet(isPresented: $showFeedback) { FeedbackView() }
+            .sheet(isPresented: $showHistory) {
+                HistoryView(workouts: model.bootstrap?.workouts ?? [])
+            }
+            .sheet(isPresented: $showAssigned) { AssignedView() }
+            .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
         }
         .task { await model.load() }
     }
@@ -89,11 +105,16 @@ struct HomeView: View {
                 if workouts.isEmpty {
                     EmptyWorkouts()
                 } else {
-                    Text("Recent workouts")
-                        .font(.headline)
-                        .foregroundStyle(Brand.text)
-                    ForEach(workouts.prefix(10)) { workout in
-                        WorkoutCard(workout: workout)
+                    HStack {
+                        Text("Recent workouts").font(.headline).foregroundStyle(Brand.text)
+                        Spacer()
+                        if workouts.count > 3 {
+                            Button("See all (\(workouts.count))") { showHistory = true }
+                                .font(.caption.weight(.semibold)).tint(Brand.primary)
+                        }
+                    }
+                    ForEach(workouts.prefix(3)) { workout in
+                        CollapsibleWorkoutCard(workout: workout) { runningWorkout = workout }
                     }
                 }
             }
@@ -108,9 +129,29 @@ struct HomeView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Button {
+                    showAssigned = true
+                } label: {
+                    Label("Assigned to me", systemImage: "tray.and.arrow.down")
+                }
+                Button {
+                    showHistory = true
+                } label: {
+                    Label("All workouts", systemImage: "list.bullet.rectangle")
+                }
+                Button {
+                    showProfile = true
+                } label: {
+                    Label("Edit profile", systemImage: "person.text.rectangle")
+                }
+                Button {
                     showSessions = true
                 } label: {
                     Label("Devices & sessions", systemImage: "laptopcomputer.and.iphone")
+                }
+                Button {
+                    showFeedback = true
+                } label: {
+                    Label("Send feedback", systemImage: "bubble.left.and.text.bubble.right")
                 }
                 Button(role: .destructive) {
                     Task { await auth.signOut() }
