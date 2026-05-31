@@ -79,6 +79,26 @@ struct SwimSet: Decodable, Identifiable {
         case reps, dist, desc, interval, focus, eq
     }
 
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        serverId = try c.decodeIfPresent(String.self, forKey: .serverId)
+        reps     = try c.decodeIfPresent(Int.self,    forKey: .reps)
+        dist     = try c.decodeIfPresent(Int.self,    forKey: .dist)
+        desc     = try c.decodeIfPresent(String.self, forKey: .desc)
+        interval = try c.decodeIfPresent(String.self, forKey: .interval)
+        focus    = try c.decodeIfPresent(String.self, forKey: .focus)
+        // `eq` is a single string from the engine ("pull", "kick", "snorkel"),
+        // but tolerate an array too (defensive). Normalize to [String] so the
+        // renderer can join them.
+        if let arr = try? c.decode([String].self, forKey: .eq) {
+            eq = arr
+        } else if let one = try? c.decode(String.self, forKey: .eq), !one.isEmpty {
+            eq = [one]
+        } else {
+            eq = nil
+        }
+    }
+
     /// e.g. "4 × 100" or "1 × 400".
     var repsByDist: String {
         let r = reps ?? 1
