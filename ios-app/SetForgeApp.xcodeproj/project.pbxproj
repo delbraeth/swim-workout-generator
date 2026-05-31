@@ -3,15 +3,15 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 70;
 	objects = {
 
+/* Begin PBXFileReference section */
+		SF000000000000000000D001 /* SetForge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SetForge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		SF000000000000000000F001 /* SetForge */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = SetForge;
-			sourceTree = "<group>";
-		};
+		SF000000000000000000F001 /* SetForge */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SetForge; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -23,6 +23,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		SF0000000000000000008001 = {
+			isa = PBXGroup;
+			children = (
+				SF000000000000000000F001 /* SetForge */,
+				SF0000000000000000008002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		SF0000000000000000008002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				SF000000000000000000D001 /* SetForge.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		SF000000000000000000A001 /* SetForge */ = {
@@ -77,29 +96,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin PBXGroup section */
-		SF0000000000000000008001 = {
-			isa = PBXGroup;
-			children = (
-				SF000000000000000000F001 /* SetForge */,
-				SF0000000000000000008002 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		SF0000000000000000008002 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				SF000000000000000000D001 /* SetForge.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-/* End PBXGroup section */
-
-/* Begin PBXFileReference section */
-		SF000000000000000000D001 /* SetForge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SetForge.app; sourceTree = BUILT_PRODUCTS_DIR; };
-/* End PBXFileReference section */
 
 /* Begin PBXResourcesBuildPhase section */
 		SF000000000000000000B003 /* Resources */ = {
@@ -176,13 +172,12 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Info-Debug.plist;
+				INFOPLIST_FILE = "Info-Debug.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				SDKROOT = iphoneos;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -190,6 +185,7 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.delbraeth.swimworkout;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -212,7 +208,6 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				SDKROOT = iphoneos;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -220,6 +215,7 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.delbraeth.swimworkout;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

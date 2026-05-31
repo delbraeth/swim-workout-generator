@@ -72,6 +72,17 @@ struct HomeView: View {
                 GreetingCard(me: model.bootstrap?.me,
                              poolMode: model.bootstrap?.poolMode)
 
+                NavigationLink {
+                    GenerateView()
+                } label: {
+                    Label("Generate workout", systemImage: "wand.and.stars")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Brand.primary)
+
                 SummaryRow(bootstrap: model.bootstrap)
 
                 let workouts = model.bootstrap?.workouts ?? []

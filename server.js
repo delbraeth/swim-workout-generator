@@ -133,7 +133,9 @@ import {
   dbCompleteScheduledWorkout, dbGetPracticeAttendance, dbGetGroupRosterAsOf,
   dbIsActiveGroupCoach,
   dbRepeatWeek,
+  dbGetGenerationContextForUser,
 } from "./db.js";
+import { generate as engineGenerate, workoutTypes as engineWorkoutTypes, generatorReady } from "./lib/generator.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
 function reqMeta(req) {
@@ -835,6 +837,73 @@ app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
     if (!bootstrap || !bootstrap.me) return res.status(404).json({ error: "user not found" });
     res.json({ ...bootstrap, billing: { status: billingStatus } });
   } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ───── Workout generator (native clients) ───────────────────────────────────
+// The web SPA runs `generateWorkout` in-browser; native clients can't, so these
+// expose the SAME engine server-side (lib/generator.js extracts it from
+// index.html — single source of truth). The client sends only FORM inputs;
+// curation (favorites/disfavorites/constraints/UGC) is rehydrated from the DB
+// server-side and never trusted from the client.
+
+// The workout-type catalog the client's Generate form needs (id/label/…).
+// Static engine data, no DB. 503 if the engine failed to extract at boot.
+app.get("/api/workout-types", requireAuth, (req, res) => {
+  if (!generatorReady()) return res.status(503).json({ error: "generator_unavailable" });
+  res.json({ types: engineWorkoutTypes() });
+});
+
+const POOL_MODES = ["25y", "25m", "50m"];
+const SECTION_NAMES = ["warmup", "drill", "main", "cooldown"];
+
+app.post("/api/generate", requireAuth, writeLimiter, async (req, res) => {
+  if (!generatorReady()) return res.status(503).json({ error: "generator_unavailable" });
+  try {
+    const b = req.body || {};
+
+    // Validate the two required form inputs.
+    const typeId = String(b.typeId || "");
+    if (!engineWorkoutTypes().some(t => t.id === typeId))
+      return res.status(400).json({ error: "invalid typeId" });
+    const maxYards = Number(b.maxYards);
+    if (!Number.isFinite(maxYards) || maxYards < 500 || maxYards > 20000)
+      return res.status(400).json({ error: "maxYards out of range (500–20000)" });
+
+    // FORM inputs — client-controlled, whitelisted with sane defaults.
+    const poolMode    = POOL_MODES.includes(b.poolMode) ? b.poolMode : "25y";
+    const equipment   = (b.equipment && typeof b.equipment === "object") ? b.equipment : {};
+    const sectionBias = typeof b.sectionBias === "string" ? b.sectionBias : "balanced";
+    const includedSections = Array.isArray(b.includedSections) && b.includedSections.length
+      ? b.includedSections.filter(s => SECTION_NAMES.includes(s))
+      : SECTION_NAMES.slice();
+    const recoveryMode = !!b.recoveryMode;
+    const phase        = (typeof b.phase === "string" && b.phase) ? b.phase : null;
+    const userMin      = Number.isFinite(Number(b.userMin)) ? Number(b.userMin) : null;
+    const sectionSources = (b.sectionSources && typeof b.sectionSources === "object") ? b.sectionSources : null;
+    const lanesPaceSecs  = Array.isArray(b.lanesPaceSecs) && b.lanesPaceSecs.length
+      ? b.lanesPaceSecs.map(Number).filter(Number.isFinite)
+      : null;
+
+    // CURATION — server-authoritative, rehydrated from the DB (own + coach union).
+    const curation = (await dbGetGenerationContextForUser(req.userSub)) || {};
+
+    const workout = engineGenerate({
+      typeId, maxYards, poolMode, equipment, sectionBias, includedSections,
+      recoveryMode, phase, userMin, sectionSources, lanesPaceSecs,
+      ...curation,
+    });
+
+    // Engine failure sentinel (e.g. required equipment can't be satisfied).
+    if (workout && workout.__generateFailure)
+      return res.status(422).json({ error: workout.error || "could not build a workout matching your constraints", reason: workout.reason || null });
+    if (!workout || !Array.isArray(workout.blocks))
+      return res.status(500).json({ error: "generator returned no workout" });
+
+    res.json({ ok: true, workout });
+  } catch (err) {
+    console.error("[api/generate]", err.message);
     res.status(500).json({ error: err.message || String(err) });
   }
 });

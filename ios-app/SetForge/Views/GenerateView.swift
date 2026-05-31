@@ -1,0 +1,273 @@
+import SwiftUI
+
+/// The workout generator. Loads the type catalog, collects form inputs, calls
+/// `POST /api/generate` (the engine runs server-side — same `generateWorkout` as
+/// the web SPA), and renders the result with the shared `WorkoutCard`. Curation
+/// (favorites/constraints) is applied server-side from the signed-in user.
+@MainActor
+final class GenerateViewModel: ObservableObject {
+    @Published var types: [WorkoutType] = []
+    @Published var typesError: String?
+    @Published var loadingTypes = false
+
+    @Published var selectedTypeId: String?
+    @Published var maxYards: Double = 3000
+    @Published var pool: PoolCourse = .scy
+    @Published var bias: SectionBias = .balanced
+    @Published var equipmentOn: Set<String> = []
+
+    @Published var generating = false
+    @Published var genError: String?
+    @Published var result: Workout?
+
+    private let api: APIClient
+    init(api: APIClient = .shared) { self.api = api }
+
+    func loadTypes() async {
+        guard types.isEmpty else { return }
+        loadingTypes = true; typesError = nil
+        do {
+            let resp = try await api.get("workout-types", as: WorkoutTypesResponse.self)
+            types = resp.types
+            if selectedTypeId == nil { selectedTypeId = types.first?.id }
+        } catch let err as APIError {
+            typesError = err.errorDescription ?? "Couldn't load workout types."
+        } catch {
+            typesError = error.localizedDescription
+        }
+        loadingTypes = false
+    }
+
+    func generate() async {
+        guard let typeId = selectedTypeId else { return }
+        generating = true; genError = nil; result = nil
+        let equipment = Dictionary(uniqueKeysWithValues: EquipmentItem.all.map { ($0.id, equipmentOn.contains($0.id)) })
+        let req = GenerateRequest(
+            typeId: typeId,
+            maxYards: Int(maxYards),
+            poolMode: pool.rawValue,
+            equipment: equipment,
+            sectionBias: bias.rawValue
+        )
+        do {
+            let resp = try await api.post("generate", body: req, as: GenerateResponse.self)
+            guard let workout = resp.renderableWorkout() else {
+                genError = "The server returned a workout we couldn't read."
+                generating = false; return
+            }
+            result = workout
+        } catch let err as APIError {
+            genError = err.errorDescription ?? "Generation failed."
+        } catch {
+            genError = error.localizedDescription
+        }
+        generating = false
+    }
+}
+
+struct GenerateView: View {
+    @StateObject private var model = GenerateViewModel()
+
+    var body: some View {
+        ZStack {
+            Brand.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if model.loadingTypes {
+                        ProgressView().tint(Brand.textMuted).frame(maxWidth: .infinity)
+                    } else if let err = model.typesError {
+                        InlineError(message: err) { Task { await model.loadTypes() } }
+                    } else {
+                        typePicker
+                        yardageControl
+                        coursePicker
+                        biasPicker
+                        equipmentPicker
+                        generateButton
+                        if let err = model.genError { InlineError(message: err, retry: nil) }
+                        if let workout = model.result { resultSection(workout) }
+                    }
+                }
+                .padding()
+            }
+        }
+        .navigationTitle("Generate")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Brand.bg, for: .navigationBar)
+        .task { await model.loadTypes() }
+    }
+
+    // MARK: - Sections
+
+    private var typePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Workout type")
+            ForEach(model.types) { type in
+                Button { model.selectedTypeId = type.id } label: {
+                    HStack(spacing: 10) {
+                        Text(type.emoji ?? "🏊").font(.title3)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(type.label ?? type.id)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Brand.text)
+                            if let blurb = type.blurb {
+                                Text(blurb).font(.caption2).foregroundStyle(Brand.textDim)
+                                    .multilineTextAlignment(.leading)
+                            }
+                        }
+                        Spacer()
+                        if model.selectedTypeId == type.id {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.primary)
+                        }
+                    }
+                    .padding(12)
+                    .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12)
+                        .stroke(model.selectedTypeId == type.id ? Brand.primary : Brand.border, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var yardageControl: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SectionLabel("Target")
+                Spacer()
+                Text("\(Int(model.maxYards)) \(model.pool == .scy ? "yd" : "m")")
+                    .font(.subheadline.weight(.bold).monospaced())
+                    .foregroundStyle(Brand.primary)
+            }
+            Slider(value: $model.maxYards, in: 1000...6000, step: 100)
+                .tint(Brand.primary)
+        }
+    }
+
+    private var coursePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Pool")
+            Picker("Pool", selection: $model.pool) {
+                ForEach(PoolCourse.allCases) { c in Text(c.short).tag(c) }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var biasPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Emphasis")
+            Picker("Emphasis", selection: $model.bias) {
+                ForEach(SectionBias.allCases) { b in Text(b.label).tag(b) }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var equipmentPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Equipment")
+            FlowChips(items: EquipmentItem.all, isOn: { model.equipmentOn.contains($0.id) }) { item in
+                if model.equipmentOn.contains(item.id) { model.equipmentOn.remove(item.id) }
+                else { model.equipmentOn.insert(item.id) }
+            }
+        }
+    }
+
+    private var generateButton: some View {
+        Button {
+            Task { await model.generate() }
+        } label: {
+            HStack {
+                if model.generating { ProgressView().tint(.white) }
+                Text(model.generating ? "Generating…" : "Generate")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Brand.primary)
+        .disabled(model.generating || model.selectedTypeId == nil)
+        .padding(.top, 4)
+    }
+
+    private func resultSection(_ workout: Workout) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Divider().overlay(Brand.border)
+            HStack {
+                Text("Your workout").font(.headline).foregroundStyle(Brand.text)
+                Spacer()
+                Button {
+                    Task { await model.generate() }
+                } label: {
+                    Label("Regenerate", systemImage: "arrow.clockwise")
+                        .font(.caption.weight(.semibold))
+                }
+                .tint(Brand.primary)
+                .disabled(model.generating)
+            }
+            WorkoutCard(workout: workout)
+        }
+    }
+}
+
+// MARK: - Small shared pieces
+
+private struct SectionLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text.uppercased())
+            .font(.caption.weight(.heavy))
+            .foregroundStyle(Brand.textMuted)
+    }
+}
+
+private struct InlineError: View {
+    let message: String
+    var retry: (() -> Void)? = nil
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(message).font(.footnote).foregroundStyle(Brand.warn)
+                .multilineTextAlignment(.center)
+            if let retry {
+                Button("Try again", action: retry).font(.caption.weight(.semibold)).tint(Brand.primary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Brand.warn.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Brand.warn.opacity(0.25), lineWidth: 1))
+    }
+}
+
+/// A simple wrapping row of toggle chips.
+private struct FlowChips: View {
+    let items: [EquipmentItem]
+    let isOn: (EquipmentItem) -> Bool
+    let toggle: (EquipmentItem) -> Void
+
+    var body: some View {
+        // Two-column grid wraps predictably without a custom Layout.
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            ForEach(items) { item in
+                Button { toggle(item) } label: {
+                    HStack(spacing: 6) {
+                        Text(item.icon)
+                        Text(item.label).font(.caption.weight(.semibold))
+                        Spacer()
+                        if isOn(item) { Image(systemName: "checkmark").font(.caption2) }
+                    }
+                    .foregroundStyle(isOn(item) ? Brand.text : Brand.textMuted)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .background(isOn(item) ? Brand.primary.opacity(0.2) : Brand.card,
+                                in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10)
+                        .stroke(isOn(item) ? Brand.primary : Brand.border, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
