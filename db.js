@@ -736,6 +736,59 @@ export async function dbGetBootstrapForUser(userSub) {
   return out;
 }
 
+// ─── generation context (server-side curation rehydration) ──────────────────
+// Assembles the curation inputs `generateWorkout` expects, loaded from the DB
+// and merged own + coach-propagated exactly as the SPA's Generate handler does
+// (public/index.html ~26850): own labels/set-ids/engine-tuples unioned with the
+// effective (coach-inherited) sets. Returned pieces are spread into the engine
+// opts by POST /api/generate, so the native client only sends FORM inputs
+// (type, yardage, pool, equipment, bias) and never its own curation lists.
+//
+// Set-valued ids match the SPA: favoriteSetIds/disfavorSetIds are JS Sets (the
+// engine uses `.has()`/`.size`). Resilient per-source: any failing query
+// degrades to empty so a generate never 500s on a single curation read.
+export async function dbGetGenerationContextForUser(userSub) {
+  if (!userSub) return null;
+  const safe = (p, fb) => p.catch(() => fb);
+  const [favs, disfavs, favSets, disfavSets, effFav, effDis, ugc, constraints, settings] =
+    await Promise.all([
+      safe(dbListFavorites(userSub), []),
+      safe(dbListDisfavorites(userSub), []),
+      safe(dbListFavoriteSets(userSub), []),
+      safe(dbListDisfavorSets(userSub), []),
+      safe(dbGetEffectiveFavorites(userSub),    { labels: [], set_ids: [], engine: [] }),
+      safe(dbGetEffectiveDisfavorites(userSub), { labels: [], set_ids: [], engine: [] }),
+      safe(dbGetUgcOverlay(userSub), {}),
+      safe(dbListMyActiveConstraints(userSub), { constraints: [] }),
+      safe(dbGetSettings(userSub), {}),
+    ]);
+
+  const ownEngineFav = Array.isArray(settings.engine_favorites)    ? settings.engine_favorites    : [];
+  const ownEngineDis = Array.isArray(settings.engine_disfavorites) ? settings.engine_disfavorites : [];
+  const dedupeEngine = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const e of arr) {
+      if (!e || e.template_id == null) continue;
+      const k = `${e.template_id}:${e.stroke}`;
+      if (!seen.has(k)) { seen.add(k); out.push({ template_id: e.template_id, stroke: e.stroke }); }
+    }
+    return out;
+  };
+
+  return {
+    favorites:          Array.from(new Set([...(favs || []),    ...(effFav.labels  || [])])),
+    disfavorites:       Array.from(new Set([...(disfavs || []), ...(effDis.labels  || [])])),
+    favoriteSetIds:     new Set([...(favSets || []),    ...(effFav.set_ids || [])]),
+    disfavorSetIds:     new Set([...(disfavSets || []), ...(effDis.set_ids || [])]),
+    engineFavorites:    dedupeEngine([...ownEngineFav, ...(effFav.engine || [])]),
+    engineDisfavorites: dedupeEngine([...ownEngineDis, ...(effDis.engine || [])]),
+    ugcOverlay:         (ugc && Object.keys(ugc).length) ? ugc : null,
+    myConstraints:      Array.isArray(constraints?.constraints) ? constraints.constraints : [],
+    disfavorMode:       settings.disfavorMode || settings.disfavor_mode || "downweight",
+  };
+}
+
 // ─── auth helpers ───────────────────────────────────────────────────────────
 export async function dbIsUser(sub) {
   if (!sub) return false;
