@@ -33,6 +33,36 @@ enum SectionBias: String, CaseIterable, Identifiable {
     }
 }
 
+/// Training phase (taper progression). Empty = unset (engine default).
+enum TrainingPhase: String, CaseIterable, Identifiable {
+    case none = "", base, build, peak, taper
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .none:  return "None"
+        case .base:  return "Base"
+        case .build: return "Build"
+        case .peak:  return "Peak"
+        case .taper: return "Taper"
+        }
+    }
+}
+
+/// The four swim sections. `main` is always required (never skippable).
+enum WorkoutSectionKind: String, CaseIterable, Identifiable {
+    case warmup, drill, main, cooldown
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .warmup:   return "Warm-up"
+        case .drill:    return "Drill"
+        case .main:     return "Main"
+        case .cooldown: return "Cool-down"
+        }
+    }
+    var isRequired: Bool { self == .main }
+}
+
 /// Pool course options the engine accepts.
 enum PoolCourse: String, CaseIterable, Identifiable {
     case scy = "25y", scm = "25m", lcm = "50m"
@@ -70,6 +100,9 @@ struct GenerateRequest: Encodable {
     let poolMode: String
     let equipment: [String: Bool]
     let sectionBias: String
+    let recoveryMode: Bool
+    let phase: String?            // nil ⇒ key omitted ⇒ engine default
+    let includedSections: [String]
 }
 
 /// `POST /api/generate` response. The workout is kept as raw `AnyCodable` so it
