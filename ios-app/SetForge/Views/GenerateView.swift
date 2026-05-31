@@ -152,6 +152,7 @@ struct GenerateView: View {
                         }
                     }
                     .padding()
+                    .readableWidth()
                 }
                 .onChange(of: model.resultID) {
                     withAnimation(.easeInOut) { proxy.scrollTo("generated-result", anchor: .top) }

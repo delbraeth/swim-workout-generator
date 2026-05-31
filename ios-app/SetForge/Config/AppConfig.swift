@@ -64,3 +64,11 @@ extension Color {
         self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
     }
 }
+
+extension View {
+    /// Caps content to a comfortable reading width and centers it — keeps the
+    /// iPhone-designed screens from stretching edge-to-edge on iPad.
+    func readableWidth(_ maxWidth: CGFloat = 640) -> some View {
+        frame(maxWidth: maxWidth).frame(maxWidth: .infinity)
+    }
+}

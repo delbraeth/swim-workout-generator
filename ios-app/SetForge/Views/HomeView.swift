@@ -98,6 +98,7 @@ struct HomeView: View {
                 }
             }
             .padding()
+            .readableWidth()
         }
         .refreshable { await model.load(force: true) }
     }
