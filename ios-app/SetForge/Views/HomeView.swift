@@ -37,6 +37,7 @@ struct HomeView: View {
     @StateObject private var model = HomeViewModel()
     @State private var showSessions = false
     @State private var showProfile = false
+    @State private var showFeedback = false
 
     var body: some View {
         NavigationStack {
@@ -56,6 +57,7 @@ struct HomeView: View {
                     ProfileView(me: me) { Task { await model.load(force: true) } }
                 }
             }
+            .sheet(isPresented: $showFeedback) { FeedbackView() }
         }
         .task { await model.load() }
     }
@@ -122,6 +124,11 @@ struct HomeView: View {
                     showSessions = true
                 } label: {
                     Label("Devices & sessions", systemImage: "laptopcomputer.and.iphone")
+                }
+                Button {
+                    showFeedback = true
+                } label: {
+                    Label("Send feedback", systemImage: "bubble.left.and.text.bubble.right")
                 }
                 Button(role: .destructive) {
                     Task { await auth.signOut() }
