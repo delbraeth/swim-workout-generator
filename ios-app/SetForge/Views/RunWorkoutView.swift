@@ -12,15 +12,14 @@ struct RunWorkoutView: View {
     @State private var index = 0
     @State private var repDone = 0
 
-    // Pace clock: date-based elapsed (accurate), refreshed by a periodic tick.
+    // Pace clock state: banked time + the start of the current running segment
+    // (nil ⇒ paused). The analog clock computes elapsed off this via TimelineView.
     @State private var accumulated: TimeInterval = 0
     @State private var segmentStart: Date? = Date()
-    @State private var tick = Date()
-    private let timer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
     private var running: Bool { segmentStart != nil }
-    private var elapsed: TimeInterval {
-        accumulated + (segmentStart.map { tick.timeIntervalSince($0) } ?? 0)
+    private func currentElapsed() -> TimeInterval {
+        accumulated + (segmentStart.map { Date().timeIntervalSince($0) } ?? 0)
     }
     private var step: RunStep? { steps.indices.contains(index) ? steps[index] : nil }
 
@@ -42,7 +41,6 @@ struct RunWorkoutView: View {
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
-        .onReceive(timer) { now in if running { tick = now } }
         .statusBarHidden(true)
     }
 
@@ -66,9 +64,7 @@ struct RunWorkoutView: View {
                         .font(.title2).foregroundStyle(Brand.primary)
                 }
             }
-            Text(Self.clock(elapsed))
-                .font(.system(size: 64, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundStyle(running ? Brand.text : Brand.textMuted)
+            PaceClock(accumulated: accumulated, segmentStart: segmentStart)
             if !steps.isEmpty {
                 ProgressView(value: Double(index + 1), total: Double(steps.count))
                     .tint(Brand.primary)
@@ -163,21 +159,87 @@ struct RunWorkoutView: View {
     }
 
     private func pause() {
-        accumulated = elapsed
+        accumulated = currentElapsed()
         segmentStart = nil
     }
     private func resume() {
         segmentStart = Date()
-        tick = Date()
     }
 
     private func haptic() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
+}
 
-    private static func clock(_ t: TimeInterval) -> String {
-        let total = Int(t)
-        return String(format: "%02d:%02d", total / 60, total % 60)
+// MARK: - Pace clock (analog 60s sweep + digital)
+
+/// A swim pace clock: an analog face with a sweeping second hand (one rev per
+/// 60s) plus a digital total. Driven by `TimelineView(.animation)` so the hand
+/// sweeps smoothly; `paused` freezes it when the run is paused.
+private struct PaceClock: View {
+    let accumulated: TimeInterval
+    let segmentStart: Date?
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: segmentStart == nil)) { context in
+            let elapsed = accumulated + (segmentStart.map { context.date.timeIntervalSince($0) } ?? 0)
+            VStack(spacing: 10) {
+                ClockFace(seconds: elapsed)
+                    .frame(width: 190, height: 190)
+                Text(String(format: "%02d:%02d", Int(elapsed) / 60, Int(elapsed) % 60))
+                    .font(.system(size: 32, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(segmentStart == nil ? Brand.textMuted : Brand.text)
+            }
+        }
+    }
+}
+
+private struct ClockFace: View {
+    let seconds: TimeInterval
+
+    var body: some View {
+        Canvas { ctx, size in
+            let r = min(size.width, size.height) / 2
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+
+            // Face
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)),
+                       with: .color(Brand.borderStrong), lineWidth: 3)
+
+            // Second ticks (bold every 5s)
+            for i in 0..<60 {
+                let major = i % 5 == 0
+                let a = Double(i) / 60 * 2 * .pi
+                let outer = r - 5
+                let inner = r - (major ? 15 : 9)
+                var p = Path()
+                p.move(to: CGPoint(x: c.x + sin(a) * outer, y: c.y - cos(a) * outer))
+                p.addLine(to: CGPoint(x: c.x + sin(a) * inner, y: c.y - cos(a) * inner))
+                ctx.stroke(p, with: .color(major ? Brand.text : Brand.textDim), lineWidth: major ? 2 : 1)
+            }
+
+            // 5-second labels (60 at top, then 5,10,…,55 clockwise)
+            for i in stride(from: 0, to: 60, by: 5) {
+                let a = Double(i) / 60 * 2 * .pi
+                let lr = r - 30
+                let pt = CGPoint(x: c.x + sin(a) * lr, y: c.y - cos(a) * lr)
+                let label = i == 0 ? "60" : "\(i)"
+                ctx.draw(Text(label).font(.system(size: 12, weight: .semibold)).foregroundColor(Brand.textMuted),
+                         at: pt)
+            }
+
+            // Sweeping second hand (one revolution per minute)
+            let a = (seconds.truncatingRemainder(dividingBy: 60)) / 60 * 2 * .pi
+            let len = r - 22
+            var hand = Path()
+            hand.move(to: c)
+            hand.addLine(to: CGPoint(x: c.x + sin(a) * len, y: c.y - cos(a) * len))
+            ctx.stroke(hand, with: .color(Brand.destructive), lineWidth: 3)
+
+            // Hub
+            ctx.fill(Path(ellipseIn: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10)),
+                     with: .color(Brand.destructive))
+        }
     }
 }
 
