@@ -856,7 +856,10 @@ app.get("/api/workout-types", requireAuth, (req, res) => {
 });
 
 const POOL_MODES = ["25y", "25m", "50m"];
-const SECTION_NAMES = ["warmup", "drill", "main", "cooldown"];
+// Must include every section the engine accepts, or the /api/generate route
+// silently strips unknown sections from includedSections. "kick" is the opt-in
+// 5th section — omitting it here made native clients' kick requests no-op.
+const SECTION_NAMES = ["warmup", "drill", "kick", "main", "cooldown"];
 
 app.post("/api/generate", requireAuth, writeLimiter, async (req, res) => {
   if (!generatorReady()) return res.status(503).json({ error: "generator_unavailable" });
