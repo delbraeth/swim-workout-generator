@@ -49,6 +49,41 @@ final class GenerateViewModel: ObservableObject {
         return coachTargets.first { $0.id == id }
     }
 
+    // MARK: - Coach: multi-lane generate
+    struct Lane: Identifiable {
+        let id = UUID()
+        var label: String
+        var pace: String   // "M:SS" per 100
+    }
+    @Published var multiLaneOn = false
+    @Published var lanes: [Lane] = [
+        Lane(label: "Lane 1", pace: "1:45"),
+        Lane(label: "Lane 2", pace: "2:00"),
+    ]
+
+    func addLane() {
+        lanes.append(Lane(label: "Lane \(lanes.count + 1)", pace: "2:00"))
+    }
+    func removeLane(_ id: UUID) {
+        guard lanes.count > 1 else { return }
+        lanes.removeAll { $0.id == id }
+    }
+
+    /// Parse a "M:SS" (or ":SS") pace into seconds. nil if unparseable.
+    static func paceToSeconds(_ s: String) -> Int? {
+        let parts = s.trimmingCharacters(in: .whitespaces).split(separator: ":")
+        if parts.count == 2, let m = Int(parts[0]), let sec = Int(parts[1]) { return m * 60 + sec }
+        if parts.count == 1, let sec = Int(parts[0]) { return sec }
+        return nil
+    }
+
+    /// The lanesPaceSecs payload, or nil when multi-lane is off / nothing parses.
+    var lanesPaceSecs: [Int]? {
+        guard multiLaneOn else { return nil }
+        let secs = lanes.compactMap { Self.paceToSeconds($0.pace) }
+        return secs.isEmpty ? nil : secs
+    }
+
     // MARK: - Inline editing state
     /// Section currently being regenerated (sectionKey), for spinner/disable.
     @Published var regeneratingSection: String?
@@ -102,7 +137,8 @@ final class GenerateViewModel: ObservableObject {
             sectionBias: bias.rawValue,
             recoveryMode: recoveryMode,
             phase: phase == .none ? nil : phase.rawValue,
-            includedSections: sections
+            includedSections: sections,
+            lanesPaceSecs: lanesPaceSecs
         )
         do {
             let resp = try await api.post("generate", body: req, as: GenerateResponse.self)
@@ -405,6 +441,7 @@ struct GenerateView: View {
                             InlineError(message: err) { Task { await model.loadTypes() } }
                         } else {
                             generateForPicker
+                            multiLaneEditor
                             typePicker
                             yardageControl
                             coursePicker
@@ -485,6 +522,57 @@ struct GenerateView: View {
                         .font(.caption2).foregroundStyle(Brand.textDim)
                 }
             }
+        }
+    }
+
+    /// Coach-only: generate one workout fitted to multiple lane paces. Same
+    /// visibility gate as the target picker (coaches with assignable groups).
+    @ViewBuilder
+    private var multiLaneEditor: some View {
+        if !model.coachTargets.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $model.multiLaneOn) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Multi-lane").font(.subheadline.weight(.semibold)).foregroundStyle(Brand.text)
+                        Text("Fit intervals across lanes at different paces")
+                            .font(.caption2).foregroundStyle(Brand.textDim)
+                    }
+                }
+                .tint(Brand.primary)
+
+                if model.multiLaneOn {
+                    ForEach($model.lanes) { $lane in
+                        HStack(spacing: 8) {
+                            TextField("Lane", text: $lane.label)
+                                .font(.subheadline).foregroundStyle(Brand.text)
+                            TextField("M:SS", text: $lane.pace)
+                                .font(.subheadline.monospaced()).foregroundStyle(Brand.primary)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 64)
+                                .keyboardType(.numbersAndPunctuation)
+                            Button {
+                                model.removeLane(lane.id)
+                            } label: {
+                                Image(systemName: "minus.circle.fill").foregroundStyle(Brand.textMuted)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(model.lanes.count <= 1)
+                            .opacity(model.lanes.count <= 1 ? 0.3 : 1)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Brand.card, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Brand.border, lineWidth: 1))
+                    }
+                    Button { model.addLane() } label: {
+                        Label("Add lane", systemImage: "plus.circle")
+                            .font(.caption.weight(.semibold)).foregroundStyle(Brand.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(12)
+            .background(Brand.card.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Brand.border, lineWidth: 1))
         }
     }
 

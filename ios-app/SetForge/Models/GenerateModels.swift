@@ -129,6 +129,28 @@ struct GenerateRequest: Encodable {
     let recoveryMode: Bool
     let phase: String?            // nil ⇒ key omitted ⇒ engine default
     let includedSections: [String]
+    /// Multi-lane: per-lane pace in seconds/100. nil ⇒ single-pace (key omitted
+    /// when encoded). The engine filters to options whose intervals fit all lanes.
+    let lanesPaceSecs: [Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case typeId, maxYards, poolMode, equipment, sectionBias
+        case recoveryMode, phase, includedSections
+        case lanesPaceSecs
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(typeId, forKey: .typeId)
+        try c.encode(maxYards, forKey: .maxYards)
+        try c.encode(poolMode, forKey: .poolMode)
+        try c.encode(equipment, forKey: .equipment)
+        try c.encode(sectionBias, forKey: .sectionBias)
+        try c.encode(recoveryMode, forKey: .recoveryMode)
+        try c.encodeIfPresent(phase, forKey: .phase)
+        try c.encode(includedSections, forKey: .includedSections)
+        try c.encodeIfPresent(lanesPaceSecs, forKey: .lanesPaceSecs)
+    }
 }
 
 /// `POST /api/generate` response. The workout is kept as raw `AnyCodable` so it
