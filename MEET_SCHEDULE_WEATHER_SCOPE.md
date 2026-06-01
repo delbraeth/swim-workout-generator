@@ -98,10 +98,48 @@ Forecast at event start: temp, conditions (sun/rain/wind), and a swimmer-relevan
 - Creating/linking venues + scheduling meets: **coach-gated** (`requireCoach`), same as facilities/events today.
 - Venue core-field edits: **admin-moderated** (decision §2 #4).
 - Viewing an event's weather: any user who can see the event (swimmers in the group/team).
+- RSVP (see §6): any swimmer who can see the event may set their own RSVP; coaches see the roster-wide tally.
 
 ---
 
-## 6. Explicitly OUT of scope (v1)
+## 6. Expected attendance / RSVP
+
+**Net-new feature — does not exist today.** Current attendance is *coach-side roll-call after the fact* (`practice_attendance`, the iOS Practices screen). There is **no swimmer-facing "I'm going" RSVP anywhere** in web or iOS. "Expected attendance" for a meet is forward-looking intent, which is a different thing from recorded attendance — both should coexist (RSVP before, roll-call after).
+
+### 6.1 Why it belongs in this scope
+A meet schedule with a venue + time naturally wants "who's coming." It also feeds the other two features here:
+- **Headcount for planning** — coach sees expected turnout per meet/practice before the day.
+- **Weather relevance** — an outdoor-meet forecast matters more when N swimmers have RSVP'd yes; the RSVP list is who to notify if a heat/lightning advisory fires (ties to §4.3).
+
+### 6.2 Data model (proposed)
+```
+event_rsvp
+  event_id      -- FK to the meet/event (team_events row if Option A) — or a
+                --   polymorphic (event_kind, event_id) if practices get RSVP too
+  swimmer_sub   -- full-account swimmer (XOR managed_id, mirroring practice_attendance's identity shape)
+  managed_id    -- coach-managed swimmer (RSVP'd on their behalf by a coach/parent)
+  status        ENUM('going','maybe','out','no_response') DEFAULT 'no_response'
+  responded_at, responded_by_sub   -- who set it (self, coach, or parent)
+  UNIQUE (event_id, swimmer_sub) / (event_id, managed_id)
+```
+Mirror `practice_attendance`'s exactly-one-of-swimmer_sub/managed_id convention and the `extractScheduledWorkoutGroupId`/roster patterns already in `db.js`, so RSVP and roll-call share identity handling.
+
+### 6.3 Decisions to lock
+| # | Decision | Note |
+|---|----------|------|
+| 1 | **RSVP is for MEETS in v1; practices optional** | Meets are the high-value case (the ask). Practice RSVP can reuse the same table if the event_id is polymorphic — but don't over-build; meets first. |
+| 2 | **Default status `no_response`, not `going`** | Expected attendance must reflect real intent, not assumed-yes. Coach tally distinguishes going / maybe / out / no-response. |
+| 3 | **Who can RSVP for whom** | Self (full-account swimmer), coach-on-behalf (managed swimmers), and — if parent portal is in play — parent-on-behalf (`responded_by_sub` records which). |
+| 4 | **Expected (RSVP) ≠ actual (roll-call)** | Keep `event_rsvp` separate from `practice_attendance`. The meet view can later show both columns ("12 expected / 9 attended"). Do NOT overwrite one with the other (this was the original attendance-cleanup lesson — intent and actuals must not share a column). |
+| 5 | **Notifications are out of v1** | RSVP reminders / "you haven't responded" pushes are a follow-on (needs the push infra). v1 is set-and-view only. |
+
+### 6.4 Surfaces
+- Swimmer: an RSVP control on the event (going / maybe / out) in the schedule view.
+- Coach: a tally + per-swimmer list on the meet, alongside the venue + weather. Reuses the roster rendering from the Practices/attendance sheet.
+
+---
+
+## 7. Explicitly OUT of scope (v1)
 - Full season/meet-management (heat sheets, entries, results, psych sheets) — that's a different product.
 - Travel/lodging, multi-day meet sessions with per-session weather (v1: one start datetime per event).
 - Historical weather backfill for completed events (forecast-only first).
@@ -110,20 +148,23 @@ Forecast at event start: temp, conditions (sun/rain/wind), and a swimmer-relevan
 
 ---
 
-## 7. Open decisions to lock before build
+## 8. Open decisions to lock before build
 1. Venue id type: BIGINT vs string `vn_xxx` (match the `gr_`/`ev_` convention?).
 2. Meet model: extend `team_events` (Option A, recommended) vs unified `events` (Option B).
 3. Venue edit policy: admin-moderated vs copy-on-write candidate.
 4. WeatherKit key provisioning (separate Apple key + capability) — prerequisite, like the IAP key.
 5. Weather cache store: dedicated table vs reuse an existing kv/cache mechanism.
 6. Dedup strictness for venue create (name+postal vs geo-proximity).
+7. RSVP polymorphism: meets-only table vs (event_kind, event_id) shared with practices (§6 #1).
+8. RSVP-on-behalf: include parent-portal RSVP in v1, or self + coach only (§6 #3).
 
 ---
 
-## 8. Why this is band L (cost honesty)
+## 9. Why this is band L (cost honesty)
 - New shared table + a backward-compatible migration of an existing team-scoped table (`team_facilities` → `venue_id`).
 - Geocoding pipeline (address → lat/lng) is a new dependency.
 - A second Apple service (WeatherKit) with its own key, entitlement, caching, and a web-vs-iOS split path — comparable in setup cost to the IAP integration.
 - Moderation surface for universal venues.
+- **RSVP is a net-new swimmer-facing feature** (no prior intent-capture; only after-the-fact roll-call exists) — its own table, write paths, and UI on both platforms.
 
-The 80% value (schedule a meet at a real place + see outdoor weather) is achievable; the cost is the *shared identity* + *new external API*, not the UI.
+The 80% value (schedule a meet at a real place + see outdoor weather + expected headcount) is achievable; the cost is the *shared identity*, *new external API*, and *first forward-looking attendance surface* — not the UI.
