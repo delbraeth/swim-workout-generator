@@ -229,26 +229,6 @@ final class GenerateViewModel: ObservableObject {
         }
     }
 
-    /// Parse "On M:SS" / "M:SS" / "1:30" into total seconds. Returns nil for
-    /// "No interval" / empty / unparseable.
-    func parseInterval(_ s: String) -> Int? {
-        let cleaned = s.replacingOccurrences(of: "On", with: "")
-            .trimmingCharacters(in: .whitespaces)
-        guard !cleaned.isEmpty else { return nil }
-        let parts = cleaned.split(separator: ":")
-        if parts.count == 2, let m = Int(parts[0]), let sec = Int(parts[1]) {
-            return m * 60 + sec
-        }
-        if parts.count == 1, let sec = Int(parts[0]) { return sec }
-        return nil
-    }
-
-    /// Format seconds as "On M:SS".
-    func formatInterval(_ secs: Int) -> String {
-        let m = secs / 60, s = secs % 60
-        return String(format: "On %d:%02d", m, s)
-    }
-
     /// Rescale every parseable interval across all blocks by `newBase / 120`
     /// (baseline 2:00 per 100). Leaves "No interval"/empty untouched.
     func rescalePace(toBaseSeconds newBase: Int) {
@@ -261,9 +241,9 @@ final class GenerateViewModel: ObservableObject {
                 for si in sets.indices {
                     guard case .object(var set) = sets[si],
                           let cur = set["interval"]?.stringValue,
-                          let secs = self.parseInterval(cur) else { continue }
+                          let secs = IntervalFormat.parseSeconds(cur) else { continue }
                     let scaled = Int((Double(secs) * ratio).rounded())
-                    set["interval"] = .string(self.formatInterval(scaled))
+                    set["interval"] = .string(IntervalFormat.format(scaled))
                     sets[si] = .object(set)
                 }
                 block["sets"] = .array(sets)
@@ -380,12 +360,6 @@ final class GenerateViewModel: ObservableObject {
 
 /// `{ ok: true }` response for favorite/set mutations.
 struct OkResponse: Decodable { let ok: Bool? }
-
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
-}
 
 struct GenerateView: View {
     @StateObject private var model = GenerateViewModel()

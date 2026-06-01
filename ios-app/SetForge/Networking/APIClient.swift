@@ -52,6 +52,12 @@ final class APIClient {
         try await request(path, method: "GET", body: Optional<Empty>.none, as: type)
     }
 
+    /// GET with query items. `appendingPathComponent` would URL-encode a `?`, so
+    /// the query is appended via `URLComponents` on top of the built path.
+    func get<T: Decodable>(_ path: String, query: [URLQueryItem], as type: T.Type) async throws -> T {
+        try await request(path, method: "GET", body: Optional<Empty>.none, query: query, as: type)
+    }
+
     @discardableResult
     func post<Body: Encodable, T: Decodable>(_ path: String, body: Body, as type: T.Type) async throws -> T {
         try await request(path, method: "POST", body: body, as: type)
@@ -78,12 +84,19 @@ final class APIClient {
         _ path: String,
         method: String,
         body: Body?,
+        query: [URLQueryItem]? = nil,
         as type: T.Type
     ) async throws -> T {
         let slash = CharacterSet(charactersIn: "/")
-        let url = AppConfig.baseURL
+        var url = AppConfig.baseURL
             .appendingPathComponent(AppConfig.apiPath.trimmingCharacters(in: slash))
             .appendingPathComponent(path.trimmingCharacters(in: slash))
+
+        if let query = query, !query.isEmpty,
+           var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            comps.queryItems = query
+            if let withQuery = comps.url { url = withQuery }
+        }
 
         var req = URLRequest(url: url)
         req.httpMethod = method

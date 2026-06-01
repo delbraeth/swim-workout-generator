@@ -40,6 +40,7 @@ struct HomeView: View {
     @State private var showFeedback = false
     @State private var showHistory = false
     @State private var showAssigned = false
+    @State private var showPractices = false
     @State private var runningWorkout: Workout?
 
     // Wrapper so the profile sheet is driven by data, never presented empty.
@@ -69,6 +70,7 @@ struct HomeView: View {
                 HistoryView(workouts: model.bootstrap?.workouts ?? [])
             }
             .sheet(isPresented: $showAssigned) { AssignedView() }
+            .sheet(isPresented: $showPractices) { PracticesView() }
             .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
         }
         .task { await model.load() }
@@ -136,6 +138,11 @@ struct HomeView: View {
                     showAssigned = true
                 } label: {
                     Label("Assigned to me", systemImage: "tray.and.arrow.down")
+                }
+                Button {
+                    showPractices = true
+                } label: {
+                    Label("Practices", systemImage: "calendar.badge.checkmark")
                 }
                 Button {
                     showHistory = true
