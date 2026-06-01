@@ -192,13 +192,23 @@ final class GenerateViewModel: ObservableObject {
 
     /// Equivalent total-preserving (reps × dist) splits, ordered. The first entry
     /// is the original; cycling `swapSet` advances through the rest.
+    /// Distance-preserving rep/dist splits for a set, in a STABLE order (by
+    /// distance ascending) that does NOT depend on the current value — so
+    /// repeated swaps cycle through every equivalent (8×25 → 4×50 → 2×100 →
+    /// 1×200 → back to 8×25) rather than ping-ponging between two.
     func equivalents(reps: Int, dist: Int) -> [(reps: Int, dist: Int)] {
         let total = reps * dist
         let dists = [25, 50, 75, 100, 200]
-        var out: [(reps: Int, dist: Int)] = [(reps, dist)]
-        for d in dists where d != dist && total % d == 0 {
+        var out: [(reps: Int, dist: Int)] = []
+        for d in dists where total % d == 0 {
             let r = total / d
             if r >= 1 { out.append((r, d)) }
+        }
+        // Ensure the current split is present even if its distance isn't in the
+        // canonical list (e.g. an odd authored distance).
+        if !out.contains(where: { $0.reps == reps && $0.dist == dist }) {
+            out.append((reps, dist))
+            out.sort { $0.dist < $1.dist }
         }
         return out
     }
@@ -210,7 +220,7 @@ final class GenerateViewModel: ObservableObject {
               let reps = set.reps, let dist = set.dist, reps > 0, dist > 0 else { return }
         let opts = equivalents(reps: reps, dist: dist)
         guard opts.count > 1 else { return }
-        // Find current index, advance to next.
+        // Find current index in the stable list, advance to next (cycling).
         let curIdx = opts.firstIndex(where: { $0.reps == reps && $0.dist == dist }) ?? 0
         let next = opts[(curIdx + 1) % opts.count]
         mutateSet(blockIndex: bi, setIndex: si) { s in

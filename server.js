@@ -131,7 +131,7 @@ import {
   dbCreateScheduledWorkout, dbGetScheduledWorkout, dbListScheduledWorkouts,
   dbUpdateScheduledWorkout, dbDeleteScheduledWorkout, dbLinkCompletedToSchedule,
   dbCompleteScheduledWorkout, dbGetPracticeAttendance, dbGetGroupRosterAsOf,
-  dbIsActiveGroupCoach,
+  dbIsActiveGroupCoach, extractScheduledWorkoutGroupId,
   dbRepeatWeek,
   dbGetGenerationContextForUser,
 } from "./db.js";
