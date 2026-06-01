@@ -1,17 +1,19 @@
-# Meet/Practice Schedules + Outdoor-Pool Weather — scope (spec only)
+# Team Calendar (meets, events, practices) + Outdoor-Pool Weather + RSVP — scope (spec only)
 
-**Status:** spec-only (2026-06-01). No implementation. Deferred future enhancement; sizing band L (touches a shared venue model + a new external API integration). This doc defines the data model, the "universal pool" decision, the outdoor tag, and the WeatherKit call so implementation is mechanical when prioritized.
+**Status:** spec-only (2026-06-01). No implementation. Deferred future enhancement; sizing band L (shared venue model + a new external API + first forward-looking attendance surface). This doc defines the data model, the "universal pool" decision, the generalized team-event calendar + pills, the outdoor tag + WeatherKit call, and unified RSVP — so implementation is mechanical when prioritized.
 
-**Pattern source:** bridges three existing systems — `team_facilities` (team-scoped pools + `addresses`), `team_events` (name + date meet calendar), and `scheduled_workouts` (practices, already FK `facility_id`). Adds a shared venue layer + a weather enrichment on top.
+**Pattern source:** bridges three existing systems — `team_facilities` (team-scoped pools + `addresses`), `team_events` (name + date calendar, today meet-only, drives group-anchors), and `scheduled_workouts` (practices, already FK `facility_id`). Adds a shared venue layer, a generalized event calendar + pills, weather enrichment, and RSVP.
 
 ---
 
 ## 1. Why
 
-Two distinct asks:
+Four related asks, one coherent system:
 
 1. **Schedule meets by team/group** with a real location and time — today `team_events` is just `{name, date}` with no facility link and no time-of-day, and `scheduled_workouts` (practices) link a `facility_id` but no weather context.
-2. **Outdoor events get weather.** When the venue is an outdoor pool, surface the forecast/conditions *at the time of the event* (meet warm-up call, or practice start) via Apple **WeatherKit**. Indoor venues never call weather.
+2. **General team events, not just meets** — picture day, team meal/banquet, parent meeting, etc., on the same calendar and surfaced as pills (§3.3–3.4).
+3. **Outdoor events get weather.** When the venue is an outdoor pool, surface the forecast/conditions *at the time of the event* via Apple **WeatherKit**. Indoor / venue-less events never call weather (§4).
+4. **Expected attendance / RSVP** across meets AND practices, composing with the existing coach roll-call (§6).
 
 The non-obvious requirement (stated by the user, and the reason this is band L not S): **pool identity is universal, not team-scoped.** One team's *home* pool is another team's *away-meet* location. If every team re-enters "Mason Rec Center" as its own row, weather lookups duplicate, geocodes drift, and cross-team meet scheduling can't agree on a location. So this scope introduces a **shared venue catalog** that team facilities and meet locations both reference.
 
@@ -58,19 +60,48 @@ ADD COLUMN venue_id BIGINT NULL FK venues(id)   -- a team's home pool = a link t
 -- migration: best-effort backfill venue_id by matching address → venue; NULL is fine
 ```
 
-### 3.3 Meet scheduling
+### 3.3 Team events — general calendar, not just meets
+`team_events` today is a bare `{id, team_id, name, date}` calendar that drives group-anchors. This scope generalizes it into the team's **whole event calendar**: meets AND non-competition team happenings (picture day, banquet/team meal, parent meeting, fundraiser, travel, etc.). Same row, distinguished by a `kind`.
+
 Two viable shapes — **decision needed at build time:**
+- **Option A (extend `team_events`):** add `venue_id`, `start_time` (TIME/DATETIME), and `kind` (enum below) to the existing calendar. Lowest churn; group-anchors already depend on it. Practices stay in `scheduled_workouts`.
+- **Option B (unified `events` table):** one schedule table for everything (meets, team events, practices) with `venue_id` + `start_at` + `team_id`/`group_id` + `kind`. Cleaner long-term but migrates two existing systems.
 
-- **Option A (extend `team_events`):** add `venue_id`, `start_time` (TIME/DATETIME), `kind ENUM('meet','practice','other')` to the existing meet calendar. Lowest churn; `team_events` already drives group-anchors. Practices stay in `scheduled_workouts`.
-- **Option B (unified `events` table):** one schedule table for meets *and* practices with `venue_id` + `start_at` (DATETIME) + `team_id`/`group_id` + `kind`. Cleaner long-term (single weather path) but migrates two existing systems.
+**Recommendation: Option A for v1.** The weather enrichment (§4) and RSVP (§6) both key off `venue_id` + a resolved start datetime + `kind`, so they work across event kinds regardless.
 
-**Recommendation: Option A for v1** (extend `team_events` + keep `scheduled_workouts` for practices), because both already exist and group-anchors depend on `team_events`. The weather enrichment (below) keys off `venue_id` + a resolved start datetime, so it works for both event types regardless.
+#### 3.3.1 `kind` enum
+```
+kind ENUM('meet','picture_day','team_meal','team_meeting','fundraiser','travel','social','other')
+     NOT NULL DEFAULT 'meet'
+```
+- **Existing rows migrate to `meet`** (default), so today's meet calendar + group-anchors are unaffected.
+- `kind` drives the **pill emoji/label** (§3.4) and which behaviors apply:
+  - **Weather** (§4): gated on the *venue* being outdoor, not on `kind`. A banquet at an outdoor venue could show weather; a `team_meeting` with no venue never does. So weather keys off `venue_id`/outdoor, and `kind` is orthogonal.
+  - **Group-anchor / taper math** (existing MEET_ANCHORED_TAPER): only `kind='meet'` is anchor-eligible. Non-meet kinds never drive phase suggestions — important so a "team meal" can't accidentally become a taper anchor. (The anchor picker must filter to `kind='meet'`.)
+  - **RSVP** (§6): applies to any kind a coach marks RSVP-able (a banquet wants a headcount as much as a meet).
+- `venue_id` is **nullable** — a `team_meeting` may be virtual / no pool; a `meet` should have one.
 
-### 3.4 Group-level meets
-`team_events` is team-scoped. To schedule by **group** (per the ask), either:
-- add nullable `group_id` to `team_events` (a meet for one squad), OR
-- keep team-scoped and let groups inherit (simpler).
-v1: **nullable `group_id`** so a meet can target a squad; NULL = whole team.
+### 3.4 Event pills (home/greeting surface)
+Non-meet team events surface as pills the same way the meet countdown does today (`groupAnchors` → 🎯 "N wks to <event>" on web + the iOS home greeting card). Generalize the pill source from "anchors only" to "upcoming team events," each styled by `kind`:
+
+| kind | pill | notes |
+|---|---|---|
+| `meet` | 🏁 / 🎯 countdown | existing anchor behavior preserved for anchored meets |
+| `picture_day` | 📸 | |
+| `team_meal` | 🍝 | "banquet", "pasta dinner" |
+| `team_meeting` | 📣 | often venue-less |
+| `fundraiser` | 💰 | |
+| `travel` | 🚌 | |
+| `social` | 🎉 | |
+| `other` | 📌 | fallback |
+
+Pill rules:
+- Show upcoming events within a window (e.g. next ~2 weeks) for the viewer's team/group, nearest first — mirroring how `upcomingAnchors` already filters/sorts on iOS.
+- A `meet` with an active group-anchor keeps its countdown phrasing; other kinds show date/relative-day ("Sat", "in 3 days").
+- iOS: extend the existing `GroupAnchor`/event-pill rendering on the greeting card to accept a `kind` + emoji rather than assuming meet. Web: same, from the `groupAnchors`/team-events bootstrap data.
+
+### 3.5 Group-level events
+`team_events` is team-scoped. To target a **squad** (per the ask), add nullable `group_id` to `team_events`: a meet/meal/meeting can be for one group; NULL = whole team. (Same column serves all kinds.)
 
 ---
 
@@ -167,11 +198,14 @@ Mirror `practice_attendance`'s exactly-one-of-swimmer_sub/managed_id convention 
 7. RSVP target id encoding: confirm `team_events.id` (ev_xxx) and `scheduled_workouts.id` (int) coexist cleanly as a VARCHAR `target_id` keyed by `target_kind` (§6.2).
 8. RSVP-on-behalf: include parent-portal RSVP in v1, or self + coach only (§6.4 #3).
 9. RSVP→roll-call seeding: pre-check "going" RSVPs on the practice attendance sheet, or keep them fully independent (§6.4 #5).
+10. Anchor eligibility: the group-anchor / taper picker MUST filter to `kind='meet'` so non-meet events (meal, meeting) can't become taper anchors (§3.3.1). Confirm + update the existing anchor query.
+11. `team_events.kind` enum membership — lock the v1 list (§3.3.1); adding kinds later is a cheap enum extend.
 
 ---
 
 ## 9. Why this is band L (cost honesty)
 - New shared table + a backward-compatible migration of an existing team-scoped table (`team_facilities` → `venue_id`).
+- Generalizing `team_events` (kind enum + venue + time + group_id) and the pill renderer from "meet anchors only" to all event kinds — modest, but touches the existing group-anchor query (must stay meet-only for taper).
 - Geocoding pipeline (address → lat/lng) is a new dependency.
 - A second Apple service (WeatherKit) with its own key, entitlement, caching, and a web-vs-iOS split path — comparable in setup cost to the IAP integration.
 - Moderation surface for universal venues.
