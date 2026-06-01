@@ -57,8 +57,12 @@ INDEX (latitude, longitude)   -- proximity dedup
 ```
 ADD COLUMN venue_id BIGINT NULL FK venues(id)   -- a team's home pool = a link to a venue
 -- existing columns (name, address_id, course, lanes, is_primary) unchanged
--- migration: best-effort backfill venue_id by matching address → venue; NULL is fine
 ```
+**Migration plan (don't hand-wave this — naive matching defeats the universal-pool point).** Existing `addresses` have **no lat/lng**, so free-text address matching is unreliable and would mint duplicate venues. Plan:
+1. Leave `venue_id` **NULL** on migration — no auto-match. Existing facilities keep working exactly as today (NULL venue → no weather, no shared identity).
+2. **Lazily create/link a venue** when a coach next edits a facility OR schedules an event at it: geocode the address then, run dedup (§2 #3), and link. This avoids a big risky backfill and only spends geocoding calls on venues actually used.
+3. Optional later: an admin tool to batch-geocode + dedup historical facilities once the dedup heuristic is trusted.
+Net: migration is a pure additive column; venue population is incremental and deliberate, not a best-effort guess.
 
 ### 3.3 Team events — general calendar, not just meets
 `team_events` today is a bare `{id, team_id, name, date}` calendar that drives group-anchors. This scope generalizes it into the team's **whole event calendar**: meets AND non-competition team happenings (picture day, banquet/team meal, parent meeting, fundraiser, travel, etc.). Same row, distinguished by a `kind`.
@@ -81,8 +85,27 @@ kind ENUM('meet','picture_day','team_meal','team_meeting','fundraiser','travel',
   - **RSVP** (§6): applies to any kind a coach marks RSVP-able (a banquet wants a headcount as much as a meet).
 - `venue_id` is **nullable** — a `team_meeting` may be virtual / no pool; a `meet` should have one.
 
+#### 3.3.2 Event lifecycle fields (the part that makes it a usable calendar)
+A bare `{name, date, kind, venue}` row isn't enough to run a season off. Add:
+```
+start_at      DATETIME NULL   -- instant (UTC). NULL = all-day/date-only (back-comat with today's date-only rows)
+end_at        DATETIME NULL   -- optional; meets run hours, meals ~2h. Drives weather-over-range (§4) + display
+venue_tz      VARCHAR(64) NULL -- snapshot of the venue's IANA tz at schedule time (see tz rule below)
+status        ENUM('scheduled','cancelled','postponed') NOT NULL DEFAULT 'scheduled'
+status_note   VARCHAR(280) NULL  -- "cancelled — lightning", "moved to Sunday"
+recurrence    VARCHAR(255) NULL  -- iCal RRULE string, NULL = one-off (see recurrence decision)
+```
+
+**Timezone rule (locks the #1 real-world bug — "9am meet showed as 6am").** Store `start_at`/`end_at` as **UTC instants**, plus `venue_tz` (snapshot from the venue, or the team's tz if venue-less). **Always display in the venue's local time with an explicit tz label** ("Sat 9:00 AM PT"), NOT the viewer's device tz — an away team must see the meet in the meet's local time. Weather (§4.2 #3) already assumes venue-local; this makes display consistent with it. Date-only events (`start_at` NULL) render as a day with no time.
+
+**Cancellation is first-class** because it's where weather + RSVP + events intersect: a coach cancels an outdoor meet for storms → `status='cancelled'` + note → every RSVP'd swimmer must see "CANCELLED" on the pill/event, and (when push exists, §7) gets notified. A cancelled event stays on the calendar struck-through, never silently disappears (swimmers need to know it *was* cancelled, not just find it gone).
+
+**End time / weather-over-range:** for an outdoor `meet` spanning hours, weather "at start" is too thin — heat and storms build during the session. When `end_at` is set on an outdoor venue, fetch the forecast across the window (hourly) and surface the worst-case advisory (peak temp, any lightning probability in-window), not just the start conditions.
+
+**Recurrence (decision required, §8):** practices already have copy-forward (`dbRepeatWeek`). Events don't. Two options: (a) **v1 = one-off events only**, lean on `dbRepeatWeek` for recurring practices, defer event recurrence; or (b) add an `RRULE` field now and expand occurrences at read time. Recommendation: **(a) for v1** — recurrence is a meaningful build (occurrence expansion, exception handling, "edit this vs all") and most non-practice events (picture day, banquet) are genuinely one-off. The field is reserved in schema so (b) is a later additive step.
+
 ### 3.4 Event pills (home/greeting surface)
-Non-meet team events surface as pills the same way the meet countdown does today (`groupAnchors` → 🎯 "N wks to <event>" on web + the iOS home greeting card). Generalize the pill source from "anchors only" to "upcoming team events," each styled by `kind`:
+There are already **two** pill sources today: the group-anchor countdown (`groupAnchors` → 🎯 "N wks to <event>") AND a "most-imminent team event" pill (decision #38, `public/index.html` ~28377; server returns upcoming team events). So this isn't net-new rendering — it's **generalizing the existing team-event pill** to style by `kind` and show more than one. Each styled by `kind`:
 
 | kind | pill | notes |
 |---|---|---|
@@ -98,7 +121,8 @@ Non-meet team events surface as pills the same way the meet countdown does today
 Pill rules:
 - Show upcoming events within a window (e.g. next ~2 weeks) for the viewer's team/group, nearest first — mirroring how `upcomingAnchors` already filters/sorts on iOS.
 - A `meet` with an active group-anchor keeps its countdown phrasing; other kinds show date/relative-day ("Sat", "in 3 days").
-- iOS: extend the existing `GroupAnchor`/event-pill rendering on the greeting card to accept a `kind` + emoji rather than assuming meet. Web: same, from the `groupAnchors`/team-events bootstrap data.
+- **Cancelled events** render struck-through with the status note ("CANCELLED — lightning"), not hidden.
+- iOS: extend the existing `GroupAnchor`/event-pill rendering on the greeting card to accept a `kind` + emoji + status rather than assuming an active meet. Web: same, generalizing the decision-#38 pill.
 
 ### 3.5 Group-level events
 `team_events` is team-scoped. To target a **squad** (per the ask), add nullable `group_id` to `team_events`: a meet/meal/meeting can be for one group; NULL = whole team. (Same column serves all kinds.)
@@ -171,7 +195,9 @@ Mirror `practice_attendance`'s exactly-one-of-swimmer_sub/managed_id convention 
 | 3 | **Who can RSVP for whom** | Self (full-account swimmer), coach-on-behalf (managed swimmers), parent-on-behalf if parent portal is in play (`responded_by_sub` records which). |
 | 4 | **RSVP ≠ roll-call (separate tables)** | §6.3. Compose in the view ("expected / attended"); never overwrite one with the other. |
 | 5 | **RSVP can seed roll-call default** | On the practice attendance sheet, pre-check swimmers who RSVP'd "going" — coach confirms. Convenience only; the written roll-call is authoritative for actuals. |
-| 6 | **Notifications out of v1** | RSVP reminders / "you haven't responded" pushes are a follow-on (needs push infra). v1 is set-and-view only. |
+| 6 | **Notifications out of v1** | RSVP reminders / "you haven't responded" pushes are a follow-on (needs push infra — §7.1). v1 is set-and-view only. |
+| 7 | **Optional RSVP deadline** | `team_events.rsvp_closes_at DATETIME NULL` — after it passes, swimmers can't change their RSVP (coach still can, for late changes). NULL = open until event start. Cheap to add; every real RSVP system has it. |
+| 8 | **Cancelled event → RSVP frozen** | When `status='cancelled'`, RSVP is read-only and the event shows CANCELLED; existing RSVPs are retained (history/headcount of who *would* have come), not deleted. |
 
 ### 6.5 Surfaces
 - **Swimmer:** an RSVP control (going / maybe / out) on each meet *and* practice in the schedule view, and on the iOS home/Assigned surfaces where practices already appear.
@@ -179,16 +205,45 @@ Mirror `practice_attendance`'s exactly-one-of-swimmer_sub/managed_id convention 
 
 ---
 
-## 7. Explicitly OUT of scope (v1)
-- Full season/meet-management (heat sheets, entries, results, psych sheets) — that's a different product.
-- Travel/lodging, multi-day meet sessions with per-session weather (v1: one start datetime per event).
-- Historical weather backfill for completed events (forecast-only first).
-- Crowd-sourced venue editing without moderation.
-- Automatic meet import from USA Swimming / MeetMobile feeds.
+## 7. Prerequisites & shared dependencies (acquire before / alongside build)
+
+### 7.1 Notification infrastructure — DOES NOT EXIST YET (shared blocker)
+There is **no push/notification system** in the app today (grep confirms: no APNs, no web push, no FCM — the only "notifications" are Apple's *inbound* App Store Server Notifications for IAP). Multiple high-value behaviors in this scope all depend on it and are therefore **all deferred to a v1.1 that builds push first**:
+- Weather advisory alerts (§4.3 — "notify the RSVP'd swimmers when lightning fires").
+- RSVP reminders / "you haven't responded" nudges (§6.4 #6).
+- Cancellation alerts (§3.3.2 — push "meet CANCELLED" to RSVP'd swimmers).
+
+v1 of *this* feature is **pull, not push**: everything is visible when the user opens the app (pills, event status, weather, RSVP). The proactive/notify layer is a separate prerequisite project. Calling this out once so it isn't rediscovered three times.
+
+### 7.2 Geocoding (address → lat/lng)
+Required for weather (needs venue lat/lng). No geocoder wired today. **Recommended: Apple — `CLGeocoder` (iOS) / MapKit JS (web), or Apple's server-side geocoding** — you're already in Apple's ecosystem for WeatherKit + auth, so no new vendor relationship. Caveat: the web path can't use `CLGeocoder` (iOS-only), so the **server** needs either MapKit JS server token or a server geocoder; pick one. Geocode lazily (on venue create/link, §3.2), cache the result on the venue row forever (addresses rarely move).
+
+### 7.3 Apple keys/capabilities (long-lead, like IAP)
+- **WeatherKit:** separate key (.p8) + the WeatherKit capability/entitlement on the App ID (§4.2 #5).
+- **MapKit (if used for geocoding/maps):** MapKit JS key for the web path.
+Both provision the same way as the IAP key in `IAP_PLAN.md` — treat as a procurement step, not a coding step.
+
+### 7.4 Existing systems this composes with
+- **Reporting:** the Reports system already tracks attendance %. RSVP "going" vs roll-call "attended" is a natural new reliability metric (which swimmers flake) — feeds existing reporting, not a new surface.
+- **Group-anchor / taper:** must stay `kind='meet'`-only (§3.3.1, decision §8 #10).
+- **Practices `dbRepeatWeek`:** the recurrence story for practices already exists; events lean on it rather than reinventing (§3.3.2 recurrence).
 
 ---
 
-## 8. Open decisions to lock before build
+## 8. Explicitly OUT of scope (v1)
+- Full season/meet-management (heat sheets, entries, results, psych sheets) — that's a different product.
+- **Any push/notify behavior** (weather alerts, RSVP reminders, cancellation pushes) — gated on §7.1; v1 is pull-only.
+- **Event recurrence** (RRULE expansion) — field reserved, behavior deferred (§3.3.2); recurring *practices* use existing `dbRepeatWeek`.
+- Travel/lodging, multi-day meet sessions with per-session weather (v1: single start/end window per event).
+- Historical weather backfill for completed events (forecast-only first).
+- Crowd-sourced venue editing without moderation.
+- Automatic meet import from USA Swimming / MeetMobile feeds.
+- Cross-team venue conflict detection ("the pool's already booked") — the universal venue model *enables* it, but it's a later feature.
+- RSVP capacity caps / waitlists (a team headcount isn't capacity-limited like a clinic would be).
+
+---
+
+## 9. Open decisions to lock before build
 1. Venue id type: BIGINT vs string `vn_xxx` (match the `gr_`/`ev_` convention?).
 2. Meet model: extend `team_events` (Option A, recommended) vs unified `events` (Option B).
 3. Venue edit policy: admin-moderated vs copy-on-write candidate.
@@ -200,10 +255,15 @@ Mirror `practice_attendance`'s exactly-one-of-swimmer_sub/managed_id convention 
 9. RSVP→roll-call seeding: pre-check "going" RSVPs on the practice attendance sheet, or keep them fully independent (§6.4 #5).
 10. Anchor eligibility: the group-anchor / taper picker MUST filter to `kind='meet'` so non-meet events (meal, meeting) can't become taper anchors (§3.3.1). Confirm + update the existing anchor query.
 11. `team_events.kind` enum membership — lock the v1 list (§3.3.1); adding kinds later is a cheap enum extend.
+12. **Time storage + display tz** — confirm UTC `start_at`/`end_at` + `venue_tz` snapshot, always displayed in venue-local with tz label, never viewer-device tz (§3.3.2).
+13. **Recurrence** — v1 one-off events (recommended) vs RRULE now (§3.3.2). If deferred, confirm the `recurrence` column is still reserved.
+14. **Geocoder choice** — Apple MapKit (server token for web + CLGeocoder iOS) vs a server-side geocoder; affects the web path (§7.2).
+15. **Weather over a range** — for outdoor meets with `end_at`, fetch hourly across the window + surface worst-case, or just start-conditions in v1 (§3.3.2).
+16. **RSVP deadline** — include `rsvp_closes_at` in v1 or defer (§6.4 #7).
 
 ---
 
-## 9. Why this is band L (cost honesty)
+## 10. Why this is band L (cost honesty)
 - New shared table + a backward-compatible migration of an existing team-scoped table (`team_facilities` → `venue_id`).
 - Generalizing `team_events` (kind enum + venue + time + group_id) and the pill renderer from "meet anchors only" to all event kinds — modest, but touches the existing group-anchor query (must stay meet-only for taper).
 - Geocoding pipeline (address → lat/lng) is a new dependency.
