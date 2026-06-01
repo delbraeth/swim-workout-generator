@@ -6574,6 +6574,33 @@ export async function dbLinkCompletedToSchedule({ scheduledId, callerSub, workou
 //   { swimmer_sub OR managed_id, present (bool), notes (string|null) }
 // Caller is the coach who owns the scheduled workout (authz checked at
 // route level). Same row may already exist (re-edit) — we UPSERT.
+// Single source of truth for "which group is this scheduled workout tied to?".
+// The association lives in intent_params.group_id (Phase 2b coach-fanout) or,
+// for group workouts committed via the log-workout fanout, in
+// payload.assignment_target.group_id. Accepts intent_params/payload either as
+// parsed objects (dbGetScheduledWorkout normalizes them) OR as raw JSON strings
+// (raw SELECTs hand back strings) — so every caller gets identical results.
+// Previously this lookup was open-coded in three places with subtle drift
+// (one site omitted the assignment_target fallback entirely).
+export function extractScheduledWorkoutGroupId(sw) {
+  if (!sw) return null;
+  const parse = (v) => {
+    if (v == null) return null;
+    if (typeof v === "object") return v;
+    try { return JSON.parse(v); } catch (_) { return null; }
+  };
+  for (const raw of [sw.intent_params, sw.payload]) {
+    const v = parse(raw);
+    if (!v || typeof v !== "object") continue;
+    if (typeof v.group_id === "string" && v.group_id.startsWith("gr_")) return v.group_id;
+    if (v.assignment_target && typeof v.assignment_target.group_id === "string" &&
+        v.assignment_target.group_id.startsWith("gr_")) {
+      return v.assignment_target.group_id;
+    }
+  }
+  return null;
+}
+
 export async function dbCompleteScheduledWorkout({ scheduledId, callerSub, completedAt = null, attendance = [] }) {
   if (!scheduledId || !callerSub) return { ok: false, reason: "missing_args" };
   // Validate authz: owner OR any active coach in the workout's associated
@@ -6587,22 +6614,10 @@ export async function dbCompleteScheduledWorkout({ scheduledId, callerSub, compl
   );
   if (!cur[0]) return { ok: false, reason: "schedule_not_found" };
   if (cur[0].user_sub !== callerSub) {
-    // Try the looser group-coach path.
-    let groupId = null;
-    for (const field of ["intent_params", "payload"]) {
-      let v = cur[0][field];
-      if (typeof v === "string") { try { v = JSON.parse(v); } catch (_) { v = null; } }
-      if (!v || typeof v !== "object") continue;
-      // Direct `.group_id` (set on intent_params from Phase 2b). Or the
-      // nested `.assignment_target.group_id` (set on payload when a coach
-      // commits a group workout via the log-workout fanout path).
-      if (typeof v.group_id === "string" && v.group_id.startsWith("gr_")) {
-        groupId = v.group_id; break;
-      }
-      if (v.assignment_target && typeof v.assignment_target.group_id === "string" && v.assignment_target.group_id.startsWith("gr_")) {
-        groupId = v.assignment_target.group_id; break;
-      }
-    }
+    // Try the looser group-coach path. cur[0] carries raw JSON-string columns
+    // (this is a bare SELECT, not dbGetScheduledWorkout) — the shared helper
+    // handles that.
+    const groupId = extractScheduledWorkoutGroupId(cur[0]);
     if (!groupId) return { ok: false, reason: "not_owner" };
     const gc = await pool.query(
       "SELECT 1 FROM `group_coaches` WHERE `group_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
@@ -6624,6 +6639,7 @@ export async function dbCompleteScheduledWorkout({ scheduledId, callerSub, compl
     // 2. Upsert attendance rows. INSERT...ON DUPLICATE KEY UPDATE keys on
     //    the (scheduled_workout_id, swimmer_sub) or (..., managed_id) unique
     //    indexes from migration 029. Skip rows that lack both targets.
+    let writtenCount = 0;
     for (const a of attendance) {
       if (!a || (a.swimmer_sub == null && a.managed_id == null)) continue;
       if (a.swimmer_sub != null && a.managed_id != null) continue;  // XOR
@@ -6648,9 +6664,12 @@ export async function dbCompleteScheduledWorkout({ scheduledId, callerSub, compl
           [Number(scheduledId), Number(a.managed_id), present ? 1 : 0, notes, callerSub]
         );
       }
+      writtenCount++;
     }
     await conn.commit();
-    return { ok: true, completed_at: stampedAt, attendance_count: attendance.length };
+    // attendance_count reflects rows actually upserted (skipped/invalid rows
+    // excluded) — not the raw input length, so audit logs are accurate.
+    return { ok: true, completed_at: stampedAt, attendance_count: writtenCount };
   } catch (e) {
     try { await conn.rollback(); } catch (_) {}
     throw e;

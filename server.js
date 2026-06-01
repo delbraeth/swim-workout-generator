@@ -4696,17 +4696,7 @@ app.delete("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf,
 async function _checkScheduledWorkoutCoachAccess(sw, callerSub) {
   if (!sw) return { ok: false, reason: "not_found" };
   if (sw.user_sub === callerSub) return { ok: true };
-  let groupId = null;
-  for (const v of [sw.intent_params, sw.payload]) {
-    if (!v || typeof v !== "object") continue;
-    if (typeof v.group_id === "string" && v.group_id.startsWith("gr_")) {
-      groupId = v.group_id; break;
-    }
-    // Phase 2b coach-fanout stashes the group under payload.assignment_target.
-    if (v.assignment_target && typeof v.assignment_target.group_id === "string" && v.assignment_target.group_id.startsWith("gr_")) {
-      groupId = v.assignment_target.group_id; break;
-    }
-  }
+  const groupId = extractScheduledWorkoutGroupId(sw);
   if (!groupId) return { ok: false, reason: "not_owner" };
   if (!(await dbIsActiveGroupCoach(groupId, callerSub))) {
     return { ok: false, reason: "not_owner_not_coach" };
@@ -4720,14 +4710,13 @@ app.get("/api/scheduled-workouts/:id/attendance-context", requireAuth, async (re
     if (!sw) return res.status(404).json({ error: "not_found" });
     const authz = await _checkScheduledWorkoutCoachAccess(sw, req.userSub);
     if (!authz.ok) return res.status(403).json({ error: authz.reason });
-    // Roster: only populated if the workout is tied to a group.
+    // Roster: only populated if the workout is tied to a group. Uses the shared
+    // helper, which also resolves payload.assignment_target.group_id — this
+    // route previously checked only the top-level group_id, so coach-fanout
+    // practices loaded an empty roster. Now consistent with the authz + complete
+    // paths.
     let roster = [];
-    let groupId = null;
-    for (const v of [sw.intent_params, sw.payload]) {
-      if (v && typeof v === "object" && typeof v.group_id === "string" && v.group_id.startsWith("gr_")) {
-        groupId = v.group_id; break;
-      }
-    }
+    const groupId = extractScheduledWorkoutGroupId(sw);
     if (groupId) {
       roster = await dbGetGroupRosterAsOf(groupId, sw.scheduled_date);
     }
