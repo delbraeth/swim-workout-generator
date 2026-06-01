@@ -341,7 +341,7 @@
     <!-- ══ OVERVIEW ══ -->
     <section id="overview">
       <h2>Overview</h2>
-      <p>SetForge creates structured swim workouts tailored to your pool, pace, available equipment, and time budget. Every workout is built from four sections — Warm-Up, Drill, Main Set, and Cool-Down — chosen from a library of options calibrated for masters swimmers.</p>
+      <p>SetForge creates structured swim workouts tailored to your pool, pace, available equipment, and time budget. Every workout is built from core sections — Warm-Up, Drill, Main Set, and Cool-Down, plus an optional Kick set — chosen from a library of options calibrated for masters swimmers.</p>
 
       <div class="grid">
         <div class="feat"><div class="feat-icon">🎯</div><div class="feat-title">9 Workout Types</div><div class="feat-desc">IM, Distance, Sprint, Endurance, Technique, Mixed, plus Backstroke, Breaststroke, and Butterfly specialty workouts.</div></div>
@@ -629,13 +629,14 @@
     <!-- ══ SECTIONS ══ -->
     <section id="sections">
       <h2>Workout Sections</h2>
-      <p>A workout is built from up to four swim sections (you can skip some — see below) plus optional <a href="#sections">dryland</a>, displayed as color-coded blocks:</p>
+      <p>A workout is built from a set of swim sections (you can skip some, and add the optional kick set — see below) plus optional <a href="#sections">dryland</a>, displayed as color-coded blocks:</p>
 
       <table>
         <thead><tr><th>Section</th><th>Color</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td>Warm-Up</td><td><span style="color:#38bdf8">■</span> Sky blue</td><td>Easy aerobic activation, 400–800 yds</td></tr>
           <tr><td>Drill / Pre-Main</td><td><span style="color:#2dd4bf">■</span> Teal</td><td>Technique focus, stroke preparation</td></tr>
+          <tr><td>Kick Set <em>(optional)</em></td><td><span style="color:#f59e0b">■</span> Amber</td><td>Legs-focused work — off by default, toggle it on</td></tr>
           <tr><td>Main Set</td><td><span style="color:#3b82f6">■</span> Blue</td><td>The primary training stimulus</td></tr>
           <tr><td>Cool-Down</td><td><span style="color:#94a3b8">■</span> Slate</td><td>Easy recovery swim, 200–400 yds</td></tr>
         </tbody>
@@ -646,10 +647,14 @@
       <h3>Choosing which sections to include</h3>
       <p>Above the workout-type cards, a <strong>Sections</strong> row lets you skip a section before generating — tap <strong>Warmup</strong>, <strong>Drill</strong>, or <strong>Cooldown</strong> to toggle it off (it shows struck-through). The <strong>Main</strong> set is always included. When you skip a section, its yardage is redistributed across the sections you kept, so the workout still hits your target distance rather than coming up short. The same toggles appear on the <a href="#plan-intent">Plan-Intent</a> form, so a scheduled practice can drop a section too.</p>
 
+      <h3>Kick set (optional)</h3>
+      <p>The same <strong>Sections</strong> row includes a <strong>Kick</strong> toggle for a dedicated kick set. Unlike the others it is <strong>off by default</strong> — tap it on and the generator adds a kick block between the drill and main sets, sized to fit your target like every other section. It draws on kick-focused sets (board kick, descend, underwater dolphin, IM-order kick, and more). Leave it on if you want a kick set in every workout; it can be regenerated, edited, or removed afterward just like any block.</p>
+
       <h3>Dryland blocks</h3>
       <p>You can add a <strong>dryland</strong> block to any generated workout — a list of exercises (sets × reps, optional rest) rather than swim sets. Below the workout, tap <strong>🏋 + Add dryland</strong>, pick a preset (Pre-Pool Activation, Core Circuit, Shoulder Prehab, Mobility Flow, Power/Plyometrics, Lower-Body Strength, and more) and a placement (<em>before</em> or <em>after</em> pool), then <strong>Add</strong>. The block appears in its own amber card.</p>
       <ul>
-        <li><strong>Edit it</strong> — tap the <strong>✎</strong> on the dryland card to change the name or any exercise (sets / reps / name / rest), add exercises with <strong>+ Add exercise</strong>, or remove them. Tap <strong>✓ Done</strong> to save.</li>
+        <li><strong>Edit it</strong> — tap the <strong>✎</strong> on the dryland card to change the name or any exercise (sets / reps / name / rest), add exercises with <strong>+ Add exercise</strong>, or remove them. Tap <strong>✓ Done</strong> to save. To take a whole block out again, use its remove (<strong>✕</strong>) control.</li>
+        <li><strong>Exercise explainers</strong> — not sure what an exercise is? <strong>Hover</strong> it on the web, or <strong>tap</strong> it in the app, to see a short plain-language description of what it is and how to do it.</li>
         <li><strong>Run mode</strong> — a dryland block shows as a tap-to-check <strong>checklist</strong> (no pace clock); tick each exercise as you finish it.</li>
         <li><strong>Print, copy, save, history</strong> — dryland blocks are included everywhere the workout goes, and they're excluded from the yardage totals and reports (they have no distance).</li>
         <li><strong>On an intent</strong> — the Plan-Intent form has a <em>Dryland (optional)</em> picker, so a scheduled practice can pre-include a dryland block that's added automatically when you generate on the day.</li>
@@ -806,7 +811,7 @@
     <!-- ══ REGENERATING SECTIONS ══ -->
     <section id="regen">
       <h2>Regenerating Sections</h2>
-      <p>Each workout block has a <strong>↺</strong> regenerate button. Tapping it replaces only that section with a different option while keeping the other three sections unchanged.</p>
+      <p>Each workout block has a <strong>↺</strong> regenerate button. Tapping it replaces only that section — warm-up, drill, kick, main, or cool-down — with a different option while keeping the rest unchanged.</p>
       <p>The generator ensures the new section:</p>
       <ul>
         <li>Has a different fingerprint from the current section (no immediate repeats).</li>
