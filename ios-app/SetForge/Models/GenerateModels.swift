@@ -48,14 +48,19 @@ enum TrainingPhase: String, CaseIterable, Identifiable {
     }
 }
 
-/// The four swim sections. `main` is always required (never skippable).
+/// The swim sections. `main` is always required (never skippable). `kick` is an
+/// optional 5th section that defaults OFF — it's absent from the default
+/// `includedSections` set, so it renders as an off-by-default toggle the user
+/// can opt into. Enum order (warmup → drill → kick → main → cooldown) drives the
+/// picker order and mirrors the engine's block order.
 enum WorkoutSectionKind: String, CaseIterable, Identifiable {
-    case warmup, drill, main, cooldown
+    case warmup, drill, kick, main, cooldown
     var id: String { rawValue }
     var label: String {
         switch self {
         case .warmup:   return "Warm-up"
         case .drill:    return "Drill"
+        case .kick:     return "Kick"
         case .main:     return "Main"
         case .cooldown: return "Cool-down"
         }

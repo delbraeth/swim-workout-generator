@@ -58,8 +58,40 @@ enum AnyCodable: Codable, Equatable {
         }
     }
     var boolValue: Bool? { if case .bool(let v) = self { return v }; return nil }
+    var doubleValue: Double? {
+        switch self {
+        case .double(let v): return v
+        case .int(let v): return Double(v)
+        default: return nil
+        }
+    }
+    var arrayValue: [AnyCodable]? { if case .array(let v) = self { return v }; return nil }
+    var objectValue: [String: AnyCodable]? { if case .object(let v) = self { return v }; return nil }
+
+    /// Keyed get/set for `.object`. The setter is a no-op on non-objects; it
+    /// preserves all other keys and supports removal via `nil`.
     subscript(_ key: String) -> AnyCodable? {
-        if case .object(let dict) = self { return dict[key] }
-        return nil
+        get {
+            if case .object(let dict) = self { return dict[key] }
+            return nil
+        }
+        set {
+            guard case .object(var dict) = self else { return }
+            dict[key] = newValue
+            self = .object(dict)
+        }
+    }
+
+    /// Indexed get/set for `.array`. Out-of-range access returns nil / no-ops.
+    subscript(_ index: Int) -> AnyCodable? {
+        get {
+            if case .array(let arr) = self, arr.indices.contains(index) { return arr[index] }
+            return nil
+        }
+        set {
+            guard case .array(var arr) = self, arr.indices.contains(index) else { return }
+            if let newValue { arr[index] = newValue } else { arr.remove(at: index) }
+            self = .array(arr)
+        }
     }
 }

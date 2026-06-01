@@ -531,6 +531,7 @@ struct RunStep: Identifiable {
         switch section {
         case "warmup":   return "Warm-Up"
         case "drill":    return "Drill / Pre-Main"
+        case "kick":     return "Kick Set"
         case "main":     return "Main Set"
         case "cooldown": return "Cool-Down"
         default:         return section?.capitalized ?? "Set"

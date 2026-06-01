@@ -67,6 +67,11 @@ final class APIClient {
         try await request(path, method: "PATCH", body: body, as: type)
     }
 
+    @discardableResult
+    func delete<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
+        try await request(path, method: "DELETE", body: Optional<Empty>.none, as: type)
+    }
+
     // MARK: - Core request
 
     private func request<Body: Encodable, T: Decodable>(

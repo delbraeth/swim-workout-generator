@@ -482,6 +482,7 @@
     const SECTION_STYLES = {
       warmup:   { bg: "#f0f9ff", border: "#bae6fd", headerBg: "#e0f2fe", headerText: "#075985", dot: "#0ea5e9" },
       drill:    { bg: "#f0fdfa", border: "#99f6e4", headerBg: "#ccfbf1", headerText: "#134e4a", dot: "var(--color-primary)" },
+      kick:     { bg: "#fffbeb", border: "#fde68a", headerBg: "#fef3c7", headerText: "#92400e", dot: "#f59e0b" },
       main:     { bg: "#f8fafc", border: "var(--color-text)", headerBg: "var(--color-border)", headerText: "#ffffff", dot: "var(--color-text-dim)" },
       cooldown: { bg: "#f9fafb", border: "#e5e7eb", headerBg: "#f3f4f6", headerText: "#374151", dot: "#9ca3af" },
     };
@@ -6750,6 +6751,54 @@
     ];
 
     // ═══════════════════════════════════════════════════════════════
+    //  KICK OPTIONS — standalone 5th-section kick banks. Non-typed
+    //  (types:[]/strokes:[]) like warmup/cooldown so getBankOptions
+    //  returns all options regardless of workout type. Yards bank +
+    //  meters banks (50m / SCM) so unit-aware lookup never crosses
+    //  banks needlessly. eq:["kickboard"] is a PREFERRED tag (bonus
+    //  weight in the picker), never a hard requirement.
+    // ═══════════════════════════════════════════════════════════════
+    const KICK_OPTIONS = [
+      { label: "Flutter Kick Builder", totalYards: 400, types: [], strokes: [], sets: [
+          { id: "s_kk001", reps: 8, dist: 50, desc: "Flutter kick — alternate 25 moderate / 25 fast", interval: "Rest 0:15", focus: "Leg endurance with a speed kicker", eq: ["kickboard"] },
+        ]},
+      { label: "IM Kick Rotation", totalYards: 500, types: [], strokes: [], sets: [
+          { id: "s_kk002", reps: 1, dist: 200, desc: "Kick IM order — 50 of each stroke", interval: "Rest 0:20", focus: "Touch all four kicks" },
+          { id: "s_kk003", reps: 6, dist: 50, desc: "Choice kick — strong, streamline off each wall", interval: "Rest 0:15", focus: "Underwater push-offs", eq: ["kickboard"] },
+        ]},
+      { label: "Dolphin & Free Kick", totalYards: 600, types: [], strokes: [], sets: [
+          { id: "s_kk004", reps: 6, dist: 50, desc: "Underwater dolphin kick — 15m + finish freestyle kick", interval: "Rest 0:20", focus: "Underwater power" },
+          { id: "s_kk005", reps: 6, dist: 50, desc: "Flutter kick on back — steady, hips up", interval: "Rest 0:15", focus: "Body position" },
+        ]},
+    ];
+    const KICK_OPTIONS_50M = [
+      { label: "Flutter Kick Builder", totalYards: 400, types: [], strokes: [], sets: [
+          { id: "s_kk001m", reps: 8, dist: 50, desc: "Flutter kick — alternate 25 moderate / 25 fast", interval: "Rest 0:15", focus: "Leg endurance with a speed kicker", eq: ["kickboard"] },
+        ]},
+      { label: "IM Kick Rotation", totalYards: 600, types: [], strokes: [], sets: [
+          { id: "s_kk002m", reps: 1, dist: 200, desc: "Kick IM order — 50 of each stroke", interval: "Rest 0:25", focus: "Touch all four kicks" },
+          { id: "s_kk003m", reps: 4, dist: 100, desc: "Choice kick — strong, streamline off each wall", interval: "Rest 0:20", focus: "Underwater push-offs", eq: ["kickboard"] },
+        ]},
+      { label: "Dolphin & Free Kick", totalYards: 600, types: [], strokes: [], sets: [
+          { id: "s_kk004m", reps: 6, dist: 50, desc: "Underwater dolphin kick — 15m + finish freestyle kick", interval: "Rest 0:25", focus: "Underwater power" },
+          { id: "s_kk005m", reps: 6, dist: 50, desc: "Flutter kick on back — steady, hips up", interval: "Rest 0:20", focus: "Body position" },
+        ]},
+    ];
+    const KICK_OPTIONS_SCM = [
+      { label: "Flutter Kick Builder", totalYards: 400, types: [], strokes: [], sets: [
+          { id: "s_kk001s", reps: 8, dist: 50, desc: "Flutter kick — alternate 25 moderate / 25 fast", interval: "Rest 0:15", focus: "Leg endurance with a speed kicker", eq: ["kickboard"] },
+        ]},
+      { label: "IM Kick Rotation", totalYards: 500, types: [], strokes: [], sets: [
+          { id: "s_kk002s", reps: 1, dist: 200, desc: "Kick IM order — 50 of each stroke", interval: "Rest 0:20", focus: "Touch all four kicks" },
+          { id: "s_kk003s", reps: 6, dist: 50, desc: "Choice kick — strong, streamline off each wall", interval: "Rest 0:15", focus: "Underwater push-offs", eq: ["kickboard"] },
+        ]},
+      { label: "Dolphin & Free Kick", totalYards: 600, types: [], strokes: [], sets: [
+          { id: "s_kk004s", reps: 6, dist: 50, desc: "Underwater dolphin kick — 15m + finish freestyle kick", interval: "Rest 0:20", focus: "Underwater power" },
+          { id: "s_kk005s", reps: 6, dist: 50, desc: "Flutter kick on back — steady, hips up", interval: "Rest 0:15", focus: "Body position" },
+        ]},
+    ];
+
+    // ═══════════════════════════════════════════════════════════════
     //  SET-ID LOOKUP MAP — set_id → "reps×dist – parent label"
     //  Built once at script load by walking every *_OPTIONS bank.
     //  Used by R3 Curation Log to render human-readable set names
@@ -6773,6 +6822,7 @@
         WARMUP_OPTIONS, COOLDOWN_OPTIONS, DRILL_OPTIONS, MAIN_OPTIONS,
         WARMUP_OPTIONS_50M, COOLDOWN_OPTIONS_50M, DRILL_OPTIONS_50M, MAIN_OPTIONS_50M,
         WARMUP_OPTIONS_SCM, COOLDOWN_OPTIONS_SCM, DRILL_OPTIONS_SCM, MAIN_OPTIONS_SCM,
+        KICK_OPTIONS, KICK_OPTIONS_50M, KICK_OPTIONS_SCM,
       ]) walkArray(bank);
       return m;
     })();
@@ -7202,7 +7252,12 @@
     function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints = []) {
       if (!sources) return sections;
       const out = { ...sections };
-      for (const sect of ["warmup", "drill", "main", "cooldown"]) {
+      // kick is bank-only (sources never names it from the UI), so its
+      // `sources[sect] || "bank"` short-circuits to bank → no override.
+      // Listed here only so a future kick-source would route generically;
+      // generateEngineForSection degrades to { option: null } for sections
+      // with no applicable template, so an unknown source can't throw.
+      for (const sect of ["warmup", "drill", "kick", "main", "cooldown"]) {
         const src = sources[sect] || "bank";
         if (src === "engine") {
           const original = sections[sect];
@@ -7299,6 +7354,7 @@
       const _incl = {
         warmup:   includedSections.includes("warmup"),
         drill:    includedSections.includes("drill"),
+        kick:     includedSections.includes("kick"),        // kick — opt-in 5th section (defaults excluded)
         main:     true,                                     // main is never skippable
         cooldown: includedSections.includes("cooldown"),
       };
@@ -7313,6 +7369,7 @@
         ...pinnedBlocks,
         ...(_incl.warmup   ? {} : { warmup:   _EMPTY_SECTION }),
         ...(_incl.drill    ? {} : { drill:    _EMPTY_SECTION }),
+        ...(_incl.kick     ? {} : { kick:     _EMPTY_SECTION }),
         ...(_incl.cooldown ? {} : { cooldown: _EMPTY_SECTION }),
       };
       // v1.8 — Resolve the multiplier once. "exclude" zeros the weight;
@@ -7346,6 +7403,7 @@
       const _allWarmupsRaw   = getBankOptions("warmup",   typeId, poolMode, ugcOverlay);
       const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode, ugcOverlay);
       const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay);
+      const _kickListRaw     = getBankOptions("kick",     typeId, poolMode, ugcOverlay);
       const _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay);
 
       // Phase 3 PSC slice 2/3 — hard-exclude step 0. Per
@@ -7359,7 +7417,7 @@
       // persistent myConstraints — both feed the same picker filter.
       const _effectiveConstraints = [...(myConstraints || []), ...(tonightOverrides || [])];
       const usePsc = _effectiveConstraints.length > 0 && !(Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0);
-      const pscFilterFallback = { warmup: false, drill: false, main: false, cooldown: false };
+      const pscFilterFallback = { warmup: false, drill: false, kick: false, main: false, cooldown: false };
       const _narrowByPsc = (pool, sectionKey) => {
         if (!usePsc) return pool;
         const filtered = pool.filter(o => !optionViolatesPSC(o, _effectiveConstraints));
@@ -7372,6 +7430,7 @@
       const _allWarmupsPsc   = _narrowByPsc(_allWarmupsRaw,   "warmup");
       const _allCooldownsPsc = _narrowByPsc(_allCooldownsRaw, "cooldown");
       const _drillListPsc    = _narrowByPsc(_drillListRaw,    "drill");
+      const _kickListPsc     = _narrowByPsc(_kickListRaw,     "kick");
       const _mainListPsc     = _narrowByPsc(_mainListRaw,     "main");
 
       // v2.0 — Multi-lane lane-fit pre-filter. When lanesPaceSecs is non-empty,
@@ -7382,7 +7441,7 @@
       // When lanesPaceSecs is null/empty, the filter is a no-op and the path
       // is byte-identical to the single-pace flow.
       const useLaneFit = Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0;
-      const laneFitFallback = { warmup: false, drill: false, main: false, cooldown: false };
+      const laneFitFallback = { warmup: false, drill: false, kick: false, main: false, cooldown: false };
       const _narrowByLanes = (pool, sectionKey) => {
         if (!useLaneFit) return pool;
         const filtered = pool.filter(o => optionFitsAllLanes(o, lanesPaceSecs));
@@ -7395,6 +7454,7 @@
       const allWarmups   = _narrowByLanes(_allWarmupsPsc,   "warmup");
       const allCooldowns = _narrowByLanes(_allCooldownsPsc, "cooldown");
       const drillList    = _narrowByLanes(_drillListPsc,    "drill");
+      const kickList     = _narrowByLanes(_kickListPsc,     "kick");
       let   mainList     = _narrowByLanes(_mainListPsc,     "main");
 
       // C: recovery mode — filter mains down to easy/aerobic zone options.
@@ -7412,6 +7472,7 @@
       // Fixed yardage from pinned sections; free budget is what remains for unpinned picks
       const pinnedTotal = (pinnedBlocks.warmup   ? pinnedBlocks.warmup.totalYards   : 0)
                         + (pinnedBlocks.drill    ? pinnedBlocks.drill.totalYards    : 0)
+                        + (pinnedBlocks.kick     ? pinnedBlocks.kick.totalYards     : 0)
                         + (pinnedBlocks.main     ? pinnedBlocks.main.totalYards     : 0)
                         + (pinnedBlocks.cooldown ? pinnedBlocks.cooldown.totalYards : 0);
       const freeBudget  = maxYards - pinnedTotal;
@@ -7420,6 +7481,7 @@
       // Per-section minimums (0 for pinned sections — they don't consume free budget)
       const minWu = (pinnedBlocks.warmup   || !_incl.warmup)   ? 0 : Math.min(...allWarmups.map(o => o.totalYards));
       const minDr = (pinnedBlocks.drill    || !_incl.drill)    ? 0 : Math.min(...drillList.map(o => o.totalYards));
+      const minKt = (pinnedBlocks.kick || !_incl.kick || !kickList.length) ? 0 : Math.min(...kickList.map(o => o.totalYards));
       const minMa = pinnedBlocks.main     ? 0 : Math.min(...mainList.map(o => o.totalYards));
       const minCd = (pinnedBlocks.cooldown || !_incl.cooldown) ? 0 : Math.min(...allCooldowns.map(o => o.totalYards));
 
@@ -7489,7 +7551,7 @@
           wu = pinnedBlocks.warmup;
         } else {
           const validWarmups = allWarmups.filter(o =>
-            o.totalYards <= freeBudget - minDr - minMa - minCd
+            o.totalYards <= freeBudget - minDr - minKt - minMa - minCd
           );
           if (!validWarmups.length) break;
           // Prefer warmups whose typeAffinity matches the workout type family
@@ -7520,7 +7582,7 @@
           dr = pinnedBlocks.drill;
         } else {
           const validDrills = drillList.filter(o =>
-            o.totalYards <= freeBudget - freeUsed - minMa - minCd
+            o.totalYards <= freeBudget - freeUsed - minKt - minMa - minCd
           );
           if (!validDrills.length) continue;
           const drillBase = (o) => Math.pow(2, preferredEquipMatches(o, equipment)) * favBoost(o);
@@ -7534,6 +7596,21 @@
             dr = pickWeighted(drPool, drillBase);
           }
           freeUsed += dr.totalYards;
+        }
+
+        // 2b. Kick (optional 5th section — defaults excluded). Drawn from free
+        // budget after drill; no bias target (kick isn't in SECTION_BIAS_RATIOS).
+        let kt;
+        if (pinnedBlocks.kick) {
+          kt = pinnedBlocks.kick;
+        } else {
+          const validKicks = kickList.filter(o =>
+            o.totalYards <= freeBudget - freeUsed - minMa - minCd
+          );
+          if (!validKicks.length) continue;
+          const kickBase = (o) => Math.pow(2, preferredEquipMatches(o, equipment)) * favBoost(o);
+          kt = pickWeighted(validKicks, kickBase);
+          freeUsed += kt.totalYards;
         }
 
         // 3. Main — expand pool with ×2 and ×3 repeat variants
@@ -7653,17 +7730,17 @@
           cd = pickWeighted(validCooldowns, favBoost);
         }
 
-        const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
+        const total = wu.totalYards + dr.totalYards + kt.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
           // S3 — apply engine overrides per section, then recompute total
-          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : []);
-          const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, kick: kt, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : []);
+          const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.kick.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
           // v2.0 — attach laneFit fallback marker (closure vars live in generateWorkout scope).
           const _laneFitFallbackSections = useLaneFit
             ? Object.entries(laneFitFallback).filter(([_, v]) => v).map(([k]) => k)
             : [];
-          const _loopResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal, includedSections), __genPath: "loop", __genAttempts: attempt + 1 };
+          const _loopResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.kick, overridden.main, overridden.cooldown, finalTotal, includedSections), __genPath: "loop", __genAttempts: attempt + 1 };
           if (_laneFitFallbackSections.length) _loopResult.__laneFitFallback = _laneFitFallbackSections;
           return _loopResult;
         }
@@ -7692,7 +7769,7 @@
         if (hasEquipReq) {
           const eqPreferred = drCandidates.filter(d =>
             mainList.some(m =>
-              m.totalYards <= freeBudget - fbFree - d.totalYards - minCd &&
+              m.totalYards <= freeBudget - fbFree - d.totalYards - minKt - minCd &&
               combinationSatisfies(d, m, equipment)
             )
           );
@@ -7707,6 +7784,21 @@
         }
         dr = drCandidates[0];
         fbFree += dr.totalYards;
+      }
+
+      // Kick (optional 5th section). Excluded → pinnedBlocks.kick is the empty
+      // section (0 yards). Included with options → largest that fits. If
+      // included but no kick options exist, fall back to an empty section.
+      let kt;
+      if (pinnedBlocks.kick) {
+        kt = pinnedBlocks.kick;
+      } else if (_incl.kick && kickList.length) {
+        let ktCandidates = kickList.filter(o => o.totalYards <= freeBudget - fbFree - minMa - minCd);
+        if (!ktCandidates.length) ktCandidates = kickList;
+        kt = ktCandidates.slice().sort(byYardsDesc)[0];
+        fbFree += kt.totalYards;
+      } else {
+        kt = { label: "", totalYards: 0, sets: [] };
       }
 
       let ma;
@@ -7750,29 +7842,31 @@
         cd = (cdPool.length ? cdPool.slice().sort(byYardsDesc) : allCooldowns.slice().sort(byYardsDesc))[0];
       }
 
-      const total = wu.totalYards + dr.totalYards + ma.totalYards + cd.totalYards;
+      const total = wu.totalYards + dr.totalYards + kt.totalYards + ma.totalYards + cd.totalYards;
       // S3 — apply engine overrides per section, then recompute total
-      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : []);
-      const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
+      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, kick: kt, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : []);
+      const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.kick.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
       // v2.0 — same laneFit attachment as the loop-success path above.
       const _fallbackLaneFitSections = useLaneFit
         ? Object.entries(laneFitFallback).filter(([_, v]) => v).map(([k]) => k)
         : [];
-      const _fallbackResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.main, overridden.cooldown, finalTotal, includedSections), __genPath: "fallback", __genAttempts: attempts };
+      const _fallbackResult = { ...buildWorkout(typeId, overridden.warmup, overridden.drill, overridden.kick, overridden.main, overridden.cooldown, finalTotal, includedSections), __genPath: "fallback", __genAttempts: attempts };
       if (_fallbackLaneFitSections.length) _fallbackResult.__laneFitFallback = _fallbackLaneFitSections;
       return _fallbackResult;
     }
 
-    function buildWorkout(typeId, wu, dr, ma, cd, total, includedSections = ["warmup", "drill", "main", "cooldown"]) {
+    function buildWorkout(typeId, wu, dr, kt, ma, cd, total, includedSections = ["warmup", "drill", "main", "cooldown"]) {
       const mainName = ma.rounds > 1
         ? `Main Set — ${ma.label} ×${ma.rounds}`
         : `Main Set — ${ma.label}`;
-      // Section model A1 — assemble the four candidate blocks, then keep only
-      // included sections (default = all four → byte-identical to pre-A1).
+      // Section model A1 — assemble the candidate blocks, then keep only
+      // included sections (default = warmup/drill/main/cooldown → byte-identical
+      // to pre-A1; kick is opt-in and dropped here unless includedSections names it).
       const blocks = [
         { name: "Warm-Up",              section: "warmup",   ...wu },
         { name: "Drill / Pre-Main Set", section: "drill",    ...dr },
+        { name: "Kick Set",             section: "kick",     ...kt },
         { name: mainName, section: "main", ...ma, roundRestSecs: ma.roundRestSecs ?? 30 },
         { name: "Cool-Down",            section: "cooldown", ...cd },
       ].filter(b => includedSections.includes(b.section));
@@ -7792,7 +7886,7 @@
     // are held fixed, so the new pick must (a) keep total yardage in
     // [MIN_YARDS, maxYards] and (b) preserve the equipment-coverage invariant
     // across drill+main if any equipment is checked.
-    const SECTION_KEYS = ["warmup", "drill", "main", "cooldown"];
+    const SECTION_KEYS = ["warmup", "drill", "kick", "main", "cooldown"];
 
     // Stable signature so we can exclude the current pick when alternatives exist.
     // Built from the full sets array so it matches across (a) fresh blocks
@@ -7839,16 +7933,19 @@
       const _useLaneFitRegen     = Array.isArray(lanesPaceSecs) && lanesPaceSecs.length > 0;
       const _effectiveCRegen     = [...(myConstraints || []), ...(tonightOverrides || [])];
       const _usePscRegen         = _effectiveCRegen.length > 0 && !_useLaneFitRegen;
-      if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length !== 4) {
+      if (!workout || !Array.isArray(workout.blocks) || workout.blocks.length < 4 || workout.blocks.length > 5) {
         return { workout: null, error: "No workout to update." };
       }
-      const idx = SECTION_KEYS.indexOf(sectionKey);
-      if (idx < 0) return { workout: null, error: "Unknown section." };
+      if (!SECTION_KEYS.includes(sectionKey)) return { workout: null, error: "Unknown section." };
 
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
       const blocks = workout.blocks;
+      // Match the target block by section, not positional index — kick can be
+      // inserted between drill and main, shifting positions.
+      const idx = blocks.findIndex(b => b.section === sectionKey);
+      if (idx < 0) return { workout: null, error: "Unknown section." };
       const current = blocks[idx];
       const others = blocks.reduce((sum, b, i) => i === idx ? sum : sum + b.totalYards, 0);
       const lower = Math.max(0, Math.max(isMeters ? MIN_METERS : MIN_YARDS, userMin || 0) - others);
@@ -7858,6 +7955,7 @@
       if (sectionKey === "warmup")        pool = getBankOptions("warmup",   typeId, poolMode, ugcOverlay);
       else if (sectionKey === "cooldown") pool = getBankOptions("cooldown", typeId, poolMode, ugcOverlay);
       else if (sectionKey === "drill")    pool = getBankOptions("drill",    typeId, poolMode, ugcOverlay);
+      else if (sectionKey === "kick")     pool = getBankOptions("kick",     typeId, poolMode, ugcOverlay);
       else {
         let basePool = getBankOptions("main", typeId, poolMode, ugcOverlay);
         // C: in recovery mode, only consider easy/aerobic mains, no repeat variants.
@@ -7897,8 +7995,8 @@
       }
 
       const hasEquipReq = equipment && Object.keys(EQUIP_REQUIREMENTS).some(k => isEquipRequired(equipment, k));
-      const partnerDrill = blocks[1]; // used when regenerating main
-      const partnerMain  = blocks[2]; // used when regenerating drill
+      const partnerDrill = blocks.find(b => b.section === "drill") || blocks[1]; // used when regenerating main
+      const partnerMain  = blocks.find(b => b.section === "main")  || blocks[2]; // used when regenerating drill
 
       const passesEquip = (candidate) => {
         if (!hasEquipReq) return true;
@@ -8008,6 +8106,7 @@
       const NAME_BY_SECTION = {
         warmup:   "Warm-Up",
         drill:    "Drill / Pre-Main Set",
+        kick:     "Kick Set",
         cooldown: "Cool-Down",
       };
       const bankBlock = sectionKey === "main"
@@ -9693,6 +9792,11 @@
           "50m": [["m", DRILL_OPTIONS_50M], ["yd", DRILL_OPTIONS]],
           "25y": [["yd", DRILL_OPTIONS]],
         },
+        kick: {
+          "25m": [["m", KICK_OPTIONS_SCM], ["m", KICK_OPTIONS_50M], ["yd", KICK_OPTIONS]],
+          "50m": [["m", KICK_OPTIONS_50M], ["yd", KICK_OPTIONS]],
+          "25y": [["yd", KICK_OPTIONS]],
+        },
         main: {
           "25m": [["m", MAIN_OPTIONS_SCM], ["m", MAIN_OPTIONS_50M], ["yd", MAIN_OPTIONS]],
           "50m": [["m", MAIN_OPTIONS_50M], ["yd", MAIN_OPTIONS]],
@@ -10399,6 +10503,62 @@
         { name: "Superman holds", sets: 3, reps: "20s hold", rest: "30s" },
       ]},
     ];
+
+    // Plain-language explainer per dryland exercise — what it is, how to do it,
+    // and why it matters for swimmers. Keyed by the EXACT exercise `name` used
+    // in DRYLAND_OPTIONS (the iOS DrylandGlossary mirrors these same keys).
+    // Shown as a hover tooltip (+ ⓘ marker) on each exercise row.
+    const DRYLAND_EXPLAINERS = {
+      "Arm circles (fwd/back)": "Big, controlled circles of the arms forward then backward to warm up the shoulder joint and rotator cuff before swimming.",
+      "Leg swings (front/side)": "Stand tall and swing one leg front-to-back, then side-to-side; loosens the hips and hamstrings for kicking.",
+      "Band pull-aparts": "Hold a resistance band at shoulder height with straight arms and pull it apart, squeezing the shoulder blades together; strengthens the upper back.",
+      "Scapular push-ups": "In a straight-arm push-up plank, pinch the shoulder blades together then push them apart — only the blades move. Builds scapular control.",
+      "Bodyweight squats": "Feet shoulder-width, sit the hips back and down until the thighs are near parallel, then stand; warms up the legs and hips.",
+      "Front plank": "Hold a straight line on forearms and toes, bracing the core — don't let the hips sag or pike. Builds the core stability behind good body position.",
+      "Dead bug": "Lie on your back, arms up and knees bent; slowly extend opposite arm and leg while pressing the low back into the floor. Trains anti-extension core control.",
+      "Hollow-body hold": "Lie on your back, press the low back down, and lift the shoulders and legs into a shallow banana shape — the streamline core position.",
+      "Russian twists": "Sit leaning back with feet up and rotate the torso side to side, tapping the floor each side; works the obliques for stroke rotation.",
+      "Band Y-T-W raises": "With a light band, raise the arms into a Y, then T, then W shape, squeezing the shoulder blades each time; rotator-cuff and posture work.",
+      "Band external rotation": "Elbow tucked at your side and bent 90°, rotate the forearm outward against a band; strengthens the rotator cuff to protect the shoulder.",
+      "Scapular retraction holds": "Pull the shoulder blades down and back and hold; reinforces good posture and a strong catch position.",
+      "Push-ups": "Lower the chest to the floor and press back up in a rigid plank; builds the pressing strength used in the pull.",
+      "Walking lunges": "Step forward into a lunge, dropping the back knee toward the floor, then step through; builds single-leg strength and balance.",
+      "Pull-ups (or rows)": "Hang from a bar and pull the chin over it (or row a band/weight if no bar); the primary back and lat builder, mirroring the swim pull.",
+      "Glute bridge": "Lie on your back with knees bent and drive the hips up, squeezing the glutes; strengthens the posterior chain for a stable body line.",
+      "Lat stretch (each side)": "Reach one arm overhead and lean away to lengthen the lat down the side of the torso; opens the shoulders for streamline.",
+      "Pec / doorway stretch": "Place a forearm on a doorframe and lean through to stretch the chest; counteracts the rounded posture swimming builds.",
+      "Cross-body shoulder": "Pull one arm across the chest with the other to stretch the back of the shoulder; relieves shoulder tightness.",
+      "Hip-flexor lunge stretch": "In a low lunge, tuck the hips and press forward to stretch the front of the back hip; loosens hip flexors tightened by kicking.",
+      "Goblet squat": "Hold a weight at the chest and squat deep, keeping the chest tall; builds leg strength with good posture.",
+      "Romanian deadlift (DB)": "Holding dumbbells, hinge at the hips with a flat back, lowering the weights down the legs, then stand; targets hamstrings and glutes.",
+      "Step-ups (each leg)": "Step up onto a box with one leg, driving through the heel, then control back down; single-leg power for starts and turns.",
+      "Calf raises": "Rise onto the balls of the feet and lower slowly; strengthens the calves and ankles for kicking and push-offs.",
+      "Box jumps (or squat jumps)": "Explosively jump onto a box (or straight up); develops the leg power used off the blocks and walls.",
+      "Broad jumps": "Jump forward as far as possible from a standing start, landing softly; builds the horizontal explosive power of the start.",
+      "Medicine-ball slams": "Lift a medicine ball overhead and slam it down hard, hinging at the hips; full-body power and core drive.",
+      "Streamline jumps": "Jump straight up holding a tight streamline with arms locked overhead; links explosive legs to the streamline position off walls.",
+      "World's greatest stretch (each)": "From a lunge, drop the elbow inside the front foot, then rotate that same arm to the sky; a full-body mobility opener.",
+      "Cat-cow": "On all fours, alternately round and arch the spine; warms up and mobilizes the whole back.",
+      "Thoracic rotations (each)": "On all fours or side-lying, rotate the upper back to open the chest; improves the trunk rotation used in freestyle and backstroke.",
+      "Hip 90/90 switches": "Sit with both knees bent at 90° to one side, then rotate them to the other side; opens the hips internally and externally.",
+      "Ankle rocks": "In a half-kneel, rock the front knee forward over the toes to mobilize the ankle; improves push-off and streamline flexibility.",
+      "Prone Y-T-W (light)": "Lie face-down and lift the arms into Y, T, and W shapes off the floor; strengthens the mid-back and rotator cuff.",
+      "Serratus wall slides": "Press the forearms on a wall and slide them up while pushing into the wall; activates the serratus for healthy shoulder mechanics.",
+      "Side plank (each side)": "Hold a straight line on one forearm and the side of the feet; builds the lateral core stability behind body roll.",
+      "Bird dog": "On all fours, extend opposite arm and leg level with the body and hold; trains balanced core stability.",
+      "Band freestyle pull (each arm)": "Anchor a band and mimic the freestyle pull stroke against resistance; strengthens the exact catch-and-pull pattern.",
+      "Band straight-arm pulldown": "With straight arms, pull a high band down to the thighs; builds the lat engagement that starts the catch.",
+      "Band catch + finish hold": "Hold the early-catch position against a band, then the finish position; grooves the strong points of the stroke.",
+      "Foam roll lats (each)": "Lie on your side with a foam roller under the lat and roll slowly; releases tightness through the side of the back.",
+      "Foam roll quads / IT band": "Roll the front and outside of the thigh on a foam roller to release the quads and IT band after kicking.",
+      "Foam roll upper back": "Lie back on a roller under the upper back and roll along the spine; loosens the mid-back for better posture.",
+      "Child's pose + side reach": "Kneel and sit back with the arms stretched forward, then walk the hands to each side; a gentle back and lat stretch to finish.",
+      "Hanging knee raises": "Hang from a bar and raise the knees toward the chest with control; builds lower-ab strength without straining the back.",
+      "V-ups": "Lie flat and simultaneously lift the legs and torso to meet over the hips in a V; strong full-core flexion.",
+      "Plank shoulder taps": "In a plank, tap each hand to the opposite shoulder without letting the hips rock; anti-rotation core stability.",
+      "Flutter kicks": "Lie on your back, low back pressed down, and make small fast scissoring kicks; mirrors and strengthens the freestyle kick.",
+      "Superman holds": "Lie face-down and lift the arms, chest, and legs off the floor and hold; strengthens the lower back and posterior chain.",
+    };
 
     // Make a fresh dryland block (deep-copies exercises so edits don't mutate
     // the bank). `totalYards:0` keeps it out of all yardage math.
@@ -24275,7 +24435,7 @@
     //  Full-screen step-through: one section at a time, iPhone-sized.
     // ═══════════════════════════════════════════════════════════════
 
-    const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", main: "💪", cooldown: "🧊" };
+    const SECTION_EMOJIS = { warmup: "🌊", drill: "🎯", kick: "🦵", main: "💪", cooldown: "🧊" };
 
     function RunWorkoutOverlay({ workout, restSecs, onClose, onLogAsToday, personalFirstName, audioCues = false, lapButton = true, unit = "yds" }) {
       const [idx, setIdx]               = useState(0);
@@ -28214,6 +28374,7 @@
                 {[
                   { key: "warmup",   label: "Warmup",   skip: skipWarmup,   toggle: () => setSkipWarmup(v => !v) },
                   { key: "drill",    label: "Drill",    skip: skipDrill,    toggle: () => setSkipDrill(v => !v) },
+                  { key: "kick",     label: "Kick",     skip: !addKick,     toggle: () => setAddKick(v => !v) },
                   { key: "main",     label: "Main",     locked: true },
                   { key: "cooldown", label: "Cooldown", skip: skipCooldown, toggle: () => setSkipCooldown(v => !v) },
                 ].map(s => {

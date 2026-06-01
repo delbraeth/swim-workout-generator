@@ -16,8 +16,12 @@ final class GenerateViewModel: ObservableObject {
     @Published var bias: SectionBias = .balanced
     @Published var phase: TrainingPhase = .none
     @Published var recoveryMode = false
-    /// Sections to include; `main` is always present and not removable.
-    @Published var includedSections: Set<String> = Set(WorkoutSectionKind.allCases.map(\.rawValue))
+    /// Sections to include; `main` is always present and not removable. `kick`
+    /// is opt-in (defaults OFF) — every other section defaults ON, mirroring the
+    /// web SPA where kick is absent from the default includedSections.
+    @Published var includedSections: Set<String> = Set(
+        WorkoutSectionKind.allCases.map(\.rawValue).filter { $0 != WorkoutSectionKind.kick.rawValue }
+    )
     @Published var equipmentOn: Set<String> = []
 
     @Published var generating = false
@@ -31,6 +35,15 @@ final class GenerateViewModel: ObservableObject {
     @Published var saving = false
     @Published var saved = false
     @Published var saveError: String?
+
+    // MARK: - Inline editing state
+    /// Section currently being regenerated (sectionKey), for spinner/disable.
+    @Published var regeneratingSection: String?
+    /// Transient error from a section regenerate (422 "only one option fits", …).
+    @Published var sectionError: String?
+    /// Favorited / disfavored set ids (server set ids), for the star affordance.
+    @Published var favoriteSetIds: Set<String> = []
+    @Published var disfavorSetIds: Set<String> = []
 
     private let api: APIClient
     init(api: APIClient = .shared) { self.api = api }
@@ -119,11 +132,255 @@ final class GenerateViewModel: ObservableObject {
         }
         saving = false
     }
+
+    // MARK: - Inline editing (rawWorkout is the single source of truth)
+
+    /// Re-decode `rawWorkout` into the typed `result` after any mutation.
+    private func rederive() {
+        guard let raw = rawWorkout,
+              let data = try? JSONEncoder().encode(raw),
+              let w = try? JSONDecoder().decode(Workout.self, from: data) else { return }
+        result = w
+    }
+
+    /// Destructure `rawWorkout` into its `blocks` array, run `f`, write back,
+    /// and rederive. No-op if `rawWorkout` isn't an object with an array `blocks`.
+    private func mutateBlocks(_ f: (inout [AnyCodable]) -> Void) {
+        guard case .object(var dict)? = rawWorkout,
+              case .array(var blocks)? = dict["blocks"] else { return }
+        f(&blocks)
+        dict["blocks"] = .array(blocks)
+        rawWorkout = .object(dict)
+        rederive()
+    }
+
+    /// Mutate the set at `blocks[bi].sets[si]` via `f`.
+    private func mutateSet(blockIndex bi: Int, setIndex si: Int, _ f: (inout AnyCodable) -> Void) {
+        mutateBlocks { blocks in
+            guard blocks.indices.contains(bi),
+                  case .object(var block) = blocks[bi],
+                  case .array(var sets)? = block["sets"],
+                  sets.indices.contains(si) else { return }
+            f(&sets[si])
+            block["sets"] = .array(sets)
+            blocks[bi] = .object(block)
+        }
+    }
+
+    func editInterval(blockIndex bi: Int, setIndex si: Int, to raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        mutateSet(blockIndex: bi, setIndex: si) { set in
+            set["interval"] = trimmed.isEmpty ? .null : .string(trimmed)
+        }
+    }
+
+    func editDesc(blockIndex bi: Int, setIndex si: Int, to raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        mutateSet(blockIndex: bi, setIndex: si) { set in
+            set["desc"] = trimmed.isEmpty ? .null : .string(trimmed)
+        }
+    }
+
+    func editRoundRest(blockIndex bi: Int, to secs: Int) {
+        let clamped = min(max(secs, 0), 300)
+        mutateBlocks { blocks in
+            guard blocks.indices.contains(bi), case .object(var block) = blocks[bi] else { return }
+            block["roundRestSecs"] = .int(clamped)
+            blocks[bi] = .object(block)
+        }
+    }
+
+    /// Equivalent total-preserving (reps × dist) splits, ordered. The first entry
+    /// is the original; cycling `swapSet` advances through the rest.
+    func equivalents(reps: Int, dist: Int) -> [(reps: Int, dist: Int)] {
+        let total = reps * dist
+        let dists = [25, 50, 75, 100, 200]
+        var out: [(reps: Int, dist: Int)] = [(reps, dist)]
+        for d in dists where d != dist && total % d == 0 {
+            let r = total / d
+            if r >= 1 { out.append((r, d)) }
+        }
+        return out
+    }
+
+    func swapSet(blockIndex bi: Int, setIndex si: Int) {
+        // Read current reps/dist from the typed result (already derived).
+        guard let block = result?.blocks[safe: bi],
+              let set = block.sets?[safe: si],
+              let reps = set.reps, let dist = set.dist, reps > 0, dist > 0 else { return }
+        let opts = equivalents(reps: reps, dist: dist)
+        guard opts.count > 1 else { return }
+        // Find current index, advance to next.
+        let curIdx = opts.firstIndex(where: { $0.reps == reps && $0.dist == dist }) ?? 0
+        let next = opts[(curIdx + 1) % opts.count]
+        mutateSet(blockIndex: bi, setIndex: si) { s in
+            s["reps"] = .int(next.reps)
+            s["dist"] = .int(next.dist)
+        }
+    }
+
+    /// Parse "On M:SS" / "M:SS" / "1:30" into total seconds. Returns nil for
+    /// "No interval" / empty / unparseable.
+    func parseInterval(_ s: String) -> Int? {
+        let cleaned = s.replacingOccurrences(of: "On", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        guard !cleaned.isEmpty else { return nil }
+        let parts = cleaned.split(separator: ":")
+        if parts.count == 2, let m = Int(parts[0]), let sec = Int(parts[1]) {
+            return m * 60 + sec
+        }
+        if parts.count == 1, let sec = Int(parts[0]) { return sec }
+        return nil
+    }
+
+    /// Format seconds as "On M:SS".
+    func formatInterval(_ secs: Int) -> String {
+        let m = secs / 60, s = secs % 60
+        return String(format: "On %d:%02d", m, s)
+    }
+
+    /// Rescale every parseable interval across all blocks by `newBase / 120`
+    /// (baseline 2:00 per 100). Leaves "No interval"/empty untouched.
+    func rescalePace(toBaseSeconds newBase: Int) {
+        guard newBase > 0 else { return }
+        let ratio = Double(newBase) / 120.0
+        mutateBlocks { blocks in
+            for bi in blocks.indices {
+                guard case .object(var block) = blocks[bi],
+                      case .array(var sets)? = block["sets"] else { continue }
+                for si in sets.indices {
+                    guard case .object(var set) = sets[si],
+                          let cur = set["interval"]?.stringValue,
+                          let secs = self.parseInterval(cur) else { continue }
+                    let scaled = Int((Double(secs) * ratio).rounded())
+                    set["interval"] = .string(self.formatInterval(scaled))
+                    sets[si] = .object(set)
+                }
+                block["sets"] = .array(sets)
+                blocks[bi] = .object(block)
+            }
+        }
+    }
+
+    // MARK: - Add / remove dryland blocks (client-side)
+
+    /// Build and insert a dryland block from a preset. `pre` blocks go to the
+    /// front of the workout, `post` blocks to the end — mirroring the web's
+    /// `makeDrylandBlock` placement. The block shape matches the engine exactly:
+    /// `{ kind:"dryland", section:"dryland", name, placement, exercises:[…] }`.
+    func addDryland(presetId: String, placement: String) {
+        let preset = DrylandCatalog.all.first { $0.id == presetId } ?? DrylandCatalog.all[0]
+        let exercises: [AnyCodable] = preset.exercises.map { ex in
+            .object([
+                "name": .string(ex.name),
+                "sets": .int(ex.sets),
+                "reps": .string(ex.reps),
+                "rest": ex.rest.map { AnyCodable.string($0) } ?? .null,
+            ])
+        }
+        let newBlock = AnyCodable.object([
+            "kind": .string("dryland"),
+            "section": .string("dryland"),
+            "name": .string(preset.name),
+            "placement": .string(placement),
+            "exercises": .array(exercises),
+        ])
+        mutateBlocks { blocks in
+            if placement == "pre" { blocks.insert(newBlock, at: 0) }
+            else { blocks.append(newBlock) }
+        }
+    }
+
+    /// Remove the block at `index` in the workout's blocks array. `result.blocks`
+    /// is decoded 1:1 from rawWorkout, so the rendered index matches.
+    func removeBlock(at index: Int) {
+        mutateBlocks { blocks in
+            guard blocks.indices.contains(index) else { return }
+            blocks.remove(at: index)
+        }
+    }
+
+    /// Regenerate a single section via `POST /api/regenerate-section`. On success
+    /// the server returns a full workout, which becomes the new `rawWorkout`.
+    func regenerateSection(sectionKey: String) async {
+        guard let raw = rawWorkout, let typeId = selectedTypeId else { return }
+        regeneratingSection = sectionKey; sectionError = nil
+        let equipment = Dictionary(uniqueKeysWithValues: EquipmentItem.all.map { ($0.id, equipmentOn.contains($0.id)) })
+        var body: [String: AnyCodable] = [
+            "workout": raw,
+            "typeId": .string(typeId),
+            "sectionKey": .string(sectionKey),
+            "maxYards": .int(Int(maxYards)),
+            "poolMode": .string(pool.rawValue),
+            "equipment": .object(equipment.mapValues { .bool($0) }),
+            "recoveryMode": .bool(recoveryMode),
+        ]
+        if phase != .none { body["phase"] = .string(phase.rawValue) }
+        do {
+            let resp = try await api.post("regenerate-section", body: AnyCodable.object(body), as: GenerateResponse.self)
+            guard let workout = resp.workout, resp.renderableWorkout() != nil else {
+                sectionError = "The server returned a workout we couldn't read."
+                regeneratingSection = nil; return
+            }
+            rawWorkout = workout
+            rederive()
+        } catch let err as APIError {
+            sectionError = err.errorDescription ?? "Couldn't regenerate that section."
+        } catch {
+            sectionError = error.localizedDescription
+        }
+        regeneratingSection = nil
+    }
+
+    // MARK: - Favorite / disfavor sets (optimistic, revert on failure)
+
+    func toggleFavoriteSet(_ setId: String) async {
+        let wasFav = favoriteSetIds.contains(setId)
+        if wasFav { favoriteSetIds.remove(setId) }
+        else { favoriteSetIds.insert(setId); disfavorSetIds.remove(setId) }
+        do {
+            if wasFav {
+                let enc = setId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? setId
+                _ = try await api.delete("favorite-sets/\(enc)", as: OkResponse.self)
+            } else {
+                _ = try await api.post("favorite-sets", body: ["setId": setId], as: OkResponse.self)
+            }
+        } catch {
+            // Revert.
+            if wasFav { favoriteSetIds.insert(setId) } else { favoriteSetIds.remove(setId) }
+        }
+    }
+
+    func toggleDisfavorSet(_ setId: String) async {
+        let wasDis = disfavorSetIds.contains(setId)
+        if wasDis { disfavorSetIds.remove(setId) }
+        else { disfavorSetIds.insert(setId); favoriteSetIds.remove(setId) }
+        do {
+            if wasDis {
+                let enc = setId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? setId
+                _ = try await api.delete("disfavor-sets/\(enc)", as: OkResponse.self)
+            } else {
+                _ = try await api.post("disfavor-sets", body: ["setId": setId], as: OkResponse.self)
+            }
+        } catch {
+            if wasDis { disfavorSetIds.insert(setId) } else { disfavorSetIds.remove(setId) }
+        }
+    }
+}
+
+/// `{ ok: true }` response for favorite/set mutations.
+struct OkResponse: Decodable { let ok: Bool? }
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
 }
 
 struct GenerateView: View {
     @StateObject private var model = GenerateViewModel()
     @State private var runningWorkout: Workout?
+    @State private var showPaceRescale = false
 
     var body: some View {
         ZStack {
@@ -164,6 +421,25 @@ struct GenerateView: View {
         .toolbarBackground(Brand.bg, for: .navigationBar)
         .task { await model.loadTypes() }
         .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
+        .sheet(isPresented: $showPaceRescale) {
+            PaceRescaleSheet { base in model.rescalePace(toBaseSeconds: base) }
+        }
+    }
+
+    /// Editing callbacks bridged from the view model into the result card.
+    private var editActions: WorkoutEditActions {
+        WorkoutEditActions(
+            editInterval: { bi, si, v in model.editInterval(blockIndex: bi, setIndex: si, to: v) },
+            editDesc: { bi, si, v in model.editDesc(blockIndex: bi, setIndex: si, to: v) },
+            editRoundRest: { bi, v in model.editRoundRest(blockIndex: bi, to: v) },
+            swapSet: { bi, si in model.swapSet(blockIndex: bi, setIndex: si) },
+            regenerateSection: { key in Task { await model.regenerateSection(sectionKey: key) } },
+            isRegenerating: { key in model.regeneratingSection == key },
+            isFavorite: { id in model.favoriteSetIds.contains(id) },
+            toggleFavorite: { id in Task { await model.toggleFavoriteSet(id) } },
+            removeBlock: { model.removeBlock(at: $0) },
+            addDryland: { model.addDryland(presetId: $0, placement: $1) }
+        )
     }
 
     // MARK: - Sections
@@ -322,16 +598,27 @@ struct GenerateView: View {
             HStack {
                 Text("Your workout").font(.headline).foregroundStyle(Brand.text)
                 Spacer()
-                Button {
-                    Task { await model.generate() }
+                Menu {
+                    Button {
+                        Task { await model.generate() }
+                    } label: { Label("Regenerate all", systemImage: "arrow.clockwise") }
+                    Button {
+                        showPaceRescale = true
+                    } label: { Label("Rescale pace…", systemImage: "speedometer") }
                 } label: {
-                    Label("Regenerate", systemImage: "arrow.clockwise")
-                        .font(.caption.weight(.semibold))
+                    Image(systemName: "ellipsis.circle").font(.title3)
                 }
                 .tint(Brand.primary)
                 .disabled(model.generating)
             }
-            WorkoutCard(workout: workout)
+            if let err = model.sectionError {
+                InlineError(message: err, retry: nil)
+            }
+            WorkoutCard(workout: workout, edit: editActions)
+
+            AddDrylandControl { presetId, placement in
+                model.addDryland(presetId: presetId, placement: placement)
+            }
 
             Button {
                 runningWorkout = workout
@@ -368,6 +655,91 @@ struct GenerateView: View {
             }
             if let err = model.saveError { InlineError(message: err, retry: nil) }
         }
+    }
+}
+
+// MARK: - Add dryland
+
+/// A collapsible control to append a dryland block to the generated workout.
+/// Tapping "Add dryland" reveals a preset menu + a Before/After-pool selector
+/// and an Add button. Placement defaults to the chosen preset's own slot.
+private struct AddDrylandControl: View {
+    let onAdd: (_ presetId: String, _ placement: String) -> Void
+
+    @State private var expanded = false
+    @State private var selectedId: String = DrylandCatalog.all.first?.id ?? ""
+    @State private var placement: String = DrylandCatalog.all.first?.placement ?? "post"
+
+    private var selectedPreset: DrylandPreset? {
+        DrylandCatalog.all.first { $0.id == selectedId }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: expanded ? "minus.circle" : "plus.circle")
+                    Text("Add dryland").font(.subheadline.weight(.semibold))
+                    Spacer()
+                }
+                .foregroundStyle(Brand.primary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                Menu {
+                    ForEach(DrylandCatalog.all) { preset in
+                        Button {
+                            selectedId = preset.id
+                            placement = preset.placement
+                        } label: {
+                            if preset.id == selectedId {
+                                Label(preset.name, systemImage: "checkmark")
+                            } else {
+                                Text(preset.name)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text(selectedPreset?.name ?? "Choose a routine")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Brand.text)
+                        Spacer()
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2).foregroundStyle(Brand.textMuted)
+                    }
+                    .padding(10)
+                    .background(Brand.bg, in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Brand.border, lineWidth: 1))
+                }
+
+                Picker("Placement", selection: $placement) {
+                    Text("Before pool").tag("pre")
+                    Text("After pool").tag("post")
+                }
+                .pickerStyle(.segmented)
+
+                Button {
+                    onAdd(selectedId, placement)
+                    withAnimation(.easeInOut(duration: 0.2)) { expanded = false }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Brand.primary)
+                .disabled(selectedPreset == nil)
+            }
+        }
+        .padding(12)
+        .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Brand.border, lineWidth: 1))
     }
 }
 

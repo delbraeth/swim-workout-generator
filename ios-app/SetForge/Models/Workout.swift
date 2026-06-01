@@ -43,6 +43,7 @@ struct WorkoutBlock: Decodable, Identifiable {
     let section: String?      // "warmup" | "drill" | "main" | "cooldown" | "dryland"
     let totalYards: Int?
     let placement: String?    // dryland only: "pre" | "post"
+    let roundRestSecs: Int?   // main blocks: rest between rounds
     let sets: [SwimSet]?      // swim only
     let exercises: [DrylandExercise]? // dryland only
 
@@ -50,7 +51,7 @@ struct WorkoutBlock: Decodable, Identifiable {
     var isDryland: Bool { kind == "dryland" }
 
     enum CodingKeys: String, CodingKey {
-        case kind, name, section, totalYards, placement, sets, exercises
+        case kind, name, section, totalYards, placement, roundRestSecs, sets, exercises
     }
 
     init(from decoder: Decoder) throws {
@@ -60,6 +61,7 @@ struct WorkoutBlock: Decodable, Identifiable {
         section = try c.decodeIfPresent(String.self, forKey: .section)
         totalYards = try c.decodeIfPresent(Int.self, forKey: .totalYards)
         placement = try c.decodeIfPresent(String.self, forKey: .placement)
+        roundRestSecs = try c.decodeIfPresent(Int.self, forKey: .roundRestSecs)
         // Lossy per-element: one bad set/exercise is skipped, the rest render.
         sets = c.decodeLossyArray(SwimSet.self, forKey: .sets)
         exercises = c.decodeLossyArray(DrylandExercise.self, forKey: .exercises)
