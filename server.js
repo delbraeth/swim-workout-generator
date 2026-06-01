@@ -55,6 +55,7 @@ import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
+import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification } from "./lib/appleIap.js";
 
 import {
   pool, dbActive, pingDb,
@@ -211,7 +212,10 @@ app.use(helmet({
 // the JSON parser for /api/billing/webhook so the per-route express.raw()
 // at the webhook handler can do its job.
 app.use((req, res, next) => {
+  // Both billing webhooks need the raw body for signature verification:
+  // Stripe (HMAC) and Apple App Store Server Notifications (JWS signedPayload).
   if (req.originalUrl === "/api/billing/webhook") return next();
+  if (req.originalUrl === "/api/billing/apple/notify") return next();
   return express.json({ limit: "100kb" })(req, res, next);
 });
 
@@ -2835,6 +2839,63 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
   }
 });
 
+// ── Apple In-App Purchase (scaffold, parallel to Stripe above) ──────
+// Both routes are INERT until APPLE_IAP_CONFIG env is set (IAP_ACTIVE=false)
+// and the @apple/app-store-server-library package is installed. They resolve
+// to the SAME tier seam Stripe uses (grantTier/revokeTier via lib/appleIap.js).
+// See IAP_PLAN.md for the activation checklist.
+
+// Client (StoreKit 2) posts its signed transaction after a purchase/restore;
+// the server verifies it with Apple and grants the tier. Bearer auth (native).
+app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res) => {
+  try {
+    if (!IAP_ACTIVE) return res.status(503).json({ error: "iap_inactive" });
+    const jws = req.body?.signedTransaction || req.body?.jws;
+    if (!jws || typeof jws !== "string") return res.status(400).json({ error: "signedTransaction required" });
+    const v = await verifyTransaction(jws);
+    if (v.skipped || v.error) return res.status(v.error === "not_activated" ? 503 : 400).json(v);
+    const result = await applyVerifiedTransaction({
+      userSub:               req.userSub,
+      productId:             v.productId,
+      originalTransactionId: v.originalTransactionId,
+      expiresDate:           v.expiresDate,
+      revoked:               v.revoked,
+    });
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error("[billing/apple/verify]", err.message);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// App Store Server Notifications V2 — Apple POSTs a signed payload on
+// subscription lifecycle changes. Raw body (the JSON-parser skip is wired
+// above). Idempotency via apple_iap_events. Always 200 once we've recorded it
+// so Apple stops retrying (we investigate failures via processed_status).
+app.post("/api/billing/apple/notify", express.raw({ type: "application/json" }), async (req, res) => {
+  try {
+    if (!IAP_ACTIVE) {
+      console.warn("[billing/apple/notify] received but IAP_ACTIVE=false; acking + dropping");
+      return res.status(200).json({ acked: true, dropped: "iap_inactive" });
+    }
+    let body;
+    try { body = JSON.parse(req.body.toString("utf8")); }
+    catch (_) { return res.status(400).json({ error: "invalid_json" }); }
+    const signedPayload = body?.signedPayload;
+    if (!signedPayload) return res.status(400).json({ error: "signedPayload required" });
+
+    // Idempotency: Apple includes a notificationUUID inside the (signed)
+    // payload, but we only have it post-verify. Use a content hash as the
+    // provisional key; processNotification re-keys on the real UUID when the
+    // activation TODO is wired. For the scaffold we just record + dispatch.
+    const result = await processNotification(signedPayload);
+    res.status(200).json({ ok: true, result });
+  } catch (err) {
+    console.error("[billing/apple/notify]", err.message);
+    res.status(200).json({ ok: false, error: err.message });
+  }
+});
+
 // Status: SAFE to call now (reads users.tier + stripe_customer_id from
 // migration 038). When tier hasn't been set (free), returns tier: 'free'.
 app.get("/api/billing/status", requireAuth, async (req, res) => {
@@ -2860,7 +2921,7 @@ app.get("/api/billing/history", requireAuth, async (req, res) => {
 //   portal_return }.
 app.get("/api/admin/billing/config", requireAuth, requireAdmin, async (req, res) => {
   try {
-    res.json(billingConfigState());
+    res.json({ stripe: billingConfigState(), apple_iap: appleIapConfigState() });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

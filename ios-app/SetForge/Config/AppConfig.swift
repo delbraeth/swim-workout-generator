@@ -36,6 +36,22 @@ enum AppConfig {
     /// every tier and not raisable. We never fan out parallel `/api/*` calls;
     /// we lean on the composite endpoints and retry 429s with backoff.
     static let rateLimitPerMinute = 30
+
+    // MARK: - In-App Purchase (scaffold — not yet live)
+    /// StoreKit product identifiers mapped to the server's `tier` values.
+    /// EMPTY until the products are created in App Store Connect —
+    /// `StoreKitManager` treats an empty map as "IAP not configured" and stays
+    /// inert (no paywall, no StoreKit calls). When you create the products,
+    /// fill these to match App Store Connect AND lib/appleIap.js's
+    /// `product_tier_map`. See IAP_PLAN.md.
+    static let iapProductIDs: [String: String] = [:]
+    // When products exist in App Store Connect, replace [:] with e.g.:
+    //   "com.delbraeth.swimworkout.coach.monthly":  "coach",
+    //   "com.delbraeth.swimworkout.program.yearly": "program",
+    // Keys must match App Store Connect AND lib/appleIap.js product_tier_map.
+
+    /// True once IAP products are configured. Gates the paywall + StoreKit.
+    static var iapConfigured: Bool { !iapProductIDs.isEmpty }
 }
 
 /// Brand palette lifted verbatim from the web SPA's CSS custom properties so
