@@ -19,6 +19,27 @@ struct WorkoutTypesResponse: Decodable {
     let types: [WorkoutType]
 }
 
+/// A coach's assignable target (`GET /api/picker/coach-targets`) — a group the
+/// caller coaches. `memberCount == 1` reads as a private student; ≥2 a group.
+/// Selecting one stamps `assign_to: { group_id }` on save so the server fans the
+/// workout out to active members.
+struct CoachTarget: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String?
+    let currentPhase: String?
+    let teamName: String?
+    let memberCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case currentPhase = "current_phase"
+        case teamName = "team_name"
+        case memberCount = "member_count"
+    }
+
+    var isPrivateStudent: Bool { (memberCount ?? 0) <= 1 }
+}
+
 /// Section-proportion presets (the "Mix" pills on web). Match SECTION_BIAS_RATIOS.
 enum SectionBias: String, CaseIterable, Identifiable {
     case balanced, warmup_heavy, drill_heavy, long_main

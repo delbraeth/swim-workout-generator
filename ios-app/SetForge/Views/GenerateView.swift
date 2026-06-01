@@ -36,6 +36,19 @@ final class GenerateViewModel: ObservableObject {
     @Published var saved = false
     @Published var saveError: String?
 
+    // MARK: - Coach: "Generate for" target
+    /// Groups/students the signed-in coach can assign to. Empty for non-coaches
+    /// (the endpoint is coach-gated → 403 → we treat as no targets) or coaches
+    /// with no groups, in which case the picker is hidden entirely.
+    @Published var coachTargets: [CoachTarget] = []
+    /// nil = "Myself" (solo, no fanout). Otherwise the selected target's id.
+    @Published var generateForId: String?
+
+    var selectedTarget: CoachTarget? {
+        guard let id = generateForId else { return nil }
+        return coachTargets.first { $0.id == id }
+    }
+
     // MARK: - Inline editing state
     /// Section currently being regenerated (sectionKey), for spinner/disable.
     @Published var regeneratingSection: String?
@@ -61,6 +74,15 @@ final class GenerateViewModel: ObservableObject {
             typesError = error.localizedDescription
         }
         loadingTypes = false
+    }
+
+    /// Load assignable targets. Silent on failure (403 for non-coaches, etc.) —
+    /// an empty list simply hides the "Generate for" picker.
+    func loadCoachTargets() async {
+        guard coachTargets.isEmpty else { return }
+        if let targets = try? await api.get("picker/coach-targets", as: [CoachTarget].self) {
+            coachTargets = targets
+        }
     }
 
     func generate() async {
@@ -121,6 +143,11 @@ final class GenerateViewModel: ObservableObject {
         // `completed` to 1 unless the entry explicitly sends false (db.js
         // entryToWorkoutRow). dateCompleted stays null.
         dict["completed"] = .bool(false)
+        // Coach fanout: when a group/student is selected, stamp assign_to so the
+        // server creates one assignment per active member. Omitted for "Myself".
+        if let target = selectedTarget {
+            dict["assign_to"] = .object(["group_id": .string(target.id)])
+        }
         // `blocks` and `totalYards` already come from the engine payload.
         do {
             _ = try await api.post("log-workout", body: AnyCodable.object(dict), as: LogWorkoutResponse.self)
@@ -377,6 +404,7 @@ struct GenerateView: View {
                         } else if let err = model.typesError {
                             InlineError(message: err) { Task { await model.loadTypes() } }
                         } else {
+                            generateForPicker
                             typePicker
                             yardageControl
                             coursePicker
@@ -404,6 +432,7 @@ struct GenerateView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Brand.bg, for: .navigationBar)
         .task { await model.loadTypes() }
+        .task { await model.loadCoachTargets() }
         .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
         .sheet(isPresented: $showPaceRescale) {
             PaceRescaleSheet { base in model.rescalePace(toBaseSeconds: base) }
@@ -427,6 +456,37 @@ struct GenerateView: View {
     }
 
     // MARK: - Sections
+
+    /// Coach-only: who this workout is for. Hidden entirely when the coach has
+    /// no assignable targets (and for non-coaches, whose fetch 403s → empty).
+    @ViewBuilder
+    private var generateForPicker: some View {
+        if !model.coachTargets.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel("Generate for")
+                Picker("Generate for", selection: $model.generateForId) {
+                    Text("Myself").tag(String?.none)
+                    ForEach(model.coachTargets) { t in
+                        Text(t.name ?? "Group").tag(String?.some(t.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Brand.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Brand.border, lineWidth: 1))
+
+                if let target = model.selectedTarget {
+                    let n = target.memberCount ?? 0
+                    Text(target.isPrivateStudent
+                         ? "Saves to your history and assigns to \(target.name ?? "this student")."
+                         : "Saves to your history and assigns to \(n) member\(n == 1 ? "" : "s") of \(target.name ?? "this group").")
+                        .font(.caption2).foregroundStyle(Brand.textDim)
+                }
+            }
+        }
+    }
 
     private var typePicker: some View {
         VStack(alignment: .leading, spacing: 8) {
