@@ -90,6 +90,13 @@ struct PracticeAttendanceSheet: View {
 
     @StateObject private var model = AttendanceViewModel()
     @Environment(\.dismiss) private var dismiss
+    @State private var notesTarget: NotesTarget?
+
+    /// Wrapper so the coach-notes sheet is driven by the tapped roster member.
+    struct NotesTarget: Identifiable {
+        let id = UUID()
+        let member: RosterMember
+    }
 
     var body: some View {
         NavigationStack {
@@ -100,6 +107,13 @@ struct PracticeAttendanceSheet: View {
             .navigationTitle("Attendance")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Brand.bg, for: .navigationBar)
+            .sheet(item: $notesTarget) { target in
+                CoachNotesSheet(
+                    title: displayName(for: target.member),
+                    swimmerSub: target.member.memberSwimmerSub,
+                    managedId: target.member.memberManagedId
+                )
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }.tint(Brand.textMuted)
@@ -180,38 +194,50 @@ struct PracticeAttendanceSheet: View {
     private func memberRow(_ member: RosterMember) -> some View {
         let present = model.isPresent(member.key)
         let name = displayName(for: member)
-        return Button {
-            model.toggle(member.key)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: present ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(present ? Brand.positive : Brand.textDim)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                        .font(.body)
-                        .foregroundStyle(present ? Brand.text : Brand.warn)
-                        .strikethrough(!present, color: Brand.warn)
-                    if let role = member.role, !role.isEmpty {
-                        Text(role.capitalized).font(.caption2).foregroundStyle(Brand.textDim)
+        return HStack(spacing: 8) {
+            Button {
+                model.toggle(member.key)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: present ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(present ? Brand.positive : Brand.textDim)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(name)
+                            .font(.body)
+                            .foregroundStyle(present ? Brand.text : Brand.warn)
+                            .strikethrough(!present, color: Brand.warn)
+                        if let role = member.role, !role.isEmpty {
+                            Text(role.capitalized).font(.caption2).foregroundStyle(Brand.textDim)
+                        }
+                    }
+                    Spacer()
+                    if !present {
+                        Text("Absent")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Brand.warn)
                     }
                 }
-                Spacer()
-                if !present {
-                    Text("Absent")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Brand.warn)
-                }
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(present ? Brand.border : Brand.warn.opacity(0.5), lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+
+            // Coach notes for this swimmer (private/group/team-visible).
+            Button {
+                notesTarget = NotesTarget(member: member)
+            } label: {
+                Image(systemName: "note.text")
+                    .font(.body)
+                    .foregroundStyle(Brand.textMuted)
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(present ? Brand.border : Brand.warn.opacity(0.5), lineWidth: 1)
+        )
     }
 
     private func displayName(for member: RosterMember) -> String {
