@@ -16,6 +16,10 @@ struct Me: Decodable, Identifiable {
     let providers: [String]?
     let usaSwimmingId: String?
     let isAdmin: Bool?
+    /// True when the user can coach (server sets is_coach OR is_admin). Gates
+    /// every coach-facing surface in the app (Practices, generate-for target,
+    /// multi-lane, coach notes).
+    let isCoach: Bool?
     let supportRole: String?
     let createdAt: String?
     let lastLoginAt: String?
@@ -32,6 +36,7 @@ struct Me: Decodable, Identifiable {
         case classYear = "class_year"
         case usaSwimmingId = "usa_swimming_id"
         case isAdmin = "is_admin"
+        case isCoach = "is_coach"
         case supportRole = "support_role"
         case createdAt = "created_at"
         case lastLoginAt = "last_login_at"
@@ -43,6 +48,9 @@ struct Me: Decodable, Identifiable {
     var firstName: String? {
         displayName?.split(separator: " ").first.map(String.init)
     }
+
+    /// Convenience: treat a nil flag as not-a-coach.
+    var coaches: Bool { isCoach == true }
 }
 
 /// An active auth session (device-management UI). From `bootstrap.sessions`

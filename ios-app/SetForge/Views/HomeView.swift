@@ -139,10 +139,12 @@ struct HomeView: View {
                 } label: {
                     Label("Assigned to me", systemImage: "tray.and.arrow.down")
                 }
-                Button {
-                    showPractices = true
-                } label: {
-                    Label("Practices", systemImage: "calendar.badge.checkmark")
+                if model.bootstrap?.me?.coaches == true {
+                    Button {
+                        showPractices = true
+                    } label: {
+                        Label("Practices", systemImage: "calendar.badge.checkmark")
+                    }
                 }
                 Button {
                     showHistory = true
