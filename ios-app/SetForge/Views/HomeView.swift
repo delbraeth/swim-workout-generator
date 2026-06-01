@@ -36,11 +36,17 @@ struct HomeView: View {
     @EnvironmentObject private var auth: AuthManager
     @StateObject private var model = HomeViewModel()
     @State private var showSessions = false
-    @State private var showProfile = false
+    @State private var profileTarget: ProfileTarget?
     @State private var showFeedback = false
     @State private var showHistory = false
     @State private var showAssigned = false
     @State private var runningWorkout: Workout?
+
+    // Wrapper so the profile sheet is driven by data, never presented empty.
+    struct ProfileTarget: Identifiable {
+        let id = UUID()
+        let me: Me
+    }
 
     var body: some View {
         NavigationStack {
@@ -55,10 +61,8 @@ struct HomeView: View {
             .sheet(isPresented: $showSessions) {
                 SessionsView(initial: model.bootstrap?.sessions ?? [])
             }
-            .sheet(isPresented: $showProfile) {
-                if let me = model.bootstrap?.me {
-                    ProfileView(me: me) { Task { await model.load(force: true) } }
-                }
+            .sheet(item: $profileTarget) { target in
+                ProfileView(me: target.me) { Task { await model.load(force: true) } }
             }
             .sheet(isPresented: $showFeedback) { FeedbackView() }
             .sheet(isPresented: $showHistory) {
@@ -139,10 +143,11 @@ struct HomeView: View {
                     Label("All workouts", systemImage: "list.bullet.rectangle")
                 }
                 Button {
-                    showProfile = true
+                    if let me = model.bootstrap?.me { profileTarget = ProfileTarget(me: me) }
                 } label: {
                     Label("Edit profile", systemImage: "person.text.rectangle")
                 }
+                .disabled(model.bootstrap?.me == nil)
                 Button {
                     showSessions = true
                 } label: {
