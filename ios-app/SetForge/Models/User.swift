@@ -13,7 +13,10 @@ struct Me: Decodable, Identifiable {
     let gender: String?
     let grade: Int?       // derived integer grade (gradeFromClassYear), null if class_year unset
     let classYear: Int?   // graduation year as a number, e.g. 2027
-    let providers: [String]?
+    /// Linked auth providers. The server returns objects ({provider, linked_at}),
+    /// so this is kept open-ended rather than [String] (which would throw and
+    /// nil out the whole Me).
+    let providers: [AnyCodable]?
     let usaSwimmingId: String?
     let isAdmin: Bool?
     /// True when the user can coach (server sets is_coach OR is_admin). Gates
@@ -24,8 +27,10 @@ struct Me: Decodable, Identifiable {
     let createdAt: String?
     let lastLoginAt: String?
     let workoutCount: Int?
-    /// Per-pool stat rollups, shape varies — kept open-ended.
-    let statsByPool: [String: AnyCodable]?
+    /// Per-pool stat rollups. The server returns an ARRAY of {pool_mode, count,
+    /// total} objects — kept open-ended (was [String:AnyCodable], a dictionary,
+    /// which threw on the array and silently niled the entire Me object).
+    let statsByPool: [AnyCodable]?
 
     var id: String { sub ?? email ?? UUID().uuidString }
 
@@ -42,6 +47,32 @@ struct Me: Decodable, Identifiable {
         case lastLoginAt = "last_login_at"
         case workoutCount = "workout_count"
         case statsByPool = "stats_by_pool"
+    }
+
+    /// Tolerant per-field decode (matches Bootstrap/Workout idiom): a single
+    /// type-mismatched field (e.g. providers/stats shape drift, or me.grade)
+    /// degrades to nil instead of throwing and niling the WHOLE Me — which
+    /// silently broke Edit-profile + the coach Practices gate before this.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sub           = try? c.decodeIfPresent(String.self, forKey: .sub)
+        email         = try? c.decodeIfPresent(String.self, forKey: .email)
+        emailVerified = try? c.decodeIfPresent(Bool.self, forKey: .emailVerified)
+        displayName   = try? c.decodeIfPresent(String.self, forKey: .displayName)
+        initials      = try? c.decodeIfPresent(String.self, forKey: .initials)
+        dob           = try? c.decodeIfPresent(String.self, forKey: .dob)
+        gender        = try? c.decodeIfPresent(String.self, forKey: .gender)
+        grade         = try? c.decodeIfPresent(Int.self, forKey: .grade)
+        classYear     = try? c.decodeIfPresent(Int.self, forKey: .classYear)
+        providers     = try? c.decodeIfPresent([AnyCodable].self, forKey: .providers)
+        usaSwimmingId = try? c.decodeIfPresent(String.self, forKey: .usaSwimmingId)
+        isAdmin       = try? c.decodeIfPresent(Bool.self, forKey: .isAdmin)
+        isCoach       = try? c.decodeIfPresent(Bool.self, forKey: .isCoach)
+        supportRole   = try? c.decodeIfPresent(String.self, forKey: .supportRole)
+        createdAt     = try? c.decodeIfPresent(String.self, forKey: .createdAt)
+        lastLoginAt   = try? c.decodeIfPresent(String.self, forKey: .lastLoginAt)
+        workoutCount  = try? c.decodeIfPresent(Int.self, forKey: .workoutCount)
+        statsByPool   = try? c.decodeIfPresent([AnyCodable].self, forKey: .statsByPool)
     }
 
     /// First word of the display name, for greetings.
