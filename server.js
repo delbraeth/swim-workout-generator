@@ -131,11 +131,11 @@ import {
   dbCreateScheduledWorkout, dbGetScheduledWorkout, dbListScheduledWorkouts,
   dbUpdateScheduledWorkout, dbDeleteScheduledWorkout, dbLinkCompletedToSchedule,
   dbCompleteScheduledWorkout, dbGetPracticeAttendance, dbGetGroupRosterAsOf,
-  dbIsActiveGroupCoach,
+  dbIsActiveGroupCoach, extractScheduledWorkoutGroupId,
   dbRepeatWeek,
   dbGetGenerationContextForUser,
 } from "./db.js";
-import { generate as engineGenerate, workoutTypes as engineWorkoutTypes, generatorReady } from "./lib/generator.js";
+import { generate as engineGenerate, regenerateSection as engineRegenerateSection, workoutTypes as engineWorkoutTypes, generatorReady } from "./lib/generator.js";
 
 // Helper for audit events — pulls IP/UA off the request consistently
 function reqMeta(req) {
@@ -904,6 +904,60 @@ app.post("/api/generate", requireAuth, writeLimiter, async (req, res) => {
     res.json({ ok: true, workout });
   } catch (err) {
     console.error("[api/generate]", err.message);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Re-roll a SINGLE section of an existing workout. The web does this in-browser;
+// native can't, so it POSTs the current workout + the section to re-roll and we
+// run the same engine path. Auth + curation rehydration mirror /api/generate
+// exactly (server-authoritative favorites/disfavorites/overlay).
+app.post("/api/regenerate-section", requireAuth, writeLimiter, async (req, res) => {
+  if (!generatorReady()) return res.status(503).json({ error: "generator_unavailable" });
+  try {
+    const b = req.body || {};
+
+    // Required inputs.
+    const workout = b.workout;
+    if (!workout || typeof workout !== "object" || !Array.isArray(workout.blocks))
+      return res.status(400).json({ error: "workout (object with blocks array) required" });
+    const typeId = String(b.typeId || "");
+    if (!typeId) return res.status(400).json({ error: "typeId required" });
+    const sectionKey = String(b.sectionKey || "");
+    if (!sectionKey) return res.status(400).json({ error: "sectionKey required" });
+
+    // FORM inputs — client-controlled, mirrored from the live workout's settings.
+    const maxYards     = Number(b.maxYards);
+    const equipment    = (b.equipment && typeof b.equipment === "object") ? b.equipment : {};
+    const poolMode     = POOL_MODES.includes(b.poolMode) ? b.poolMode : "25y";
+    const userMin      = Number.isFinite(Number(b.userMin)) ? Number(b.userMin) : null;
+    const recoveryMode = !!b.recoveryMode;
+    const phase        = (typeof b.phase === "string" && b.phase) ? b.phase : null;
+    const sectionSource = (typeof b.sectionSource === "string" && b.sectionSource) ? b.sectionSource : null;
+    const disfavorMode  = (typeof b.disfavorMode === "string" && b.disfavorMode) ? b.disfavorMode : null;
+    const lanesPaceSecs = Array.isArray(b.lanesPaceSecs) && b.lanesPaceSecs.length
+      ? b.lanesPaceSecs.map(Number).filter(Number.isFinite)
+      : null;
+
+    // CURATION — server-authoritative, rehydrated from the DB (own + coach union).
+    const curation = (await dbGetGenerationContextForUser(req.userSub)) || {};
+
+    const result = engineRegenerateSection({
+      workout, typeId, sectionKey,
+      maxYards, equipment, poolMode, userMin, recoveryMode, phase,
+      sectionSource, disfavorMode, lanesPaceSecs,
+      ...curation,
+    });
+
+    // regenerateSection returns { workout, error }.
+    if (result && result.error)
+      return res.status(422).json({ error: result.error });
+    if (!result || !result.workout || !Array.isArray(result.workout.blocks))
+      return res.status(500).json({ error: "regenerate returned no workout" });
+
+    res.json({ ok: true, workout: result.workout });
+  } catch (err) {
+    console.error("[api/regenerate-section]", err.message);
     res.status(500).json({ error: err.message || String(err) });
   }
 });
@@ -4642,17 +4696,7 @@ app.delete("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf,
 async function _checkScheduledWorkoutCoachAccess(sw, callerSub) {
   if (!sw) return { ok: false, reason: "not_found" };
   if (sw.user_sub === callerSub) return { ok: true };
-  let groupId = null;
-  for (const v of [sw.intent_params, sw.payload]) {
-    if (!v || typeof v !== "object") continue;
-    if (typeof v.group_id === "string" && v.group_id.startsWith("gr_")) {
-      groupId = v.group_id; break;
-    }
-    // Phase 2b coach-fanout stashes the group under payload.assignment_target.
-    if (v.assignment_target && typeof v.assignment_target.group_id === "string" && v.assignment_target.group_id.startsWith("gr_")) {
-      groupId = v.assignment_target.group_id; break;
-    }
-  }
+  const groupId = extractScheduledWorkoutGroupId(sw);
   if (!groupId) return { ok: false, reason: "not_owner" };
   if (!(await dbIsActiveGroupCoach(groupId, callerSub))) {
     return { ok: false, reason: "not_owner_not_coach" };
@@ -4666,14 +4710,13 @@ app.get("/api/scheduled-workouts/:id/attendance-context", requireAuth, async (re
     if (!sw) return res.status(404).json({ error: "not_found" });
     const authz = await _checkScheduledWorkoutCoachAccess(sw, req.userSub);
     if (!authz.ok) return res.status(403).json({ error: authz.reason });
-    // Roster: only populated if the workout is tied to a group.
+    // Roster: only populated if the workout is tied to a group. Uses the shared
+    // helper, which also resolves payload.assignment_target.group_id — this
+    // route previously checked only the top-level group_id, so coach-fanout
+    // practices loaded an empty roster. Now consistent with the authz + complete
+    // paths.
     let roster = [];
-    let groupId = null;
-    for (const v of [sw.intent_params, sw.payload]) {
-      if (v && typeof v === "object" && typeof v.group_id === "string" && v.group_id.startsWith("gr_")) {
-        groupId = v.group_id; break;
-      }
-    }
+    const groupId = extractScheduledWorkoutGroupId(sw);
     if (groupId) {
       roster = await dbGetGroupRosterAsOf(groupId, sw.scheduled_date);
     }
