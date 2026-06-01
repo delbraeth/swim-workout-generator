@@ -33,3 +33,7 @@ SwimApp-Sources/
 "SetForge Icons/"
 "new watch app/"
 png/
+
+# Local SSH config + python bytecode (stray, never deploy)
+/config
+__pycache__/
