@@ -471,10 +471,6 @@ private struct RunOptionsSheet: View {
     }
 }
 
-private extension Array {
-    subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
-}
-
 // MARK: - Run step
 
 /// One thing to do in run mode — a swim set or a dryland exercise.
@@ -503,38 +499,12 @@ struct RunStep: Identifiable {
                 }
             } else {
                 for s in block.sets ?? [] {
-                    out.append(RunStep(sectionLabel: block.name ?? sectionTitle(block.section),
+                    out.append(RunStep(sectionLabel: block.name ?? sectionDisplayTitle(block.section),
                                        title: s.repsByDist, detail: s.desc, interval: s.interval, focus: s.focus,
-                                       reps: s.reps ?? 1, intervalSecs: parseIntervalSeconds(s.interval)))
+                                       reps: s.reps ?? 1, intervalSecs: IntervalFormat.parseSeconds(s.interval)))
                 }
             }
         }
         return out
-    }
-
-    /// Mirrors the web `parseIntervalSeconds`: "On 2:00" → 120, "On :30" → 30,
-    /// "No interval" / nil → nil.
-    static func parseIntervalSeconds(_ str: String?) -> Int? {
-        guard let str, !str.isEmpty, str.range(of: "no interval", options: .caseInsensitive) == nil else { return nil }
-        if let m = str.range(of: #"(\d+):(\d{2})"#, options: .regularExpression) {
-            let parts = str[m].split(separator: ":")
-            if parts.count == 2, let mm = Int(parts[0]), let ss = Int(parts[1]) { return mm * 60 + ss }
-        }
-        if let m = str.range(of: #":(\d{2})"#, options: .regularExpression) {
-            let ss = str[m].dropFirst()
-            if let s = Int(ss) { return s }
-        }
-        return nil
-    }
-
-    private static func sectionTitle(_ section: String?) -> String {
-        switch section {
-        case "warmup":   return "Warm-Up"
-        case "drill":    return "Drill / Pre-Main"
-        case "kick":     return "Kick Set"
-        case "main":     return "Main Set"
-        case "cooldown": return "Cool-Down"
-        default:         return section?.capitalized ?? "Set"
-        }
     }
 }

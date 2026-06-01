@@ -146,7 +146,7 @@ struct SwimBlockView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                BlockHeader(title: block.name ?? sectionTitle(block.section),
+                BlockHeader(title: block.name ?? sectionDisplayTitle(block.section),
                             trailing: block.totalYards.map { "\($0) yd" })
                 if let edit, let key = sectionKey {
                     if edit.isRegenerating(key) {
@@ -283,12 +283,6 @@ private struct SetEditTarget: Identifiable {
     var id: Int { setIndex }
 }
 
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
-}
-
 /// A dryland block: section header + an exercise list (sets × reps, rest). No
 /// distances, intervals, or pace clock — `sets` is intentionally absent here.
 struct DrylandBlockView: View {
@@ -377,17 +371,6 @@ private struct BlockHeader: View {
     }
 }
 
-private func sectionTitle(_ section: String?) -> String {
-    switch section {
-    case "warmup":   return "Warm-Up"
-    case "drill":    return "Drill / Pre-Main"
-    case "kick":     return "Kick Set"
-    case "main":     return "Main Set"
-    case "cooldown": return "Cool-Down"
-    case "dryland":  return "Dryland"
-    default:         return section?.capitalized ?? "Set"
-    }
-}
 
 // MARK: - Dryland explainer sheet
 
