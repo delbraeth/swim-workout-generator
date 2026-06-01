@@ -360,7 +360,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "456e3f6 · 2026-06-01 03:20 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "68b5cb5 · 2026-06-01 04:01 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -9902,10 +9902,13 @@
         warmup:   { "25y": WARMUP_OPTIONS,   "25m": WARMUP_OPTIONS_SCM,   "50m": WARMUP_OPTIONS_50M   },
         cooldown: { "25y": COOLDOWN_OPTIONS, "25m": COOLDOWN_OPTIONS_SCM, "50m": COOLDOWN_OPTIONS_50M },
         drill:    { "25y": DRILL_OPTIONS,    "25m": DRILL_OPTIONS_SCM,    "50m": DRILL_OPTIONS_50M    },
+        kick:     { "25y": KICK_OPTIONS,     "25m": KICK_OPTIONS_SCM,     "50m": KICK_OPTIONS_50M     },
         main:     { "25y": MAIN_OPTIONS,     "25m": MAIN_OPTIONS_SCM,     "50m": MAIN_OPTIONS_50M     },
       };
       const bank = BANKS[kind] && BANKS[kind][poolMode];
-      const isFlat = (kind === "warmup" || kind === "cooldown");
+      // kick is a non-typed (flat) bank like warmup/cooldown — its options
+      // carry empty types[]/strokes[], so it shows everything regardless of typeId.
+      const isFlat = (kind === "warmup" || kind === "cooldown" || kind === "kick");
       // Phase H Stage 2: banks are flat arrays with types[]/strokes[] tags.
       // - flat sections (warmup/cooldown): show everything, _typeId=null
       // - typed sections, typeId="all": show everything, _typeId=first tag
@@ -15713,7 +15716,7 @@
     // pool mode / section / type and lists labels + totalYards + set count.
     // Click a row to expand the full set list. Search by label, filter by
     // equipment / zone. Print stylesheet expands everything for paper.
-    const CATALOG_SECTIONS = ["warmup", "drill", "main", "cooldown"];
+    const CATALOG_SECTIONS = ["warmup", "drill", "kick", "main", "cooldown"];
     const CATALOG_TYPES    = ["all", "im", "distance", "sprint", "endurance", "technique", "mixed", "back", "breast", "fly"];
     // Synthetic "all equipment on" state — passed to equipmentForSet so the
     // catalog renders every applicable badge regardless of the user's actual
@@ -17800,6 +17803,9 @@
       const [skipWarmup,   setSkipWarmup]   = React.useState(!_initInc.includes("warmup"));
       const [skipDrill,    setSkipDrill]    = React.useState(!_initInc.includes("drill"));
       const [skipCooldown, setSkipCooldown] = React.useState(!_initInc.includes("cooldown"));
+      // Kick is the opt-IN 5th section (default off) — seed from the intent's
+      // saved includedSections so re-editing an intent preserves it.
+      const [addKick,      setAddKick]      = React.useState(_initInc.includes("kick"));
       // Section model — optional dryland block to attach to this intent. "" = none.
       const [drylandPreset, setDrylandPreset] = React.useState(safeInitial.dryland?.preset || "");
       const [drylandPlace,  setDrylandPlace]  = React.useState(safeInitial.dryland?.placement || "pre");
@@ -17882,10 +17888,11 @@
         }
         // Section model A2 — only attach when something is skipped, so old
         // all-4 intents produce identical JSON.
-        if (skipWarmup || skipDrill || skipCooldown) {
+        if (skipWarmup || skipDrill || addKick || skipCooldown) {
           const inc = [];
           if (!skipWarmup) inc.push("warmup");
           if (!skipDrill)  inc.push("drill");
+          if (addKick)     inc.push("kick");
           inc.push("main");
           if (!skipCooldown) inc.push("cooldown");
           intent_params.includedSections = inc;
@@ -18037,6 +18044,7 @@
               {[
                 { label: "Warmup",   skip: skipWarmup,   toggle: () => setSkipWarmup(v => !v) },
                 { label: "Drill",    skip: skipDrill,    toggle: () => setSkipDrill(v => !v) },
+                { label: "Kick",     skip: !addKick,     toggle: () => setAddKick(v => !v) },
                 { label: "Main",     locked: true },
                 { label: "Cooldown", skip: skipCooldown, toggle: () => setSkipCooldown(v => !v) },
               ].map(s => {
