@@ -92,7 +92,9 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 GreetingCard(me: model.bootstrap?.me,
-                             poolMode: model.bootstrap?.poolMode)
+                             poolMode: model.bootstrap?.poolMode,
+                             nextEvent: model.bootstrap?.nextEvent,
+                             anchors: model.bootstrap?.upcomingAnchors ?? [])
 
                 NavigationLink {
                     GenerateView()
@@ -185,6 +187,8 @@ struct HomeView: View {
 private struct GreetingCard: View {
     let me: Me?
     let poolMode: String?
+    var nextEvent: NextEvent? = nil
+    var anchors: [GroupAnchor] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -202,11 +206,60 @@ private struct GreetingCard: View {
                     Tag(text: "Admin", color: Brand.warn)
                 }
             }
+            if nextEvent != nil || !anchors.isEmpty {
+                eventPills
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Brand.card, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Brand.border, lineWidth: 1))
+    }
+
+    /// Individual "Next event" + team/meet countdown anchors, as pills.
+    private var eventPills: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Team/meet anchors (🎯 "N wks to <event>"). Nearest first.
+            ForEach(anchors) { a in
+                EventPill(icon: "🎯", text: anchorText(a), color: Brand.warn)
+            }
+            // Individual next event (🏁 name · date).
+            if let ev = nextEvent {
+                EventPill(icon: "🏁",
+                          text: ev.date.map { "\(ev.name) · \($0)" } ?? ev.name,
+                          color: Brand.primary)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func anchorText(_ a: GroupAnchor) -> String {
+        let name = a.eventName ?? "event"
+        let when: String
+        switch a.weeksOut ?? -1 {
+        case 0:  when = "This week"
+        case 1:  when = "1 wk to"
+        case let w where w > 1: when = "\(w) wks to"
+        default: when = "Upcoming"
+        }
+        return "\(when) \(name)"
+    }
+}
+
+/// A small event pill (emoji + text), matching the greeting-card tag style.
+private struct EventPill: View {
+    let icon: String
+    let text: String
+    let color: Color
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(icon).font(.caption2)
+            Text(text).font(.caption.weight(.semibold)).foregroundStyle(Brand.text)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(color.opacity(0.18), in: Capsule())
+        .overlay(Capsule().stroke(color.opacity(0.4), lineWidth: 1))
     }
 }
 

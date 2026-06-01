@@ -22,6 +22,8 @@ struct Bootstrap: Decodable {
     let pendingInvites: [AnyCodable]?
     let billing: Billing?
     let settings: [String: AnyCodable]?
+    /// Team/meet event anchors for the swimmer's groups (one per anchored group).
+    let groupAnchors: [GroupAnchor]?
 
     enum CodingKeys: String, CodingKey {
         case me, workouts, favorites, disfavorites, goals, sessions, billing, settings
@@ -30,6 +32,7 @@ struct Bootstrap: Decodable {
         case effectiveFavorites = "effectiveFavorites"
         case effectiveDisfavorites = "effectiveDisfavorites"
         case pendingInvites = "pendingInvites"
+        case groupAnchors
     }
 
     /// Per-section tolerant decode (matches the SPA's `applyBootstrap`): an
@@ -52,7 +55,37 @@ struct Bootstrap: Decodable {
         pendingInvites        = try? c.decodeIfPresent([AnyCodable].self, forKey: .pendingInvites)
         billing               = try? c.decodeIfPresent(Billing.self, forKey: .billing)
         settings              = try? c.decodeIfPresent([String: AnyCodable].self, forKey: .settings)
+        groupAnchors          = try? c.decodeIfPresent([GroupAnchor].self, forKey: .groupAnchors)
     }
+}
+
+/// A team/meet event anchor (`bootstrap.groupAnchors`). `weeksOut` is the
+/// server-computed countdown (0 = this week); the server only includes
+/// future-or-current anchors.
+struct GroupAnchor: Decodable, Identifiable {
+    let groupId: String?
+    let eventId: String?
+    let eventName: String?
+    let eventDate: String?
+    let weeksOut: Int?
+    let suggestedPhase: String?
+
+    var id: String { eventId ?? groupId ?? UUID().uuidString }
+
+    enum CodingKeys: String, CodingKey {
+        case groupId = "group_id"
+        case eventId = "event_id"
+        case eventName = "event_name"
+        case eventDate = "event_date"
+        case weeksOut = "weeks_out"
+        case suggestedPhase = "suggested_phase"
+    }
+}
+
+/// The individual "Next event" the swimmer set (`settings.next_event = {name,date}`).
+struct NextEvent {
+    let name: String
+    let date: String?
 }
 
 /// Coach-propagated curation has three states each (per-user + inherited):
@@ -82,5 +115,20 @@ extension Bootstrap {
     var favoriteSetCount: Int { favoriteSets?.count ?? 0 }
     var effectiveFavoriteCount: Int {
         (effectiveFavorites?.setIds?.count ?? 0) + (effectiveFavorites?.labels?.count ?? 0)
+    }
+
+    /// The individual "Next event" from settings.next_event ({ name, date }).
+    /// Returns nil when unset or nameless.
+    var nextEvent: NextEvent? {
+        guard let obj = settings?["next_event"]?.objectValue,
+              let name = obj["name"]?.stringValue, !name.isEmpty else { return nil }
+        return NextEvent(name: name, date: obj["date"]?.stringValue)
+    }
+
+    /// Anchors with a valid future-or-current countdown, nearest first.
+    var upcomingAnchors: [GroupAnchor] {
+        (groupAnchors ?? [])
+            .filter { ($0.weeksOut ?? -1) >= 0 && ($0.eventName?.isEmpty == false) }
+            .sorted { ($0.weeksOut ?? .max) < ($1.weeksOut ?? .max) }
     }
 }
