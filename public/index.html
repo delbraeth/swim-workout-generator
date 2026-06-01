@@ -360,7 +360,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "4c2c89a · 2026-06-01 08:45 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "9524d73 · 2026-06-01 14:24 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -10645,7 +10645,15 @@
                   <span style={{ minWidth: 70, fontWeight: 700, color: "#7a4a12", fontSize: 13, fontFamily: "ui-monospace, monospace" }}>
                     {e.sets > 1 ? `${e.sets} × ${e.reps}` : `${e.reps}`}
                   </span>
-                  <span style={{ flex: 1, color: "#5b4326", fontSize: 13 }}>{e.name}</span>
+                  <span style={{ flex: 1, fontSize: 13 }}>
+                    <span title={DRYLAND_EXPLAINERS[e.name] || undefined}
+                      style={{ color: "#5b4326", ...(DRYLAND_EXPLAINERS[e.name] ? { borderBottom: "1px dotted #c9a96a", cursor: "help" } : {}) }}>
+                      {e.name}
+                    </span>
+                    {DRYLAND_EXPLAINERS[e.name] ? (
+                      <span title={DRYLAND_EXPLAINERS[e.name]} style={{ color: "#a3702c", fontSize: 11, marginLeft: 4, cursor: "help" }}>ⓘ</span>
+                    ) : null}
+                  </span>
                   {e.rest && <span style={{ color: "#9a7b4f", fontSize: 11 }}>rest {e.rest}</span>}
                 </div>
               ))
