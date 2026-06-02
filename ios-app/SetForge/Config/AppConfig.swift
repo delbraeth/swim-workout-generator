@@ -44,11 +44,13 @@ enum AppConfig {
     /// inert (no paywall, no StoreKit calls). When you create the products,
     /// fill these to match App Store Connect AND lib/appleIap.js's
     /// `product_tier_map`. See IAP_PLAN.md.
-    static let iapProductIDs: [String: String] = [:]
-    // When products exist in App Store Connect, replace [:] with e.g.:
-    //   "com.delbraeth.swimworkout.coach.monthly":  "coach",
-    //   "com.delbraeth.swimworkout.program.yearly": "program",
-    // Keys must match App Store Connect AND lib/appleIap.js product_tier_map.
+    // Keys MUST match App Store Connect product IDs AND the server's
+    // APPLE_IAP_CONFIG.product_tier_map exactly (a mismatch silently fails
+    // verification with "unknown_product"). Values are the server tier names.
+    static let iapProductIDs: [String: String] = [
+        "com.delbraeth.swimworkout.coach.monthly":  "coach",
+        "com.delbraeth.swimworkout.program.yearly": "program",
+    ]
 
     /// True once IAP products are configured. Gates the paywall + StoreKit.
     static var iapConfigured: Bool { !iapProductIDs.isEmpty }

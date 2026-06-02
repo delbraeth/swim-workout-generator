@@ -41,6 +41,7 @@ struct HomeView: View {
     @State private var showHistory = false
     @State private var showAssigned = false
     @State private var showPractices = false
+    @State private var showPaywall = false
     @State private var runningWorkout: Workout?
 
     // Wrapper so the profile sheet is driven by data, never presented empty.
@@ -71,6 +72,7 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showAssigned) { AssignedView() }
             .sheet(isPresented: $showPractices) { PracticesView() }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
             .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
         }
         .task { await model.load() }
@@ -152,6 +154,15 @@ struct HomeView: View {
                     showHistory = true
                 } label: {
                     Label("All workouts", systemImage: "list.bullet.rectangle")
+                }
+                // Upgrade — only when IAP is configured and the user is still on
+                // the free tier (no point showing it to active subscribers).
+                if AppConfig.iapConfigured && (model.bootstrap?.billing?.status ?? "free") == "free" {
+                    Button {
+                        showPaywall = true
+                    } label: {
+                        Label("Upgrade to Coach", systemImage: "star.circle")
+                    }
                 }
                 Button {
                     if let me = model.bootstrap?.me { profileTarget = ProfileTarget(me: me) }
