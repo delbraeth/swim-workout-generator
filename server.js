@@ -1479,6 +1479,13 @@ const REQUIRED_SECTIONS  = ["warmup", "drill", "main", "cooldown"];
 function validateWorkoutEntry(entry) {
   if (!entry || typeof entry !== "object")             return "entry must be an object";
   if (typeof entry.id !== "string" || !entry.id)       return "entry.id (string) required";
+  // The `workouts.id` column is VARCHAR(32); an over-long id (e.g. a client
+  // sending "w" + full UUID) otherwise dies at the DB layer with an opaque
+  // 1406 "Data too long". Reject cleanly here. Canonical ids are makeEntryId()
+  // output: "w" + base36 — short and [a-z0-9]. Be lenient on charset (allow the
+  // legacy set) but strict on length so nothing can overflow the column.
+  if (entry.id.length > 32)                            return "entry.id too long (max 32 chars)";
+  if (!/^[A-Za-z0-9_-]+$/.test(entry.id))              return "entry.id has invalid characters";
   if (!VALID_WORKOUT_TYPES.has(entry.type))            return `entry.type must be one of: ${[...VALID_WORKOUT_TYPES].join(", ")}`;
   if (!Number.isFinite(entry.totalYards) || entry.totalYards <= 0)
                                                        return "entry.totalYards must be a positive number";
