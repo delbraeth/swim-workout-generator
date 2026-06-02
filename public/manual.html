@@ -307,6 +307,7 @@
     <a href="#teams">Teams (coaches)</a>
     <a href="#swimmers">Managed Swimmers (coaches)</a>
     <a href="#catalog">Workout Catalog (coaches)</a>
+    <a href="#practices-screen">Practices screen (coaches)</a>
     <a href="#coach-fanout">Coach: Planning for a Group</a>
     <a href="#coach-propagation">Coach group propagation</a>
     <a href="#reports">Reports</a>
@@ -1702,6 +1703,28 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
         <div class="callout-body"><strong>Read-only by design.</strong> The catalog is browse + flag only. Phase III (editable bank for admins) is deferred — it needs an architecture decision on where edits write back to. Today the source-of-truth is the bank constants in <code>public/index.html</code>; fixes happen by editing source.</div>
+      </div>
+    </section>
+
+    <!-- ══ PRACTICES SCREEN ══ -->
+    <section id="practices-screen">
+      <h2>Practices screen (coaches)</h2>
+      <p>The <strong>Practices</strong> screen is a dedicated coach view for attendance roll-call, reachable from the <strong>🔧 ▾</strong> coach menu in the header → <strong>📋 Practices</strong>. (The 🔧 menu only appears for coaches.) It pulls your scheduled practices into one list so you can record who attended without scrolling the week grid.</p>
+
+      <h3>What it shows</h3>
+      <p>A flat, date-sorted list of every scheduled practice in a four-week window — the current week (starting Monday) plus the next three. Each row shows the date, the facility (if the practice is tagged with one — see <a href="#teams">practice facilities</a>), and an attendance status:</p>
+      <ul>
+        <li><strong>Not yet recorded</strong> — a generated practice with no attendance taken. The row has a <strong>📋 Mark done</strong> button.</li>
+        <li><strong>Attendance recorded</strong> — already marked; the button reads <strong>Edit attendance</strong> so you can reopen and adjust.</li>
+        <li><strong>Planned (generate first)</strong> — an <a href="#plan-intent">intent</a> row whose workout hasn't been generated yet. Attendance isn't possible until the workout exists, so the row is shown disabled with a <strong>—</strong>.</li>
+      </ul>
+
+      <h3>Marking attendance</h3>
+      <p>Tapping <strong>📋 Mark done</strong> (or <strong>Edit attendance</strong>) opens the <em>same</em> roster modal the week view uses — see <a href="#week-view">📋 Mark practice done</a> for the full roster behavior (roster as-of the scheduled date, present-by-default, who's allowed to mark). The two surfaces are interchangeable: the week-view button is unchanged, and anything you record here shows up there and feeds the <a href="#reports">Schedule Adherence (R2)</a> report identically.</p>
+
+      <div class="callout tip">
+        <div class="callout-icon">📋</div>
+        <div class="callout-body"><strong>When to use which.</strong> Use the <strong>week view</strong> when you're already planning the week and want the calendar context; use the <strong>Practices screen</strong> when you just want a clean checklist of practices that still need attendance taken. Empty state ("No scheduled practices in the next four weeks") points you back to the 📅 week view to schedule one.</div>
       </div>
     </section>
 
