@@ -14,15 +14,21 @@ Both items were committed on `build-3` and are now in a shipped build:
    ("Upgrade to Coach" menu, free-tier only), StoreKitManager transaction listener
    at launch, double-pay /eligibility pre-check.
 
-## ▶ Next action: sandbox-test IAP on build 9 (see checklist below)
+## ✅ Sandbox IAP test — PASSED (2026-06-02)
+End-to-end on a real device: free-tier SetForge user → Upgrade to Coach →
+sandbox purchase → `/api/billing/apple/verify` → tier flipped to coach. Products
+LOADED fine, so the **In-App Purchase capability is NOT needed** (StoreKit 2 works
+without it here). Confirmed login provider is independent of IAP (tested fine).
+
+## ▶ Next action: IAP PRODUCTION prerequisites (see bottom) when ready to launch.
 
 ## 🅱 Waiting to ride build 10 (committed on `build-3`, NOT in build 9)
 - **Person-menu Sections fix** (`HomeView.swift`, commit a56b041) — grouped the
   person menu into Workouts / Account sections with **Sign out** isolated in its
   own trailing section. Fixes Sign out scrolling out of view at large Dynamic Type.
   Build verified. (Batched per user — ship with build 10.)
-- **(conditional) In-App Purchase capability** — only if sandbox testing shows the
-  paywall can't load products. Add in Xcode Signing & Capabilities, then archive 10.
+- This is now the ONLY thing build 10 must carry (the IAP-capability concern is
+  resolved — products loaded in sandbox). Cut build 10 whenever convenient.
 
 ## To cut a future build (template)
 ```
@@ -36,12 +42,7 @@ cd ios-app && xcodebuild -project SetForgeApp.xcodeproj -scheme SetForge \
 # verify: PlistBuddy CFBundleVersion == 10, then user uploads via Xcode Organizer
 ```
 
-## Possible build-10 trigger
-- If sandbox IAP **products don't load** on the paywall → the In-App Purchase
-  capability isn't in entitlements. Add in Xcode → target → Signing & Capabilities
-  → **+ In-App Purchase**, re-archive as build 10.
-
-## Sandbox IAP test checklist (once build 9 installs on a device)
+## Sandbox IAP test checklist (PASSED 2026-06-02 — kept for reference)
 1. ASC → Users and Access → Sandbox → Testers → create one (email NOT tied to a
    real Apple ID).
 2. Device Settings → App Store → Sandbox Account → sign in as tester.
