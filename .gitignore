@@ -37,3 +37,6 @@ png/
 # Local SSH config + python bytecode (stray, never deploy)
 /config
 __pycache__/
+
+# Local IAP review assets (paywall mockup) — not deployed app code
+/ios-app/iap-assets/
