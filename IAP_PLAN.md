@@ -82,15 +82,21 @@ Renewals/cancels/refunds arrive server-to-server at `/apple/notify` →
 - [ ] Verify: purchase → `/verify` grants tier → bootstrap reflects it; cancel
   in sandbox → notification revokes; restore re-grants.
 
-## Stripe ↔ IAP coexistence (decided: both active, same tier)
+## Stripe ↔ IAP coexistence (decided: both active, same tier) — DONE
 - Web → Stripe, iOS → Apple IAP. Both write `users.tier`; `tier_source` tags the
   channel. Entitlement is idempotent (tier is tier).
-- **Double-pay guard** (implement at go-live, read-only off `tier_source`):
-  - Before a Stripe checkout: if `tier_source LIKE 'apple_iap_%'` and active →
-    block, tell user to manage in App Store.
-  - Before the iOS paywall: if `tier_source LIKE 'stripe_sub_%'` and active →
-    block, point to the web billing portal.
-  - See `reconciliationNote()` in `lib/appleIap.js`.
+- **Double-pay guard — IMPLEMENTED** (read-only off `tier_source`; `channelForSource`
+  + `checkCrossChannel` in `lib/appleIap.js`, 9/9 matrix tested):
+  - **Stripe checkout** (`POST /api/billing/checkout`): if an active Apple IAP sub
+    exists → **409 `already_subscribed_other_channel`**, before any Stripe session.
+  - **iOS pre-purchase** (`GET /api/billing/apple/eligibility`): the paywall calls
+    this before StoreKit charges; active Stripe sub → `eligible:false` and the buy
+    aborts client-side (StoreKitManager.purchase → crossChannelBlockMessage).
+  - **Apple verify backstop** (`POST /api/billing/apple/verify`): if Apple already
+    charged while Stripe active, we still GRANT (never take money + deny), but return
+    a `warning` + audit `billing.double_pay.detected` so the redundant Stripe sub can
+    be cancelled.
+  - Same-channel renewals/restores never block; comped (`admin_*`) never blocks.
 
 ## App Review gotchas
 - iOS must **not** show or link to Stripe/web checkout for the purchase. The

@@ -60,6 +60,14 @@ final class StoreKitManager: ObservableObject {
     func purchase(_ product: Product) async -> Bool {
         guard isConfigured else { return false }
         phase = .purchasing; lastError = nil
+        // Double-pay guard: ask the server if this account already has an active
+        // web (Stripe) subscription BEFORE StoreKit charges. Blocks the buy and
+        // points the user to the web portal rather than billing both channels.
+        if let block = await crossChannelBlockMessage() {
+            lastError = block
+            phase = .loaded
+            return false
+        }
         do {
             let result = try await product.purchase()
             switch result {
@@ -125,6 +133,23 @@ final class StoreKitManager: ObservableObject {
             // backstop — Apple will notify the server of the same transaction
             // server-to-server, so entitlement still resolves on next bootstrap.
             lastError = "Purchase recorded; syncing entitlement may take a moment."
+        }
+    }
+
+    /// Pre-purchase double-pay check. Returns a user-facing message to show
+    /// (and abort) when the account already has an active web/Stripe sub;
+    /// returns nil when the purchase may proceed. Fails OPEN — a check error
+    /// never blocks a legitimate buyer.
+    private func crossChannelBlockMessage() async -> String? {
+        struct Eligibility: Decodable { let eligible: Bool?; let message: String? }
+        do {
+            let e = try await api.get("billing/apple/eligibility", as: Eligibility.self)
+            if e.eligible == false {
+                return e.message ?? "You already have an active subscription on the web."
+            }
+            return nil
+        } catch {
+            return nil // fail open
         }
     }
 
