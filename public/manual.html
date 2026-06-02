@@ -315,6 +315,7 @@
     <a href="#parse-intent">Quick Input (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
     <a href="#tips">Tips &amp; Tricks</a>
+    <a href="#ios-app">iOS App</a>
 
     <div class="nav-section">About</div>
     <a href="#community">Community</a>
@@ -1968,6 +1969,58 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <hr />
 
       <a href="/" class="hero-back" style="display:inline-flex;">← Back to the app</a>
+    </section>
+
+    <!-- ══ iOS APP ══ -->
+    <section id="ios-app">
+      <h2>iOS App</h2>
+      <p>SetForge has a native iOS app (currently in TestFlight). It signs into the <strong>same account</strong> and the <strong>same production backend</strong> as the website — your workouts, history, favorites, groups, and curation are shared, so you can plan on the web and run practice from your phone. The app focuses on the day-to-day flow (generate → edit → run → save) plus the coach surfaces; a few web-only admin tools (Teams setup, bulk import, Reports, Catalog browsing) stay on the website.</p>
+
+      <h3>Signing in</h3>
+      <p>The app offers <strong>Sign in with Apple</strong> and <strong>Continue with Google</strong>. As on the web, the app is invite-only for new accounts — enter your <strong>invite code</strong> the first time; returning users leave it blank. Sessions use a bearer token stored securely in the Keychain; sign out from the person menu (it also appears under <a href="#account">Devices &amp; sessions</a>).</p>
+
+      <h3>Home</h3>
+      <p>The home screen loads once on launch (a single call, to stay light on the network) and shows a greeting card with your pool mode, workout count, and an <em>Admin</em> tag if you have one. Below it: a big <strong>Generate workout</strong> button, a summary row (favorite sets / effective favorites / devices), and your most recent workouts. Pull down to refresh. If you have upcoming events, they appear as pills on the greeting card — 🎯 team/meet countdowns ("3 wks to Champs") and 🏁 your individual next event.</p>
+      <p>The <strong>person menu</strong> (top-right) holds: <strong>Assigned to me</strong>, <strong>Practices</strong> (coaches only), <strong>All workouts</strong>, <strong>Upgrade to Coach</strong> (free-tier only), <strong>Edit profile</strong>, <strong>Devices &amp; sessions</strong>, <strong>Send feedback</strong>, and <strong>Sign out</strong>.</p>
+
+      <h3>Generating a workout</h3>
+      <p>Tap <strong>Generate workout</strong> for the full builder: workout type, yardage, pool mode, target pace, training phase, emphasis, and equipment. A <strong>Sections</strong> row lets you toggle sections — including the opt-in <a href="#sections">kick set</a> (off by default, same as the web) — and there's a <strong>Recovery day</strong> switch. You can <strong>add or remove a dryland block</strong> (before/after the pool portion) from the same presets as the web.</p>
+
+      <h3>Editing a generated workout</h3>
+      <p>The iOS app has the same inline editing tools as the web result card. On each set you can:</p>
+      <ul>
+        <li><strong>Edit the interval</strong> (or add one where there's none), <strong>edit the description</strong>, and <strong>edit the rest between rounds</strong>.</li>
+        <li><strong>Swap a set</strong> — cycles through equivalent splits (e.g. 8×25 → 4×50 → 2×100) at the same distance.</li>
+        <li><strong>★ Favorite / disfavorite</strong> a set to bias future generation, and <strong>Rescale pace</strong> across the workout.</li>
+        <li><strong>Regenerate a section</strong> to re-roll just that part.</li>
+      </ul>
+      <p>Tap a <strong>dryland exercise</strong> to open an explainer sheet describing what it is and how to do it (the app ships the same 49 explainers as the web hover tooltips — see <a href="#sections">Workout Sections → Dryland</a>). Saving writes the workout to your shared history, edits and all.</p>
+
+      <h3>Run mode</h3>
+      <p>Open any workout and tap <strong>🏊 Start Workout</strong> for a full-screen run view: a pace clock, set/rep progress ("Set 2 of 6", "Rep 3 of 8"), <strong>Lap</strong> logging, a rest timer between sets with <strong>Skip rest</strong>, and audio cues. It mirrors the web <a href="#run-mode">Run Mode</a>.</p>
+
+      <h3>Profile</h3>
+      <p>Edit profile lets you update your name, gender, class year, and USA Swimming ID. Deeper account management (curation panels, subscription, goals) lives on the website — see <a href="#account">Profile (Account / Curation / Subscription)</a>.</p>
+
+      <h3>Coach features</h3>
+      <p>If your account has the coach flag, the app unlocks the coach surfaces:</p>
+      <ul>
+        <li><strong>Generate for</strong> — on the generator, pick a group or student instead of "Myself" to fan the generated workout out to everyone as an assignment (mirrors <a href="#coach-fanout">Coach: Planning for a Group</a>).</li>
+        <li><strong>Multi-lane</strong> — turn on multi-lane and set a target pace per lane; the engine fits the intervals across lanes at different paces.</li>
+        <li><strong>Coach notes</strong> — add notes on roster swimmers with a visibility level (mirrors the web coach notes).</li>
+        <li><strong>Practices</strong> — the person menu's Practices screen lists this week's scheduled practices; tap one to take attendance (everyone present by default, mark absences, see "N of M present"). This is the same roll-call as the web <a href="#practices-screen">Practices screen</a> / <a href="#week-view">Mark practice done</a>, scoped to the current week on iOS.</li>
+      </ul>
+
+      <h3>Assigned to me</h3>
+      <p>Swimmers see <strong>Assigned to me</strong> in the person menu — the workouts your coach has assigned to you, the app-side equivalent of the web <strong>📥 Assigned to me</strong> view.</p>
+
+      <h3>Upgrade to Coach</h3>
+      <p>On iOS, the Coach tier is purchased through the App Store as an in-app purchase (the web uses Stripe); both resolve to the same Coach tier on your account. The <strong>Upgrade to Coach</strong> menu item appears only while you're on the free tier, and <strong>Restore</strong> re-applies a previous purchase. If you already subscribed on the web, manage that plan on the web — the app will point you there rather than charging you twice.</p>
+
+      <div class="callout note">
+        <div class="callout-icon">📱</div>
+        <div class="callout-body"><strong>One account, two front-ends.</strong> The app and website are views onto the same data. Anything you generate, save, favorite, or assign on one shows up on the other after a refresh. When a feature isn't in the app yet, it's available on the website.</div>
+      </div>
     </section>
 
     <!-- ══ COMMUNITY ══ -->
