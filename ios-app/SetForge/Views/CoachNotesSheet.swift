@@ -14,16 +14,16 @@ final class CoachNotesViewModel: ObservableObject {
     @Published var saveError: String?
 
     let swimmerSub: String?
-    let managedId: Int?
+    let managedId: String?   // "ms_xxxxxx" string
 
-    init(swimmerSub: String?, managedId: Int?) {
+    init(swimmerSub: String?, managedId: String?) {
         self.swimmerSub = swimmerSub
         self.managedId = managedId
     }
 
     private var query: [URLQueryItem] {
         if let s = swimmerSub { return [URLQueryItem(name: "swimmer_sub", value: s)] }
-        if let m = managedId { return [URLQueryItem(name: "managed_id", value: String(m))] }
+        if let m = managedId { return [URLQueryItem(name: "managed_id", value: m)] }
         return []
     }
 
@@ -64,7 +64,7 @@ struct CoachNotesSheet: View {
     @StateObject private var model: CoachNotesViewModel
     @Environment(\.dismiss) private var dismiss
 
-    init(title: String, swimmerSub: String?, managedId: Int?) {
+    init(title: String, swimmerSub: String?, managedId: String?) {
         self.title = title
         _model = StateObject(wrappedValue: CoachNotesViewModel(swimmerSub: swimmerSub, managedId: managedId))
     }

@@ -40,7 +40,7 @@ enum NoteVisibility: String, CaseIterable, Identifiable {
 /// `POST /api/coach-notes` body. Exactly one of swimmerSub / managedId is set.
 struct CoachNoteCreate: Encodable {
     let swimmerSub: String?
-    let managedId: Int?
+    let managedId: String?   // "ms_xxxxxx" string
     let visibility: String
     let body: String
 

@@ -71,7 +71,7 @@ struct AttendanceContext: Decodable {
 struct RosterMember: Decodable, Identifiable {
     let rowId: Int
     let memberSwimmerSub: String?
-    let memberManagedId: Int?
+    let memberManagedId: String?   // managed-swimmer id is "ms_xxxxxx" (string), NOT an Int
     let role: String?
     let displayName: String?
     let initials: String?
@@ -98,7 +98,7 @@ struct RosterMember: Decodable, Identifiable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         rowId = (try c.decodeIfPresent(Int.self, forKey: .rowId)) ?? 0
         memberSwimmerSub = try c.decodeIfPresent(String.self, forKey: .memberSwimmerSub)
-        memberManagedId = try c.decodeIfPresent(Int.self, forKey: .memberManagedId)
+        memberManagedId = try c.decodeIfPresent(String.self, forKey: .memberManagedId)
         role = try c.decodeIfPresent(String.self, forKey: .role)
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
         initials = try c.decodeIfPresent(String.self, forKey: .initials)
@@ -108,7 +108,7 @@ struct RosterMember: Decodable, Identifiable {
 /// A previously-recorded attendance row, used to seed the absent set.
 struct AttendanceRecord: Decodable {
     let swimmerSub: String?
-    let managedId: Int?
+    let managedId: String?   // "ms_xxxxxx" string
     let present: Bool
     let notes: String?
 
@@ -129,7 +129,7 @@ struct AttendanceRecord: Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         swimmerSub = try c.decodeIfPresent(String.self, forKey: .swimmerSub)
-        managedId = try c.decodeIfPresent(Int.self, forKey: .managedId)
+        managedId = try c.decodeIfPresent(String.self, forKey: .managedId)
         present = (try c.decodeIfPresent(Bool.self, forKey: .present)) ?? true
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
     }
@@ -139,7 +139,7 @@ struct AttendanceRecord: Decodable {
 /// identifier (swimmer_sub OR managed_id) plus `present`.
 struct AttendanceMark: Encodable {
     let swimmerSub: String?
-    let managedId: Int?
+    let managedId: String?   // "ms_xxxxxx" string
     let present: Bool
 
     enum CodingKeys: String, CodingKey {
