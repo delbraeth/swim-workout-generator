@@ -138,52 +138,62 @@ struct HomeView: View {
     private var toolbarMenu: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button {
-                    showAssigned = true
-                } label: {
-                    Label("Assigned to me", systemImage: "tray.and.arrow.down")
-                }
-                if model.bootstrap?.me?.coaches == true {
+                // Grouped into labelled sections so the menu reads cleanly and the
+                // destructive Sign out sits in its own divider-separated section at
+                // the bottom (instead of being one more anonymous row that scrolls
+                // out of view at large Dynamic Type sizes).
+                Section("Workouts") {
                     Button {
-                        showPractices = true
+                        showAssigned = true
                     } label: {
-                        Label("Practices", systemImage: "calendar.badge.checkmark")
+                        Label("Assigned to me", systemImage: "tray.and.arrow.down")
+                    }
+                    if model.bootstrap?.me?.coaches == true {
+                        Button {
+                            showPractices = true
+                        } label: {
+                            Label("Practices", systemImage: "calendar.badge.checkmark")
+                        }
+                    }
+                    Button {
+                        showHistory = true
+                    } label: {
+                        Label("All workouts", systemImage: "list.bullet.rectangle")
                     }
                 }
-                Button {
-                    showHistory = true
-                } label: {
-                    Label("All workouts", systemImage: "list.bullet.rectangle")
-                }
-                // Upgrade — only when IAP is configured and the user is still on
-                // the free tier (no point showing it to active subscribers).
-                if AppConfig.iapConfigured && (model.bootstrap?.billing?.status ?? "free") == "free" {
+                Section("Account") {
+                    // Upgrade — only when IAP is configured and the user is still on
+                    // the free tier (no point showing it to active subscribers).
+                    if AppConfig.iapConfigured && (model.bootstrap?.billing?.status ?? "free") == "free" {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            Label("Upgrade to Coach", systemImage: "star.circle")
+                        }
+                    }
                     Button {
-                        showPaywall = true
+                        if let me = model.bootstrap?.me { profileTarget = ProfileTarget(me: me) }
                     } label: {
-                        Label("Upgrade to Coach", systemImage: "star.circle")
+                        Label("Edit profile", systemImage: "person.text.rectangle")
+                    }
+                    .disabled(model.bootstrap?.me == nil)
+                    Button {
+                        showSessions = true
+                    } label: {
+                        Label("Devices & sessions", systemImage: "laptopcomputer.and.iphone")
+                    }
+                    Button {
+                        showFeedback = true
+                    } label: {
+                        Label("Send feedback", systemImage: "bubble.left.and.text.bubble.right")
                     }
                 }
-                Button {
-                    if let me = model.bootstrap?.me { profileTarget = ProfileTarget(me: me) }
-                } label: {
-                    Label("Edit profile", systemImage: "person.text.rectangle")
-                }
-                .disabled(model.bootstrap?.me == nil)
-                Button {
-                    showSessions = true
-                } label: {
-                    Label("Devices & sessions", systemImage: "laptopcomputer.and.iphone")
-                }
-                Button {
-                    showFeedback = true
-                } label: {
-                    Label("Send feedback", systemImage: "bubble.left.and.text.bubble.right")
-                }
-                Button(role: .destructive) {
-                    Task { await auth.signOut() }
-                } label: {
-                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                Section {
+                    Button(role: .destructive) {
+                        Task { await auth.signOut() }
+                    } label: {
+                        Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
                 }
             } label: {
                 Image(systemName: "person.crop.circle")
