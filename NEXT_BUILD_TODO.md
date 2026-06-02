@@ -1,30 +1,31 @@
-# Next iOS Build (build 9) — what it must carry + how to ship
+# iOS build status + next steps
 
-Quick-reference for the next time iOS gets built. Build number is at **8** in the
-project file; the last UPLOADED TestFlight build is **8**. Next archive = **bump to 9**.
+Build number is at **9** in the project file; the last UPLOADED TestFlight build is
+**9** (uploaded 2026-06-02 from Xcode Organizer). Next archive = bump to 10.
 
-## What's already committed and waiting to ride build 9
-These are on `build-3` (pushed) but NOT in any shipped build yet:
+## ✅ Shipped in build 9 (uploaded to TestFlight)
+Both items were committed on `build-3` and are now in a shipped build:
 
 1. **managed_id String fix (iOS half)** — `RosterMember`/`AttendanceRecord`/
    `AttendanceMark`/`CoachNoteCreate`/`CoachNotesSheet` changed `Int?` → `String?`.
-   Server half is ALREADY LIVE. Until build 9 ships, managed-swimmer coach notes /
-   attendance / RSVP stay broken on build 8 (full-account swimmers fine).
+   Server half was already live; managed-swimmer coach notes / attendance / RSVP
+   now work on build 9 (were broken on build 8).
 2. **IAP client** — AppConfig.iapProductIDs filled, PaywallView reachable
    ("Upgrade to Coach" menu, free-tier only), StoreKitManager transaction listener
-   at launch, double-pay /eligibility pre-check. (Was committed for build 8 too, so
-   it's effectively the first build users can attempt a purchase on once installed.)
+   at launch, double-pay /eligibility pre-check.
 
-## To cut build 9
+## ▶ Next action: sandbox-test IAP on build 9 (see checklist below)
+
+## To cut a future build (template)
 ```
-sed -i '' 's/CURRENT_PROJECT_VERSION = 8;/CURRENT_PROJECT_VERSION = 9;/g' \
+sed -i '' 's/CURRENT_PROJECT_VERSION = 9;/CURRENT_PROJECT_VERSION = 10;/g' \
   ios-app/SetForgeApp.xcodeproj/project.pbxproj
-git commit -am "iOS: bump build number to 9"
+git commit -am "iOS: bump build number to 10"
 git push origin build-3
 cd ios-app && xcodebuild -project SetForgeApp.xcodeproj -scheme SetForge \
   -configuration Release -destination 'generic/platform=iOS' \
   -archivePath /tmp/SetForge.xcarchive archive
-# verify: PlistBuddy CFBundleVersion == 9, then user uploads via Xcode Organizer
+# verify: PlistBuddy CFBundleVersion == 10, then user uploads via Xcode Organizer
 ```
 
 ## Possible build-10 trigger
@@ -32,7 +33,7 @@ cd ios-app && xcodebuild -project SetForgeApp.xcodeproj -scheme SetForge \
   capability isn't in entitlements. Add in Xcode → target → Signing & Capabilities
   → **+ In-App Purchase**, re-archive as build 10.
 
-## Sandbox IAP test checklist (after build 9 installs)
+## Sandbox IAP test checklist (once build 9 installs on a device)
 1. ASC → Users and Access → Sandbox → Testers → create one (email NOT tied to a
    real Apple ID).
 2. Device Settings → App Store → Sandbox Account → sign in as tester.
