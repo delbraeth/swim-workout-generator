@@ -6695,7 +6695,10 @@ export async function dbGetPracticeAttendance(scheduledId) {
   return rows.map(r => ({
     id:               Number(r.id),
     swimmer_sub:      r.swimmer_sub,
-    managed_id:       r.managed_id != null ? Number(r.managed_id) : null,
+    // managed_id is a STRING (ms_xxxxxx). Do NOT Number() it — that yields NaN
+    // → null, dropping the swimmer's identity (broke coach-notes/RSVP/roll-call
+    // for managed swimmers). Keep as-is.
+    managed_id:       r.managed_id != null ? String(r.managed_id) : null,
     present:          !!r.present,
     notes:            r.notes || null,
     recorded_by_sub:  r.recorded_by_sub,
@@ -6747,7 +6750,9 @@ export async function dbGetGroupRosterAsOf(groupId, scheduledDate) {
   return rows.map(r => ({
     id:                  Number(r.id),
     member_swimmer_sub:  r.member_swimmer_sub,
-    member_managed_id:   r.member_managed_id != null ? Number(r.member_managed_id) : null,
+    // member_managed_id is a STRING (ms_xxxxxx). Number() would NaN→null it and
+    // drop the swimmer's identity. Keep the string.
+    member_managed_id:   r.member_managed_id != null ? String(r.member_managed_id) : null,
     role:                r.role,
     joined_at:           dtToIso(r.joined_at),
     display_name:        displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }),
