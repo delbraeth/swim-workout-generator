@@ -16,6 +16,14 @@ Both items were committed on `build-3` and are now in a shipped build:
 
 ## ▶ Next action: sandbox-test IAP on build 9 (see checklist below)
 
+## 🅱 Waiting to ride build 10 (committed on `build-3`, NOT in build 9)
+- **Person-menu Sections fix** (`HomeView.swift`, commit a56b041) — grouped the
+  person menu into Workouts / Account sections with **Sign out** isolated in its
+  own trailing section. Fixes Sign out scrolling out of view at large Dynamic Type.
+  Build verified. (Batched per user — ship with build 10.)
+- **(conditional) In-App Purchase capability** — only if sandbox testing shows the
+  paywall can't load products. Add in Xcode Signing & Capabilities, then archive 10.
+
 ## To cut a future build (template)
 ```
 sed -i '' 's/CURRENT_PROJECT_VERSION = 9;/CURRENT_PROJECT_VERSION = 10;/g' \
