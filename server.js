@@ -55,7 +55,7 @@ import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
-import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification } from "./lib/appleIap.js";
+import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
 
 import {
   pool, dbActive, pingDb,
@@ -2724,6 +2724,16 @@ function billingInactiveResponse(res) {
 app.post("/api/billing/checkout", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     if (!BILLING_ACTIVE) return billingInactiveResponse(res);
+    // Double-pay guard: don't open a Stripe checkout if the user already holds
+    // an active Apple IAP subscription (would bill them on both channels).
+    const xc = await checkCrossChannel(req.userSub, "stripe");
+    if (xc.blocked) {
+      return res.status(409).json({
+        error:   "already_subscribed_other_channel",
+        channel: xc.otherChannel,                                              // "apple"
+        message: "You already have an active subscription through the App Store. Manage it in your iPhone's Settings → Apple Account → Subscriptions.",
+      });
+    }
     const result = await createCheckoutSession({
       userSub:    req.userSub,
       successUrl: `${APP_URL}/?upgrade=success`,
@@ -2854,6 +2864,29 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), asyn
 
 // Client (StoreKit 2) posts its signed transaction after a purchase/restore;
 // the server verifies it with Apple and grants the tier. Bearer auth (native).
+// Pre-purchase eligibility — the iOS paywall calls this BEFORE triggering a
+// StoreKit purchase so we can block an Apple buy when the user already has an
+// active web (Stripe) subscription, before any money changes hands.
+// { eligible: bool, reason?, otherChannel? }
+app.get("/api/billing/apple/eligibility", requireAuth, async (req, res) => {
+  try {
+    const xc = await checkCrossChannel(req.userSub, "apple");
+    if (xc.blocked) {
+      return res.json({
+        eligible:     false,
+        reason:       xc.reason,            // "active_stripe_subscription"
+        otherChannel: xc.otherChannel,      // "stripe"
+        message:      "You already have an active subscription on the web. Manage it at setforge.io before subscribing here.",
+      });
+    }
+    res.json({ eligible: true });
+  } catch (err) {
+    // Fail open: an eligibility-check error shouldn't block a legit purchase.
+    console.error("[billing/apple/eligibility]", err.message);
+    res.json({ eligible: true });
+  }
+});
+
 app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res) => {
   try {
     if (!IAP_ACTIVE) return res.status(503).json({ error: "iap_inactive" });
@@ -2868,6 +2901,21 @@ app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res
       expiresDate:           v.expiresDate,
       revoked:               v.revoked,
     });
+    // Double-pay note: if the user ALSO has an active Stripe sub, Apple has
+    // already charged them — we still grant the tier (never take their money
+    // and deny access) but flag it so we (and they) can cancel the redundant
+    // Stripe sub. The iOS paywall itself should pre-block this via the
+    // pre-purchase check below; this is the belt-and-suspenders server log.
+    const xc = await checkCrossChannel(req.userSub, "apple");
+    if (xc.blocked) {
+      dbAuditEvent({
+        userSub:   req.userSub,
+        eventType: "billing.double_pay.detected",
+        ...reqMeta(req),
+        details:   { active_other: xc.otherChannel, note: "apple purchase while stripe active — cancel stripe" },
+      });
+      return res.json({ ok: true, result, warning: "active_stripe_subscription", message: "You also have a web subscription — please cancel it to avoid double billing." });
+    }
     res.json({ ok: true, result });
   } catch (err) {
     console.error("[billing/apple/verify]", err.message);
