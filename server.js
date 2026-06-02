@@ -2884,11 +2884,39 @@ app.post("/api/billing/apple/notify", express.raw({ type: "application/json" }),
     const signedPayload = body?.signedPayload;
     if (!signedPayload) return res.status(400).json({ error: "signedPayload required" });
 
-    // Idempotency: Apple includes a notificationUUID inside the (signed)
-    // payload, but we only have it post-verify. Use a content hash as the
-    // provisional key; processNotification re-keys on the real UUID when the
-    // activation TODO is wired. For the scaffold we just record + dispatch.
-    const result = await processNotification(signedPayload);
+    // Bad signature → 400 (do NOT 200; could be an attacker, and Apple only
+    // retries on non-2xx for genuine delivery failures, not forged ones).
+    let result;
+    try {
+      result = await processNotification(signedPayload);
+    } catch (procErr) {
+      console.error("[billing/apple/notify] process threw:", procErr.message);
+      return res.status(200).json({ ok: false, error: procErr.message });
+    }
+    if (result?.error === "notification_verify_failed" || result?.error === "transaction_verify_failed") {
+      return res.status(400).json({ error: result.error });
+    }
+
+    // Idempotency: the notificationUUID is only known post-verify, so we record
+    // AFTER processing (mirrors the intent of the Stripe webhook dedupe, keyed
+    // on Apple's UUID). INSERT IGNORE-style: if we've already processed this
+    // UUID, this is a retry — ack without re-applying.
+    const uuid = result?.notificationUUID;
+    if (uuid) {
+      try {
+        await pool.query(
+          "INSERT INTO `apple_iap_events` (`notification_uuid`, `notification_type`, `subtype`, `original_txn_id`, `processed_status`, `payload_json`) " +
+          "VALUES (?, ?, ?, ?, 'processed', ?)",
+          [uuid, result.handled || result.notificationType || "unknown", result.subtype || null,
+           result.original_txn_id || null, JSON.stringify(result).slice(0, 16777215)]
+        );
+      } catch (dupErr) {
+        if (dupErr.code === "ER_DUP_ENTRY" || /duplicate/i.test(dupErr.message || "")) {
+          return res.status(200).json({ ok: true, deduped: true, notification_uuid: uuid });
+        }
+        throw dupErr;
+      }
+    }
     res.status(200).json({ ok: true, result });
   } catch (err) {
     console.error("[billing/apple/notify]", err.message);
