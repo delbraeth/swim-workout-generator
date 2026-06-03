@@ -135,6 +135,16 @@ Explicitly export-only, NOT integrations.
       by the article → test with a sample import; likely `MM/DD/YYYY`.
   - Note our internal `Swimming ID` lives in `person_external_ids` (system='usa_swimming'),
     and gender/DOB on `persons` — so the export query is a `persons` + external-IDs join.
+  - **⚠ Canonical format NOT final — TeamUnify may win (flagged 2026-06-03).** TeamUnify
+    (SportsEngine-owned) is the day-to-day roster/registration/billing system of record for
+    most USA-S clubs; Hy-Tek MM is meet-day software. If the export's job is **roster sync**
+    (not just meet entry), TeamUnify is the more valuable target. Two things to settle when
+    this is built: (1) **which format** (TeamUnify vs Hy-Tek MM — capture TeamUnify's CSV
+    column spec then, as we did Hy-Tek's; not captured yet); (2) **direction** — TeamUnify is
+    usually the *upstream source* of roster truth, so the real need may be SetForge *consuming*
+    a TeamUnify export rather than producing one. The "one-way export" framing fits meet-entry
+    (Hy-Tek) cleanly; a TeamUnify roster sync may point the other way. Keep both formats in
+    scope; pick per the actual coach workflow at build time.
 - Deps: roster + scheduled-workouts + team-events ✓; the self-serve JSON export (I-G)
   already proves the export pattern + route shape. Cost **S**.
 
