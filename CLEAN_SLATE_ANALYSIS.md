@@ -1,6 +1,14 @@
 # SetForge — Clean-Slate Analysis & Gap Audit
 
 **Date drafted:** 2026-05-27
+**Reconciled 2026-06-03** — several gaps below have SHIPPED since drafting; the §10 top-five is partly stale:
+- ✅ **#4 Identity I-F** (drop legacy columns) — shipped (migration 044).
+- ✅ **#5 Data portability + tombstone (I-G)** — shipped; self-serve JSON export + tombstone-on-delete live. (Identity refactor is now complete through I-H.)
+- ✅ **#1 Pluggable sections — PARTIAL** — flexible sections (skip/redistribute) + dryland + kick set shipped on web AND iOS; the full typed-plugin model (arbitrary non-swim section types) is still v2.
+- ✅ **§4.4 Onboarding** — the 6-step guided tour shipped ("👋 Take the tour").
+- ✅ Ownership transfer + UGC reassignment (not in this doc) also shipped — Phase 4 is complete.
+**Still open + the genuinely UNTRACKED items this doc surfaces:** the **ops-hardening cluster** — CI + smoke + staging (§8.2/§2.3), structured logging + observability (§8.1) — was NOT in the ROADMAP backlog; added 2026-06-03. Also still open: SPA build pipeline + React Router (§2.2/§4.1; Babel-precompile half is in the backlog, Router companion now noted), account-merge tool (backlog), and the low-priority "live with it" items (server/db split, polymorphic swimmer, settings.extra, ProfileModal). See ROADMAP backlog.
+
 **Premise:** Take everything SetForge does today as the *target spec* and ask: if we were starting from scratch with full hindsight, what UX and structural decisions would we make? Then compare against current-state and surface the gap.
 
 **What this is:** Honest retrospective. The current code is the result of months of incremental decisions made under partial information. Many of them turned out to be right and would survive a rewrite; some compounded into structural debt that's now expensive to undo. This doc separates the two and quantifies the gap.
