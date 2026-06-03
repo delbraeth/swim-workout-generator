@@ -12,6 +12,10 @@ COPY db.js ./
 COPY lib/ ./lib/
 COPY public/ ./public/
 COPY vendor-kit/ ./vendor-kit/
+# SPA-split: the server's workout engine (lib/generator.js) reads the engine
+# prelude from src/app.jsx (the esbuild entry). The browser loads the prebuilt
+# public/assets/app.js (committed/deployed; not built in-image).
+COPY src/ ./src/
 
 # Hyperlift sets PORT; default to 8080 for local runs
 ENV PORT=8080

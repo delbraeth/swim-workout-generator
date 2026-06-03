@@ -26,13 +26,10 @@ checkpoints/
 node_modules/
 vendor-kit/build/
 tools/__pycache__/
-# SPA-split (in progress): esbuild output + staged source. Ignored during the
-# groundwork phase so the still-live inline script in index.html isn't duplicated
-# in git. At cutover, src/app.jsx becomes the committed source of truth and the
-# inline script is removed from index.html. public/assets/app.js is deployed
-# directly from disk by _deploy.py (which reads files, not git).
+# SPA-split: src/app.jsx is now the committed source of truth (cut over 2026-06-03;
+# index.html is a thin shell). The esbuild OUTPUT stays out of git — _deploy.py
+# ships public/assets/app.js directly from disk (it reads files, not git).
 public/assets/
-src/app.jsx
 
 # Misc working dirs not for prod
 SwimWorkout
@@ -40,6 +37,9 @@ SwimApp-Sources/
 "SetForge Icons/"
 "new watch app/"
 png/
+
+# Local preview helper (Claude Preview launch configs) — not shipped
+.claude/
 
 # Local SSH config + python bytecode (stray, never deploy)
 /config
