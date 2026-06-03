@@ -111,6 +111,32 @@ personas was data portability).
 needs an unauthenticated, unguessable token route). CSV column set per consumer
 (TeamUnify/Hytek/SportsEngine shapes differ — pick one canonical, don't chase all).
 
+## 6. Team calendar + venues + outdoor-pool weather + RSVP
+**Trigger:** a team asks to schedule meets/events with real locations and times, OR
+outdoor-season weather/RSVP demand. **Already has a full detailed spec:
+`MEET_SCHEDULE_WEATHER_SCOPE.md` (2026-06-01)** — unlike items 1–5, this one is already
+promoted to its own scope doc with the data model + decisions worked out.
+**What:** one coherent system bridging three existing surfaces (`team_facilities`,
+`team_events`, `scheduled_workouts`):
+- **Shared `venues` catalog** — pool identity is **universal, not team-scoped** (one team's
+  home pool is another's away-meet location). One row per physical location with geocode +
+  indoor/outdoor + course; facilities and meet locations both reference it. Lazy
+  create/geocode-on-use (no big backfill).
+- **Generalized team-event calendar + pills** — meets, picture day, banquet, parent
+  meeting, etc. (today `team_events` is just `{name, date}`, no time, no location).
+- **Outdoor-pool weather** — `venues.indoor_outdoor` is the *only* gate on a WeatherKit
+  call; indoor/venue-less events never hit it. Apple WeatherKit (iOS framework + REST for web).
+- **Unified RSVP** across meets AND practices, composing with the existing coach roll-call;
+  cancellation is first-class (struck-through, never silently disappears).
+**Deps:** `team_facilities`/`team_events`/`scheduled_workouts` ✓ + the venue model is new.
+**MISSING deps (the real gate):** (1) **Apple WeatherKit key** + a **geocoder**; (2) **push
+notification infrastructure does not exist** — RSVP reminders + cancellation alerts (§7) need
+it, and it's a shared blocker for every notify feature. RSVP can ship read/write without push;
+the *notify* half waits on push infra.
+**Cost:** L (shared venue model + new external API + first forward-looking attendance surface).
+**Open questions:** see the scope doc — venue dedup heuristic, WeatherKit web-vs-native auth,
+how RSVP composes with attendance roll-call, push-infra sequencing.
+
 ---
 
 ## Recommended ordering (when Phase 5 opens)
@@ -122,6 +148,9 @@ the one a real user pulls forward, not this order for its own sake:
 3. **Lesson tier** (M, deps met) — when the pricing downgrade pressure is real.
 4. **HS race-pace pack** (M→L) — template pack first, PR engine second; pairs with item 2's PR store.
 5. **MAAP pack** (L, scope session first) — heaviest; only for a club pilot that needs it.
+6. **Team calendar + venues + weather + RSVP** (L, spec ready) — gated on a WeatherKit key +
+   geocoder, and the notify half is blocked on push infra not existing. RSVP read/write can
+   precede push; weather can ship independently. Build when an outdoor-season team asks.
 
 ## Permanently OUT of scope (do not relitigate — PHASED_PLAN §4)
 TrainingPeaks / Garmin export · Meet Manager / Hy-Tek round-trip · SWIMS · `.hy3` / `.fit` /
