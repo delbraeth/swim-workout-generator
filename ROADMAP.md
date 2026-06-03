@@ -6,9 +6,11 @@ Last refreshed: **2026-05-25** (PHASED_PLAN_2026-05-25.md locked — supersedes 
 
 **Reconciled 2026-06-02** with the 2026-05-31→06-02 working session (durable record: repo `SESSION_LOG_2026-06-02.md`; next iOS action: `NEXT_BUILD_TODO.md`; IAP: [[apple-iap]]). Two material changes vs the 05-25 snapshot: **(1) iOS native is ACTIVE again** — not paused — with editing tools, coach tools, Practices roll-call, and the IAP client shipped (builds 8–9). **(2) Apple IAP is built + sandbox-verified end-to-end**; only the production flip + first paying coach remain. Kick set (5th section), web Practices screen, and dryland explainers also shipped. Details in the Recently-shipped table below.
 
+**Updated 2026-06-03 — PHASE 4 COMPLETE.** The entire "team tier earned + continuity closed" plan shipped: team curation, parent portal, the full identity refactor (I-A→I-H: persons model, name split, guardians, tombstone-on-delete, self-serve JSON export, bulk-import name columns), and ownership transfer + UGC reassignment (migration 045). **All four named phases are now engineering-complete.** What's left is NOT new phase work — it's (a) the billing GO-LIVE flip + first paying coach, (b) a little Phase-1 hand-work (founder bio/photo, real screenshot, Lighthouse run), (c) iOS build 10 (queued Sign-out menu fix), and (d) **Phase 5** features, which stay trigger-gated on pilot demand. Migrations 044 + 045 are applied to prod.
+
 ## ▶ Active plan
 
-**See `PHASED_PLAN_2026-05-25.md` at repo root.** Four named phases (Phase 1: cold-prospect-can-evaluate · Phase 2: Android-can-signup + email-rails · Phase 3: first-HS-pilot-converts · Phase 4: team-tier-earned + continuity-closed) over ~4–6 months. ~110–150h total. Every Bigger Threads item below is mapped into a phase or explicitly cut.
+**See `PHASED_PLAN_2026-05-25.md` at repo root.** Four named phases (Phase 1: cold-prospect-can-evaluate · Phase 2: Android-can-signup + email-rails · Phase 3: first-HS-pilot-converts · Phase 4: team-tier-earned + continuity-closed). **As of 2026-06-03 all four are engineering-complete** — the build clock the phased plan estimated (~110–150h) is spent. The product can now be evaluated cold, signed up for on Android, paid for (pending the IAP prod flip), and survives founder absence. Remaining work is operational (billing go-live, Phase-1 hand-work, iOS build 10) or **Phase 5**, which is demand-gated, not scheduled.
 
 ## How this file works
 
@@ -22,7 +24,15 @@ Memos in `/Users/cassidy/Library/Application Support/Claude/.../memory/` are the
 
 ---
 
-## Now (Phase 3 nearly closed — taper + PSC + vendor kit + IAP all SHIPPED; only billing GO-LIVE + first paying pilot remain)
+## Now (Phases 1–4 engineering-complete; only operational follow-ups + demand-gated Phase 5 remain)
+
+**Operational follow-ups (not new phase work):**
+- 🟡 **Billing GO-LIVE** — flip `APPLE_IAP_CONFIG.environment` Sandbox→Production, finish ASC product metadata, apply migration 043 to prod, then the first paying coach. (Apple IAP + Stripe both built + sandbox-verified.)
+- ⏳ **iOS build 10** — carries the queued person-menu Sections fix (Sign-out discoverability). Cut + upload when convenient. See `NEXT_BUILD_TODO.md`.
+- ⏳ **Phase-1 hand-work** (below): founder bio/photo, real SignInGate screenshot, Lighthouse a11y run.
+
+The historical Phase 2/3/4 ship detail is kept below for the record.
+
 
 Phase 2 engineering closed 2026-05-26. Phase 3 build started same day per Cap'n's "wrap up phase 3" directive (billing thin slice stays gated on first paying pilot; PSC + taper + vendor paper kit do not).
 
@@ -54,13 +64,13 @@ Phase 2 engineering closed 2026-05-26. Phase 3 build started same day per Cap'n'
 - ⏳ **Real SignInGate screenshot** — replace stylized mock workout-block in the right column with an actual app screenshot. PHASED_PLAN §8 open follow-up.
 - ⏳ **Lighthouse a11y measurement** against `https://setforge.io/` — actual score not yet run. Phase 1 exit criterion requires ≥90.
 
-## Next phases — TRIGGER-GATED on first paying HS pilot
+## Phases — status
 
-All four Phase 3 + three Phase 4 scopes are written. Implementation of Phase 3 starts when the first paying HS coach asks. No build clock until then.
-
-- **Phase 3** (~4-6 weeks, ~37-52h estimated) — "First paying HS pilot signs." Scopes: `PER_SWIMMER_CONSTRAINTS_SCOPE.md`, `MEET_ANCHORED_TAPER_SCOPE.md`, `VENDOR_PAPER_KIT_SCOPE.md`, `BILLING_SCOPE.md`. **Recommended build order when triggered:** vendor paper kit (1-2h templates + Stripe setup) → billing thin slice (10-14h, fires ToS softening day-of-first-billing) → PSC (15-20h, biggest) → meet-anchored taper (6-10h, smallest, can ship in parallel since it piggybacks the email worker tick for expire cron).
-- **Phase 4** (~6-8 weeks, ~51-63h estimated) — "Team tier earned + continuity closed." Scopes: `IDENTITY_SCOPE.md` (existing), `TEAM_CURATION_SCOPE.md`, `OWNERSHIP_TRANSFER_SCOPE.md`, `PARENT_PORTAL_MVP_SCOPE.md`. Identity refactor first (it's foundational); parent portal last (it hard-depends on identity I-E + email infra + Google OAuth, all of which the chain already has).
-- **Phase 5** (trigger-driven) — Lesson tier · swimmer progress dashboard · MAAP pack · HS race-pace templates · CSV/.ics export.
+- **Phase 1** (cold prospect can evaluate) — ✅ engineering shipped 2026-05-25. `phase-1-complete` tag waits only on the hand-work in the **Now** section (founder bio/photo, real screenshot, Lighthouse ≥90).
+- **Phase 2** (Android signup + email rails) — ✅ COMPLETE (Google OAuth, Resend email infra, Discord webhook).
+- **Phase 3** (first paying HS pilot can sign/pay/stick) — ✅ engineering COMPLETE: per-swimmer constraints, meet-anchored taper, vendor paper kit, and billing (Stripe live + Apple IAP sandbox-verified). Only the **billing GO-LIVE flip + first paying coach** remain (operational, in **Now**).
+- **Phase 4** (team tier earned + continuity closed) — ✅ COMPLETE 2026-06-03: team curation, parent portal, identity refactor I-A→I-H, tombstone-on-delete + self-serve export, ownership transfer + UGC reassignment.
+- **Phase 5** (demand-gated — build only when a pilot/revenue asks) — Lesson tier (deps: identity ✓ + email ✓ + parent recap export) · swimmer progress dashboard · MAAP pack (deps: identity ✓ + external-IDs table ✓ + two-deep gate) · HS race-pace template pack · one-way CSV/.ics export. **No build clock until a specific user pulls one forward.** Scopes for several already exist; the rest need a scope session first.
 
 ## UGC v1 — closed (kept for context)
 
