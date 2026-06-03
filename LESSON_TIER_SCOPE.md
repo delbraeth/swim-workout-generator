@@ -42,6 +42,22 @@ team curation, Reports, lane plans, anchors.
    add the Apple IAP product (new ASC product + `product-tier-map` entry +
    `AppConfig.iapProductIDs`) in a later pass — avoids gating launch on an ASC review.
 
+## Build progress
+- ✅ **Tier plumbing — server-side SHIPPED 2026-06-03.** Stripe now supports a `lesson`
+  product end-to-end: `STRIPE_CONFIG.price_id_lesson_monthly` (+ `STRIPE_PRICE_ID_LESSON_MONTHLY`)
+  parsed; `createCheckoutSession({tier})` picks the right price + stamps `metadata.tier`;
+  the subscription webhook resolves tier from that metadata (→ price→tier map → coach
+  fallback) so it grants `tier=lesson` correctly; `POST /api/billing/checkout` accepts
+  `{tier:"lesson"}`; `billingConfigState.has_price_id_lesson` exposes availability. Coach
+  billing unchanged. **Inert** until (a) you create the lesson price in Stripe and add its
+  `price_id_lesson_monthly` to `STRIPE_CONFIG`, AND (b) the Lesson features below ship.
+- ⏳ **Deliberately NOT built yet:** the user-facing "Subscribe to Lesson" paywall button
+  (would sell a tier that unlocks nothing until features exist), the **Lesson workout type**
+  (no-main engine change — its own careful pass), per-swimmer equipment profile, parent recap
+  export, and entitlement gating of Lesson-only surfaces.
+- **To activate later:** create the Stripe lesson price → set `price_id_lesson_monthly` →
+  build the Lesson features → add the paywall button (gated on `has_price_id_lesson`).
+
 ## Build shape (deps mostly satisfied)
 - **Tier plumbing** — add `lesson` to the product/tier map; entitlement gates key
   off `users.tier` (the grant/revoke + `tier_source` seam already exists from

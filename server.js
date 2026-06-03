@@ -2762,19 +2762,23 @@ app.post("/api/billing/checkout", checkOrigin, requireAuth, requireCsrf, writeLi
         message: "You already have an active subscription through the App Store. Manage it in your iPhone's Settings → Apple Account → Subscriptions.",
       });
     }
+    // tier: "coach" (default) or "lesson". Lesson is inert until its price_id
+    // is configured in Stripe (returns no_price_id otherwise).
+    const tier = (req.body && req.body.tier === "lesson") ? "lesson" : "coach";
     const result = await createCheckoutSession({
       userSub:    req.userSub,
       successUrl: `${APP_URL}/?upgrade=success`,
       cancelUrl:  `${APP_URL}/?upgrade=cancelled`,
+      tier,
     });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "billing.checkout.start",
       ...reqMeta(req),
-      details:   { result_type: result?.url ? "session_created" : (result?.error || result?.skipped || "unknown") },
+      details:   { tier, result_type: result?.url ? "session_created" : (result?.error || result?.skipped || "unknown") },
     });
     if (result?.url) return res.json({ url: result.url });
-    if (result?.error === "no_price_id") return res.status(500).json({ error: "no_price_id", message: "Stripe price ID not configured. Set STRIPE_PRICE_ID_COACH_MONTHLY in env." });
+    if (result?.error === "no_price_id") return res.status(500).json({ error: "no_price_id", message: tier === "lesson" ? "Lesson price not configured yet (set price_id_lesson_monthly in STRIPE_CONFIG)." : "Stripe price ID not configured. Set STRIPE_PRICE_ID_COACH_MONTHLY in env." });
     res.status(500).json({ error: "checkout_session_failed", result });
   } catch (err) {
     console.error("[billing/checkout]", err.message);
