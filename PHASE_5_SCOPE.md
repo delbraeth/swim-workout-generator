@@ -23,6 +23,9 @@ Sources: `PHASED_PLAN_2026-05-25.md` §Phase 5, the three 2026-05-25 evaluations
 ---
 
 ## 1. Lesson tier ($5–7/mo)
+**➡ Promoted to its own spec: `LESSON_TIER_SCOPE.md` (2026-06-03)** — full build
+shape + the decisions to lock (price, replace-vs-additive managed swimmers, iOS
+sequencing). Summary below.
 **Trigger:** a private/individual-lesson coach asks, OR the first Coach-tier downgrade request.
 **What:** a paid tier below Coach for 1-on-1 / small-lesson coaches who want more than
 Free but don't need club infrastructure. Per `PRICING.md` §"Lesson tier" + coach-eval
