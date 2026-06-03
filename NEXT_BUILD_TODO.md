@@ -1,10 +1,11 @@
 # iOS build status + next steps
 
-Build number is at **10** in the project file. **Build 10 ARCHIVED 2026-06-03**
-(`/tmp/SetForge.xcarchive`, CFBundleVersion=10, ARCHIVE SUCCEEDED) — **pending
-upload via Xcode Organizer** (needs Apple ID/2FA). Last uploaded TestFlight build
-is 9. Build 10 carries the person-menu Sections fix (commit a56b041, Sign-out
-discoverability). Next archive = bump to 11.
+Build number is at **10**. **Build 10 UPLOADED to TestFlight 2026-06-03** (person-menu
+Sections fix, commit a56b041 — Sign-out discoverability at large Dynamic Type). Next
+archive = bump to 11.
+
+No iOS changes are currently queued for build 11. Candidates when one is built: iOS
+swimmer-dashboard parity (Phase 5 #2), or whatever the next iOS feature is.
 
 ## ✅ Shipped in build 9 (uploaded to TestFlight)
 Both items were committed on `build-3` and are now in a shipped build:
