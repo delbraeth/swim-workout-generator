@@ -28,9 +28,8 @@ Explicitly NOT included (these stay Coach/Program): teams, groups, multi-coach,
 team curation, Reports, lane plans, anchors.
 
 ## ⚠ Decisions to lock before building
-1. **Exact price.** Target $5–7/mo. **Recommend $6/mo** — a clear $4 gap below
-   Coach ($10) so it reads as a real downgrade, not a rounding difference.
-   Annual option ~$60/yr.
+1. **Exact price.** ✅ **LOCKED $5/mo (2026-06-03).** Half of Coach ($10) — an
+   unambiguous downgrade tier. Annual option ~$50/yr.
 2. **Replace vs additive (the big one).** Per PRICING §"Lesson tier" open question:
    - **Option A — restructure:** managed swimmers move OUT of Coach INTO Lesson;
      Coach becomes "full-account swimmers only." Breaks the value prop for every

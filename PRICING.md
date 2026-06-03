@@ -15,7 +15,7 @@ Three paid tiers + free baseline. **Supporter $3 demoted from product tier to "b
 | **Free** | $0 | All swimmers, all parents, exploratory coaches | Always live |
 | **Tip jar** | $3 (one-time or recurring, no feature unlock) | "I like this, take my money" | Replaces Supporter $3; not advertised as a tier |
 | **Coach** | $10/mo | Working coach with 1+ groups | Original tier, unchanged |
-| **Lesson** | TBD (target $5-7/mo) | Private/individual lesson coaches | NEW per coach eval; structure TBD |
+| **Lesson** | **$5/mo** (~$50/yr) | Private/individual lesson coaches | Price LOCKED 2026-06-03; structure in `LESSON_TIER_SCOPE.md` (replace-vs-additive still open) |
 | **Program** | $25/mo (or $300/yr invoiced) | Multi-coach club teams | Original tier; **gated on team-level curation shipping** + vendor paper kit |
 | **Institutional / Program+** | TBD (~$1–2k/yr) | Boards requiring cyber insurance + signed MSA/DPA + formal procurement | NEW (2026-06-03) — the **home for board-gated compliance costs**: priced to cover the cyber-insurance premium + lawyer pass + procurement time, so those are passed through, never absorbed into $300 Program (a ~$1k/yr policy ≈ 3× a Program seat). |
 
@@ -45,7 +45,7 @@ Free tier PLUS:
 - Coach impact panel (curation reach + effectiveness)
 - Team membership (as a non-Owner; one team)
 
-### Lesson tier — $5-7/mo (TBD)
+### Lesson tier — $5/mo (LOCKED 2026-06-03)
 
 For private/individual coaches who don't need full club infrastructure but want more than Free. Coach evaluation's Private coach persona identified specific gaps that should be the lesson-tier value-add:
 - Per-managed-swimmer equipment profile (stored on the swimmer, not the coach)
@@ -131,7 +131,7 @@ For users who can't or won't use Patreon (corporate, allergic to subscriptions, 
 
 ## 10. Open questions
 
-- **Lesson tier exact price** — TBD. Coach eval Private persona said "Maybe at $10," so Lesson should be cheaper than Coach to be a real downgrade option (target $5-7/mo).
+- **Lesson tier exact price** — ✅ LOCKED $5/mo (2026-06-03; half of Coach, clean downgrade). Remaining Lesson open item: replace-vs-additive managed swimmers (see `LESSON_TIER_SCOPE.md` decision 2).
 - **Does Lesson replace Managed Swimmers feature in Coach?** If yes, Coach-tier users with managed swimmers grandfather in. Open.
 - **Patreon's coach-creator-fee model vs. flat-tier model** — Patreon supports either. Workshop noted "specifics need [more] workshopping."
 - **Annual prepay discount** — boards expect it. 10% off Program annual ($270/yr) is industry norm.
