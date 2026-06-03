@@ -1,7 +1,10 @@
 # iOS build status + next steps
 
-Build number is at **9** in the project file; the last UPLOADED TestFlight build is
-**9** (uploaded 2026-06-02 from Xcode Organizer). Next archive = bump to 10.
+Build number is at **10** in the project file. **Build 10 ARCHIVED 2026-06-03**
+(`/tmp/SetForge.xcarchive`, CFBundleVersion=10, ARCHIVE SUCCEEDED) — **pending
+upload via Xcode Organizer** (needs Apple ID/2FA). Last uploaded TestFlight build
+is 9. Build 10 carries the person-menu Sections fix (commit a56b041, Sign-out
+discoverability). Next archive = bump to 11.
 
 ## ✅ Shipped in build 9 (uploaded to TestFlight)
 Both items were committed on `build-3` and are now in a shipped build:
