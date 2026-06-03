@@ -59,8 +59,14 @@ Per scope §5 + decision 10:
   (Self-serve data export was a "not yet" item here in v1 — it has since
   **shipped** (Profile → Account → Export my data, 2026-06); the DPA §9 now
   documents it as live.)
-- **Cyber-insurance certificate** — Cap'n purchases when first board
-  requires it; not v1.
+- **Cyber-insurance certificate** — NOT carried at current pricing. A ~$1k/yr
+  policy is ≈3× the revenue of a $300/yr Program customer, so absorbing it on a
+  board's request is upside-down economics (the first board ask is when you have
+  the fewest customers to amortize it over). If a board requires it, **quote it as
+  a pass-through compliance add-on** or move that customer to an **institutional
+  tier** sized to cover it (see `PRICING.md`) — never absorb it at $10/mo
+  economics. The COI itself is free once a policy exists; the policy premium is
+  the cost.
 - **DocuSign / HelloSign integration** — treasurer signs PDF and emails
   back in v1.
 

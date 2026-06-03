@@ -17,6 +17,7 @@ Three paid tiers + free baseline. **Supporter $3 demoted from product tier to "b
 | **Coach** | $10/mo | Working coach with 1+ groups | Original tier, unchanged |
 | **Lesson** | TBD (target $5-7/mo) | Private/individual lesson coaches | NEW per coach eval; structure TBD |
 | **Program** | $25/mo (or $300/yr invoiced) | Multi-coach club teams | Original tier; **gated on team-level curation shipping** + vendor paper kit |
+| **Institutional / Program+** | TBD (~$1–2k/yr) | Boards requiring cyber insurance + signed MSA/DPA + formal procurement | NEW (2026-06-03) — the **home for board-gated compliance costs**: priced to cover the cyber-insurance premium + lawyer pass + procurement time, so those are passed through, never absorbed into $300 Program (a ~$1k/yr policy ≈ 3× a Program seat). |
 
 ### Free tier — what's in it
 
