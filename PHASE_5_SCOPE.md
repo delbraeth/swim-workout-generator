@@ -145,6 +145,23 @@ Explicitly export-only, NOT integrations.
     a TeamUnify export rather than producing one. The "one-way export" framing fits meet-entry
     (Hy-Tek) cleanly; a TeamUnify roster sync may point the other way. Keep both formats in
     scope; pick per the actual coach workflow at build time.
+  - **TeamUnify format — structure captured 2026-06-03; verbatim headers NOT public.**
+    TeamUnify (SportsEngine Motion) gates the exact column template behind a team login
+    (downloadable Excel template with hover-tooltip headers + `support@teamunify.com`); their
+    doc pages block bots, so the literal header names aren't publicly retrievable. Known shape:
+    - **Fixed template — do NOT rename headers or add columns.**
+    - **Columns A–Q = Member/athlete (child); columns R onward = Account/parent(s)** — i.e. a
+      **household import** (athlete + parent(s) in one row), materially different from Hy-Tek's
+      athlete-only sheet and a better fit for our guardians/persons model.
+    - **Red-header columns = required**, except Member Middle Initial (optional for non-USA-S
+      teams) and "ID Card" (only for results import via Team Manager).
+    - TeamUnify also **exports** accounts/members to Excel (support art. 736) — relevant to the
+      direction question (we may consume their export, not produce an import).
+    - **At build time:** pull the actual import template from a TeamUnify account (or
+      support@teamunify.com) to capture the verbatim A–Q / R+ headers + DOB/gender formats, the
+      same way Hy-Tek's were captured here. Refs: TeamUnify import art. 1357 / 827; export art.
+      736; SwimTopia's "TeamUnify Roster Import" migration article (help.swimtopia.com 200783358)
+      also documents the column layout.
 - Deps: roster + scheduled-workouts + team-events ✓; the self-serve JSON export (I-G)
   already proves the export pattern + route shape. Cost **S**.
 
