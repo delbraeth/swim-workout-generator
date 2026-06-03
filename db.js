@@ -4318,10 +4318,25 @@ async function coachIsOnTeam(coachSub, teamId) {
   return rows.length > 0;
 }
 
-export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gender = null, team_id = null, initials = null, class_year = null, usa_swimming_id = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
+export async function dbCreateManagedSwimmer({ ownerSub, display_name = null, first_name = null, last_name = null, preferred_name = null, dob, gender = null, team_id = null, initials = null, class_year = null, usa_swimming_id = null, parental_contact = null, parent_managed_flag = false, pace_scy_100 = null, pace_scm_100 = null, pace_lcm_100 = null }) {
   if (!ownerSub) throw new Error("ownerSub required");
-  if (!display_name || typeof display_name !== "string") throw new Error("display_name required");
-  if (display_name.length > 120) throw new Error("display_name max 120 chars");
+  // I-H: accept explicit first/last name parts (preferred — avoids the lossy
+  // split on multi-word names like "Mary Jo" / "van der Berg") OR a single
+  // display_name that we split (legacy CSV + the single-create form).
+  let first, last;
+  if (first_name != null && String(first_name).trim()) {
+    first = String(first_name).trim();
+    last  = (last_name == null ? "" : String(last_name).trim());
+    if (first.length > 80) throw new Error("first_name max 80 chars");
+    if (last.length  > 80) throw new Error("last_name max 80 chars");
+  } else {
+    if (!display_name || typeof display_name !== "string") throw new Error("display_name or first_name required");
+    if (display_name.length > 120) throw new Error("display_name max 120 chars");
+    const parsed = parseDisplayName(display_name);
+    first = parsed.first; last = parsed.last;
+  }
+  const pref = (preferred_name == null || String(preferred_name).trim() === "") ? null : String(preferred_name).trim();
+  if (pref && pref.length > 80) throw new Error("preferred_name max 80 chars");
   const dobCheck = validateDob(dob);
   if (!dobCheck.ok) throw new Error(dobCheck.reason);
   if (initials && initials.length > 4) throw new Error("initials max 4 chars");
@@ -4339,12 +4354,11 @@ export async function dbCreateManagedSwimmer({ ownerSub, display_name, dob, gend
   // I-F: persons is the source of truth for name/initials/dob/gender/
   // class_year. The cms row carries only the relationship/pace data + the
   // person_id FK — no legacy name columns.
-  const parse = parseDisplayName(display_name);
   const personId = genPersonId();
-  const personInitials = initials || genInitialsFromParts(parse.first, parse.last);
+  const personInitials = initials || genInitialsFromParts(first, last);
   await pool.query(
-    "INSERT INTO `persons` (`id`, `first_name`, `last_name`, `initials`, `dob`, `gender`, `class_year`) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [personId, parse.first, parse.last, personInitials, dob, gender || null, cyChk.value]
+    "INSERT INTO `persons` (`id`, `first_name`, `last_name`, `preferred_name`, `initials`, `dob`, `gender`, `class_year`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [personId, first, last, pref, personInitials, dob, gender || null, cyChk.value]
   );
   await pool.query(
     "INSERT INTO `coach_managed_swimmers` " +

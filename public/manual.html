@@ -1656,10 +1656,11 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>Bulk import (📥)</h3>
       <p>For onboarding a real roster, use the <strong>📥 Import</strong> button at the top of the swimmers view. It accepts CSV or TSV in two ways: <strong>📁 Choose CSV file</strong> uploads a file directly; or paste content into the textarea. Either way the same parser runs.</p>
-      <p><strong>Required columns:</strong> <code>name</code>, <code>dob</code>.<br>
-      <strong>Optional columns:</strong> <code>initials</code>, <code>pace_scy_100</code>, <code>pace_scm_100</code>, <code>pace_lcm_100</code>, <code>parental_contact</code>.</p>
+      <p><strong>Required columns:</strong> <code>first_name</code>, <code>dob</code> (<code>last_name</code> recommended).<br>
+      <strong>Optional columns:</strong> <code>preferred_name</code>, <code>initials</code>, <code>gender</code>, <code>pace_scy_100</code>, <code>pace_scm_100</code>, <code>pace_lcm_100</code>, <code>parental_contact</code>.</p>
+      <p><strong>Names import as separate <code>first_name</code> + <code>last_name</code> columns</strong> so multi-word names ("Mary Jo", "van der Berg") aren't split incorrectly. A legacy single <code>name</code> column is still accepted for backwards compatibility — it's split on the last space and the row is flagged with an amber <strong>⚠</strong> in the preview so you can verify the split landed right before importing. (Provide <code>first_name</code>/<code>last_name</code> to avoid the guess entirely.)</p>
       <p>Headers are case-insensitive; column order doesn't matter; extra unknown columns are ignored. DOB accepts <code>YYYY-MM-DD</code> or <code>MM/DD/YYYY</code> (both work — Excel exports often use one or the other). Click <strong>📄 Download template</strong> for a starter CSV with the header row pre-filled.</p>
-      <p><strong>Flow:</strong> upload or paste → <em>Parse</em> → preview table shows each row with a green ✓ (valid) or red ✗ (validation error, reason inline) → <em>Import N swimmers</em> commits the valid rows. The server is per-row atomic — one bad row doesn't roll back the others; the result screen shows server-side rejections (rare; mainly DB-level constraint hits) alongside the success count.</p>
+      <p><strong>Flow:</strong> upload or paste → <em>Parse</em> → preview table shows each row with a green ✓ (valid), amber ⚠ (imported but name was split from the legacy column — verify it), or red ✗ (validation error, reason inline) → <em>Import N swimmers</em> commits the valid rows. The server is per-row atomic — one bad row doesn't roll back the others; the result screen shows server-side rejections (rare; mainly DB-level constraint hits) alongside the success count.</p>
       <p>Cap at 500 rows per import call. Larger rosters: split the file and run it in batches.</p>
 
       <div class="callout note">

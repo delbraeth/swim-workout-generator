@@ -21950,9 +21950,13 @@
     // Simple CSV/TSV parser — handles quoted strings with embedded delimiters
     // (Excel/Sheets export shape), auto-detects comma vs tab, requires a
     // header row. NOT a full RFC 4180 parser; handles 99% of coach exports.
-    const IMPORT_REQUIRED = ["name", "dob"];
-    const IMPORT_OPTIONAL = ["initials", "gender", "pace_scy_100", "pace_scm_100", "pace_lcm_100", "parental_contact"];
-    const IMPORT_ALL_HEADERS = [...IMPORT_REQUIRED, ...IMPORT_OPTIONAL];
+    // I-H: names import as first_name + last_name (+ optional preferred_name).
+    // The legacy single `name` column is still accepted and split on the last
+    // space, with a per-row warning so the coach can verify the split.
+    // Required: dob + a name (first_name OR legacy name).
+    const IMPORT_NEW_HEADERS = ["first_name", "last_name", "preferred_name", "dob", "gender", "initials", "pace_scy_100", "pace_scm_100", "pace_lcm_100", "parental_contact"];
+    // Every header the parser recognizes (superset; legacy `name` included).
+    const IMPORT_RECOGNIZED = ["name", "first_name", "last_name", "preferred_name", "dob", "initials", "gender", "pace_scy_100", "pace_scm_100", "pace_lcm_100", "parental_contact"];
     // Accept several spellings of gender in CSV (case-insensitive). Map to enum.
     const GENDER_CSV_MAP = {
       "m": "M", "male": "M", "boy": "M",
@@ -22000,11 +22004,11 @@
       if (!rows.length) return { ok: false, error: "No data found." };
       const headerCells = rows[0].map(h => h.toLowerCase().trim());
       // Validate required headers exist.
-      const missing = IMPORT_REQUIRED.filter(h => !headerCells.includes(h));
-      if (missing.length) return { ok: false, error: `Missing required column(s): ${missing.join(", ")}. Expected headers: ${IMPORT_ALL_HEADERS.join(", ")}` };
+      if (!headerCells.includes("dob")) return { ok: false, error: `Missing required column: dob. Expected headers: ${IMPORT_NEW_HEADERS.join(", ")} (legacy single 'name' column also accepted).` };
+      if (!headerCells.includes("first_name") && !headerCells.includes("name")) return { ok: false, error: "Missing a name column: provide first_name (+ optional last_name), or the legacy single 'name' column." };
       // Build column-index map for known headers (ignore unknown columns).
       const idx = {};
-      for (const h of IMPORT_ALL_HEADERS) {
+      for (const h of IMPORT_RECOGNIZED) {
         const i = headerCells.indexOf(h);
         if (i >= 0) idx[h] = i;
       }
@@ -22022,9 +22026,26 @@
 
     // Normalize + validate one row. Returns {ok, normalized?, error?}.
     function normalizeImportRow(raw) {
-      const name = (raw.name || "").trim();
-      if (!name) return { ok: false, error: "name is empty" };
-      if (name.length > 120) return { ok: false, error: "name too long (>120 chars)" };
+      // I-H name resolution: explicit first_name (+ last_name) preferred; else
+      // split the legacy single `name` column and flag a warning so the coach
+      // can verify. preferred_name is optional in both paths.
+      const first     = (raw.first_name || "").trim();
+      const last      = (raw.last_name  || "").trim();
+      const preferred = (raw.preferred_name || "").trim() || null;
+      const legacy    = (raw.name || "").trim();
+      let nameFields, warning = null;
+      if (first) {
+        if (first.length > 80) return { ok: false, error: "first_name too long (>80 chars)" };
+        if (last.length  > 80) return { ok: false, error: "last_name too long (>80 chars)" };
+        if (preferred && preferred.length > 80) return { ok: false, error: "preferred_name too long (>80 chars)" };
+        nameFields = { first_name: first, last_name: last, preferred_name: preferred };
+      } else if (legacy) {
+        if (legacy.length > 120) return { ok: false, error: "name too long (>120 chars)" };
+        nameFields = { display_name: legacy, preferred_name: preferred };
+        warning = "split from single 'name' column — verify first/last";
+      } else {
+        return { ok: false, error: "first_name (or legacy 'name') is empty" };
+      }
       const dobRaw = (raw.dob || "").trim();
       if (!dobRaw) return { ok: false, error: "dob is empty" };
       // Accept YYYY-MM-DD or MM/DD/YYYY (or M/D/YYYY).
@@ -22063,17 +22084,18 @@
       const parental_contact = (raw.parental_contact || "").trim() || null;
       if (parental_contact && parental_contact.length > 255) return { ok: false, error: "parental_contact too long (>255 chars)" };
 
-      return { ok: true, normalized: {
-        display_name: name, initials, dob, gender,
+      return { ok: true, warning, normalized: {
+        ...nameFields, initials, dob, gender,
         pace_scy_100, pace_scm_100, pace_lcm_100,
         parental_contact,
       } };
     }
 
     function buildTemplateCSV() {
-      const header = IMPORT_ALL_HEADERS.join(",");
-      // Column order matches IMPORT_ALL_HEADERS: name,dob,initials,gender,pace_scy_100,pace_scm_100,pace_lcm_100,parental_contact
-      const example = "Sarah Johnson,2010-03-15,SJ,F,2:05,,,parent@example.com";
+      const header = IMPORT_NEW_HEADERS.join(",");
+      // Column order matches IMPORT_NEW_HEADERS:
+      // first_name,last_name,preferred_name,dob,gender,initials,pace_scy_100,pace_scm_100,pace_lcm_100,parental_contact
+      const example = "Sarah,Johnson,,2010-03-15,F,SJ,2:05,,,parent@example.com";
       return header + "\n" + example + "\n";
     }
 
@@ -22113,7 +22135,7 @@
         if (!p.ok) { setErr(p.error); setParsed(null); return; }
         const rows = p.dataRows.map((raw, idx) => {
           const v = normalizeImportRow(raw);
-          return { idx, raw, normalized: v.ok ? v.normalized : null, error: v.ok ? null : v.error };
+          return { idx, raw, normalized: v.ok ? v.normalized : null, error: v.ok ? null : v.error, warning: v.ok ? (v.warning || null) : null };
         });
         setParsed(rows);
       };
@@ -22139,6 +22161,7 @@
 
       const validCount   = parsed ? parsed.filter(r => !r.error).length : 0;
       const invalidCount = parsed ? parsed.filter(r =>  r.error).length : 0;
+      const warnCount    = parsed ? parsed.filter(r => !r.error && r.warning).length : 0;
 
       return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16, overflow: "auto" }}>
@@ -22171,7 +22194,7 @@
             ) : (
               <>
                 <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 10, lineHeight: 1.5 }}>
-                  Required columns: <code>name</code>, <code>dob</code>. Optional: <code>initials</code>, <code>gender</code>, <code>pace_scy_100</code>, <code>pace_scm_100</code>, <code>pace_lcm_100</code>, <code>parental_contact</code>. Headers are case-insensitive; extra columns are ignored. DOB accepts <code>YYYY-MM-DD</code> or <code>MM/DD/YYYY</code>.
+                  Required: <code>first_name</code> + <code>dob</code> (<code>last_name</code> recommended). Optional: <code>preferred_name</code>, <code>initials</code>, <code>gender</code>, <code>pace_scy_100</code>, <code>pace_scm_100</code>, <code>pace_lcm_100</code>, <code>parental_contact</code>. A legacy single <code>name</code> column still works — it's split on the last space, flagged with a ⚠ so you can verify. Headers are case-insensitive; extra columns are ignored. DOB accepts <code>YYYY-MM-DD</code> or <code>MM/DD/YYYY</code>.
                 </div>
 
                 {teams.length > 0 && (
@@ -22200,7 +22223,7 @@
 
                 <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Or paste CSV/TSV here:</label>
                 <textarea value={text} onChange={e => { setText(e.target.value); setParsed(null); setErr(null); }}
-                  placeholder="name,dob,initials,pace_scy_100,pace_scm_100,pace_lcm_100,parental_contact&#10;Sarah Johnson,2010-03-15,SJ,2:05,,,parent@example.com"
+                  placeholder="first_name,last_name,preferred_name,dob,gender,initials,pace_scy_100,pace_scm_100,pace_lcm_100,parental_contact&#10;Sarah,Johnson,,2010-03-15,F,SJ,2:05,,,parent@example.com"
                   rows={8}
                   style={{ width: "100%", padding: "8px 10px", fontSize: 12, fontFamily: "monospace", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, resize: "vertical", boxSizing: "border-box" }} />
 
@@ -22212,6 +22235,7 @@
                   {parsed && (
                     <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
                       {validCount} valid · {invalidCount > 0 ? <span style={{ color: "#fca5a5" }}>{invalidCount} invalid</span> : "0 invalid"}
+                      {warnCount > 0 && <span style={{ color: "#f59e0b" }}> · {warnCount} name-split ⚠</span>}
                     </span>
                   )}
                 </div>
@@ -22237,14 +22261,18 @@
                             <td style={{ padding: "5px 8px" }}>
                               {row.error
                                 ? <span style={{ color: "var(--color-destructive)" }}>✗</span>
-                                : <span style={{ color: "var(--color-positive)" }}>✓</span>}
+                                : row.warning
+                                  ? <span style={{ color: "#f59e0b" }}>⚠</span>
+                                  : <span style={{ color: "var(--color-positive)" }}>✓</span>}
                             </td>
-                            <td style={{ padding: "5px 8px", color: "var(--color-text)" }}>{row.raw.name || "—"}</td>
+                            <td style={{ padding: "5px 8px", color: "var(--color-text)" }}>
+                              {row.raw.first_name ? `${row.raw.first_name} ${row.raw.last_name || ""}`.trim() : (row.raw.name || "—")}
+                            </td>
                             <td style={{ padding: "5px 8px", color: "#cbd5e1", fontFamily: "monospace" }}>
                               {row.normalized?.dob || row.raw.dob || "—"}
                             </td>
-                            <td style={{ padding: "5px 8px", color: row.error ? "#fca5a5" : "var(--color-text-dim)", fontSize: 11 }}>
-                              {row.error || (row.normalized?.initials ? `initials: ${row.normalized.initials}` : "")}
+                            <td style={{ padding: "5px 8px", color: row.error ? "#fca5a5" : (row.warning ? "#f59e0b" : "var(--color-text-dim)"), fontSize: 11 }}>
+                              {row.error || row.warning || (row.normalized?.initials ? `initials: ${row.normalized.initials}` : "")}
                             </td>
                           </tr>
                         ))}
