@@ -3057,7 +3057,19 @@ export async function dbRemoveTeamCoach(teamId, coachSub) {
     "WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
     [teamId, coachSub]
   );
-  return { ok: true, affected: Number(r.affectedRows || 0) };
+  // Continuity: the departing coach's team-shared UGC moves to the current
+  // owner so it stays live. Public UGC keeps its author (moderation trail);
+  // private stays theirs. (OWNERSHIP_TRANSFER_SCOPE §3.6 / decision 7.)
+  let ugcReassigned = 0;
+  if (Number(r.affectedRows)) {
+    const ownerRows = await pool.query("SELECT `owner_coach_sub` FROM `teams` WHERE `id` = ?", [teamId]);
+    const ownerSub = ownerRows[0]?.owner_coach_sub;
+    if (ownerSub && ownerSub !== coachSub) {
+      const ug = await dbReassignDepartingCoachUgc({ teamId, departingSub: coachSub, newOwnerSub: ownerSub, includePublic: false });
+      ugcReassigned = ug.reassigned;
+    }
+  }
+  return { ok: true, affected: Number(r.affectedRows || 0), ugc_reassigned: ugcReassigned };
 }
 
 // R-J: promote/demote between admin and coach. Owner unchanged here
@@ -3075,6 +3087,176 @@ export async function dbUpdateTeamCoachRole(teamId, coachSub, role) {
     [role, teamId, coachSub]
   );
   return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// ─── Ownership transfer (Phase 4 / OWNERSHIP_TRANSFER_SCOPE.md) ───────
+// A deliberate, reversible hand-off of a team's ownership. Owner is stored
+// in TWO places — teams.owner_coach_sub AND team_coaches.role='owner' — and
+// the swap updates both atomically. On accept / 30-day auto-complete, the
+// departing owner's team-shared + public UGC reassigns to the new owner.
+
+// Txn helper: flip both owner representations. Throws if the proposed owner is
+// no longer an active member of the team (left during the cooldown).
+async function _applyOwnershipSwap(conn, teamId, fromSub, toSub) {
+  const up = await conn.query(
+    "UPDATE `team_coaches` SET `role` = 'owner' WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
+    [teamId, toSub]
+  );
+  if (!Number(up.affectedRows)) throw new Error("proposed owner is no longer an active team member");
+  await conn.query("UPDATE `teams` SET `owner_coach_sub` = ? WHERE `id` = ?", [toSub, teamId]);
+  await conn.query(
+    "UPDATE `team_coaches` SET `role` = 'admin' WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL",
+    [teamId, fromSub]
+  );
+}
+
+// Reassign a departing coach's UGC so it stays live. `includePublic` is true
+// for an ownership hand-off (the departing owner's public UGC moves too), false
+// for a regular coach leaving (public keeps its author — moderation trail). Only
+// the team-shared rows for THIS team move. Skips graduated (promoted_at) rows.
+export async function dbReassignDepartingCoachUgc({ teamId, departingSub, newOwnerSub, includePublic = false }, conn = pool) {
+  if (!teamId || !departingSub || !newOwnerSub || departingSub === newOwnerSub) return { reassigned: 0, ids: [] };
+  const teamShared = await conn.query(
+    "SELECT DISTINCT bo.`id` FROM `bank_options` bo " +
+    "JOIN `bank_option_team_shares` ts ON ts.`option_id` = bo.`id` " +
+    "WHERE bo.`author_sub` = ? AND bo.`visibility` = 'team' AND ts.`team_id` = ? AND bo.`promoted_at` IS NULL",
+    [departingSub, teamId]
+  );
+  const ids = teamShared.map(r => r.id);
+  if (includePublic) {
+    const pub = await conn.query(
+      "SELECT `id` FROM `bank_options` WHERE `author_sub` = ? AND `visibility` = 'public' AND `promoted_at` IS NULL",
+      [departingSub]
+    );
+    for (const r of pub) ids.push(r.id);
+  }
+  if (!ids.length) return { reassigned: 0, ids: [] };
+  const ph = ids.map(() => "?").join(",");
+  await conn.query("UPDATE `bank_options` SET `author_sub` = ? WHERE `id` IN (" + ph + ")", [newOwnerSub, ...ids]);
+  return { reassigned: ids.length, ids };
+}
+
+export async function dbGetPendingTransferForTeam(teamId) {
+  if (!teamId) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `team_id`, `from_sub`, `to_sub`, `proposed_at`, `auto_complete_at` " +
+    "FROM `team_ownership_transfers` WHERE `team_id` = ? AND `state` = 'pending' " +
+    "ORDER BY `proposed_at` DESC LIMIT 1",
+    [teamId]
+  );
+  return rows[0] || null;
+}
+
+// Pending transfers proposed TO this coach — drives the accept/decline banner.
+export async function dbListIncomingTransfersForCoach(coachSub) {
+  if (!coachSub) return [];
+  return await pool.query(
+    "SELECT tot.`id`, tot.`team_id`, t.`name` AS team_name, tot.`from_sub`, " +
+    "       tot.`proposed_at`, tot.`auto_complete_at` " +
+    "FROM `team_ownership_transfers` tot JOIN `teams` t ON t.`id` = tot.`team_id` " +
+    "WHERE tot.`to_sub` = ? AND tot.`state` = 'pending' ORDER BY tot.`proposed_at` DESC",
+    [coachSub]
+  );
+}
+
+export async function dbProposeOwnershipTransfer({ teamId, fromSub, toSub }) {
+  if (!teamId || !fromSub || !toSub) return { ok: false, reason: "missing_args" };
+  if (fromSub === toSub) return { ok: false, reason: "cannot_transfer_to_self" };
+  if ((await dbGetTeamRole(teamId, fromSub)) !== "owner") return { ok: false, reason: "not_owner" };
+  if ((await dbGetTeamRole(teamId, toSub)) !== "admin") return { ok: false, reason: "target_not_admin" };
+  const existing = await pool.query(
+    "SELECT `id` FROM `team_ownership_transfers` WHERE `team_id` = ? AND `state` = 'pending' LIMIT 1", [teamId]
+  );
+  if (existing.length) return { ok: false, reason: "already_pending" };
+  const r = await pool.query(
+    "INSERT INTO `team_ownership_transfers` (`team_id`, `from_sub`, `to_sub`, `auto_complete_at`) " +
+    "VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))",
+    [teamId, fromSub, toSub]
+  );
+  return { ok: true, id: Number(r.insertId), to_sub: toSub };
+}
+
+export async function dbCancelOwnershipTransfer({ teamId, byCoachSub, reason = null }) {
+  const t = await dbGetPendingTransferForTeam(teamId);
+  if (!t) return { ok: false, reason: "no_pending" };
+  if (t.from_sub !== byCoachSub) return { ok: false, reason: "not_proposer" };
+  await pool.query(
+    "UPDATE `team_ownership_transfers` SET `state` = 'cancelled', `resolved_at` = NOW(), `cancel_reason` = ? WHERE `id` = ?",
+    [reason ? String(reason).slice(0, 255) : null, t.id]
+  );
+  return { ok: true, transfer: t };
+}
+
+export async function dbDeclineOwnershipTransfer({ teamId, byCoachSub, reason = null }) {
+  const t = await dbGetPendingTransferForTeam(teamId);
+  if (!t) return { ok: false, reason: "no_pending" };
+  if (t.to_sub !== byCoachSub) return { ok: false, reason: "not_proposed_owner" };
+  await pool.query(
+    "UPDATE `team_ownership_transfers` SET `state` = 'declined', `resolved_at` = NOW(), `cancel_reason` = ? WHERE `id` = ?",
+    [reason ? String(reason).slice(0, 255) : null, t.id]
+  );
+  return { ok: true, transfer: t };
+}
+
+export async function dbAcceptOwnershipTransfer({ teamId, byCoachSub }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const rows = await conn.query(
+      "SELECT * FROM `team_ownership_transfers` WHERE `team_id` = ? AND `state` = 'pending' ORDER BY `proposed_at` DESC LIMIT 1 FOR UPDATE",
+      [teamId]
+    );
+    const t = rows[0];
+    if (!t) { await conn.rollback(); return { ok: false, reason: "no_pending" }; }
+    if (t.to_sub !== byCoachSub) { await conn.rollback(); return { ok: false, reason: "not_proposed_owner" }; }
+    await _applyOwnershipSwap(conn, teamId, t.from_sub, t.to_sub);
+    const ugc = await dbReassignDepartingCoachUgc({ teamId, departingSub: t.from_sub, newOwnerSub: t.to_sub, includePublic: true }, conn);
+    await conn.query("UPDATE `team_ownership_transfers` SET `state` = 'accepted', `resolved_at` = NOW() WHERE `id` = ?", [t.id]);
+    await conn.commit();
+    return { ok: true, transfer: t, ugc_reassigned: ugc.reassigned };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    return { ok: false, reason: err.message || String(err) };
+  } finally { conn.release(); }
+}
+
+// Cron sweep (piggybacks the email worker tick). Completes transfers past their
+// 30-day cooldown. Open-fork #1: if the proposed owner is gone (account disabled
+// or no longer an active team member), cancel instead of completing. Returns
+// per-row events so the caller (lib/email.js) can send emails + audit — keeps
+// db.js free of email/audit-routing deps.
+export async function dbAutoCompleteTransfers() {
+  const due = await pool.query(
+    "SELECT * FROM `team_ownership_transfers` WHERE `state` = 'pending' AND `auto_complete_at` <= NOW()"
+  );
+  const events = [];
+  for (const row of due) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const locked = await conn.query("SELECT * FROM `team_ownership_transfers` WHERE `id` = ? AND `state` = 'pending' FOR UPDATE", [row.id]);
+      const t = locked[0];
+      if (!t) { await conn.rollback(); continue; }
+      const stillActive = (await dbIsUser(t.to_sub)) && ((await dbGetTeamRole(t.team_id, t.to_sub)) !== null);
+      if (!stillActive) {
+        await conn.query(
+          "UPDATE `team_ownership_transfers` SET `state` = 'cancelled', `resolved_at` = NOW(), `cancel_reason` = 'proposed owner no longer available' WHERE `id` = ?",
+          [t.id]
+        );
+        await conn.commit();
+        events.push({ type: "cancelled", transfer: t });
+        continue;
+      }
+      await _applyOwnershipSwap(conn, t.team_id, t.from_sub, t.to_sub);
+      const ugc = await dbReassignDepartingCoachUgc({ teamId: t.team_id, departingSub: t.from_sub, newOwnerSub: t.to_sub, includePublic: true }, conn);
+      await conn.query("UPDATE `team_ownership_transfers` SET `state` = 'completed', `resolved_at` = NOW() WHERE `id` = ?", [t.id]);
+      await conn.commit();
+      events.push({ type: "completed", transfer: t, ugc_reassigned: ugc.reassigned });
+    } catch (err) {
+      try { await conn.rollback(); } catch (_) {}
+    } finally { conn.release(); }
+  }
+  return { processed: due.length, events };
 }
 
 // ─── Team curation (Phase 4 / TEAM_CURATION_SCOPE.md) ─────────────────
