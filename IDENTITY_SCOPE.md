@@ -234,9 +234,9 @@ These have material product or business implications:
 | **I-C** | Enforce `person_id NOT NULL` on both tables. Add unique constraints. Reading paths still use legacy `display_name` columns. | 1 | I-B clean + verified |
 | **I-D** | Add `display_name` computed projection helper to db.js. Switch read paths to compute from persons. Legacy `users.display_name` + `coach_managed_swimmers.display_name` columns kept but no longer authoritative. | 4 | I-C deployed |
 | **I-E** | Parent backfill: parse `coach_managed_swimmers.parental_contact` strings → best-effort `guardians` rows + `parent_contact_methods` (method=email when string looks like email; method=other-text when not). Coach-review queue for ambiguous parses. | 3 + coach review | I-D deployed |
-| **I-F** | Drop legacy columns: `users.display_name`, `users.initials`, `users.dob`, `users.gender`, `coach_managed_swimmers.display_name`, `.initials`, `.dob`, `.gender`, `.parental_contact`. Remove compat shim. | 1 | I-E clean for 30 days |
-| **I-G** | Tombstone-on-delete in account-delete + coach-removal paths. Replace cascade-wipe with identity replacement. | 3 | I-F clean |
-| **I-H** | Bulk-import CSV format update + manual + privacy doc updates. | 2 | I-G clean |
+| **I-F** ✅ 2026-06-03 | Drop legacy columns: `users.{display_name,initials,dob,gender}`, `coach_managed_swimmers.{display_name,initials,dob,gender}` via migration 044. **`parental_contact` intentionally KEPT** (superseded by guardians later, not this pass). Soak waived (pilot mode/all-test-users/clean static audit). | 1 | done |
+| **I-G** ✅ 2026-06-03 | Tombstone-on-delete: `dbAdminDeleteUser` → `dbTombstonePerson` ("Former / Coach #N\|Swimmer #N", PII nulled, `tombstoned_at`) + keep users row `is_disabled=1` + revoke sessions. `signInAs`/native-auth refuse disabled; requireAuth already did. `{hard:true}` keeps the cascade-wipe as an admin override. **Self-serve JSON export bundled** (`dbExportAccount` + `GET /api/me/export` + web button). Coach-removal stays soft (`removed_at`); UGC reassignment is the separate Ownership-transfer scope. | 3 | done |
+| **I-H** | Bulk-import CSV format update + manual + privacy doc updates. | 2 | I-G clean (next pass) |
 
 **Total: ~19h + admin review pass.** Stage 1 (I-A through I-D) is the meaningful refactor; everything else is backfill + cleanup.
 

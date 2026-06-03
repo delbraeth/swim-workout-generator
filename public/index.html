@@ -15612,6 +15612,36 @@
                 </div>
                 )}
 
+                {/* Self-serve data export (Phase 4 continuity). Authenticated
+                    GET /api/me/export → JSON download via blob (cookie auth). */}
+                {tab === "account" && (
+                <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                    Your data
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--color-text-muted)", marginBottom: 10, lineHeight: 1.5 }}>
+                    Download a full copy of your account as JSON — your profile, workouts, schedule, curation, and the swimmers and teams you coach.
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/me/export", { credentials: "include" });
+                        if (!res.ok) throw new Error("export failed");
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `setforge-export-${new Date().toISOString().slice(0, 10)}.json`;
+                        document.body.appendChild(a); a.click(); a.remove();
+                        URL.revokeObjectURL(url);
+                      } catch (_) { alert("Couldn't generate the export. Please try again."); }
+                    }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    ⬇ Export my data (JSON)
+                  </button>
+                </div>
+                )}
+
                 {/* View-as switcher — admin-only QA tool. Gated on REAL
                     admin (me.is_admin), not effectiveMe, so an admin who
                     flipped into "view as solo" can still see + exit the

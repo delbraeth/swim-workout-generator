@@ -82,6 +82,7 @@ import {
   dbIsUser, dbIsAdmin, dbIsCoach, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe, dbGetBootstrapForUser,
   dbGetUserSubByProvider, dbLinkOAuthProvider, dbFindUserByVerifiedEmail,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
+  dbExportAccount,
   dbAdminListInvites, dbAdminCreateInvite, dbAdminDeleteInvite,
   dbAdminListAuditEvents,
   dbCreateSession, dbGetSession, dbTouchSession,
@@ -619,6 +620,12 @@ app.post("/api/auth/callback", authLimiter, express.urlencoded({ extended: false
 // redirects to /. Centralizing this means provider tagging stays
 // consistent across both flows.
 async function signInAs({ res, meta, userSub, provider }) {
+  // I-G: a tombstoned/disabled account must not get a session. (New users are
+  // never disabled, so this only ever blocks an intentionally-disabled sub.)
+  if (dbActive && !(await dbIsUser(userSub))) {
+    dbAuditEvent({ userSub, eventType: "auth.login.blocked_disabled", ...meta, details: { channel: "web", provider } });
+    return res.redirect("/?auth_error=account_disabled");
+  }
   const sessionId = await dbCreateSession({
     userSub,
     ip:        meta.ip,
@@ -1075,8 +1082,17 @@ app.post("/api/admin/users/:sub/coach", checkOrigin, requireAuth, requireAdmin, 
 app.delete("/api/admin/users/:sub", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
   try {
     if (req.params.sub === req.userSub) return res.status(400).json({ error: "cannot delete self" });
-    const r = await dbAdminDeleteUser(req.params.sub);
-    dbAuditEvent({ userSub: req.userSub, eventType: "admin.user.delete", ...reqMeta(req), details: { target_sub: req.params.sub, affected: r.affected } });
+    // I-G: default is tombstone-on-delete (anonymize identity, disable account,
+    // keep operational history). ?hard=1 is the explicit cascade-wipe override.
+    const hard = req.query.hard === "1" || req.query.hard === "true";
+    const r = await dbAdminDeleteUser(req.params.sub, { hard });
+    if (!r.ok && r.reason === "not_found") return res.status(404).json({ error: "user not found" });
+    dbAuditEvent({
+      userSub: req.userSub,
+      eventType: hard ? "admin.user.delete" : "admin.user.tombstone",
+      ...reqMeta(req),
+      details: { target_sub: req.params.sub, mode: r.mode, person_id: r.person_id, anonymized_as: r.anonymizedAs, affected: r.affected },
+    });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
@@ -1283,6 +1299,11 @@ app.post("/api/auth/native", authLimiter, async (req, res) => {
       dbAuditEvent({ userSub: sub, eventType: "invite.consume", ...meta, details: { code: inviteCode, channel: "native" } });
       dbAuditEvent({ userSub: sub, eventType: "auth.signup",    ...meta, details: { channel: "native" } });
     }
+    // I-G: refuse a disabled/tombstoned account (new users are never disabled).
+    if (dbActive && !(await dbIsUser(sub))) {
+      dbAuditEvent({ userSub: sub, eventType: "auth.login.blocked_disabled", ...meta, details: { channel: "native" } });
+      return res.status(403).json({ error: "account_disabled" });
+    }
     const token = await dbCreateSession({
       userSub:    sub,
       ip:         meta.ip,
@@ -1365,6 +1386,11 @@ app.post("/api/auth/google-native", authLimiter, async (req, res) => {
       userSub = newSub;
     }
 
+    // I-G: refuse a disabled/tombstoned account (new users are never disabled).
+    if (dbActive && !(await dbIsUser(userSub))) {
+      dbAuditEvent({ userSub, eventType: "auth.login.blocked_disabled", ...meta, details: { channel: "native", provider: "google" } });
+      return res.status(403).json({ error: "account_disabled" });
+    }
     const token = await dbCreateSession({ userSub, ip: meta.ip, userAgent: meta.userAgent, ttlSeconds: SESSION_MAX_AGE });
     dbAuditEvent({ userSub, eventType: "auth.login.success", ...meta, details: { channel: "native", provider: "google" } });
     res.json({ ok: true, token });
@@ -4120,6 +4146,21 @@ app.get("/api/me/group-anchors", requireAuth, async (req, res) => {
     const map = {};
     for (const a of anchors) map[a.group_id] = a;
     res.json(map);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Phase 4 / continuity: self-serve full-account JSON export ("a club can leave
+// with their data"). Self-scoped to the caller via requireAuth → req.userSub.
+// Read-only GET (no CSRF needed). Streams as a download attachment.
+app.get("/api/me/export", requireAuth, async (req, res) => {
+  try {
+    const out = await dbExportAccount(req.userSub);
+    if (!out.ok) return res.status(500).json({ error: out.reason || "export_failed" });
+    dbAuditEvent({ userSub: req.userSub, eventType: "account.export", ...reqMeta(req), details: null });
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="setforge-export-${stamp}.json"`);
+    res.send(JSON.stringify(out.data, null, 2));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
