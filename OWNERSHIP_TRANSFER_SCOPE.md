@@ -1,6 +1,8 @@
 # Ownership Transfer + UGC Reassignment — scope
 
-**Status:** scope-only (2026-05-26). Implementation lives in PHASED_PLAN §3 Phase 4 — "The product earns its team-tier price and survives founder absence." Continuity-critical: without this, teams orphan on founder/head-coach exit. Head Coach + Assistant + Lifecycle personas across the team eval all flagged this.
+**Status:** ✅ SHIPPED 2026-06-03 (migration 045). Core flow + UGC reassignment + cron + emails + UI all live. **Deferred from this pass:** §3.5 account-delete blocker — there is no self-serve account-delete flow to gate (only the admin tombstone path), so it has nothing to hook into; revisit if/when a self-delete surface ships. Transfer-history viewer, multi-step succession, bulk transfer, and surfacing cancel/decline reasons remain v1.1 (§5). Original scope below.
+
+Implementation lives in PHASED_PLAN §3 Phase 4 — "The product earns its team-tier price and survives founder absence." Continuity-critical: without this, teams orphan on founder/head-coach exit. Head Coach + Assistant + Lifecycle personas across the team eval all flagged this.
 
 **Pattern source:** none directly. New flows. Reuses team_coaches role infrastructure from RELATIONSHIPS_SCOPE and UGC author tracking from UGC v1.
 

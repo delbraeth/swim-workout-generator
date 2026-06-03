@@ -1496,6 +1496,17 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. v1 captures just name + date.</p>
       <p>Upcoming events surface on the main app via the pool-mode selector row: a <strong>📅 amber pill</strong> showing the most-imminent event across all teams you're in (as either a coach or a group member). Renders alongside your personal <strong>🏁 next-event</strong> pill — both coexist; team events take the leading position.</p>
 
+      <h3>Transferring team ownership</h3>
+      <p>A team has one <strong>owner</strong>. To hand the team off — say you're leaving the club — open <strong>Team → Settings → Ownership</strong> (owner-only). Pick an existing <strong>admin</strong> as the new owner and tap <strong>Transfer →</strong>. (No admins yet? Promote a coach to admin first on the <em>Members &amp; Coaches</em> tab.)</p>
+      <p>The hand-off is deliberate and reversible:</p>
+      <ul>
+        <li>The proposed new owner sees a <strong>🎯 banner</strong> at the top of their Teams view with <strong>Accept now</strong> / <strong>Decline</strong>, and gets an email.</li>
+        <li>You (the current owner) can <strong>Cancel</strong> anytime while it's pending.</li>
+        <li>If nobody acts, the transfer <strong>auto-completes after 30 days</strong>. (If the proposed owner's account becomes unavailable in the meantime, it auto-cancels instead and you stay owner.)</li>
+      </ul>
+      <p>When it completes (accepted or auto), the roles swap immediately — the new owner becomes <strong>owner</strong>, you become an <strong>admin</strong> — and your <strong>team-shared and public workout sets reassign to the new owner</strong> so nothing breaks. Your private sets stay yours. A team with a pending transfer can't be archived until it's resolved. Every step is recorded in the audit log.</p>
+      <p>Separately, when a <em>non-owner</em> coach is removed from (or leaves) a team, their <strong>team-shared</strong> sets move to the current owner automatically; their public sets keep their name (they've been through moderation), and private sets stay theirs.</p>
+
       <h3>Practice facilities</h3>
       <p>In <strong>Team → Settings</strong>, the <strong>Facilities</strong> section records the pool(s) your team practices at — a team can have more than one. Each facility has a name, an optional course (<strong>SCY / SCM / LCM</strong>), an optional lane count, and an optional street address. Mark one as <strong>primary</strong>; adding a facility for a team that has none makes it primary automatically, and the "make primary" button moves it.</p>
       <p>Facilities replace the old single "school / club" field — that one affiliation generalized into this list so a multi-pool team is modeled properly. A facility's course is used as a <strong>default pool mode</strong> when you plan practices there (see <a href="#plan-intent">Plan an Intent</a>). Removing a facility is a soft archive; if you remove the primary, the next remaining facility is promoted.</p>

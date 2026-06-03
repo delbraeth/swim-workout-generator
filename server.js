@@ -91,6 +91,8 @@ import {
   dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
   dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach, dbListCoachesForPicker,
   dbUpdateTeamCoachRole, dbTransferGroupPrimary,
+  dbProposeOwnershipTransfer, dbCancelOwnershipTransfer, dbAcceptOwnershipTransfer,
+  dbDeclineOwnershipTransfer, dbGetPendingTransferForTeam, dbListIncomingTransfersForCoach,
   dbAssertTeamWriter,
   dbAddTeamFavorite, dbRemoveTeamFavorite,
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
@@ -3173,6 +3175,11 @@ app.post("/api/teams/:id/archive", checkOrigin, requireAuth, requireCsrf, writeL
     const role = await getCallerTeamRole(req.params.id, req.userSub);
     if (role !== "owner") return res.status(403).json({ error: "owner only" });
     const archived = req.body?.archived !== false;                              // default true
+    // Ownership transfer decision 12: can't archive while a transfer is pending.
+    if (archived) {
+      const pending = await dbGetPendingTransferForTeam(req.params.id);
+      if (pending) return res.status(409).json({ error: "pending_transfer", message: "Resolve the pending ownership transfer before archiving this team." });
+    }
     const r = await dbArchiveTeam(req.params.id, archived);
     dbAuditEvent({
       userSub:   req.userSub,
@@ -3283,10 +3290,79 @@ app.delete("/api/teams/:id/coaches/:sub", checkOrigin, requireAuth, requireCsrf,
       userSub:   req.userSub,
       eventType: "team.remove_coach",
       ...reqMeta(req),
-      details:   { team_id: req.params.id, target_sub: req.params.sub },
+      details:   { team_id: req.params.id, target_sub: req.params.sub, ugc_reassigned: r.ugc_reassigned || 0 },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Team ownership transfer (Phase 4 / OWNERSHIP_TRANSFER_SCOPE.md) ─────
+// Reversible hand-off: owner proposes an existing admin → 30-day cooldown during
+// which the new owner can Accept early or Decline, or the owner can Cancel; the
+// email-worker cron auto-completes after 30 days. Emails are best-effort; the
+// in-app banner is authoritative.
+
+app.post("/api/teams/:id/transfer-ownership", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { to_sub } = req.body || {};
+    if (!to_sub) return res.status(400).json({ error: "to_sub required" });
+    const r = await dbProposeOwnershipTransfer({ teamId: req.params.id, fromSub: req.userSub, toSub: to_sub });
+    if (!r.ok) {
+      const code = r.reason === "already_pending" ? 409 : (r.reason === "not_owner" ? 403 : 400);
+      return res.status(code).json({ error: r.reason });
+    }
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.transfer.proposed", ...reqMeta(req), details: { team_id: req.params.id, to_sub, transfer_id: r.id } });
+    const team = await dbGetTeam(req.params.id);
+    enqueueEmail({ dedupKey: `transfer-proposed:${r.id}`, toUserSub: to_sub, templateId: "transfer-proposed", teamName: team?.name || "your team" }).catch(() => {});
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/teams/:id/transfer-ownership/cancel", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbCancelOwnershipTransfer({ teamId: req.params.id, byCoachSub: req.userSub, reason: req.body?.reason });
+    if (!r.ok) return res.status(r.reason === "not_proposer" ? 403 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.transfer.cancelled", ...reqMeta(req), details: { team_id: req.params.id, transfer_id: r.transfer.id } });
+    const team = await dbGetTeam(req.params.id);
+    enqueueEmail({ dedupKey: `transfer-cancelled:${r.transfer.id}`, toUserSub: r.transfer.to_sub, templateId: "transfer-cancelled", teamName: team?.name || "a team" }).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/teams/:id/transfer-ownership/accept", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbAcceptOwnershipTransfer({ teamId: req.params.id, byCoachSub: req.userSub });
+    if (!r.ok) return res.status(r.reason === "not_proposed_owner" ? 403 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.transfer.accepted", ...reqMeta(req), details: { team_id: req.params.id, transfer_id: r.transfer.id, from_sub: r.transfer.from_sub, ugc_reassigned: r.ugc_reassigned } });
+    const team = await dbGetTeam(req.params.id);
+    enqueueEmail({ dedupKey: `transfer-accepted:${r.transfer.id}`, toUserSub: r.transfer.from_sub, templateId: "transfer-accepted", teamName: team?.name || "your team" }).catch(() => {});
+    res.json({ ok: true, ugc_reassigned: r.ugc_reassigned });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/teams/:id/transfer-ownership/decline", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbDeclineOwnershipTransfer({ teamId: req.params.id, byCoachSub: req.userSub, reason: req.body?.reason });
+    if (!r.ok) return res.status(r.reason === "not_proposed_owner" ? 403 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.transfer.declined", ...reqMeta(req), details: { team_id: req.params.id, transfer_id: r.transfer.id } });
+    const team = await dbGetTeam(req.params.id);
+    enqueueEmail({ dedupKey: `transfer-declined:${r.transfer.id}`, toUserSub: r.transfer.from_sub, templateId: "transfer-declined", teamName: team?.name || "a team" }).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.get("/api/teams/:id/pending-transfer", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    res.json((await dbGetPendingTransferForTeam(req.params.id)) || {});
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Ownership transfers proposed TO the caller — drives the accept/decline banner.
+app.get("/api/me/incoming-transfers", requireAuth, async (req, res) => {
+  try { res.json(await dbListIncomingTransfersForCoach(req.userSub)); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // ───── Team curation (Phase 4 / TEAM_CURATION_SCOPE.md) ─────────────
