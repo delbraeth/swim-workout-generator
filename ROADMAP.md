@@ -70,7 +70,7 @@ Phase 2 engineering closed 2026-05-26. Phase 3 build started same day per Cap'n'
 - **Phase 2** (Android signup + email rails) — ✅ COMPLETE (Google OAuth, Resend email infra, Discord webhook).
 - **Phase 3** (first paying HS pilot can sign/pay/stick) — ✅ engineering COMPLETE: per-swimmer constraints, meet-anchored taper, vendor paper kit, and billing (Stripe live + Apple IAP sandbox-verified). Only the **billing GO-LIVE flip + first paying coach** remain (operational, in **Now**).
 - **Phase 4** (team tier earned + continuity closed) — ✅ COMPLETE 2026-06-03: team curation, parent portal, identity refactor I-A→I-H, tombstone-on-delete + self-serve export, ownership transfer + UGC reassignment.
-- **Phase 5** (demand-gated — build only when a pilot/revenue asks) — Lesson tier (deps: identity ✓ + email ✓ + parent recap export) · swimmer progress dashboard · MAAP pack (deps: identity ✓ + external-IDs table ✓ + two-deep gate) · HS race-pace template pack · one-way CSV/.ics export. **No build clock until a specific user pulls one forward.** Scopes for several already exist; the rest need a scope session first.
+- **Phase 5** (demand-gated — build only when a pilot/revenue asks) — Lesson tier · swimmer progress dashboard · MAAP/SafeSport pack · HS race-pace template pack + PR-anchored targets · one-way CSV/.ics export. **No build clock until a specific user pulls one forward.** **Spec'd 2026-06-03 in `PHASE_5_SCOPE.md`** (per-item trigger, dependency status against Phase 1–4, build shape, cost band, open questions, recommended cheapest-first order). When a trigger fires, promote the item to its own `<FEATURE>_SCOPE.md` with locked decisions before building.
 
 ## UGC v1 — closed (kept for context)
 
