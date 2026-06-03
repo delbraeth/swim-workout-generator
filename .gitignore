@@ -26,6 +26,13 @@ checkpoints/
 node_modules/
 vendor-kit/build/
 tools/__pycache__/
+# SPA-split (in progress): esbuild output + staged source. Ignored during the
+# groundwork phase so the still-live inline script in index.html isn't duplicated
+# in git. At cutover, src/app.jsx becomes the committed source of truth and the
+# inline script is removed from index.html. public/assets/app.js is deployed
+# directly from disk by _deploy.py (which reads files, not git).
+public/assets/
+src/app.jsx
 
 # Misc working dirs not for prod
 SwimWorkout

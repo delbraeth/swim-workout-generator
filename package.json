@@ -5,7 +5,12 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "esbuild src/app.jsx --bundle --outfile=public/assets/app.js --format=iife --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --minify --target=es2019",
+    "build:dev": "esbuild src/app.jsx --bundle --outfile=public/assets/app.js --format=iife --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --sourcemap --target=es2019"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

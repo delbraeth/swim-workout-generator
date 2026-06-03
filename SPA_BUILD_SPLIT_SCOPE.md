@@ -1,10 +1,30 @@
 # SPA Build Pipeline + Component Split — scope
 
-**Status:** SPEC ONLY (2026-06-03). Promotes `CLEAN_SLATE_ANALYSIS.md` §2.2 + §4.1 (and the
-backlog "Precompile Babel" / "SPA build pipeline + React Router" entry) into an executable,
-phased plan. Structural refactor — no user-facing feature change. Cost band **L+ / multi-session**;
-risk **high** (it's the entire web frontend). The phasing below exists specifically to make
-each step independently shippable + verifiable so the risk is paid down in safe increments.
+**Status:** IN PROGRESS (started 2026-06-03). Promotes `CLEAN_SLATE_ANALYSIS.md` §2.2 + §4.1
+into an executable, phased plan. Structural refactor — no user-facing feature change. Cost band
+**L+ / multi-session**; risk **high** (entire web frontend). Phasing makes each step
+independently shippable + verifiable. **Pipeline decision: option B (build locally, commit/
+deploy the bundle) for the refactor; A+CI later.**
+
+### Build progress
+- ✅ **Phase 1 groundwork PROVEN (2026-06-03), no prod cutover yet.** esbuild added as a
+  devDep + `npm run build` script. The full 29,560-line app extracts to `src/app.jsx` and
+  **bundles in ~66ms → `public/assets/app.js` (1.2 MB minified)** with classic JSX
+  (`React.createElement`, global React/ReactDOM kept from CDN). The core Phase-1 risk —
+  "does esbuild transpile everything babel-standalone accepted?" — is **retired** (one
+  warning only: a pre-existing **duplicate `className`** on a catalog element, index.html
+  ~line 22833; babel silently kept the last; harmless, fix later). `src/app.jsx` +
+  `public/assets/` are **gitignored during groundwork** (no committed duplicate of the
+  still-live inline script); the bundle deploys from disk via `_deploy.py`.
+- ⚠ **ENTANGLEMENT FOUND — Phase 1 cutover is coupled with Phase 2.** `lib/generator.js`
+  finds the engine by text-slicing `index.html` between `<script type="text/babel">` and
+  `function EquipmentBadge`. The moment the script body leaves `index.html` (cutover to the
+  bundle), that extraction breaks → `/api/generate` (iOS) goes down. So the cutover MUST
+  ship together with Phase 2 (engine → `lib/engine.js`, server imports it directly). They
+  are one combined, carefully-verified step — not two.
+- ⏭ **Next:** Phase 2 + cutover as one move (see below), with byte-diff on `/api/generate`
+  + a render check before deploy, and a fast rollback (revert `index.html` to the inline
+  babel version).
 
 ## Why
 - `public/index.html` is **~29,800 lines** in a single `<script type="text/babel">` with
