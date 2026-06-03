@@ -837,11 +837,8 @@ export async function dbIsCoach(sub) {
 // becomes PII leakage; scope down (e.g., "only coaches in teams I'm in") when
 // the threat model warrants.
 export async function dbListCoachesForPicker(excludeSub) {
-  // Phase 4 Identity I-D slice 2: JOIN persons for display_name/initials.
-  // ORDER BY keeps u.display_name as the sort key — it stays in sync with
-  // persons-derived inline name for backfilled rows (parseDisplayName
-  // composes "first last" the same way). Resort by persons.last_name in
-  // I-F when legacy column is dropped.
+  // Identity: name/initials come from persons (JOIN via person_id); sorted
+  // by persons.last_name, first_name. Legacy users columns dropped in 044.
   const rows = await pool.query(
     "SELECT u.`sub`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
@@ -860,8 +857,8 @@ export async function dbListCoachesForPicker(excludeSub) {
 
 // ─── admin helpers ──────────────────────────────────────────────────────────
 export async function dbAdminListUsers() {
-  // Phase 4 Identity I-D slice 3: JOIN persons for display_name + initials.
-  // Legacy u.display_name + u.initials kept as fallback; dropped in I-F.
+  // Identity (display_name + initials) comes from persons via person_id.
+  // Legacy users columns dropped in migration 044.
   const rows = await pool.query(`
     SELECT u.sub, u.email, u.email_verified,
            u.is_admin, u.is_coach, u.is_disabled, u.support_role, u.created_at, u.last_login_at,
@@ -1059,17 +1056,141 @@ export async function dbAdminUpdateUser(sub, patch) {
   return { ok: true };
 }
 
-export async function dbAdminDeleteUser(sub) {
+// Phase 4 Identity I-G: tombstone a persons row. Anonymizes identity in place
+// (Former / "Coach #N" | "Swimmer #N", PII nulled, tombstoned_at set) while the
+// row + every operational FK that points at it stays intact. `kind` is "coach"
+// or "swimmer". Runs on the supplied connection so the caller's transaction
+// owns commit/rollback. The sequential N is stable for the life of the row.
+export async function dbTombstonePerson(personId, { kind = "swimmer" } = {}, conn = pool) {
+  if (!personId) return { ok: false, reason: "no_person" };
+  const label = kind === "coach" ? "Coach" : "Swimmer";
+  const cntRows = await conn.query(
+    "SELECT COUNT(*) AS c FROM `persons` WHERE `last_name` LIKE ?",
+    [label + " #%"]
+  );
+  const anonName = `${label} #${Number(cntRows[0]?.c || 0) + 1}`;
+  await conn.query(
+    "UPDATE `persons` SET `first_name` = 'Former', `last_name` = ?, " +
+    "`preferred_name` = NULL, `pronouns` = NULL, `initials` = NULL, " +
+    "`dob` = NULL, `gender` = NULL, `class_year` = NULL, " +
+    "`tombstoned_at` = NOW(3) WHERE `id` = ?",
+    [anonName, personId]
+  );
+  return { ok: true, personId, anonymizedAs: `Former ${anonName}` };
+}
+
+// Phase 4 Identity I-G: account "delete" = tombstone + disable, NOT cascade-wipe.
+// Anonymizes the linked persons identity but KEEPS the users row (is_disabled=1)
+// so every operational FK keyed on user_sub (workouts, attendance, assignments,
+// audit trail) survives — the continuity guarantee from IDENTITY_SCOPE §3.C +
+// the team-eval "don't destroy swimmers' history" finding. Live sessions are
+// revoked so any active token dies immediately; requireAuth's dbIsUser
+// (is_disabled=0) check blocks all future requests AND re-login.
+// `{ hard: true }` is an explicit admin override that restores the old
+// cascade-wipe (no UI surface in v1).
+export async function dbAdminDeleteUser(sub, { hard = false } = {}) {
   if (!sub) return { ok: false, reason: "no_sub" };
-  // FK CASCADE on workouts/favorites/settings/sessions wipes child rows.
-  // audit_events and invite_codes use SET NULL — trail preserved.
-  const r = await pool.query("DELETE FROM `users` WHERE `sub` = ?", [sub]);
-  return { ok: true, affected: Number(r.affectedRows || 0) };
+  if (hard) {
+    // Rare hard-delete override: FK CASCADE wipes workouts/favorites/settings/
+    // sessions; audit_events + invite_codes SET NULL. Destroys history.
+    const r = await pool.query("DELETE FROM `users` WHERE `sub` = ?", [sub]);
+    return { ok: true, mode: "hard_delete", affected: Number(r.affectedRows || 0) };
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const urows = await conn.query(
+      "SELECT `person_id`, `is_coach` FROM `users` WHERE `sub` = ? FOR UPDATE",
+      [sub]
+    );
+    if (!urows[0]) { await conn.rollback(); return { ok: false, reason: "not_found" }; }
+    const personId = urows[0].person_id;
+    const kind = urows[0].is_coach ? "coach" : "swimmer";
+    let tomb = null;
+    if (personId) tomb = await dbTombstonePerson(personId, { kind }, conn);
+    await conn.query("UPDATE `users` SET `is_disabled` = 1 WHERE `sub` = ?", [sub]);
+    await conn.query(
+      "UPDATE `sessions` SET `revoked_at` = NOW(3) WHERE `user_sub` = ? AND `revoked_at` IS NULL",
+      [sub]
+    );
+    await conn.commit();
+    return { ok: true, mode: "tombstone", affected: 1, person_id: personId, anonymizedAs: tomb?.anonymizedAs || null };
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) {}
+    return { ok: false, reason: err.message || String(err) };
+  } finally {
+    conn.release();
+  }
+}
+
+// Phase 4 / continuity commitment: self-serve full-account export. Aggregates
+// every row keyed to this user (identity + operational + the roster they own)
+// into one JSON object so a coach/club can leave with their data. Self-scoped:
+// the caller's own account + the managed swimmers THEY own — never another
+// coach's data. Each query is guarded so a schema surprise degrades that
+// section to an error stub rather than failing the whole export.
+export async function dbExportAccount(userSub) {
+  if (!userSub) return { ok: false, reason: "no_sub" };
+  const safe = async (sql, params = []) => {
+    try { return await pool.query(sql, params); }
+    catch (err) { return [{ _export_error: err.message }]; }
+  };
+  const one = async (sql, params = []) => { const r = await safe(sql, params); return r[0] || null; };
+
+  const user = await one("SELECT * FROM `users` WHERE `sub` = ?", [userSub]);
+  const personId = user && user.person_id ? user.person_id : null;
+
+  const data = {
+    exported_at: new Date().toISOString(),
+    schema_note: "SetForge self-serve account export v1. Self-scoped: your account plus the managed swimmers you own.",
+    account: {
+      user,
+      person:        personId ? await one("SELECT * FROM `persons` WHERE `id` = ?", [personId]) : null,
+      external_ids:  personId ? await safe("SELECT * FROM `person_external_ids` WHERE `person_id` = ?", [personId]) : [],
+      addresses:     personId ? await safe("SELECT * FROM `person_addresses` WHERE `person_id` = ?", [personId]) : [],
+      guardian_of:   personId ? await safe("SELECT * FROM `guardians` WHERE `guardian_person_id` = ? AND `removed_at` IS NULL", [personId]) : [],
+      oauth_providers: await safe("SELECT * FROM `user_oauth_providers` WHERE `user_sub` = ?", [userSub]),
+      settings:        await one("SELECT * FROM `settings` WHERE `user_sub` = ?", [userSub]),
+      sessions:        await safe("SELECT `id`, `created_at`, `expires_at`, `last_seen_at`, `ip`, `user_agent`, `revoked_at` FROM `sessions` WHERE `user_sub` = ?", [userSub]),
+    },
+    training: {
+      workouts:           await safe("SELECT * FROM `workouts` WHERE `user_sub` = ?", [userSub]),
+      scheduled_workouts: await safe("SELECT * FROM `scheduled_workouts` WHERE `user_sub` = ?", [userSub]),
+      goals:              await safe("SELECT * FROM `goals` WHERE `user_sub` = ?", [userSub]),
+      favorites:          await safe("SELECT * FROM `favorites` WHERE `user_sub` = ?", [userSub]),
+      disfavorites:       await safe("SELECT * FROM `disfavorites` WHERE `user_sub` = ?", [userSub]),
+      favorite_sets:      await safe("SELECT * FROM `user_favorite_sets` WHERE `user_sub` = ?", [userSub]),
+      disfavor_sets:      await safe("SELECT * FROM `user_disfavor_sets` WHERE `user_sub` = ?", [userSub]),
+      constraints:        await safe("SELECT * FROM `swimmer_constraints` WHERE `swimmer_sub` = ?", [userSub]),
+    },
+    coaching: {
+      managed_swimmers:      await safe("SELECT * FROM `coach_managed_swimmers` WHERE `owner_coach_sub` = ?", [userSub]),
+      teams_as_coach:        await safe("SELECT * FROM `team_coaches` WHERE `coach_sub` = ?", [userSub]),
+      groups_as_coach:       await safe("SELECT * FROM `group_coaches` WHERE `coach_sub` = ?", [userSub]),
+      bank_options_authored: await safe("SELECT * FROM `bank_options` WHERE `author_sub` = ?", [userSub]),
+      group_anchors_set:     await safe("SELECT * FROM `group_anchors` WHERE `set_by_coach_sub` = ?", [userSub]),
+      coach_notes_authored:  await safe("SELECT * FROM `coach_swimmer_notes` WHERE `author_coach_sub` = ?", [userSub]),
+    },
+    feedback:     await safe("SELECT * FROM `feedback` WHERE `user_sub` = ?", [userSub]),
+    audit_events: await safe("SELECT `id`, `event_type`, `ip`, `user_agent`, `details`, `created_at` FROM `audit_events` WHERE `user_sub` = ? ORDER BY `created_at` DESC LIMIT 1000", [userSub]),
+  };
+
+  // Persons for the managed swimmers this coach owns (so names/DOB export too).
+  const ms = data.coaching.managed_swimmers;
+  const msPersonIds = Array.isArray(ms) ? ms.map(r => r && r.person_id).filter(Boolean) : [];
+  if (msPersonIds.length) {
+    const ph = msPersonIds.map(() => "?").join(",");
+    data.coaching.managed_swimmer_persons = await safe("SELECT * FROM `persons` WHERE `id` IN (" + ph + ")", msPersonIds);
+  } else {
+    data.coaching.managed_swimmer_persons = [];
+  }
+
+  return { ok: true, data };
 }
 
 export async function dbAdminListInvites() {
-  // Pre-I-F: JOIN persons for initials. Legacy u.initials remains as
-  // fallback until I-F drops it.
+  // Identity (initials) comes from persons via person_id; legacy users column
+  // dropped in migration 044.
   const rows = await pool.query(`
     SELECT ic.code, ic.note, ic.max_uses, ic.times_used,
            ic.expires_at, ic.created_at, ic.created_by,
@@ -2849,8 +2970,8 @@ export async function dbGetTeamRole(teamId, coachSub) {
 
 export async function dbListTeamCoaches(teamId) {
   if (!teamId) return [];
-  // Phase 4 Identity I-D slice 4: JOIN persons for display_name + initials.
-  // Legacy u.display_name / u.initials kept as fallback; dropped in I-F.
+  // Identity (display_name + initials) comes from persons via person_id.
+  // Legacy users columns dropped in migration 044.
   const rows = await pool.query(
     "SELECT tc.`coach_sub`, tc.`role`, tc.`added_at`, " +
     "       u.`email`, " +
@@ -4627,7 +4748,7 @@ export async function dbUpdatePersonById(personId, patch, conn = pool) {
 async function _ensurePersonId(parentTable, idCol, idVal, conn) {
   const q = conn || pool;
   // Common path: just the person_id. No legacy columns touched, so this is
-  // clean both before and after migration 045 drops them.
+  // clean both before and after migration 044 drops them.
   const rows = await q.query("SELECT `person_id` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
   if (!rows[0]) return null;                                  // parent row gone
   let pid = rows[0].person_id;
@@ -4637,13 +4758,13 @@ async function _ensurePersonId(parentTable, idCol, idVal, conn) {
   }
   // Rare create/repair branch (missing or orphaned person_id). Best-effort
   // seed of name/initials from the legacy columns IF they still exist
-  // (pre-045); post-drop this throws and we fall back to placeholders. By
+  // (pre-044); post-drop this throws and we fall back to placeholders. By
   // then every row has a person_id so this branch effectively never fires.
   let legacyName = null, legacyInit = null;
   try {
     const lr = await q.query("SELECT `display_name`, `initials` FROM `" + parentTable + "` WHERE `" + idCol + "` = ?", [idVal]);
     legacyName = lr[0]?.display_name; legacyInit = lr[0]?.initials;
-  } catch (_) { /* legacy columns dropped (post-045) — seed placeholders */ }
+  } catch (_) { /* legacy columns dropped (post-044) — seed placeholders */ }
   if (!pid) pid = genPersonId();
   const parsed = parseDisplayName(legacyName);
   const init = (legacyInit && String(legacyInit).slice(0, 4)) || genInitialsFromParts(parsed.first, parsed.last);
@@ -4690,13 +4811,12 @@ function rowToGroup(r) {
 }
 
 // Detect whether any currently-active member of a group is a minor. Used by
-// the visibility gate. Joins both swimmer-side (users.dob) and managed-side
-// (coach_managed_swimmers.dob); either polymorphic target is sufficient.
+// the visibility gate. Joins both polymorphic targets (full-account user and
+// managed swimmer) to persons; either side carrying a minor DOB is sufficient.
 async function groupHasMinorMember(groupId) {
   if (!groupId) return false;
-  // Pre-I-F: JOIN persons twice (one per polymorphic target). COALESCE so
-  // persons-side dob wins when present, falls back to legacy column. After
-  // I-F drops legacy dob columns, only the persons JOIN remains as source.
+  // DOB comes from persons (JOINed twice, one per polymorphic target).
+  // Legacy users/cms dob columns dropped in migration 044.
   const rows = await pool.query(
     "SELECT up.`dob` AS udob, " +
     "       mp.`dob` AS mdob " +
@@ -4880,8 +5000,8 @@ export async function dbGetGroupRole(groupId, coachSub) {
 
 export async function dbListGroupCoaches(groupId) {
   if (!groupId) return [];
-  // Phase 4 Identity I-D slice 4: JOIN persons for display_name + initials.
-  // Legacy u.display_name / u.initials kept as fallback; dropped in I-F.
+  // Identity (display_name + initials) comes from persons via person_id.
+  // Legacy users columns dropped in migration 044.
   const rows = await pool.query(
     "SELECT gc.`coach_sub`, gc.`role`, gc.`added_at`, " +
     "       u.`email`, " +
@@ -4955,10 +5075,10 @@ export async function dbRemoveGroupCoach(groupId, coachSub) {
 export async function dbListGroupMembers(groupId) {
   if (!groupId) return [];
   // Join both polymorphic targets — null-coalesce in the projection.
-  // Phase 4 Identity I-D slice 2: JOIN persons twice (one per polymorphic
-  // target). Project person columns from whichever side hit, then compute
-  // display_name in JS via displayNameInline. Legacy m/u display_name
-  // remains as COALESCE fallback for the I-D → I-F gap.
+  // JOIN persons twice (one per polymorphic target: managed-person mp +
+  // user-person up). Project person columns from whichever side hit, then
+  // compute display_name in JS via displayNameInline. Both sides are persons
+  // rows — legacy users/cms identity columns dropped in migration 044.
   const rows = await pool.query(
     "SELECT gm.`id`, gm.`member_swimmer_sub`, gm.`member_managed_id`, gm.`role`, " +
     "       gm.`joined_at`, gm.`left_at`, gm.`reason`, " +
@@ -6015,9 +6135,9 @@ const COACH_NOTE_VISIBILITIES = ["private", "group_coaches", "team_coaches"];
 const COACH_NOTE_BODY_MAX = 5000;
 
 function rowToCoachNote(r) {
-  // Phase 4 Identity I-D slice 7: prefer persons-derived display when the
-  // caller JOINed persons + projected first_name. Falls back to legacy
-  // u.display_name alias for callers that didn't add the JOIN.
+  // Author display name comes from persons-derived columns the caller JOINs
+  // and projects (first_name/last_name/preferred_name). All callers JOIN
+  // persons; legacy users identity columns dropped in migration 044.
   const authorName = displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name });
   return {
     id:                 Number(r.id),
