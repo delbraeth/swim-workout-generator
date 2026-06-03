@@ -111,6 +111,24 @@ is the single most important part of this scope — get it wrong and iOS generat
 - Kills the "single 30k file" editing pain and the garble rule.
 - **Verify:** bundle builds clean after each move; smoke the moved surface.
 
+- 🔧 **Session 1 IN PROGRESS (2026-06-03) — keystone + scaffold + first 2 leaves.**
+  - **Keystone:** `lib/generator.js` now strips ESM `import`/`export` from the extracted
+    engine prelude before `vm.runInContext` (`_stripEsm`). The vm can't eval ESM syntax, so
+    without this the first `import` added to `src/app.jsx` would crash `/api/generate` (iOS).
+    No-op on the import-free prelude → engine byte-identical (verified: loads 9 types).
+  - **Boundary reminder:** the engine region is everything before `function EquipmentBadge`
+    (now line 9761). That marker + the whole prelude stay in `src/app.jsx`; only components
+    *after* it are carve-eligible.
+  - **Harness:** `tools/jsdom_smoke.mjs` (`npm run smoke`) loads React UMD (devDep) + the built
+    bundle into jsdom, mounts `<App/>`, asserts non-empty `#root` + 0 runtime errors. Added
+    `jsdom`/`react`/`react-dom` devDeps (prod image is `--omit=dev`, so no bloat).
+  - **First leaves extracted:** `Stat` → `src/components/Stat.jsx`, `StarRating` →
+    `src/components/StarRating.jsx` (pure, props-only; `React` stays a runtime global → no
+    React import). Pattern: `export function X(){…}` in the module, `import { X } from
+    "./components/X.jsx"` at the top of `src/app.jsx`. Verified: build clean, engine 9 types,
+    jsdom mount identical to baseline (9,961 chars, 0 errors).
+  - New `src/**` files are added to `_deploy.py` FILES (reach the container via `COPY src/`).
+
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
   are shareable, back-button works, and **refresh no longer dumps to the generator** (§4.1).

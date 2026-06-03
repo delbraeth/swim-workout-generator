@@ -1,3 +1,9 @@
+    // SPA-split Phase 3: components carved out of this file live in src/components/.
+    // (The server's engine extractor in lib/generator.js strips these import lines
+    // before vm-eval'ing the engine prelude, so they don't affect /api/generate.)
+    import { Stat } from "./components/Stat.jsx";
+    import { StarRating } from "./components/StarRating.jsx";
+
     const { useState, useCallback, useMemo, useEffect } = React;
 
     // ═══════════════════════════════════════════════════════════════
@@ -10909,40 +10915,6 @@
     // ═══════════════════════════════════════════════════════════════
     //  SAVE-TO-HISTORY FORM — appears below a freshly generated workout
     // ═══════════════════════════════════════════════════════════════
-    function StarRating({ value, onChange, size = 18, readOnly = false, allowToggleClear = true, showClear = false }) {
-      // value: null or 1..5
-      // allowToggleClear: when true, clicking the current-value star sets back to null
-      //                   when false, clicking always sets to N (no toggle-off)
-      // showClear: when true and editable, render a small × clear button when a value is set
-      return (
-        <div style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
-          {[1,2,3,4,5].map(n => {
-            const filled = value != null && n <= value;
-            return (
-              <span key={n}
-                onClick={readOnly ? undefined : () => onChange(allowToggleClear && value === n ? null : n)}
-                title={readOnly ? `${value || 0}/5` : `${n} star${n>1?'s':''}`}
-                style={{
-                  fontSize: size, lineHeight: 1, cursor: readOnly ? "default" : "pointer",
-                  color: filled ? "var(--color-warn)" : "var(--color-border-strong)",
-                  transition: "color 0.1s",
-                  userSelect: "none",
-                }}>★</span>
-            );
-          })}
-          {!readOnly && showClear && value != null && (
-            <span onClick={() => onChange(null)}
-              title="Clear rating"
-              style={{
-                marginLeft: 4, fontSize: Math.max(10, size - 4), lineHeight: 1,
-                cursor: "pointer", color: "var(--color-text-dim)", userSelect: "none",
-                padding: "0 4px", borderRadius: 4,
-              }}>✕</span>
-          )}
-        </div>
-      );
-    }
-
     function SaveToHistoryForm({ dateDraft, setDateDraft, initialsDraft, setInitialsDraft, noteDraft, setNoteDraft, difficultyDraft, setDifficultyDraft, saveStatus, saveError, onSave }) {
       const isSaved  = saveStatus === "saved";
       const isSaving = saveStatus === "saving";
@@ -15616,16 +15588,6 @@
           </div>
 
           {msg && <div style={{ color: "var(--color-warn)", fontSize: 12, marginTop: 10 }}>{msg}</div>}
-        </div>
-      );
-    }
-
-    // Tiny presentational helper for ParentDashboard's stat tiles.
-    function Stat({ label, value }) {
-      return (
-        <div style={{ background: "var(--color-card-alt, rgba(255,255,255,0.04))", borderRadius: 8, padding: 10, border: "1px solid var(--color-border)" }}>
-          <div style={{ fontSize: 11, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{label}</div>
-          <div style={{ fontSize: 18, color: "var(--color-text)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</div>
         </div>
       );
     }
