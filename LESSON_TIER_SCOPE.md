@@ -1,10 +1,10 @@
 # Lesson Tier — scope
 
-**Status:** SPEC (2026-06-03). Promoted from `PHASE_5_SCOPE.md` item 1. Demand-gated:
-build when a private/lesson coach actually asks, or when the first Coach-tier
-downgrade request arrives. Two business decisions (price + the replace-vs-additive
-fork) must be locked before building — flagged below. Source: `PRICING.md`
-§"Lesson tier" + the coach-eval Private-coach persona.
+**Status:** SPEC — **decisions LOCKED, BUILD-READY (2026-06-03).** Promoted from
+`PHASE_5_SCOPE.md` item 1. All three decisions resolved (price $5/mo · additive ·
+web-Stripe-first — see below). Still demand-gated on go (build when a private/lesson
+coach asks or a Coach downgrade request arrives), but no decisions block it now.
+Source: `PRICING.md` §"Lesson tier" + the coach-eval Private-coach persona.
 
 ## Why / audience
 A paid tier **below** Coach for private / 1-on-1 / small-lesson coaches who want
@@ -27,22 +27,20 @@ don't load these onto Coach.
 Explicitly NOT included (these stay Coach/Program): teams, groups, multi-coach,
 team curation, Reports, lane plans, anchors.
 
-## ⚠ Decisions to lock before building
-1. **Exact price.** ✅ **LOCKED $5/mo (2026-06-03).** Half of Coach ($10) — an
-   unambiguous downgrade tier. Annual option ~$50/yr.
-2. **Replace vs additive (the big one).** Per PRICING §"Lesson tier" open question:
-   - **Option A — restructure:** managed swimmers move OUT of Coach INTO Lesson;
-     Coach becomes "full-account swimmers only." Breaks the value prop for every
-     existing Coach user → needs grandfathering + migration comms. High blast radius.
-   - **Option B — additive (RECOMMENDED):** Lesson is a standalone cheaper tier
-     (Lesson type + recap + per-swimmer equipment + a **capped** managed-swimmer
-     roster); Coach is unchanged. Non-breaking, simplest, matches "don't load onto
-     Coach." Differentiate from Coach with a managed-swimmer cap (e.g. ≤N).
-   - If Option B: pick the **managed-swimmer cap** for Lesson (e.g. 10–15) or leave
-     uncapped and differentiate purely on the club features Lesson lacks.
-3. **iOS sequencing.** Ship **web (Stripe) first**, add the Apple IAP product
-   after? Or both at launch (needs a new ASC IAP product + product-tier-map entry +
-   `AppConfig.iapProductIDs`)? Lean web-first — iOS IAP adds an ASC review cycle.
+## Decisions — ALL LOCKED 2026-06-03 (build-ready)
+1. **Price: $5/mo** (~$50/yr) — half of Coach ($10); an unambiguous downgrade tier.
+2. **Additive, NOT a restructure.** Lesson is a **standalone tier** below Coach:
+   Lesson workout type + parent recap + per-swimmer equipment + managed-swimmer
+   roster. **Coach is unchanged** (no managed-swimmer migration, no grandfathering).
+   - **Managed-swimmer cap: none in v1** — Lesson is differentiated from Coach purely
+     by the **club features it lacks** (teams, groups, multi-coach, curation, Reports,
+     lane plans, anchors stay Coach/Program). A coach running groups *needs* those and
+     can't drop to Lesson; a coach with only 1-on-1 clients is the correct Lesson fit —
+     so this is segmentation, not cannibalization. Add a cap later only if real
+     Coach→Lesson downgrade abuse appears.
+3. **iOS sequencing: web/Stripe FIRST.** Ship the Stripe price + web paywall first;
+   add the Apple IAP product (new ASC product + `product-tier-map` entry +
+   `AppConfig.iapProductIDs`) in a later pass — avoids gating launch on an ASC review.
 
 ## Build shape (deps mostly satisfied)
 - **Tier plumbing** — add `lesson` to the product/tier map; entitlement gates key

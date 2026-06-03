@@ -15,7 +15,7 @@ Three paid tiers + free baseline. **Supporter $3 demoted from product tier to "b
 | **Free** | $0 | All swimmers, all parents, exploratory coaches | Always live |
 | **Tip jar** | $3 (one-time or recurring, no feature unlock) | "I like this, take my money" | Replaces Supporter $3; not advertised as a tier |
 | **Coach** | $10/mo | Working coach with 1+ groups | Original tier, unchanged |
-| **Lesson** | **$5/mo** (~$50/yr) | Private/individual lesson coaches | Price LOCKED 2026-06-03; structure in `LESSON_TIER_SCOPE.md` (replace-vs-additive still open) |
+| **Lesson** | **$5/mo** (~$50/yr) | Private/individual lesson coaches | Decisions LOCKED 2026-06-03 (additive tier, no managed cap v1, web-Stripe-first); build-ready — see `LESSON_TIER_SCOPE.md` |
 | **Program** | $25/mo (or $300/yr invoiced) | Multi-coach club teams | Original tier; **gated on team-level curation shipping** + vendor paper kit |
 | **Institutional / Program+** | TBD (~$1–2k/yr) | Boards requiring cyber insurance + signed MSA/DPA + formal procurement | NEW (2026-06-03) — the **home for board-gated compliance costs**: priced to cover the cyber-insurance premium + lawyer pass + procurement time, so those are passed through, never absorbed into $300 Program (a ~$1k/yr policy ≈ 3× a Program seat). |
 
@@ -131,7 +131,7 @@ For users who can't or won't use Patreon (corporate, allergic to subscriptions, 
 
 ## 10. Open questions
 
-- **Lesson tier exact price** — ✅ LOCKED $5/mo (2026-06-03; half of Coach, clean downgrade). Remaining Lesson open item: replace-vs-additive managed swimmers (see `LESSON_TIER_SCOPE.md` decision 2).
+- **Lesson tier** — ✅ all decisions LOCKED 2026-06-03: $5/mo · additive standalone tier (Coach unchanged, no managed-swimmer cap in v1) · web-Stripe-first (Apple IAP later). Build-ready; see `LESSON_TIER_SCOPE.md`.
 - **Does Lesson replace Managed Swimmers feature in Coach?** If yes, Coach-tier users with managed swimmers grandfather in. Open.
 - **Patreon's coach-creator-fee model vs. flat-tier model** — Patreon supports either. Workshop noted "specifics need [more] workshopping."
 - **Annual prepay discount** — boards expect it. 10% off Program annual ($270/yr) is industry norm.
