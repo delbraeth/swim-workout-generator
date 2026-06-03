@@ -1,6 +1,7 @@
 # SPA Build Pipeline + Component Split — scope
 
-**Status:** IN PROGRESS (started 2026-06-03). Promotes `CLEAN_SLATE_ANALYSIS.md` §2.2 + §4.1
+**Status:** CUTOVER SHIPPED (2026-06-03) — Phases 1+2 + prod cutover live (build `991d73c`).
+Phases 3 (component split) + 4 (router) remain. Promotes `CLEAN_SLATE_ANALYSIS.md` §2.2 + §4.1
 into an executable, phased plan. Structural refactor — no user-facing feature change. Cost band
 **L+ / multi-session**; risk **high** (entire web frontend). Phasing makes each step
 independently shippable + verifiable. **Pipeline decision: option B (build locally, commit/
@@ -32,11 +33,18 @@ deploy the bundle) for the refactor; A+CI later.**
   with no vm is deferred — it needs enumerating every prelude symbol the UI imports,
   best done with CI/browser testing). Deploy-safe in isolation: in current prod (no `src/`
   in the container) it falls back to index.html → no behavior change.
-- ⏭ **Cutover (remaining, gated):** (1) `index.html` → shell loading
-  `/assets/app.js?v=__BUILD_ID__`, drop the babel-standalone CDN; (2) **`COPY src/ ./src/`
-  in the Dockerfile** (so the server vm can read app.jsx in prod); (3) add `src/app.jsx`
-  (un-gitignore) + `public/assets/app.js` to `_deploy.py` FILES; (4) build + deploy +
-  smoke + rollback-ready.
+- ✅ **Cutover SHIPPED (2026-06-03, build `991d73c`).** (1) `index.html` is now a 357-line
+  shell (29,918→357) loading `/assets/app.js?v=__BUILD_SHA__` + `window.__BUILD_ID__`;
+  babel-standalone CDN dropped (React/ReactDOM CDN kept). (2) `COPY src/ ./src/` added to
+  the Dockerfile. (3) `src/app.jsx` un-gitignored (committed source of truth; BUILD_ID reads
+  the window global) + `public/assets/app.js` added to `_deploy.py` FILES; `_deploy.py` also
+  stamps `__BUILD_SHA__` for the bundle cache-bust. (4) Verified before deploy via a **jsdom
+  render of the real bundle with real React → App mounts, 9,961 chars, 0 runtime errors**
+  (the preview tool's headless renderer doesn't exec page scripts / reach the CDN, so jsdom
+  was the trustworthy harness). Verified live: shell has no `text/babel`; `/assets/app.js`
+  200 + byte-identical (1,289,908 B) to the tested local bundle; `/api/generate` 401 (route
+  alive). Rollback path: revert `index.html` to inline + redeploy — the generator's
+  dual-source fallback keeps `/api/generate` working throughout.
 
 ## Why
 - `public/index.html` is **~29,800 lines** in a single `<script type="text/babel">` with
