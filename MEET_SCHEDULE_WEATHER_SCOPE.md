@@ -2,6 +2,14 @@
 
 **Status:** spec-only (2026-06-01). No implementation. Deferred future enhancement; sizing band L (shared venue model + a new external API + first forward-looking attendance surface). This doc defines the data model, the "universal pool" decision, the generalized team-event calendar + pills, the outdoor tag + WeatherKit call, and unified RSVP — so implementation is mechanical when prioritized.
 
+> **Merged 2026-06-03:** the former separate Phase 5 item "one-way CSV/.ics export"
+> rolls into this feature family — the schedule `.ics` feed is just the export face of
+> the calendar defined here, and the roster CSV rides along (or lives with MAAP). In
+> Phase-5 terms this doc is **Slice B** (the calendar/venue/weather/RSVP body, band L);
+> the export bridges are **Slice A** (band S, deps met on today's
+> `scheduled_workouts`/`team_events`/roster, shippable before Slice B). See
+> `PHASE_5_SCOPE.md` item 5.
+
 **Pattern source:** bridges three existing systems — `team_facilities` (team-scoped pools + `addresses`), `team_events` (name + date calendar, today meet-only, drives group-anchors), and `scheduled_workouts` (practices, already FK `facility_id`). Adds a shared venue layer, a generalized event calendar + pills, weather enrichment, and RSVP.
 
 ---

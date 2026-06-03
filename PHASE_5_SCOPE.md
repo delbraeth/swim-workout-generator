@@ -102,46 +102,47 @@ table? How do PR targets compose with the existing pace-base + per-swimmer const
 multi-lane pace fitting? Split into "template pack" (cheap, ship first) vs "PR engine"
 (bigger) as two sub-phases.
 
-## 5. One-way CSV / .ics export
-**Trigger:** a Team Manager / board-secretary pilot asks (team eval: top concern of 4/5
-personas was data portability).
-**What:** **one-way, export-only** bridges. Explicitly NOT integrations.
-- **Roster CSV** — active roster as a meet-entry-friendly file (name, DOB, USA-S ID, group),
-  with an "expiring 30/60/90" filter for memberships/certs (pairs with MAAP item 3).
-- **Schedule `.ics`** — a read-only calendar feed of a group's scheduled practices + team
-  events, subscribable in Apple/Google Calendar.
-**Deps:** roster + scheduled-workouts + team-events data ✓; the self-serve JSON export
-(I-G) already proves the export pattern + route shape.
-**Cost:** S–M.
-**Open questions:** `.ics` as a static download vs a tokenized live-subscribe URL (live feed
-needs an unauthenticated, unguessable token route). CSV column set per consumer
-(TeamUnify/Hytek/SportsEngine shapes differ — pick one canonical, don't chase all).
+## 5. Team calendar + venues + weather + RSVP + one-way export
+**(Merged 2026-06-03: the former #5 "one-way CSV/.ics export" and #6 "team calendar +
+venues + weather + RSVP" are one feature family — the `.ics` feed is just the export
+face of the calendar this item builds. They roll together; export ships as the cheap
+early slice, the calendar/venue/weather/RSVP system as the heavy body.)**
+**Detailed spec for the calendar/venue/weather/RSVP core:** `MEET_SCHEDULE_WEATHER_SCOPE.md`
+(2026-06-01) — data model + decisions already worked out.
+**Trigger:** a team asks to schedule meets/events with real locations/times; outdoor-season
+weather/RSVP demand; OR a Team Manager / board secretary needs roster/schedule export (team
+eval: data portability was a top-5 concern of 4/5 personas).
 
-## 6. Team calendar + venues + outdoor-pool weather + RSVP
-**Trigger:** a team asks to schedule meets/events with real locations and times, OR
-outdoor-season weather/RSVP demand. **Already has a full detailed spec:
-`MEET_SCHEDULE_WEATHER_SCOPE.md` (2026-06-01)** — unlike items 1–5, this one is already
-promoted to its own scope doc with the data model + decisions worked out.
-**What:** one coherent system bridging three existing surfaces (`team_facilities`,
-`team_events`, `scheduled_workouts`):
+**Slice A — one-way export (cheap; deps met TODAY, can ship before Slice B):**
+Explicitly export-only, NOT integrations.
+- **Schedule `.ics`** — a read-only calendar feed of a group's scheduled practices + team
+  events, subscribable in Apple/Google Calendar. Runs on today's `scheduled_workouts` +
+  `team_events`; gets richer (times, venues) once Slice B lands.
+- **Roster CSV** — active roster as a meet-entry-friendly file (name, DOB, USA-S ID, group)
+  with an "expiring 30/60/90" filter. Pairs with **MAAP (#3)** — if MAAP ships first this
+  can live there instead; either home is fine.
+- Deps: roster + scheduled-workouts + team-events ✓; the self-serve JSON export (I-G)
+  already proves the export pattern + route shape. Cost **S**.
+
+**Slice B — calendar / venues / weather / RSVP (the heavy body):**
+One coherent system bridging `team_facilities`, `team_events`, `scheduled_workouts`:
 - **Shared `venues` catalog** — pool identity is **universal, not team-scoped** (one team's
-  home pool is another's away-meet location). One row per physical location with geocode +
-  indoor/outdoor + course; facilities and meet locations both reference it. Lazy
-  create/geocode-on-use (no big backfill).
+  home pool is another's away-meet location). Geocode + indoor/outdoor + course; lazy
+  create/geocode-on-use.
 - **Generalized team-event calendar + pills** — meets, picture day, banquet, parent
-  meeting, etc. (today `team_events` is just `{name, date}`, no time, no location).
-- **Outdoor-pool weather** — `venues.indoor_outdoor` is the *only* gate on a WeatherKit
-  call; indoor/venue-less events never hit it. Apple WeatherKit (iOS framework + REST for web).
-- **Unified RSVP** across meets AND practices, composing with the existing coach roll-call;
-  cancellation is first-class (struck-through, never silently disappears).
-**Deps:** `team_facilities`/`team_events`/`scheduled_workouts` ✓ + the venue model is new.
-**MISSING deps (the real gate):** (1) **Apple WeatherKit key** + a **geocoder**; (2) **push
-notification infrastructure does not exist** — RSVP reminders + cancellation alerts (§7) need
-it, and it's a shared blocker for every notify feature. RSVP can ship read/write without push;
-the *notify* half waits on push infra.
-**Cost:** L (shared venue model + new external API + first forward-looking attendance surface).
-**Open questions:** see the scope doc — venue dedup heuristic, WeatherKit web-vs-native auth,
-how RSVP composes with attendance roll-call, push-infra sequencing.
+  meeting (today `team_events` is just `{name, date}`, no time/location).
+- **Outdoor-pool weather** — `venues.indoor_outdoor` is the only gate on a WeatherKit call.
+- **Unified RSVP** across meets AND practices, composing with coach roll-call; cancellation
+  first-class.
+- Cost **L**.
+
+**MISSING deps (the real gate for Slice B):** (1) **Apple WeatherKit key** + a **geocoder**;
+(2) **push notification infrastructure does not exist** — RSVP reminders + cancellation
+alerts need it (shared blocker for every notify feature). RSVP read/write + weather +
+Slice A export can ship without push; the *notify* half waits on push infra.
+**Open questions:** venue dedup heuristic; WeatherKit web-vs-native auth; RSVP-vs-roll-call
+composition; push sequencing; `.ics` static-download vs tokenized live-subscribe URL; CSV
+canonical column set (pick one consumer shape — don't chase TeamUnify/Hytek/SportsEngine all).
 
 ---
 
@@ -150,17 +151,18 @@ Cheapest-first / highest-leverage-first, but each is **independently demand-gate
 the one a real user pulls forward, not this order for its own sake:
 1. **Swimmer progress dashboard** (M, free-tier funnel fix, all deps met, reuses R4) — the
    item most likely to matter without a specific pilot, since it addresses the retention leak.
-2. **CSV/.ics export** (S–M, deps met, export pattern proven) — quick win for any team pilot.
+2. **Export bridges — CSV/.ics** (S, deps met now) — quick win for any team pilot; this is
+   **Slice A of item #5** and can ship long before the calendar body.
 3. **Lesson tier** (M, deps met) — when the pricing downgrade pressure is real.
-4. **HS race-pace pack** (M→L) — template pack first, PR engine second; pairs with item 2's PR store.
+4. **HS race-pace pack** (M→L) — template pack first, PR engine second; pairs with #2's PR store.
 5. **MAAP pack** (L, scope session first) — heaviest; only for a club pilot that needs it.
-6. **Team calendar + venues + weather + RSVP** (L, spec ready) — gated on a WeatherKit key +
-   geocoder, and the notify half is blocked on push infra not existing. RSVP read/write can
-   precede push; weather can ship independently. Build when an outdoor-season team asks.
+6. **Calendar / venues / weather / RSVP** (L, spec ready) — **Slice B of item #5**; gated on a
+   WeatherKit key + geocoder, notify half blocked on push infra. Build when an outdoor-season
+   team asks.
 
 ## Permanently OUT of scope (do not relitigate — PHASED_PLAN §4)
 TrainingPeaks / Garmin export · Meet Manager / Hy-Tek round-trip · SWIMS · `.hy3` / `.fit` /
-`.tcx` · any *inbound* integration. CSV/.ics one-way (item 5) is the only export concession.
+`.tcx` · any *inbound* integration. CSV/.ics one-way (item #5, Slice A) is the only export concession.
 Beginner/Summer-League content tier stays deferred (PHASED_PLAN decision #1).
 
 ## How to use this doc
