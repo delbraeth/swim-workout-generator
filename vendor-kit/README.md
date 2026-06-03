@@ -2,7 +2,7 @@
 
 This directory holds the procurement-grade paperwork a 501(c)(3) treasurer
 or school program reviewer needs before approving a SaaS vendor payment.
-Per `VENDOR_PAPER_KIT_SCOPE.md` (locked 2026-05-26). Triple-cross-validated
+Per `docs/archive/VENDOR_PAPER_KIT_SCOPE.md` (locked 2026-05-26). Triple-cross-validated
 in the team eval as the same-day-approval lever.
 
 ## What's in here
@@ -10,8 +10,8 @@ in the team eval as the same-day-approval lever.
 | File | What | Cap'n's hands? |
 |---|---|---|
 | `cover-letter.md` | Personalized intro letter with `{{ORG_NAME}}` + `{{TREASURER_NAME}}` placeholders | Edit once, served as-is per recipient |
-| `services-agreement.md` | Annual SaaS services agreement (Program-tier $300/yr) | **SCAFFOLD** — adapt from Stripe Atlas SaaS MSA-lite |
-| `dpa.md` | Data Processing Addendum | **SCAFFOLD** — adapt from Vanta or Stripe Atlas public DPA template |
+| `services-agreement.md` | Annual SaaS services agreement (Program-tier $300/yr) | **DRAFT v1** (2026-06-03) — clauses filled from Stripe Atlas SaaS MSA structure; **lawyer review still recommended** |
+| `dpa.md` | Data Processing Addendum | **DRAFT v1** (2026-06-03) — clauses filled (GDPR-aligned); reflects live self-serve export + tombstone deletion; **lawyer review still recommended** |
 | `breach-notification-sla.md` | One-page breach notification commitment | Edit once, ready as-is |
 | `continuity-commitment.md` | What happens if SetForge winds down | Edit once, ready as-is (extracted from ToS) |
 | `sub-processor-list.md` | Procurement-formatted mirror of `/sub-processors` | Re-sync when public page changes |
@@ -54,9 +54,9 @@ Per scope §5 + decision 10:
 - **SOC 2 attestation** — won't ever offer; cover-letter discloses honestly.
 - **Annual pen-test report** — won't ever offer; same.
 - **HIPAA BAA** — `/security` explicitly disclaims; out forever.
-- **Self-serve data export** — by-request only in v1 per DPA. Self-serve
-  export ships in Phase 4 alongside the identity refactor (`IDENTITY_SCOPE.md`
-  phase I-G).
+  (Self-serve data export was a "not yet" item here in v1 — it has since
+  **shipped** (Profile → Account → Export my data, 2026-06); the DPA §9 now
+  documents it as live.)
 - **Cyber-insurance certificate** — Cap'n purchases when first board
   requires it; not v1.
 - **DocuSign / HelloSign integration** — treasurer signs PDF and emails
@@ -71,19 +71,17 @@ Before the first send, Cap'n needs to:
 2. Add Competition Aquatics, LLC's EIN to Stripe account settings.
 3. Fill the IRS W-9 form once with LLC name + EIN + address + signature.
    Save as `vendor-kit/w-9.pdf` and commit (this file IS in git).
-4. **Legal-attentive editing pass** on the two SCAFFOLD templates
-   (`services-agreement.md` + `dpa.md`). Each scaffold has TODO markers
-   showing exactly what to import from the public source template + what
-   SetForge-specific clauses to add.
-   - Source for services agreement: Stripe Atlas's "SaaS Master Services
-     Agreement" (publicly available at stripe.com/atlas).
-   - Source for DPA: Vanta's public model DPA or Stripe Atlas's DPA
-     template (both well-known + clear; either works).
-5. Optional but recommended: $200-500 lawyer review of the two adapted
-   legal templates before the first send.
-6. Install pandoc + a LaTeX engine; run `./build.sh` once to verify the
-   PDFs render cleanly.
-7. Test the **AdminView → Vendor kit** send action to a personal address
+4. **Legal review pass** on the two now-drafted templates
+   (`services-agreement.md` + `dpa.md`). The scaffolds were filled to DRAFT v1
+   on 2026-06-03 (services agreement from the Stripe Atlas SaaS-MSA structure;
+   DPA GDPR-aligned). They are NOT lawyer-reviewed — read them through, adjust
+   any business terms (esp. §12–§14: indemnity, liability cap, governing law),
+   and confirm the SetForge-specific facts. **$200–500 attorney pass strongly
+   recommended before the first send.**
+5. Install pandoc + a LaTeX engine; run `./build.sh` once to **re-render the
+   PDFs** — `services-agreement.pdf` + `dpa.pdf` in `build/` are stale (they
+   predate the 2026-06-03 clause fills).
+6. Test the **AdminView → Vendor kit** send action to a personal address
    with all attachments. Verify the cover letter renders with placeholders
    substituted + every attachment opens.
 
