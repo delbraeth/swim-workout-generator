@@ -1,6 +1,10 @@
 # Swimmer Progress Dashboard — scope
 
-**Status:** SPEC (2026-06-03). Promoted from `PHASE_5_SCOPE.md` item 2. Demand-gated,
+**Status:** ✅ WEB v1 SHIPPED 2026-06-03 (📈 Progress top-nav view: 90-day training
+volume from R4 + test-set PRs/trend from benchmarks + the embedded logger; free/
+ungated; pure client assembly, no server/DB changes). **Deferred:** iOS parity;
+per-event/per-stroke PRs (those ride the Phase 5 #4 race-pace PR store — current
+benchmark kinds are test-sets: t30/tt500/broken500). Promoted from `PHASE_5_SCOPE.md` item 2. Demand-gated,
 but the **lowest-friction Phase 5 item** — the data substrate already exists, so this
 is largely a presentation layer + one logging form. Source: the swimmer evaluation
 (`docs/archive/SWIMMER_EVALUATION_2026-05-25.md`) flagged this as the single largest
