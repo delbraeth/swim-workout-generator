@@ -22,6 +22,11 @@ Last refreshed: **2026-05-25** (PHASED_PLAN_2026-05-25.md locked — supersedes 
 
 Memos in `/Users/cassidy/Library/Application Support/Claude/.../memory/` are the per-feature checkpoints. This file is the index of what's left.
 
+**Doc locations (2026-06-03 cleanup):** active planning/specs/runbooks live at the repo
+root; **completed-feature scopes + dated working artifacts moved to `docs/archive/`** (see
+its README). Prose below + code comments may cite archived docs by bare filename — they're
+in `docs/archive/` now.
+
 ---
 
 ## Now (Phases 1–4 engineering-complete; only operational follow-ups + demand-gated Phase 5 remain)

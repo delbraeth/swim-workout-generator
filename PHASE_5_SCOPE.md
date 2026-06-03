@@ -7,8 +7,8 @@ doc captures what each item is, what it depends on (and whether that dep is alre
 satisfied by the Phase 1–4 work), a rough build shape, a cost band, and the open
 questions that need a decision before coding.
 
-Sources: `PHASED_PLAN_2026-05-25.md` §Phase 5, `COACH_EVALUATION_2026-05-25.md`,
-`SWIMMER_EVALUATION_2026-05-25.md`, `TEAM_EVALUATION_2026-05-25.md`, `PRICING.md`,
+Sources: `PHASED_PLAN_2026-05-25.md` §Phase 5, the three 2026-05-25 evaluations
+(`docs/archive/COACH_EVALUATION_2026-05-25.md` + `…SWIMMER…` + `…TEAM…`), `PRICING.md`,
 `IDENTITY_SCOPE.md`.
 
 ## What Phase 4 already gives Phase 5 (dependency bank)
