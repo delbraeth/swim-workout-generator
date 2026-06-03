@@ -360,7 +360,7 @@
     //  handles GitHub commits server-side; no secrets in this file.
     // ═══════════════════════════════════════════════════════════════
     const API_BASE  = "/api";                 // same origin
-    const BUILD_ID  = "85a53d5 · 2026-06-03 05:34 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
+    const BUILD_ID  = "4565aaf · 2026-06-03 06:12 UTC";                 // replaced by _deploy.py at commit time with "{short-sha} · {YYYY-MM-DD HH:MM UTC}" (literal token here on purpose — deploy stamps it in-flight; do NOT hardcode a value or stamping silently freezes)
 
     // CSRF token bound to the session. Fetched after auth-status confirms login,
     // sent on every write as the X-CSRF-Token header.
@@ -16083,12 +16083,19 @@
       const [newDisfav, setNewDisfav] = React.useState("");
       const [paceDraft, setPaceDraft] = React.useState("");                   // pending edit
       const [busy, setBusy]         = React.useState(false);
+      // Ownership transfer (owner-only section).
+      const [coaches, setCoaches]                 = React.useState([]);
+      const [pendingTransfer, setPendingTransfer] = React.useState(null);
+      const [transferTarget, setTransferTarget]   = React.useState("");
+      const [transferBusy, setTransferBusy]       = React.useState(false);
 
       const load = React.useCallback(async () => {
         try {
-          const [cRes, sRes] = await Promise.all([
+          const [cRes, sRes, coRes, ptRes] = await Promise.all([
             fetch(`/api/teams/${teamId}/curation`, { cache: "no-store" }),
             fetch(`/api/teams/${teamId}/settings`, { cache: "no-store" }),
+            fetch(`/api/teams/${teamId}/coaches`, { cache: "no-store" }),
+            fetch(`/api/teams/${teamId}/pending-transfer`, { cache: "no-store" }),
           ]);
           if (!cRes.ok) throw new Error(`curation HTTP ${cRes.status}`);
           if (!sRes.ok) throw new Error(`settings HTTP ${sRes.status}`);
@@ -16097,6 +16104,8 @@
           setCuration(c);
           setSettings(s);
           setPaceDraft(s.default_pace_base || "");
+          if (coRes.ok) { try { setCoaches(await coRes.json()); } catch (_) {} }
+          if (ptRes.ok) { try { const pt = await ptRes.json(); setPendingTransfer(pt && pt.id ? pt : null); } catch (_) {} }
         } catch (e) {
           setMsg(`Error loading: ${e.message}`);
           setCuration({ favorites: [], disfavorites: [] });
@@ -16203,6 +16212,36 @@
         finally { setBusy(false); }
       };
 
+      const proposeTransfer = async () => {
+        if (!transferTarget) return;
+        if (!window.confirm("Propose this admin as the new team owner? They get 30 days to accept (or it auto-applies); you can cancel anytime before then. You'll become an admin and your team-shared + public sets move to them.")) return;
+        setTransferBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/teams/${teamId}/transfer-ownership`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ to_sub: transferTarget }),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setTransferTarget("");
+          await load();
+        } catch (e) { setMsg(`Transfer failed: ${e.message}`); }
+        finally { setTransferBusy(false); }
+      };
+
+      const cancelTransfer = async () => {
+        if (!window.confirm("Cancel the pending ownership transfer?")) return;
+        setTransferBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/teams/${teamId}/transfer-ownership/cancel`, { method: "POST", headers: csrfHeaders() });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          await load();
+        } catch (e) { setMsg(`Cancel failed: ${e.message}`); }
+        finally { setTransferBusy(false); }
+      };
+
       if (curation === null || settings === null) {
         return <div style={{ color: "var(--color-text-dim)", fontSize: 12, padding: 12 }}>Loading team settings…</div>;
       }
@@ -16272,6 +16311,54 @@
           </div>
 
           <TeamFacilitiesSection teamId={teamId} canWrite={canWrite && !archived} />
+
+          {viewerRole === "owner" && (
+            <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 6, marginBottom: 18 }}>
+              <div style={{ color: "var(--color-warn)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                Ownership
+              </div>
+              {pendingTransfer ? (
+                <div style={{ background: "#f59e0b18", border: "1px solid var(--color-warn)", borderRadius: 8, padding: "10px 12px" }}>
+                  <div style={{ color: "var(--color-text)", fontSize: 13, fontWeight: 600 }}>⏳ Transfer in progress</div>
+                  <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 4 }}>
+                    You proposed <span style={{ fontFamily: "monospace" }}>{(pendingTransfer.to_sub || "").slice(-8)}</span> as the new owner. Auto-completes {fmtDate(pendingTransfer.auto_complete_at)}.
+                  </div>
+                  {!archived && (
+                    <button onClick={cancelTransfer} disabled={transferBusy}
+                      style={{ marginTop: 8, padding: "5px 12px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive)", fontSize: 12, fontWeight: 700, cursor: transferBusy ? "not-allowed" : "pointer" }}>
+                      {transferBusy ? "Working…" : "Cancel transfer"}
+                    </button>
+                  )}
+                </div>
+              ) : (() => {
+                const admins = (coaches || []).filter(c => c.role === "admin");
+                return (
+                  <div>
+                    <p style={{ color: "var(--color-text-dim)", fontSize: 11, margin: "0 0 8px", lineHeight: 1.5 }}>
+                      Hand the team off to an existing admin. They get a 30-day window to accept (or it auto-applies); you become an admin and your team-shared + public sets move to them.
+                    </p>
+                    {admins.length === 0 ? (
+                      <div style={{ color: "var(--color-text-dim)", fontSize: 12, fontStyle: "italic" }}>
+                        No admins to transfer to — promote a coach to admin first (Members &amp; Coaches tab).
+                      </div>
+                    ) : !archived ? (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)}
+                          style={{ flex: 1, padding: "6px 9px", fontSize: 12, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                          <option value="">— pick an admin —</option>
+                          {admins.map(a => <option key={a.coach_sub} value={a.coach_sub}>{a.display_name || a.coach_sub.slice(-8)}</option>)}
+                        </select>
+                        <button onClick={proposeTransfer} disabled={!transferTarget || transferBusy}
+                          style={{ padding: "6px 12px", background: (!transferTarget || transferBusy) ? "var(--color-border)" : "var(--color-warn)", color: (!transferTarget || transferBusy) ? "#cbd5e1" : "var(--color-bg)", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: (!transferTarget || transferBusy) ? "not-allowed" : "pointer" }}>
+                          Transfer →
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 6 }}>
             <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
@@ -16393,6 +16480,52 @@
       const [anchorTargetGroupId, setAnchorTargetGroupId] = React.useState("");
       const [anchorBusy, setAnchorBusy] = React.useState(false);
       const [msg,         setMsg]         = React.useState(null);
+      // Ownership transfers proposed TO this coach (accept/decline banner).
+      const [incomingTransfers, setIncomingTransfers] = React.useState([]);
+      const [incomingBusy, setIncomingBusy] = React.useState(null);   // teamId being acted on
+      const loadIncomingTransfers = React.useCallback(async () => {
+        try {
+          const res = await fetch("/api/me/incoming-transfers", { cache: "no-store" });
+          if (res.ok) setIncomingTransfers(await res.json());
+        } catch (_) {}
+      }, []);
+      React.useEffect(() => { loadIncomingTransfers(); }, [loadIncomingTransfers]);
+      const respondTransfer = async (teamId, action) => {
+        if (!window.confirm(action === "accept" ? "Accept ownership of this team? Roles swap immediately and the previous owner's team-shared + public sets move to you." : "Decline this ownership transfer?")) return;
+        setIncomingBusy(teamId); setMsg(null);
+        try {
+          const res = await fetch(`/api/teams/${teamId}/transfer-ownership/${action}`, { method: "POST", headers: csrfHeaders() });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          await loadIncomingTransfers();
+          await loadList();
+          if (detail && String(detail.id) === String(teamId)) await loadDetail(teamId);
+        } catch (e) { setMsg(`Transfer ${action} failed: ${e.message}`); }
+        finally { setIncomingBusy(null); }
+      };
+      // Banner shown atop both list + detail views.
+      const incomingBanner = (incomingTransfers && incomingTransfers.length > 0) ? (
+        <div style={{ marginBottom: 16 }}>
+          {incomingTransfers.map(t => (
+            <div key={t.id} style={{ background: "#3b82f618", border: "1px solid var(--color-primary)", borderRadius: 10, padding: "12px 14px", marginBottom: 8 }}>
+              <div style={{ color: "var(--color-text)", fontSize: 13, fontWeight: 700 }}>🎯 You've been proposed as the new owner of {t.team_name}.</div>
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12, margin: "4px 0 10px" }}>
+                Auto-applies {t.auto_complete_at ? new Date(t.auto_complete_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "in 30 days"} if you do nothing.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => respondTransfer(t.team_id, "accept")} disabled={incomingBusy === t.team_id}
+                  style={{ padding: "6px 14px", background: "var(--color-positive)", color: "var(--color-bg)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: incomingBusy === t.team_id ? "not-allowed" : "pointer" }}>
+                  {incomingBusy === t.team_id ? "Working…" : "Accept now"}
+                </button>
+                <button onClick={() => respondTransfer(t.team_id, "decline")} disabled={incomingBusy === t.team_id}
+                  style={{ padding: "6px 14px", background: "transparent", border: "1px solid var(--color-destructive)", color: "var(--color-destructive)", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: incomingBusy === t.team_id ? "not-allowed" : "pointer" }}>
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null;
 
       const loadGroups = React.useCallback(async (teamId) => {
         if (!teamId) { setGroups(null); return; }
@@ -16780,6 +16913,7 @@
       if (selectedId && detail) {
         return (
           <div>
+            {incomingBanner}
             <button onClick={() => { setSelectedId(null); setDetail(null); setEditingName(false); setMsg(null); }}
               style={{ marginBottom: 12, padding: "5px 11px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text-muted)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
               ← All teams
@@ -17145,6 +17279,7 @@
       // List view
       return (
         <div>
+          {incomingBanner}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h2 style={{ color: "var(--color-text)", margin: 0 }}>👥 Teams</h2>
             <button onClick={() => setCreating(c => !c)}
