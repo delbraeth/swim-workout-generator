@@ -15,9 +15,13 @@
 --
 -- IDEMPOTENT: CREATE TABLE IF NOT EXISTS. Safe to re-run.
 
+-- teams.id is VARCHAR(32) (`tm_xxxxxx`), so team_id matches that. Per the
+-- project's no-FK-into-legacy-tables convention (migrations 026+, e.g. 041
+-- team_curation), there is NO FK constraint — app-layer integrity. Teams are
+-- soft-archived (never hard-deleted), so no cascade is needed in practice.
 CREATE TABLE IF NOT EXISTS `team_ownership_transfers` (
   `id`               BIGINT AUTO_INCREMENT PRIMARY KEY,
-  `team_id`          BIGINT NOT NULL,
+  `team_id`          VARCHAR(32) NOT NULL,       -- matches teams.id (tm_xxxxxx)
   `from_sub`         VARCHAR(255) NOT NULL,      -- current owner at proposal time
   `to_sub`           VARCHAR(255) NOT NULL,      -- proposed new owner (a team admin)
   `state`            ENUM('pending','accepted','cancelled','declined','completed') NOT NULL DEFAULT 'pending',
@@ -27,6 +31,5 @@ CREATE TABLE IF NOT EXISTS `team_ownership_transfers` (
   `cancel_reason`    VARCHAR(255) NULL,          -- stored for audit; not surfaced v1
   INDEX `idx_team_state`     (`team_id`, `state`),
   INDEX `idx_auto_complete`  (`auto_complete_at`, `state`),
-  INDEX `idx_to_state`       (`to_sub`, `state`),
-  FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON DELETE CASCADE
+  INDEX `idx_to_state`       (`to_sub`, `state`)
 ) ENGINE=InnoDB;
