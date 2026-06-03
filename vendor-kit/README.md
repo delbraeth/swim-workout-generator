@@ -42,10 +42,12 @@ cd vendor-kit
 ./build.sh
 ```
 
-Requires `pandoc` + `texlive-xetex` (or any LaTeX engine pandoc can
-drive). The script writes uniformly-styled PDFs to `vendor-kit/build/`
-with the SetForge wordmark in the header and page numbers in the footer.
-Don't commit the build directory.
+Requires `pandoc` + a PDF engine. `build.sh` **prefers xelatex** (canonical
+styling) and **falls back to typst** when no LaTeX engine is installed:
+- `brew install pandoc typst` — no-admin path (typst is a single binary)
+- `brew install pandoc && brew install --cask basictex` — canonical xelatex
+Force one with `PDF_ENGINE=xelatex ./build.sh` (or `=typst`). The script writes
+PDFs to `vendor-kit/build/` (git-ignored — don't commit it).
 
 ## What's NOT in here (intentionally)
 
