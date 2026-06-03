@@ -45,6 +45,9 @@ Managed Swimmers feature in Coach** (Coach becomes "full-account swimmers only",
 adds the managed-swimmer suite) or is it purely additive? Grandfathering if it replaces.
 
 ## 2. Swimmer progress dashboard
+**➡ Promoted to its own spec: `SWIMMER_DASHBOARD_SCOPE.md` (2026-06-03)** — lowest-
+friction Phase 5 item (R4 report + `benchmarks` table already exist; mostly a
+presentation layer + a logging form). Summary below.
 **Trigger:** assigned-swimmer retention pain, OR a Solo/Masters user asks. (Swimmer eval:
 single largest convergence — Solo + Masters + Teen all want it; the funnel leaks without it.)
 **What:** swimmer-facing progress surface — yards/week, pace trend by stroke, time-trial
