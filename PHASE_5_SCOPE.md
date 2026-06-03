@@ -118,9 +118,23 @@ Explicitly export-only, NOT integrations.
 - **Schedule `.ics`** — a read-only calendar feed of a group's scheduled practices + team
   events, subscribable in Apple/Google Calendar. Runs on today's `scheduled_workouts` +
   `team_events`; gets richer (times, venues) once Slice B lands.
-- **Roster CSV** — active roster as a meet-entry-friendly file (name, DOB, USA-S ID, group)
-  with an "expiring 30/60/90" filter. Pairs with **MAAP (#3)** — if MAAP ships first this
-  can live there instead; either home is fine.
+- **Roster CSV** — active roster as a meet-entry-friendly file with an "expiring 30/60/90"
+  filter. Pairs with **MAAP (#3)** — if MAAP ships first this can live there instead.
+  - **Canonical target = Hy-Tek Meet Manager CSV roster import** (resolves the
+    "which consumer format?" open question). Captured 2026-06-03 from the Hy-Tek/
+    ActiveNetwork support article (`.../Importing-Rosters-from-a-CSV-file-into-Meet-Manager`):
+    - **Required columns, in this order:** `Swimming ID` (USA-S/registration ID — MUST be
+      first column) · `Date of Birth` · `First Name` · `Last Name` · `Gender` · `Team Name`
+      (abbreviation).
+    - **Optional columns:** `Middle Name` · `Preferred Name`.
+    - **Gender must be spelled out** — `FEMALE` / `MALE` (NOT `F`/`M`). (Our internal model
+      is `M`/`F`/`X`/`prefer_not_to_say` → map M→MALE, F→FEMALE on export; X/PNTS likely
+      omit or leave blank, TBD.)
+    - One athlete per row; first row is the header. Team must already exist in Meet Manager/
+      Team Manager before import. Requires MM ≥ 8.0Cg (Dec 2020). DOB format not specified
+      by the article → test with a sample import; likely `MM/DD/YYYY`.
+  - Note our internal `Swimming ID` lives in `person_external_ids` (system='usa_swimming'),
+    and gender/DOB on `persons` — so the export query is a `persons` + external-IDs join.
 - Deps: roster + scheduled-workouts + team-events ✓; the self-serve JSON export (I-G)
   already proves the export pattern + route shape. Cost **S**.
 
@@ -141,8 +155,9 @@ One coherent system bridging `team_facilities`, `team_events`, `scheduled_workou
 alerts need it (shared blocker for every notify feature). RSVP read/write + weather +
 Slice A export can ship without push; the *notify* half waits on push infra.
 **Open questions:** venue dedup heuristic; WeatherKit web-vs-native auth; RSVP-vs-roll-call
-composition; push sequencing; `.ics` static-download vs tokenized live-subscribe URL; CSV
-canonical column set (pick one consumer shape — don't chase TeamUnify/Hytek/SportsEngine all).
+composition; push sequencing; `.ics` static-download vs tokenized live-subscribe URL.
+(CSV canonical column set is **resolved** — Hy-Tek Meet Manager format, captured above;
+open sub-question: how to emit X/prefer-not-to-say gender, which Hy-Tek doesn't define.)
 
 ---
 
