@@ -22,9 +22,21 @@ deploy the bundle) for the refactor; A+CI later.**
   bundle), that extraction breaks → `/api/generate` (iOS) goes down. So the cutover MUST
   ship together with Phase 2 (engine → `lib/engine.js`, server imports it directly). They
   are one combined, carefully-verified step — not two.
-- ⏭ **Next:** Phase 2 + cutover as one move (see below), with byte-diff on `/api/generate`
-  + a render check before deploy, and a fast rollback (revert `index.html` to the inline
-  babel version).
+- ✅ **Phase 2 DONE (2026-06-03) — engine source repointed, dual-source + resilient.**
+  `lib/generator.js` now prefers `src/app.jsx` (engine prelude = lines 0→`function
+  EquipmentBadge`) and **falls back to `public/index.html`** if app.jsx is absent — so it's
+  correct before, during, and after cutover regardless of deploy order. Verified: engine
+  loads from app.jsx (`generatorReady: true`, 9 types) AND the extracted region is
+  **byte-identical (md5 match)** to the old index.html extraction → `/api/generate`
+  unchanged. The vm is **retained, just repointed** (a true `lib/engine.js` ESM module
+  with no vm is deferred — it needs enumerating every prelude symbol the UI imports,
+  best done with CI/browser testing). Deploy-safe in isolation: in current prod (no `src/`
+  in the container) it falls back to index.html → no behavior change.
+- ⏭ **Cutover (remaining, gated):** (1) `index.html` → shell loading
+  `/assets/app.js?v=__BUILD_ID__`, drop the babel-standalone CDN; (2) **`COPY src/ ./src/`
+  in the Dockerfile** (so the server vm can read app.jsx in prod); (3) add `src/app.jsx`
+  (un-gitignore) + `public/assets/app.js` to `_deploy.py` FILES; (4) build + deploy +
+  smoke + rollback-ready.
 
 ## Why
 - `public/index.html` is **~29,800 lines** in a single `<script type="text/babel">` with
