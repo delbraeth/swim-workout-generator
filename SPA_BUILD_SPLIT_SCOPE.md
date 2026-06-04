@@ -204,6 +204,26 @@ is the single most important part of this scope — get it wrong and iOS generat
     (the deferred true ESM, retiring the vm) and shared formatters/consts into `src/lib/`,
     so modules import from `src/lib` instead of cycling through the app.jsx entry.
   - Verified: freevars clean across all 39 modules; build clean; engine 9 types; App smoke 9,961/0.
+  - Session 5 shipped in build `bd6ab17` (deployed; live md5 match + `/api/generate` 401).
+
+- ✅ **vm RETIRED (2026-06-03) — engine → `src/lib/engine.js` (the deferred Phase-2 endgame).**
+  - A dependency-closure analysis (`tools/engine_closure.mjs`) proved the engine is a clean,
+    **pure** 66-symbol closure (all in the prelude, 0 boundary crossings, 0 browser-global refs).
+    Moved it verbatim (byte-identical by construction — assertion in the carve script) into
+    `src/lib/engine.js`: type catalog, all option banks, `generateWorkout`/`regenerateSection`/
+    `buildWorkout`/template engine/interval+unit helpers/`getBankOptions`/`calcEstimatedMin`.
+  - `src/app.jsx` imports the 36-symbol subset it still uses from `./lib/engine.js` and
+    re-exports `generateWorkout`+`WORKOUT_TYPES` (the only engine symbols components import).
+    `app.jsx`: 24.68k → **16.2k lines** (engine is ~8.6k).
+  - **`lib/generator.js` is now an ~80-line wrapper**: `await import("../src/lib/engine.js")`
+    in a try/catch (degrades to 503 on failure), same public API + JSON-normalization +
+    `Set`-coercion. Deleted `node:vm`, `_extractEngineRegion`, `_stripEsm` (the keystone), the
+    `EquipmentBadge`/`<script>` marker dependency, and the `fs` reads. **Single engine source
+    for browser + server.**
+  - `_deploy.py` globs `src/lib/**/*.js`; `Dockerfile COPY src/` already ships it.
+  - Verified: engine.js imports cleanly in Node (9 types, JSX-free/pure); `generator.js` loads
+    with no vm and `generate()` returns a real 4-block workout; build/freevars/smoke clean;
+    `node --check` server+generator.
 
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
