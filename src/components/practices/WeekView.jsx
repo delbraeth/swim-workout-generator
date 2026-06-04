@@ -1,6 +1,9 @@
 // src/components/practices/WeekView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, DRYLAND_OPTIONS, makeDrylandBlock, poolModeLabel } from "../../lib/shared.js";
+import { csrfHeaders } from "../../lib/api.js";
+import { DRYLAND_OPTIONS } from "../../lib/constants.js";
+import { poolModeLabel } from "../../lib/format.js";
+import { makeDrylandBlock } from "../../lib/workout-helpers.js";
 import { generateWorkout, WORKOUT_TYPES } from "../../lib/engine.js";
 import { IntentForm } from "./IntentForm.jsx";
 import { IntentPreviewOverlay } from "./IntentPreviewOverlay.jsx";
