@@ -1,6 +1,6 @@
 // src/components/people/ParentDashboard.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders } from "../../lib/shared.js";
+import { csrfHeaders } from "../../lib/api.js";
 import { Stat } from "../Stat.jsx";
 import { AddressManager } from "./AddressManager.jsx";
 import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
