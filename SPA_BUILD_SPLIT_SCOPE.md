@@ -268,6 +268,20 @@ is the single most important part of this scope — get it wrong and iOS generat
     exports. `app.jsx`: 10.24k → **9.52k lines** (77 modules; app.jsx now <10k).
   - Verified: freevars clean; build/engine/smoke green. Shipped in build `<pending>`.
 
+- 🔧 **Session 10 (2026-06-03, LOCAL — batched, undeployed) — remaining view clusters.**
+  Carved (Docker Hub rate-limited the s9 build, so these are committed locally to batch into
+  one deploy): `catalog/` (CatalogView, MySetsView, UgcFormModal); `history/` (SaveToHistoryForm,
+  HistoryView); `multipace/` (MultiLaneControl, MultiPaceModal, MultiPacePrintView); `reports/`
+  +ReportPrintView/ProgressDashboard/ReportsView (ReportsView now imports its R1–R6 siblings);
+  `shell/` (FeedbackModal, ImpersonationStartModal, ImpersonationBanner, SignInGate, TourOverlay).
+  Repointed CatalogView→shell/FeedbackModal. `app.jsx`: 9.52k → **6.38k lines** (86 modules).
+  - **Lesson:** `freevars` validates a name is *imported*, not that the target actually *exports*
+    it — `npm run build` catches the latter (e.g. importing `computeSubstitutionsForSwimmer`
+    from engine.js when it lives in app.jsx). Run both.
+  - Verified: freevars clean (86 modules); build/engine/smoke green. Undeployed (queued with s9
+    + the build-id fix for the next successful Hyperlift build).
+  - Also fixed: build-id header showed "dev" (cutover regression in `_deploy.py` stamping).
+
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
   are shareable, back-button works, and **refresh no longer dumps to the generator** (§4.1).
