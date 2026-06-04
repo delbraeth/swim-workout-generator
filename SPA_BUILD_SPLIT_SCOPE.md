@@ -186,6 +186,24 @@ is the single most important part of this scope — get it wrong and iOS generat
     export-from-app.jsx pattern keeps working; stand up `src/lib/` (api client + formatters)
     once the export list grows enough to warrant moving them out of the prelude.
   - Verified: freevars clean across all 32 modules; build clean; engine 9 types; App smoke 9,961/0.
+  - Session 4 shipped in build `b56634a` (deployed; live md5 match + `/api/generate` 401).
+
+- 🔧 **Session 5 (2026-06-03) — Practices/scheduling subtree (`src/components/practices/`).**
+  - Carved `IntentParserModal`, `IntentForm`, `IntentPreviewOverlay`, `PracticesView`,
+    `MarkPracticeDoneModal`, `WeekView`, `AssignedToMeView` into `src/components/practices/`.
+  - Bigger shared surface (freevars named 25 refs): exported 12 genuinely-shared symbols from
+    app.jsx — the **engine API** `generateWorkout`/`WORKOUT_TYPES`/`parseIntent`/
+    `computeSubstitutionsForSwimmer`/`poolModeLabel`/`makeEntryId` (prelude — keystone strips
+    `export`; engine still captures them, 9 types) + shared components/consts `DrylandBlock`,
+    `WorkoutBlock`, `DRYLAND_OPTIONS`, `makeDrylandBlock`, `COMPLETION_LABELS`, `PSC_LABEL_MAP`.
+    `MIX_OPTIONS_INTENT` (subtree-only) moved into IntentForm. Sibling imports wired
+    (`WeekView`→IntentForm/IntentPreviewOverlay/MarkPracticeDoneModal; `PracticesView`→
+    MarkPracticeDoneModal). `app.jsx`: 26.22k → 24.68k lines.
+  - **`src/lib/` now clearly warranted** — the app.jsx export hub is growing (engine API +
+    shared UI helpers). Next architectural step: move the engine API into `src/lib/engine`
+    (the deferred true ESM, retiring the vm) and shared formatters/consts into `src/lib/`,
+    so modules import from `src/lib` instead of cycling through the app.jsx entry.
+  - Verified: freevars clean across all 39 modules; build clean; engine 9 types; App smoke 9,961/0.
 
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
