@@ -1,6 +1,6 @@
 // src/components/people/ParentInviteCards.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { API_BASE, csrfHeaders } from "../../app.jsx";
+import { API_BASE, csrfHeaders } from "../../lib/shared.js";
 
     const { useState } = React;
 

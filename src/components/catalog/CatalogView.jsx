@@ -1,6 +1,6 @@
 // src/components/catalog/CatalogView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { CATALOG_ALL_EQUIP, CATALOG_SECTIONS, CATALOG_TYPES, catalogOptionUsesEquip, getCatalogList, ZONE_ORDER, EQUIPMENT_LIST, equipmentForSet } from "../../app.jsx";
+import { CATALOG_ALL_EQUIP, CATALOG_SECTIONS, CATALOG_TYPES, catalogOptionUsesEquip, getCatalogList, ZONE_ORDER, EQUIPMENT_LIST, equipmentForSet } from "../../lib/shared.js";
 import { ZONES, inferBlockZone } from "../../lib/engine.js";
 import { EquipmentBadge } from "../workout/EquipmentBadge.jsx";
 import { FeedbackModal } from "../shell/FeedbackModal.jsx";

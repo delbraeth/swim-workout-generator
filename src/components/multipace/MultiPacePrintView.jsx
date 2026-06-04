@@ -1,7 +1,7 @@
 // src/components/multipace/MultiPacePrintView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { scaleInterval } from "../../lib/engine.js";
-import { computeSubstitutionsForSwimmer, parsePaceMSS, rescaleBlocksForPace } from "../../app.jsx";
+import { computeSubstitutionsForSwimmer, parsePaceMSS, rescaleBlocksForPace } from "../../lib/shared.js";
 
     const { Fragment } = React;
 

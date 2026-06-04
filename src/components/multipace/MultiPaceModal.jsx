@@ -1,6 +1,6 @@
 // src/components/multipace/MultiPaceModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { parsePaceMSS } from "../../app.jsx";
+import { parsePaceMSS } from "../../lib/shared.js";
 
     const { useState } = React;
 

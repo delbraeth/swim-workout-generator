@@ -1,6 +1,6 @@
 // src/components/reports/ReportPrintView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { setIdToName } from "../../app.jsx";
+import { setIdToName } from "../../lib/shared.js";
 
     const { useEffect } = React;
 

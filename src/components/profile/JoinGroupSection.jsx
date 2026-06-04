@@ -1,6 +1,6 @@
 // src/components/profile/JoinGroupSection.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, DOB_MAX_TODAY, DOB_MIN } from "../../app.jsx";
+import { csrfHeaders, DOB_MAX_TODAY, DOB_MIN } from "../../lib/shared.js";
 
     const { useState } = React;
 

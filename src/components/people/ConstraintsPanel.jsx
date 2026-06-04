@@ -1,6 +1,6 @@
 // src/components/people/ConstraintsPanel.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, formatPscRow, PSC_LABEL_MAP } from "../../app.jsx";
+import { csrfHeaders, formatPscRow, PSC_LABEL_MAP } from "../../lib/shared.js";
 import { ConstraintFormModal } from "./ConstraintFormModal.jsx";
 
     const { useState, useCallback, useEffect, useRef } = React;

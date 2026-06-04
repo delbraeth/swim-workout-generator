@@ -1,6 +1,6 @@
 // src/components/practices/IntentParserModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { parseIntent } from "../../app.jsx";
+import { parseIntent } from "../../lib/shared.js";
 
     const { useState, useEffect, useRef } = React;
 

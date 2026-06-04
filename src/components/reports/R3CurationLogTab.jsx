@@ -2,7 +2,7 @@
 // Reports sub-tab (consumed by ReportsView). React is a runtime global (no import needed).
 // setIdToName lives in the engine prelude of app.jsx (UI-only; engine doesn't use it).
 // Imported here from the entry — runtime-safe (it's called at render, not module-eval).
-import { setIdToName } from "../../app.jsx";
+import { setIdToName } from "../../lib/shared.js";
 
     export function R3CurationLogTab({ data }) {
       const sub = { marginBottom: 18 };
