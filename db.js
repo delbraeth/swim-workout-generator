@@ -7873,23 +7873,35 @@ export async function dbListCoachTargets(coachSub) {
     team_name:      r.team_name,
     member_count:   Number(r.member_count),
   }));
-  // Lesson tier (Phase 5) — also expose the caller's managed swimmers as direct
-  // INDIVIDUAL targets (kind:"managed"), so a workout can be assigned to one
-  // swimmer without first putting them in a group (server assign_to:{managed_id}
-  // path). Carries each swimmer's per-swimmer equipment profile so the generate
-  // flow can override the coach's global equipment. This is what makes per-swimmer
-  // equipment + parent recap reachable for pure Lesson-tier users (who have no
-  // groups). Group targets above remain for fanout (assign one workout to many).
-  const managed = await dbListManagedSwimmersForCoach(coachSub, { includeArchived: false });
-  for (const m of managed) {
-    targets.push({
-      kind:            "managed",
-      id:              m.id,            // ms_… — distinct namespace from group ids
-      managed_id:      m.id,
-      name:            m.display_name,
-      member_count:    1,
-      equipment_modes: m.equipment_modes || null,
-    });
+  // Lesson tier (Phase 5) — expose INDIVIDUAL targets (kind:"managed") for direct
+  // single-swimmer assignment (server assign_to:{managed_id} path), carrying each
+  // swimmer's per-swimmer equipment profile. SCOPED to swimmers who are members of
+  // one of the caller's LESSON groups (team-less groups) — so the lesson picker
+  // shows only the people actually in your lessons, not your entire managed roster.
+  // To make a 1-on-1 student assignable, put them in their own lesson group.
+  const lessonGroupIds = targets.filter(g => g.team_id == null).map(g => g.id);
+  if (lessonGroupIds.length) {
+    const ph = lessonGroupIds.map(() => "?").join(",");
+    const memRows = await pool.query(
+      `SELECT DISTINCT \`member_managed_id\` FROM \`group_members\` ` +
+      `WHERE \`group_id\` IN (${ph}) AND \`left_at\` IS NULL AND \`member_managed_id\` IS NOT NULL`,
+      lessonGroupIds
+    );
+    const lessonMemberIds = new Set(memRows.map(r => r.member_managed_id));
+    if (lessonMemberIds.size) {
+      const managed = await dbListManagedSwimmersForCoach(coachSub, { includeArchived: false });
+      for (const m of managed) {
+        if (!lessonMemberIds.has(m.id)) continue;
+        targets.push({
+          kind:            "managed",
+          id:              m.id,            // ms_… — distinct namespace from group ids
+          managed_id:      m.id,
+          name:            m.display_name,
+          member_count:    1,
+          equipment_modes: m.equipment_modes || null,
+        });
+      }
+    }
   }
   return targets;
 }

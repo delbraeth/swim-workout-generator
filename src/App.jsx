@@ -2900,11 +2900,17 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const generateForTarget = useMemo(() => {
         if (generateForId === "myself" || !generateForId) return null;
         const t = coachTargets.find(t => t.id === generateForId) || null;
-        // Individuals (managed swimmers) are lesson-only — ignore a stale managed
-        // selection when the active type isn't lesson (handleTypeSelect also
-        // resets the picker, this is the belt-and-suspenders guard).
-        if (t && t.kind === "managed" && selectedType !== "lesson") return null;
-        return t;
+        if (!t) return null;
+        // Enforce the same visibility split the picker uses, so a stale selection
+        // can't assign to a target hidden under the current type (belt-and-
+        // suspenders; handleTypeSelect also resets the picker on type change):
+        //  • individuals → lesson type only
+        //  • lesson groups (team_id null) → lesson type only
+        //  • team groups → non-lesson types only
+        const isLessonType = selectedType === "lesson";
+        if (t.kind === "managed") return isLessonType ? t : null;
+        const isLessonGroup = t.team_id == null;
+        return (isLessonType === isLessonGroup) ? t : null;
       }, [generateForId, coachTargets, selectedType]);
       // Effective phase: group's current_phase overrides the user's personal
       // phase when generating for a group (decision #39).
@@ -3307,13 +3313,18 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         } else {
           const stdFloor = (poolMode === "50m" || poolMode === "25m") ? 2000 : 1900;
           setMaxYards(v => v < stdFloor ? ((poolMode === "50m" || poolMode === "25m") ? 2500 : 2400) : v);
-          // Individuals are lesson-only — drop a managed-swimmer target when
-          // leaving the Lesson type so the picker doesn't point at a hidden option.
-          setGenerateForId(prev => {
-            const t = coachTargets.find(x => x.id === prev);
-            return (t && t.kind === "managed") ? "myself" : prev;
-          });
         }
+        // Reset the generate-for target if it won't be visible under the new type
+        // (individuals + lesson groups are lesson-only; team groups are non-lesson).
+        setGenerateForId(prev => {
+          if (prev === "myself" || !prev) return prev;
+          const t = coachTargets.find(x => x.id === prev);
+          if (!t) return "myself";
+          const isLessonType = id === "lesson";
+          if (t.kind === "managed") return isLessonType ? prev : "myself";
+          const isLessonGroup = t.team_id == null;
+          return (isLessonType === isLessonGroup) ? prev : "myself";
+        });
         setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); setGenerateError(null); setPinnedSections({});
       };
       const handleMaxChange  = (v)  => { setMaxYards(v); setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); setGenerateError(null); };
@@ -4579,13 +4590,15 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   #35. State sticks across generations. Phase from the
                   selected group overrides personal phase (decision #39). */}
               {effectiveMe?.can_lesson && coachTargets.length > 0 && (() => {
-                // Lesson tier (Phase 5) — Individuals (managed swimmers, direct
-                // managed_id assignment) + Groups (fanout to all members).
-                // Individuals are a lesson concept: only surface them when the
-                // Lesson workout type is selected, so they don't clutter the
-                // picker for IM/Sprint/etc.
-                const individuals = selectedType === "lesson" ? coachTargets.filter(t => t.kind === "managed") : [];
-                const groups      = coachTargets.filter(t => t.kind === "group");
+                // Lesson tier (Phase 5) — lessons live in their own world:
+                //  • Lesson type → Individuals (swimmers in your lesson groups,
+                //    scoped server-side) + Lesson groups (team-less). Team groups
+                //    are hidden.
+                //  • Other types → Team groups only (team_id set). Individuals and
+                //    lesson groups are hidden.
+                const isLessonType = selectedType === "lesson";
+                const individuals = isLessonType ? coachTargets.filter(t => t.kind === "managed") : [];
+                const groups      = coachTargets.filter(t => t.kind === "group" && (isLessonType ? t.team_id == null : t.team_id != null));
                 return (
                   <div style={{ marginBottom: 10, padding: "10px 12px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 8 }}>
                     <label style={{ display: "block", fontSize: 11, color: "var(--color-warn)", marginBottom: 4, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
