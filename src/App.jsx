@@ -1432,8 +1432,35 @@
         kickboard: "off", fins: "off", paddles: "off", pullBuoy: "off", snorkel: "off",
       });
 
-      // History state
-      const [view, setView]                       = useState("generator"); // "generator" | "history" | "admin"
+      // SPA-split Phase 4 — URL-backed view (shareable links, working back button,
+      // refresh-stays-put). Lightweight history router (no library, so no 2nd React
+      // instance vs the global CDN React): the path IS the view. All existing
+      // `view === "x"` reads and `setView(...)` calls work unchanged.
+      const VIEW_TO_PATH = {
+        generator: "/", history: "/history", assigned: "/assigned", week: "/week",
+        parent: "/parent", teams: "/teams", swimmers: "/swimmers", practices: "/practices",
+        catalog: "/catalog", "my-sets": "/my-sets", reports: "/reports", progress: "/progress",
+        admin: "/admin",
+      };
+      const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
+      const [path, setPath] = useState(() => (typeof window !== "undefined" ? window.location.pathname : "/"));
+      useEffect(() => {
+        const onPop = () => setPath(window.location.pathname);
+        window.addEventListener("popstate", onPop);
+        return () => window.removeEventListener("popstate", onPop);
+      }, []);
+      const view = PATH_TO_VIEW[path] || "generator";
+      const setView = useCallback((v) => {
+        setPath(prevPath => {
+          const cur = PATH_TO_VIEW[prevPath] || "generator";
+          const next = typeof v === "function" ? v(cur) : v;
+          const nextPath = VIEW_TO_PATH[next] || "/";
+          if (typeof window !== "undefined" && nextPath !== window.location.pathname) {
+            window.history.pushState({}, "", nextPath);
+          }
+          return nextPath;
+        });
+      }, []);
       const [history, setHistory]                 = useState(() => loadLocalHistory());
       const [historyLoaded, setHistoryLoaded]     = useState(false);
       const [favorites, setFavorites]             = useState([]);
