@@ -350,8 +350,9 @@
 <body>
   <div id="root"></div>
 
-  <!-- SPA bundle (esbuild). window.__BUILD_ID__ + ?v= are stamped by _deploy.py. -->
-  <script>window.__BUILD_ID__ = "__BUILD_ID__";</script>
+  <!-- SPA bundle (esbuild). The value placeholder below is a distinct token (not the
+       window.__BUILD_ID__ property name) so _deploy.py's stamp can't clobber the property. -->
+  <script>window.__BUILD_ID__ = "__BUILD_STAMP__";</script>
   <script src="/assets/app.js?v=__BUILD_SHA__"></script>
 </body>
 </html>
