@@ -1,6 +1,7 @@
 // src/components/teams/TeamsView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, GroupRow } from "../../app.jsx";
+import { csrfHeaders } from "../../app.jsx";
+import { GroupRow } from "../groups/GroupRow.jsx";
 import { TeamRosterTab } from "./TeamRosterTab.jsx";
 import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
 
