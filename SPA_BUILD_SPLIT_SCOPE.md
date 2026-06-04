@@ -150,6 +150,27 @@ is the single most important part of this scope — get it wrong and iOS generat
     jsdom App smoke). Distinguish `ReferenceError` (real extraction bug) from `TypeError`
     (incomplete mock).
   - `_deploy.py` now auto-globs `src/components/**/*.jsx` (no manual FILES edit per file).
+  - Session 2 shipped in build `e382c31` (deployed; live md5 match + `/api/generate` 401).
+
+- 🔧 **Session 3 (2026-06-03) — Admin\* subtree (`src/components/admin/`) + static checker.**
+  - Carved all 12 admin components (`AdminView` + `AdminPendingUgc`, `AdminPublicUgc`,
+    `UgcGraduateModal`, `AdminFeedback`, `AdminUsers`, `EditUserModal`, `AdminInvites`,
+    `AdminEmailTest`, `AdminBillingConfig`, `AdminVendorKit`, `AdminAudit`) into
+    `src/components/admin/`. `AdminView` imports its 9 children; `AdminPublicUgc`→
+    `UgcGraduateModal`, `AdminUsers`→`EditUserModal`. Shared prelude helpers `API_BASE` +
+    `csrfHeaders` `export`ed from app.jsx (keystone strips for vm) and imported where used;
+    `AUDIT_GROUP_CHIPS` (only AdminAudit) moved into that module; `Fragment` added to a
+    React destructure. `app.jsx`: 28.9k → 27.75k lines.
+  - **NEW TOOL — `tools/freevars.mjs` (`npm run freevars`):** a static free-variable checker
+    (@babel/parser; collects declared+imported+global names, flags any referenced identifier
+    — incl. uppercase JSX component names — that resolves to none). This is the **complete**
+    catch for the extraction bug class (undefined refs esbuild silently leaves as globals) —
+    it finds them on ALL code paths, unlike render tests / the App smoke which only cover
+    executed/initial-render paths. **It supersedes the render test for free-var detection**
+    and is now the per-slice verification of record: carve → `freevars` (drives exactly which
+    imports each module needs) → `build` → engine check → App `smoke`.
+  - Verified: freevars clean across all 28 modules; build clean; engine 9 types; App smoke
+    9,961/0.
 
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
