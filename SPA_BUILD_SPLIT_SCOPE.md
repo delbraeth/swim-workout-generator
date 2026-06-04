@@ -171,6 +171,21 @@ is the single most important part of this scope — get it wrong and iOS generat
     imports each module needs) → `build` → engine check → App `smoke`.
   - Verified: freevars clean across all 28 modules; build clean; engine 9 types; App smoke
     9,961/0.
+  - Session 3 shipped in build `2a429f3` (deployed; live md5 match + `/api/generate` 401).
+
+- 🔧 **Session 4 (2026-06-03) — Team\* subtree (`src/components/teams/`).**
+  - Carved `TeamRosterTab`, `TeamSettingsTab`, `TeamsView`, `TeamFacilitiesSection` into
+    `src/components/teams/`. `TeamsView` imports `TeamRosterTab`/`TeamSettingsTab`/`GroupRow`;
+    `TeamSettingsTab`→`TeamFacilitiesSection`. Subtree-only consts/helpers **moved into**
+    their module (`TEAM_TYPE_LABELS`/`TEAM_TYPE_DESCRIPTIONS`→TeamsView; `FACILITY_COURSES`/
+    `courseLabel`→TeamFacilitiesSection); `GroupRow` (still used elsewhere in app.jsx)
+    `export`ed; `API_BASE`/`csrfHeaders` reused from the existing app.jsx exports; `Fragment`
+    added to a destructure. `app.jsx`: 27.75k → 26.22k lines.
+  - Workflow confirmed efficient: carve → `freevars` (named the 13 exact refs) → move-or-export
+    → re-`freevars` clean → build/engine/smoke. **`src/lib/` still deferred** — the
+    export-from-app.jsx pattern keeps working; stand up `src/lib/` (api client + formatters)
+    once the export list grows enough to warrant moving them out of the prelude.
+  - Verified: freevars clean across all 32 modules; build clean; engine 9 types; App smoke 9,961/0.
 
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
