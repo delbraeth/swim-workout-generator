@@ -236,7 +236,18 @@ is the single most important part of this scope — get it wrong and iOS generat
     `PHASE_ORDER` moved into their modules. `app.jsx`: 16.2k → **14.15k lines**.
   - Reusable carve tool (`tools/_carve.mjs`, ad-hoc) now drives slices; verified freevars clean
     (49 modules), build/engine/smoke green.
-  - Shipped in build `<pending>`.
+  - Shipped in build `d584f1b`.
+
+- 🔧 **Session 7 (2026-06-03) — Workout-display/run cluster (`src/components/workout/`).**
+  - Carved 10 components: `EquipmentBadge`, `SetRow`, `EquipmentPicker`, `RoundRestRow`,
+    `DrylandBlock`, `WorkoutBlock`, `YardageSlider`, `PaceClockView`, `RestPickerModal`,
+    `RunWorkoutOverlay`. First cross-module repoint: `AssignedToMeView` (practices/) now
+    imports `DrylandBlock`/`WorkoutBlock` from `../workout/` (build caught the stale app.jsx
+    import — esbuild errors on missing named exports, a nice safety net). Engine zone helpers
+    from `lib/engine.js`; 15 shared helpers/consts exported from app.jsx (`fmtTime`,
+    `playRestCue`, `primeAudioCtx`, `SECTION_STYLES/EMOJIS`, `EQUIPMENT_LIST`, `equipmentForSet`,
+    `getEquivalents`, …). `app.jsx`: 14.15k → **12.2k lines**.
+  - Verified: freevars clean (59 modules); build/engine/smoke green. Shipped in build `<pending>`.
 
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
