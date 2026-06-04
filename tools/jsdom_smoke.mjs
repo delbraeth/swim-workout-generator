@@ -32,11 +32,17 @@ function readReactUmd(pkg, file) {
 const react = readReactUmd("react", "react.development.js");
 const reactDom = readReactUmd("react-dom", "react-dom.development.js");
 
-const bundlePath = path.join(ROOT, "public", "assets", "app.js");
-if (!fs.existsSync(bundlePath)) {
-  console.error("✗ public/assets/app.js missing — run `npm run build` first.");
-  process.exit(1);
-}
+// The prod bundle is ESM + code-split (can't inject as a classic <script>). Build a
+// throwaway IIFE bundle from the same entry (dynamic imports inline) just for this
+// mount sanity check — format-independent, exercises the real component tree.
+import { execSync } from "node:child_process";
+const bundlePath = "/tmp/smoke-bundle.js";
+execSync(
+  `npx esbuild src/main.jsx --bundle --format=iife ` +
+  `--jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment ` +
+  `--target=es2019 --outfile=${bundlePath}`,
+  { cwd: ROOT, stdio: ["ignore", "ignore", "ignore"] }   // relative entry — ROOT path has spaces
+);
 const app = fs.readFileSync(bundlePath, "utf8");
 
 const dom = new JSDOM(`<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>`, {
