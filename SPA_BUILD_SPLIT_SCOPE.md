@@ -282,6 +282,20 @@ is the single most important part of this scope — get it wrong and iOS generat
     + the build-id fix for the next successful Hyperlift build).
   - Also fixed: build-id header showed "dev" (cutover regression in `_deploy.py` stamping).
 
+- ✅ **Endgame A+B (2026-06-04, LOCAL/undeployed) — `src/lib/shared.js` + `src/App.jsx`.**
+  - **A:** moved the 64-symbol closure of app.jsx's exported prelude helpers/consts into
+    `src/lib/shared.js`; repointed all 60 components' `"../../app.jsx"` imports → `src/lib/shared.js`
+    or `src/lib/engine.js`; removed app.jsx's re-exports. **Export hub killed** — nothing imports
+    from the entry. (One module, not 5 thematic — same win, lower risk; sub-split is a trivial
+    follow-up.)
+  - **B:** `app.jsx` → `src/App.jsx` (`export App`) + a 6-line `src/main.jsx` entry
+    (`import App; createRoot().render`). Entry renamed app.jsx→main.jsx because macOS FS is
+    case-insensitive (app.jsx/App.jsx collide); esbuild entry is now `src/main.jsx`
+    (package.json); `_deploy.py` ships main.jsx + App.jsx. `csrf` exported from shared.js.
+  - Verified: freevars clean (all modules); build 1.2mb; engine 9 types; smoke 9,961/0.
+  - **Deploy note:** GitHub still has an orphaned `src/app.jsx` from prior deploys — delete it
+    via the Contents API at next deploy (harmless cruft; nothing imports it).
+
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
   are shareable, back-button works, and **refresh no longer dumps to the generator** (§4.1).
