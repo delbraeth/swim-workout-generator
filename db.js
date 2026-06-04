@@ -3736,8 +3736,21 @@ export async function dbCreateParentInvite({ swimmerSub = null, managedId = null
 // Coach (or invite creator) revokes a pending invite before parent
 // accepts it. State='revoked' rather than DELETE so audit + analytics
 // preserve the attempt.
-export async function dbRevokeParentInvite(inviteId) {
-  if (!inviteId) return { ok: false, reason: "missing_args" };
+export async function dbRevokeParentInvite(inviteId, callerSub) {
+  if (!inviteId || !callerSub) return { ok: false, reason: "missing_args" };
+  // Ownership scope (Phase 5 hardening): the caller must coach the invite's
+  // swimmer. Without this, any authed coach/lesson user could revoke ANY invite
+  // by id (IDOR). Tightened when lesson tier widened who can reach this route.
+  const inv = (await pool.query(
+    "SELECT `swimmer_sub`, `swimmer_managed_id` FROM `parent_invites` WHERE `id` = ? LIMIT 1",
+    [Number(inviteId)]
+  ))[0];
+  if (!inv) return { ok: false, reason: "not_found" };
+  const authz = await dbAuthzCoachOfSwimmer(callerSub, {
+    swimmerSub: inv.swimmer_sub || null,
+    managedId:  inv.swimmer_managed_id || null,
+  });
+  if (!authz) return { ok: false, reason: "forbidden" };
   const r = await pool.query(
     "UPDATE `parent_invites` SET `state` = 'revoked' WHERE `id` = ? AND `state` = 'pending'",
     [Number(inviteId)]
@@ -3946,8 +3959,24 @@ export async function dbListParentInvitesForSwimmer({ managedId = null, swimmerS
 // Coach removes a parent (tombstones the guardians row). Parent's
 // ParentDashboard no longer shows this swimmer next load. Audit-logged
 // at the route layer.
-export async function dbRemoveGuardian(guardianId) {
-  if (!guardianId) return { ok: false, reason: "missing_args" };
+export async function dbRemoveGuardian(guardianId, callerSub) {
+  if (!guardianId || !callerSub) return { ok: false, reason: "missing_args" };
+  // Ownership scope (Phase 5 hardening): the caller must coach the swimmer this
+  // guardian belongs to. Previously unscoped ("v1.1 hardening" TODO) — closed now
+  // that lesson tier widened route access (was an IDOR on a FERPA-sensitive link).
+  const g = (await pool.query(
+    "SELECT `swimmer_person_id` FROM `guardians` WHERE `id` = ? AND `removed_at` IS NULL LIMIT 1",
+    [Number(guardianId)]
+  ))[0];
+  if (!g) return { ok: false, reason: "not_found" };
+  // Resolve the swimmer person → managed-swimmer or full-account ref for authz.
+  const ms = (await pool.query("SELECT `id` FROM `coach_managed_swimmers` WHERE `person_id` = ? LIMIT 1", [g.swimmer_person_id]))[0];
+  const usr = ms ? null : (await pool.query("SELECT `sub` FROM `users` WHERE `person_id` = ? LIMIT 1", [g.swimmer_person_id]))[0];
+  const authz = await dbAuthzCoachOfSwimmer(callerSub, {
+    managedId:  ms ? ms.id : null,
+    swimmerSub: usr ? usr.sub : null,
+  });
+  if (!authz) return { ok: false, reason: "forbidden" };
   const r = await pool.query(
     "UPDATE `guardians` SET `removed_at` = CURRENT_TIMESTAMP WHERE `id` = ? AND `removed_at` IS NULL",
     [Number(guardianId)]

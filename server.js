@@ -3636,8 +3636,8 @@ app.post("/api/swimmers/:swimmerRef/parent-invite", checkOrigin, requireAuth, re
 // affected=0 in that case.
 app.delete("/api/parent-invites/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const r = await dbRevokeParentInvite(req.params.id);
-    if (!r.ok) return res.status(400).json({ error: r.reason });
+    const r = await dbRevokeParentInvite(req.params.id, req.userSub);
+    if (!r.ok) return res.status(r.reason === "forbidden" ? 403 : r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "parent.invite.revoke",
@@ -3774,12 +3774,10 @@ app.get("/api/swimmers/:swimmerRef/parents", requireAuth, requireLessonAccess, a
 // caller must own the swimmer this guardian is attached to).
 app.delete("/api/guardians/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    // Trust the route's CSRF + coach gate for v1; tight authz of which
-    // swimmer the guardian belongs to is a v1.1 hardening. The coach
-    // removing the guardian must already know the id from their own
-    // /api/swimmers/:ref/parents call.
-    const r = await dbRemoveGuardian(req.params.id);
-    if (!r.ok) return res.status(400).json({ error: r.reason });
+    // Ownership scope enforced in dbRemoveGuardian (Phase 5): caller must coach
+    // the swimmer this guardian belongs to (closes the prior unscoped IDOR).
+    const r = await dbRemoveGuardian(req.params.id, req.userSub);
+    if (!r.ok) return res.status(r.reason === "forbidden" ? 403 : r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "parent.guardian.remove",
