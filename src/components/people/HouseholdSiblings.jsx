@@ -1,6 +1,6 @@
 // src/components/people/HouseholdSiblings.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { API_BASE } from "../../lib/shared.js";
+import { API_BASE } from "../../lib/api.js";
 
     const { useState, useEffect } = React;
 
