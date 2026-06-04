@@ -312,20 +312,6 @@ is the single most important part of this scope — get it wrong and iOS generat
   - **Follow-up:** deep-link auth guard (non-coach hitting `/admin` renders AdminView with
     API-gated 403s — not a security hole, but should redirect to `/`).
 
-- ✅ **Follow-ups (2026-06-04).**
-  - **#1 — `src/lib/shared.js` split** into `api.js` (3) / `constants.js` (26) / `format.js` (10) /
-    `audio.js` (4) / `workout-helpers.js` (21); cross-bucket + engine + hook imports auto-computed;
-    61 consumers repointed. Junk drawer gone.
-  - **#2 — code-splitting / lazy routes.** Build moved IIFE → **ESM + `--splitting`** (entry
-    `app.js` + content-hashed `chunks/`); `index.html` loads `<script type="module">`; 12 route
-    views are `React.lazy` + a `<React.Suspense>` around `<main>`. **Entry shrank 1.2 MB → 249 KB**
-    (secondary views load on demand). `_deploy.py` globs `public/assets/**/*.js` (ships chunks).
-    No react-router (custom history router stays). The jsdom smoke now builds its own throwaway
-    IIFE bundle (the prod ESM/split bundle can't be injected as a classic script). `freevars`
-    fixed to not flag `React.Suspense`'s member property. Verified: freevars/build/smoke/engine
-    green. **Needs browser verify** (deep-link a lazy view → chunk fetch + Suspense fallback).
-    Note: old hashed chunks orphan on the server across deploys (harmless; never referenced).
-
 #### (original Phase 4 plan — superseded by the custom-router approach above)
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
   are shareable, back-button works, and **refresh no longer dumps to the generator** (§4.1).

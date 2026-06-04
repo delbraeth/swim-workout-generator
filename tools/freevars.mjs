@@ -100,9 +100,6 @@ function check(file) {
       return;
     }
     if (n.type === "JSXIdentifier") {
-      // Skip the `.Property` of a JSXMemberExpression (e.g. React.Suspense) — only the
-      // root object (React) is a real reference; the property rides on it.
-      if (parent.type === "JSXMemberExpression" && key === "property") return;
       // Only Capitalized JSX names are component refs (lowercase = host tags).
       if (parent.type === "JSXOpeningElement" || parent.type === "JSXClosingElement" || parent.type === "JSXMemberExpression") {
         if (/^[A-Z]/.test(n.name) && !refs.has(n.name)) refs.set(n.name, n.loc ? n.loc.start.line : 0);
