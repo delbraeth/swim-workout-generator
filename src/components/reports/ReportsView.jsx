@@ -1,6 +1,7 @@
 // src/components/reports/ReportsView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { REPORT_RANGES, reportToMarkdown } from "../../lib/shared.js";
+import { REPORT_RANGES } from "../../lib/constants.js";
+import { reportToMarkdown } from "../../lib/workout-helpers.js";
 import { R1ProgrammingMixTab } from "./R1ProgrammingMixTab.jsx";
 import { R2ScheduleAdherenceTab } from "./R2ScheduleAdherenceTab.jsx";
 import { R3CurationLogTab } from "./R3CurationLogTab.jsx";
