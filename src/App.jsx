@@ -1776,6 +1776,20 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         if (blocked) setView("generator");
       }, [view, authenticated, effectiveMe, setView]);
 
+      // Default landing (2026-06-04): coaches/lesson users land on the 🧭 Coach
+      // home portal instead of the generator — but ONLY on a fresh arrival at the
+      // root path. Runs once per load (ref-guarded) so deep links / refresh on a
+      // specific view are never hijacked, and later navigating to the generator
+      // isn't bounced. Free swimmers (no can_lesson) keep the generator as home.
+      const didDefaultLandingRef = React.useRef(false);
+      useEffect(() => {
+        if (didDefaultLandingRef.current) return;
+        if (!authenticated || !effectiveMe) return;
+        didDefaultLandingRef.current = true;
+        const atRoot = typeof window !== "undefined" && window.location.pathname === "/";
+        if (atRoot && effectiveMe.can_lesson) setView("coach-home");
+      }, [authenticated, effectiveMe, setView]);
+
       // View-as v2 (2026-05-23): persona simulation. When admin is viewing-as
       // another role, the read view shows a fresh-new-user empty state AND
       // writes are blocked. Different from v1 which only hid UI surfaces.
@@ -2154,10 +2168,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // picker effectively current without forcing a reload. Cheap relative
       // to the picker's already-on-mount fetch; the server-side helper
       // (dbGetEffectiveDisfavorites) is a small 3-query SELECT.
-      useEffect(() => {
-        const id = setInterval(refreshEffectiveDisfavorites, 5 * 60 * 1000);
-        return () => clearInterval(id);
-      }, [refreshEffectiveDisfavorites]);
+      // (5-min poll consolidated into one visibility/auth-gated timer below —
+      //  429-avoidance, 2026-06-04.)
 
       // v1.13 — Mirror of refreshEffectiveDisfavorites for the favorite side.
       const refreshEffectiveFavorites = useCallback(() => {
@@ -2174,11 +2186,6 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       useEffect(() => {
         if (bootstrapHydratingRef.current) return;
         refreshEffectiveFavorites();
-      }, [refreshEffectiveFavorites]);
-      // Periodic refresh mirror of the disfavor side.
-      useEffect(() => {
-        const id = setInterval(refreshEffectiveFavorites, 5 * 60 * 1000);
-        return () => clearInterval(id);
       }, [refreshEffectiveFavorites]);
 
       // Phase 3 PSC slice 2 — fetch own active constraints + 5-min poll.
@@ -2197,10 +2204,6 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       useEffect(() => {
         if (bootstrapHydratingRef.current) return;
         refreshMyConstraints();
-      }, [refreshMyConstraints]);
-      useEffect(() => {
-        const id = setInterval(refreshMyConstraints, 5 * 60 * 1000);
-        return () => clearInterval(id);
       }, [refreshMyConstraints]);
 
       // UGC Phase B — pull the UGC bank overlay on mount + 5-min poll.
@@ -2222,10 +2225,30 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         if (bootstrapHydratingRef.current) return;
         refreshUgcOverlay();
       }, [refreshUgcOverlay]);
+      // 429-avoidance (2026-06-04): ONE consolidated 5-min background poll for
+      // the coach-propagation / constraints / UGC-overlay refreshers, replacing
+      // four always-on intervals. Skips entirely when the tab is hidden (no
+      // background drain on tabs left open all day) and when not authenticated
+      // (no 401-spin after a lapsed session). Does a single catch-up refresh
+      // when the tab regains focus so data isn't stale on return.
       useEffect(() => {
-        const id = setInterval(refreshUgcOverlay, 5 * 60 * 1000);
-        return () => clearInterval(id);
-      }, [refreshUgcOverlay]);
+        if (!authenticated) return;
+        const hidden = () => (typeof document !== "undefined" && document.hidden);
+        const refreshAll = () => {
+          if (hidden()) return;
+          refreshEffectiveDisfavorites();
+          refreshEffectiveFavorites();
+          refreshMyConstraints();
+          refreshUgcOverlay();
+        };
+        const id = setInterval(refreshAll, 5 * 60 * 1000);
+        const onVis = () => { if (!hidden()) refreshAll(); };
+        if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVis);
+        return () => {
+          clearInterval(id);
+          if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVis);
+        };
+      }, [authenticated, refreshEffectiveDisfavorites, refreshEffectiveFavorites, refreshMyConstraints, refreshUgcOverlay]);
 
       // On mount: fetch goals (recurring targets for stats progress bars)
       const refreshGoals = useCallback(() => {
