@@ -8,7 +8,8 @@
     "start": "node server.js",
     "build": "esbuild src/app.jsx --bundle --outfile=public/assets/app.js --format=iife --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --minify --target=es2019",
     "build:dev": "esbuild src/app.jsx --bundle --outfile=public/assets/app.js --format=iife --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --sourcemap --target=es2019",
-    "smoke": "node tools/jsdom_smoke.mjs"
+    "smoke": "node tools/jsdom_smoke.mjs",
+    "freevars": "node tools/freevars.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
