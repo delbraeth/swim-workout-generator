@@ -1,6 +1,6 @@
 // src/components/profile/LevelRow.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { LEVEL_PRESETS } from "../../app.jsx";
+import { LEVEL_PRESETS } from "../../lib/shared.js";
 
     const LEVEL_ORDER = ["recreational", "masters", "competitive"];
 
