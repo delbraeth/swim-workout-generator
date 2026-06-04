@@ -323,8 +323,16 @@ is the single most important part of this scope — get it wrong and iOS generat
     No react-router (custom history router stays). The jsdom smoke now builds its own throwaway
     IIFE bundle (the prod ESM/split bundle can't be injected as a classic script). `freevars`
     fixed to not flag `React.Suspense`'s member property. Verified: freevars/build/smoke/engine
-    green. **Needs browser verify** (deep-link a lazy view → chunk fetch + Suspense fallback).
-    Note: old hashed chunks orphan on the server across deploys (harmless; never referenced).
+    green.
+  - ✅ **SHIPPED + verified (2026-06-04, build `14e4dcb`)** after a deploy-timing hiccup: the
+    first build of the split served `app.js` but 404'd its `chunks/` (eager chunk imports →
+    blank app). Root cause = **`_deploy.py` pushes one commit per file**, so the build picked up
+    an intermediate state / stale layer where `app.js` landed before all 29 chunks. A **clean
+    rebuild after the full push completed** fixed it — live serves all 29 chunks `200`, app loads
+    clean. **Operational rule: trigger the Hyperlift build only after `_deploy.py` prints "Done".**
+    Robustness follow-up: make `_deploy.py` push all files in ONE commit (Git Trees API), or move
+    to an in-container build, to remove the race. Orphaned old hashed chunks accumulate on the
+    server across deploys (harmless; unreferenced).
 
 #### (original Phase 4 plan — superseded by the custom-router approach above)
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
