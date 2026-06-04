@@ -1,6 +1,6 @@
 // src/components/workout/SetRow.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { enhanceDesc, equipmentForSet, getEquivalents } from "../../lib/shared.js";
+import { enhanceDesc, equipmentForSet, getEquivalents } from "../../lib/workout-helpers.js";
 import { inferSetZone, ZONES } from "../../lib/engine.js";
 import { EquipmentBadge } from "./EquipmentBadge.jsx";
 
