@@ -14,6 +14,21 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
+    // Declutter (2026-06-04): collapsible wrapper for the detail panels, so the
+    // swimmer detail screen is a tidy list of expandable sections instead of one
+    // long stacked wall. Native <details> — no extra state.
+    function DetailSection({ emoji, title, children, defaultOpen = false }) {
+      return (
+        <details open={defaultOpen} style={{ marginTop: 8, borderTop: "1px solid var(--color-border)", paddingTop: 2 }}>
+          <summary style={{ cursor: "pointer", padding: "8px 2px", fontWeight: 700, fontSize: 14,
+            display: "flex", alignItems: "center", gap: 8, userSelect: "none" }}>
+            <span>{emoji}</span><span>{title}</span>
+          </summary>
+          <div style={{ paddingBottom: 6 }}>{children}</div>
+        </details>
+      );
+    }
+
     export function ManagedSwimmersView({ mySub = null } = {}) {
       const [list,       setList]       = React.useState(null);
       const [showArch,   setShowArch]   = React.useState(false);
@@ -277,47 +292,58 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
               </div>
             </div>
 
-            {/* R-I: claim token issuer for this managed profile */}
+            {/* Declutter (2026-06-04): the per-swimmer panels are now collapsible
+                sections (collapsed by default) so the detail screen is a tidy list,
+                not one long stacked wall. */}
             {!detail.archived && (
-              <ClaimTokensPanel
-                key={"ct-" + detail.id}
-                managedId={detail.id}
-                isMinor={detail.is_minor}
-                isCoppa={detail.is_coppa_protected}
-                parentManaged={detail.parent_managed_flag}
-                seedTokens={bundle?.claim_tokens}
-              />
+              <DetailSection emoji="🚱" title="Constraints">
+                <ConstraintsPanel key={"con-" + detail.id} managedId={detail.id}
+                  seedConstraints={bundle?.constraints} />
+              </DetailSection>
             )}
 
-            {/* Phase 3 PSC slice 3 — per-swimmer constraints (injury / equipment / cap restrictions) */}
+            {/* Lesson tier (Phase 5) — per-swimmer equipment profile. */}
             {!detail.archived && (
-              <ConstraintsPanel key={"con-" + detail.id} managedId={detail.id}
-                seedConstraints={bundle?.constraints} />
-            )}
-
-            {/* Lesson tier (Phase 5) — per-swimmer equipment profile (overrides
-                coach equipment when generating for this swimmer). */}
-            {!detail.archived && (
-              <SwimmerEquipmentPanel key={"eq-" + detail.id} managedId={detail.id}
-                swimmerName={detail.display_name} initialEquipment={detail.equipment_modes}
-                onSaved={() => loadDetail(detail.id)} />
+              <DetailSection emoji="🛠️" title="Equipment profile">
+                <SwimmerEquipmentPanel key={"eq-" + detail.id} managedId={detail.id}
+                  swimmerName={detail.display_name} initialEquipment={detail.equipment_modes}
+                  onSaved={() => loadDetail(detail.id)} />
+              </DetailSection>
             )}
 
             {/* Parent Portal MVP — invite/revoke parents on this profile */}
             {!detail.archived && (
-              <ParentsPanel key={"pp-" + detail.id} swimmerRef={detail.id} swimmerName={detail.display_name}
-                seedGuardians={bundle?.parents?.guardians} seedInvites={bundle?.parents?.invites} />
+              <DetailSection emoji="👪" title="Parents">
+                <ParentsPanel key={"pp-" + detail.id} swimmerRef={detail.id} swimmerName={detail.display_name}
+                  seedGuardians={bundle?.parents?.guardians} seedInvites={bundle?.parents?.invites} />
+              </DetailSection>
             )}
 
             {/* R-H: coach notes journal for this managed profile */}
             {!detail.archived && (
-              <CoachNotesPanel
-                key={"cn-" + detail.id}
-                targetManagedId={detail.id}
-                teamId={detail.team_id}
-                mySub={mySub}
-                seedNotes={bundle?.coach_notes}
-              />
+              <DetailSection emoji="🗒️" title="Coach notes">
+                <CoachNotesPanel
+                  key={"cn-" + detail.id}
+                  targetManagedId={detail.id}
+                  teamId={detail.team_id}
+                  mySub={mySub}
+                  seedNotes={bundle?.coach_notes}
+                />
+              </DetailSection>
+            )}
+
+            {/* R-I: claim token issuer (least-used → last). */}
+            {!detail.archived && (
+              <DetailSection emoji="🎫" title="Claim token (move to swimmer's own account)">
+                <ClaimTokensPanel
+                  key={"ct-" + detail.id}
+                  managedId={detail.id}
+                  isMinor={detail.is_minor}
+                  isCoppa={detail.is_coppa_protected}
+                  parentManaged={detail.parent_managed_flag}
+                  seedTokens={bundle?.claim_tokens}
+                />
+              </DetailSection>
             )}
 
             {msg && <div style={{ color: "#fca5a5", fontSize: 12, padding: "8px 0" }}>{msg}</div>}
