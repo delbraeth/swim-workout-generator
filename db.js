@@ -555,7 +555,7 @@ export async function dbGetMe(sub) {
     // "(unknown)" rather than crashing.
     const userRows = await conn.query(
       "SELECT u.`sub`, u.`email`, u.`email_verified`, " +
-      "       u.`is_admin`, u.`is_coach`, " +
+      "       u.`is_admin`, u.`is_coach`, u.`tier`, " +
       "       u.`created_at`, u.`last_login_at`, " +
       "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
       "       p.`initials` AS person_initials, " +
@@ -648,6 +648,13 @@ export async function dbGetMe(sub) {
       // Coach is granted by either explicit is_coach flag OR is_admin (admin
       // implicitly has coach capability). Mirrors dbIsCoach's check.
       is_coach:                !!(u.is_coach || u.is_admin),
+      // Billing tier (free/coach/lesson/program). Lesson tier (Phase 5) is
+      // ADDITIVE: Coach/Program are a superset, so lesson surfaces also unlock
+      // for coaches/admins. `can_lesson` is the single client-side gate for the
+      // Lesson workout type, managed-swimmer roster, per-swimmer equipment, and
+      // the parent-recap export. Mirrors the server-side dbHasLessonAccess check.
+      tier:                    u.tier || "free",
+      can_lesson:              !!(u.is_coach || u.is_admin) || ["lesson", "coach", "program"].includes(u.tier || "free"),
       created_at:              u.created_at,
       last_login_at:           u.last_login_at,
       workout_count:           workoutCount,
@@ -836,6 +843,21 @@ export async function dbIsCoach(sub) {
 // Privacy note: v1 lists ALL coaches system-wide. At multi-tenant scale this
 // becomes PII leakage; scope down (e.g., "only coaches in teams I'm in") when
 // the threat model warrants.
+// Lesson tier (Phase 5) — entitlement check for lesson surfaces (Lesson workout
+// type, managed-swimmer roster, per-swimmer equipment, parent-recap export).
+// ADDITIVE: Coach/Program tiers + admins are a superset, so they pass too.
+// Mirrors the `can_lesson` flag on the dbGetMe payload. Server-side gate for the
+// recap route and lesson-tier managed-swimmer access.
+export async function dbHasLessonAccess(sub) {
+  if (!sub) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `users` WHERE `sub` = ? AND `is_disabled` = 0 " +
+    "  AND (`is_coach` = 1 OR `is_admin` = 1 OR `tier` IN ('lesson','coach','program')) LIMIT 1",
+    [sub]
+  );
+  return rows.length > 0;
+}
+
 export async function dbListCoachesForPicker(excludeSub) {
   // Identity: name/initials come from persons (JOIN via person_id); sorted
   // by persons.last_name, first_name. Legacy users columns dropped in 044.
@@ -4453,6 +4475,16 @@ function validateDob(dob) {
   return { ok: true };
 }
 
+// Lesson tier (Phase 5) — normalize a coach_managed_swimmers.equipment_modes
+// value to an object|null. MariaDB may return JSON columns pre-parsed (object)
+// or as a string depending on driver/config; handle both. Undefined (column not
+// selected) → null.
+function parseEquipmentModes(v) {
+  if (v == null) return null;
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch (_) { return null; }
+}
+
 function rowToManagedSwimmer(r) {
   // Phase 4 Identity I-D slice 2: if the caller JOINed persons and
   // projected r.first_name, compute display_name from the helper.
@@ -4482,6 +4514,9 @@ function rowToManagedSwimmer(r) {
     pace_scy_100:         r.pace_scy_100,
     pace_scm_100:         r.pace_scm_100,
     pace_lcm_100:         r.pace_lcm_100,
+    // Lesson tier (Phase 5) — per-swimmer equipment profile (JSON, same shape as
+    // user settings.equipment). Undefined when the caller's SELECT omits it.
+    equipment_modes:      parseEquipmentModes(r.equipment_modes),
     archived:             !!r.archived,
     created_at:           dtToIso(r.created_at),
     updated_at:           dtToIso(r.updated_at),
@@ -4570,7 +4605,7 @@ export async function dbGetManagedSwimmer(id) {
   const rows = await pool.query(
     "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
     "       m.`parental_contact`, m.`parent_managed_flag`, " +
-    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
+    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, m.`equipment_modes`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
     "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
@@ -4593,7 +4628,7 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
   const rows = await pool.query(
     "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
     "       m.`parental_contact`, m.`parent_managed_flag`, " +
-    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
+    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, m.`equipment_modes`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
     "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
@@ -4619,6 +4654,13 @@ export async function dbUpdateManagedSwimmer(id, patch) {
     pace_scy_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
     pace_scm_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
     pace_lcm_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
+    // Lesson tier (Phase 5) — per-swimmer equipment profile. Object (settings.
+    // equipment shape) → JSON string for the JSON column; null clears it.
+    equipment_modes:     v => {
+      if (v == null) return null;
+      if (typeof v !== "object" || Array.isArray(v)) return undefined;
+      try { return JSON.stringify(v); } catch (_) { return undefined; }
+    },
   };
   const sets = [], vals = [];
   for (const [k, validator] of Object.entries(cmsAllowed)) {
@@ -7822,7 +7864,7 @@ export async function dbListCoachTargets(coachSub) {
     "ORDER BY g.`name` ASC",
     [coachSub]
   );
-  return rows.map(r => ({
+  const targets = rows.map(r => ({
     kind:           "group",
     id:             r.id,
     name:           r.name,
@@ -7831,6 +7873,27 @@ export async function dbListCoachTargets(coachSub) {
     team_name:      r.team_name,
     member_count:   Number(r.member_count),
   }));
+  // Lesson tier (Phase 5) — for solo (1-member) groups whose member is a managed
+  // swimmer, attach that swimmer's id + per-swimmer equipment profile so the
+  // generate-for flow can override the coach's global equipment. Bounded N+1
+  // (only single-member groups); groups with a real-user member or no managed
+  // member get nothing (override falls back to coach equipment).
+  for (const tgt of targets) {
+    if (tgt.member_count !== 1) continue;
+    const m = await pool.query(
+      "SELECT cms.`id` AS managed_id, cms.`equipment_modes` " +
+      "  FROM `group_members` gm " +
+      "  JOIN `coach_managed_swimmers` cms ON cms.`id` = gm.`member_managed_id` " +
+      " WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL AND gm.`member_managed_id` IS NOT NULL " +
+      " LIMIT 1",
+      [tgt.id]
+    );
+    if (m[0]) {
+      tgt.managed_id      = m[0].managed_id;
+      tgt.equipment_modes = parseEquipmentModes(m[0].equipment_modes);
+    }
+  }
+  return targets;
 }
 
 // ── Workout assignments (Stage 3 / R-D) ──────────────────────────────

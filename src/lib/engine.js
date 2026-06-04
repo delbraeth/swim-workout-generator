@@ -22,7 +22,24 @@ export const WORKOUT_TYPES = [
         selBg: "#db2777", border: "#f9a8d4", badge: "#fce7f3", badgeText: "#9d174d" },
       { id: "fly",       label: "Specialty Fly",    emoji: "🦋", description: "Butterfly focus (with free recovery throughout)",
         selBg: "#ca8a04", border: "#facc15", badge: "#fef9c3", badgeText: "#854d0e" },
+      // Lesson tier (Phase 5) — a short, no-"Main Set" skill session: Warm-Up /
+      // Skill Focus / Send-off (200–1200yd). Reuses Technique content (see
+      // getBankOptions alias); "Skill Focus" is carried in the engine's main slot
+      // (the budget-absorbing flex section) sourced from the drill bank, then
+      // relabeled in buildWorkout. Gated to the Lesson/Coach/Program tiers in the UI.
+      { id: "lesson",    label: "Lesson",           emoji: "🎓", description: "Short skill session — warm-up, skill focus, send-off",
+        selBg: "#4f46e5", border: "#a5b4fc", badge: "#e0e7ff", badgeText: "#3730a3" },
     ];
+
+// Lesson tier — the fixed section shape (no main, no kick; the main *slot* carries
+// "Skill Focus"). Engine forces this for typeId="lesson" regardless of caller input.
+export const LESSON_SECTIONS = ["warmup", "main", "cooldown"];
+// Lesson yardage bounds (yd/m) — much shorter than the standard MIN_YARDS floor.
+// Floor is 800 (not 200): the smallest feasible 3-section lesson is warmup(400) +
+// skill focus(200) + send-off(200) given the existing (reused) banks. Going lower
+// would need bespoke short-warmup content, which the locked scope excludes.
+export const LESSON_MIN = 800;
+export const LESSON_MAX = 1200;
 
 export const ZONES = {
       easy:      { id: "easy",      label: "Easy",      color: "var(--color-positive)", rank: 1 },
@@ -6487,6 +6504,12 @@ export function generateWorkout({
       tonightOverrides = [],             // Phase 3 PSC slice 3 — in-memory constraint rows added at Generate time from the per-practice checklist. Unioned with myConstraints; never persisted.
       includedSections = ["warmup", "drill", "main", "cooldown"],   // Section model A1 — which sections to build. Default = all 4 (byte-identical to pre-A1). `main` is always required. Subsetting wired in A2.
     } = {}) {
+      // Lesson tier (Phase 5) — force the fixed 3-section shape (Warm-Up / Skill
+      // Focus / Send-off). drill + kick are excluded; the main slot carries Skill
+      // Focus (drill-bank-sourced via getBankOptions). Done here so the shape holds
+      // regardless of what the caller passes for includedSections.
+      const isLesson = typeId === "lesson";
+      if (isLesson) includedSections = LESSON_SECTIONS;
       // Section model A1 — per-section inclusion flags. With the default all-4
       // list every flag is true, so all downstream guards are inert.
       const _incl = {
@@ -6514,7 +6537,12 @@ export function generateWorkout({
       // pickWeighted's existing "all weights zero → uniform fallback" is the
       // silent failsafe when hard-exclude would empty the eligible pool.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
-      let biasRatios = SECTION_BIAS_RATIOS[sectionBias] || null;
+      // Lesson tier (Phase 5) — make the Skill Focus the bulk of the session
+      // (warmup/send-off small) by defaulting to the main-heavy bias. The drill
+      // exclusion above renormalizes the ratio over {warmup, main, cooldown}, so
+      // the freed drill share flows to Skill Focus. A caller-set bias still wins.
+      const _effBias = (isLesson && sectionBias === "balanced") ? "long_main" : sectionBias;
+      let biasRatios = SECTION_BIAS_RATIOS[_effBias] || null;
       // Section model A3 — when a section is skipped, renormalize the Mix bias
       // shares over the INCLUDED sections so the freed share redistributes
       // proportionally (without this, a skipped section's reserved % is lost).
@@ -6626,9 +6654,11 @@ export function generateWorkout({
       // C: recovery mode drops the absolute floor to 1200y (1300m) so a short
       // easy day is allowed regardless of the type's normal minimum.
       const recoveryFloor = isMeters ? 1300 : 1200;
-      const baseAbsMin = recoveryMode
-        ? Math.min(recoveryFloor, isMeters ? MIN_METERS : MIN_YARDS)
-        : (isMeters ? MIN_METERS : MIN_YARDS);
+      const baseAbsMin = isLesson
+        ? LESSON_MIN                                   // Lesson tier — short sessions allowed (200yd/m floor).
+        : recoveryMode
+          ? Math.min(recoveryFloor, isMeters ? MIN_METERS : MIN_YARDS)
+          : (isMeters ? MIN_METERS : MIN_YARDS);
       const absoluteMin = Math.max(baseAbsMin, userMin || 0);
       // S3 #4 — Floor scales with target so unpinned workouts stay close to maxYards.
       // Relaxed when (a) pins are present (user chose those blocks intentionally),
@@ -6995,9 +7025,15 @@ export function generateWorkout({
     }
 
 export function buildWorkout(typeId, wu, dr, kt, ma, cd, total, includedSections = ["warmup", "drill", "main", "cooldown"]) {
+      // Lesson tier (Phase 5) — relabel the 3 surfaced blocks: Warm-Up / Skill
+      // Focus / Send-off. "Skill Focus" rides the main slot (drill-bank-sourced),
+      // so it stays section:"main" internally (regenerate/pace/analytics all keyed
+      // on section) but never reads "Main Set" in the UI.
+      const isLesson = typeId === "lesson";
+      const mainLabelPrefix = isLesson ? "Skill Focus" : "Main Set";
       const mainName = ma.rounds > 1
-        ? `Main Set — ${ma.label} ×${ma.rounds}`
-        : `Main Set — ${ma.label}`;
+        ? `${mainLabelPrefix} — ${ma.label} ×${ma.rounds}`
+        : `${mainLabelPrefix} — ${ma.label}`;
       // Section model A1 — assemble the candidate blocks, then keep only
       // included sections (default = warmup/drill/main/cooldown → byte-identical
       // to pre-A1; kick is opt-in and dropped here unless includedSections names it).
@@ -7006,7 +7042,7 @@ export function buildWorkout(typeId, wu, dr, kt, ma, cd, total, includedSections
         { name: "Drill / Pre-Main Set", section: "drill",    ...dr },
         { name: "Kick Set",             section: "kick",     ...kt },
         { name: mainName, section: "main", ...ma, roundRestSecs: ma.roundRestSecs ?? 30 },
-        { name: "Cool-Down",            section: "cooldown", ...cd },
+        { name: isLesson ? "Send-off" : "Cool-Down", section: "cooldown", ...cd },
       ].filter(b => includedSections.includes(b.section));
       const estimatedMin = calcEstimatedMin(blocks);
       // Section model A2 — total reflects only the INCLUDED blocks: honest when
@@ -7077,7 +7113,9 @@ export function regenerateSection({
       if (idx < 0) return { workout: null, error: "Unknown section." };
       const current = blocks[idx];
       const others = blocks.reduce((sum, b, i) => i === idx ? sum : sum + b.totalYards, 0);
-      const lower = Math.max(0, Math.max(isMeters ? MIN_METERS : MIN_YARDS, userMin || 0) - others);
+      // Lesson tier (Phase 5) — short-session floor (200yd/m) instead of MIN_YARDS.
+      const _floorMin = typeId === "lesson" ? LESSON_MIN : (isMeters ? MIN_METERS : MIN_YARDS);
+      const lower = Math.max(0, Math.max(_floorMin, userMin || 0) - others);
       const upper = maxYards - others;
 
       let pool;
@@ -8494,6 +8532,15 @@ export function convertOptionUnits(option, fromUnit, toUnit) {
     }
 
 export function getBankOptions(kind, typeId, poolMode, ugcOverlay = null) {
+      // Lesson tier (Phase 5) reuses Technique content. Its "Skill Focus" is
+      // carried in the main slot but sourced from the DRILL bank so options stay
+      // short enough for 200–1200yd lessons (technique main sets run too long).
+      // warmup/cooldown aren't type-filtered, so the alias only matters for
+      // drill/main lookups. UGC overlay never applies to lesson (not user-authored).
+      if (typeId === "lesson") {
+        typeId = "technique";
+        if (kind === "main") kind = "drill";
+      }
       const targetUnit = poolMode === "25y" ? "yd" : "m";
       const byType = (kind === "drill" || kind === "main");
 

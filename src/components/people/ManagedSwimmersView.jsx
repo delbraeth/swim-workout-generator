@@ -10,6 +10,7 @@ import { ConstraintsPanel } from "./ConstraintsPanel.jsx";
 import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
 import { ManagedSwimmerForm } from "./ManagedSwimmerForm.jsx";
 import { ParentsPanel } from "./ParentsPanel.jsx";
+import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -289,6 +290,14 @@ import { ParentsPanel } from "./ParentsPanel.jsx";
             {!detail.archived && (
               <ConstraintsPanel key={"con-" + detail.id} managedId={detail.id}
                 seedConstraints={bundle?.constraints} />
+            )}
+
+            {/* Lesson tier (Phase 5) — per-swimmer equipment profile (overrides
+                coach equipment when generating for this swimmer). */}
+            {!detail.archived && (
+              <SwimmerEquipmentPanel key={"eq-" + detail.id} managedId={detail.id}
+                swimmerName={detail.display_name} initialEquipment={detail.equipment_modes}
+                onSaved={() => loadDetail(detail.id)} />
             )}
 
             {/* Parent Portal MVP — invite/revoke parents on this profile */}

@@ -442,12 +442,15 @@ export function makeDrylandBlock(option, placement) {
 export function minYardsForType(typeId, poolMode = "25y") {
       const allWarmups   = getBankOptions("warmup",   typeId, poolMode);
       const allCooldowns = getBankOptions("cooldown", typeId, poolMode);
-      const drillList    = getBankOptions("drill",    typeId, poolMode);
       const mainList     = getBankOptions("main",     typeId, poolMode);
       const minWarmup   = Math.min(...allWarmups.map(o => o.totalYards));
-      const minDrill    = Math.min(...drillList.map(o => o.totalYards));
       const minMain     = Math.min(...mainList.map(o => o.totalYards));
       const minCooldown = Math.min(...allCooldowns.map(o => o.totalYards));
+      // Lesson tier (Phase 5) — 3 sections only (Warm-Up / Skill Focus / Send-off);
+      // no separate drill section, so don't add a drill minimum.
+      if (typeId === "lesson") return minWarmup + minMain + minCooldown;
+      const drillList    = getBankOptions("drill",    typeId, poolMode);
+      const minDrill     = Math.min(...drillList.map(o => o.totalYards));
       return minWarmup + minDrill + minMain + minCooldown;
     }
 

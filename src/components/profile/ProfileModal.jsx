@@ -808,6 +808,56 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                             }}>
                             {billingBusy ? "Starting…" : "Start free trial"}
                           </button>
+
+                          {/* Lesson tier (Phase 5) — additive $5/mo plan for
+                              private/small-group instructors. Only shown once the
+                              Stripe lesson price is configured (has_price_id_lesson). */}
+                          {billingStatus.has_price_id_lesson && (
+                            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
+                              <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10, lineHeight: 1.5 }}>
+                                Just teaching lessons? Subscribe to <strong>Lesson</strong> for <strong>$5/month</strong>.
+                                Unlocks the Lesson workout type (short skill sessions), managed swimmers,
+                                per-swimmer equipment, and parent recap exports.
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (billingBusy) return;
+                                  setBillingBusy(true); setBillingMsg(null);
+                                  try {
+                                    const r = await fetch("/api/billing/checkout", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                                      body: JSON.stringify({ tier: "lesson" }),
+                                    });
+                                    const d = await r.json().catch(() => ({}));
+                                    if (!r.ok) {
+                                      if (d.error === "billing_not_configured") {
+                                        setBillingMsg("Billing isn't live in this environment yet.");
+                                      } else if (d.error === "no_price_id") {
+                                        setBillingMsg(d.message || "Lesson price not configured. Contact the operator.");
+                                      } else {
+                                        setBillingMsg(`Couldn't start checkout: ${d.error || r.status}`);
+                                      }
+                                      setBillingBusy(false);
+                                      return;
+                                    }
+                                    window.location.href = d.url;
+                                  } catch (e) {
+                                    setBillingMsg(`Network error: ${e.message}`);
+                                    setBillingBusy(false);
+                                  }
+                                }}
+                                disabled={billingBusy}
+                                style={{
+                                  padding: "8px 16px", borderRadius: 6, border: "1px solid var(--color-primary)",
+                                  background: "transparent",
+                                  color: "var(--color-primary)", fontSize: 13, fontWeight: 700,
+                                  cursor: billingBusy ? "wait" : "pointer",
+                                }}>
+                                {billingBusy ? "Starting…" : "Subscribe to Lesson — $5/mo"}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
 
