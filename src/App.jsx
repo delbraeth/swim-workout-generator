@@ -2899,8 +2899,13 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // Resolve the currently-selected target (or null for "myself").
       const generateForTarget = useMemo(() => {
         if (generateForId === "myself" || !generateForId) return null;
-        return coachTargets.find(t => t.id === generateForId) || null;
-      }, [generateForId, coachTargets]);
+        const t = coachTargets.find(t => t.id === generateForId) || null;
+        // Individuals (managed swimmers) are lesson-only — ignore a stale managed
+        // selection when the active type isn't lesson (handleTypeSelect also
+        // resets the picker, this is the belt-and-suspenders guard).
+        if (t && t.kind === "managed" && selectedType !== "lesson") return null;
+        return t;
+      }, [generateForId, coachTargets, selectedType]);
       // Effective phase: group's current_phase overrides the user's personal
       // phase when generating for a group (decision #39).
       const effectivePhase = generateForTarget?.current_phase || phase;
@@ -3302,6 +3307,12 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         } else {
           const stdFloor = (poolMode === "50m" || poolMode === "25m") ? 2000 : 1900;
           setMaxYards(v => v < stdFloor ? ((poolMode === "50m" || poolMode === "25m") ? 2500 : 2400) : v);
+          // Individuals are lesson-only — drop a managed-swimmer target when
+          // leaving the Lesson type so the picker doesn't point at a hidden option.
+          setGenerateForId(prev => {
+            const t = coachTargets.find(x => x.id === prev);
+            return (t && t.kind === "managed") ? "myself" : prev;
+          });
         }
         setWorkout(null); setLoadedFromHistoryId(null); setSaveStatus(null); setRegenError(null); setGenerateError(null); setPinnedSections({});
       };
@@ -4570,7 +4581,10 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               {effectiveMe?.can_lesson && coachTargets.length > 0 && (() => {
                 // Lesson tier (Phase 5) — Individuals (managed swimmers, direct
                 // managed_id assignment) + Groups (fanout to all members).
-                const individuals = coachTargets.filter(t => t.kind === "managed");
+                // Individuals are a lesson concept: only surface them when the
+                // Lesson workout type is selected, so they don't clutter the
+                // picker for IM/Sprint/etc.
+                const individuals = selectedType === "lesson" ? coachTargets.filter(t => t.kind === "managed") : [];
                 const groups      = coachTargets.filter(t => t.kind === "group");
                 return (
                   <div style={{ marginBottom: 10, padding: "10px 12px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 8 }}>
