@@ -9,7 +9,7 @@ const { useState, useCallback, useMemo, useEffect } = React;
 
 export const API_BASE  = "/api";
 
-const csrf = { token: null };
+export const csrf = { token: null };   // token holder; refreshCsrf (in App.jsx) sets .token
 
 export function csrfHeaders() {   // exported for src/components/admin/*; engine extractor strips `export`
       return csrf.token ? { "X-CSRF-Token": csrf.token } : {};

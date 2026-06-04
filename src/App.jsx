@@ -101,6 +101,7 @@
       DRYLAND_OPTIONS,
       LEVEL_PRESETS,
       ZONE_ORDER,
+      csrf,
       csrfHeaders,
       equipmentForSet,
       extractMainLabel,
@@ -1398,7 +1399,7 @@
     //  MAIN APP
     // ═══════════════════════════════════════════════════════════════
 
-    function App() {
+    export function App() {
       const [selectedType, setSelectedType] = useState(null);
       const [maxYards, setMaxYards]         = useState(2400);
       const [poolMode, setPoolMode]         = useState("25y");
@@ -5420,5 +5421,3 @@
         </div>
       );
     }
-
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
