@@ -247,7 +247,20 @@ is the single most important part of this scope — get it wrong and iOS generat
     from `lib/engine.js`; 15 shared helpers/consts exported from app.jsx (`fmtTime`,
     `playRestCue`, `primeAudioCtx`, `SECTION_STYLES/EMOJIS`, `EQUIPMENT_LIST`, `equipmentForSet`,
     `getEquivalents`, …). `app.jsx`: 14.15k → **12.2k lines**.
-  - Verified: freevars clean (59 modules); build/engine/smoke green. Shipped in build `<pending>`.
+  - Verified: freevars clean (59 modules); build/engine/smoke green. Shipped in build `875f275`
+    (note: brief transient `/api/generate` 503 during the container swap — generator.js's
+    top-level `await import` resolves a few seconds after the new container starts serving;
+    self-heals, no rollback).
+
+- 🔧 **Session 8 (2026-06-03) — Managed-swimmer/parent cluster (`src/components/people/`).**
+  - Carved 14 components: `ParentDashboard`, `ManagedSwimmersView`, `ManagedSwimmerForm`,
+    `ParentsPanel`, `ConstraintsPanel`, `ConstraintFormModal`, `AddressManager`,
+    `HouseholdSiblings`, `ParentInviteCards`, `ClaimTokensPanel`, `ClaimManagedSection`,
+    `CoachNotesPanel`, `DobPromptModal`, `BulkImportModal`. Repointed `ProfileModal` →
+    `../people/{AddressManager,ClaimManagedSection}`. Reused existing exports; 4 more exported
+    (`csvParseSwimmers`, `downloadTemplate`, `normalizeImportRow`, `PSC_TYPE_GROUPS`).
+    `app.jsx`: 12.2k → **10.24k lines** (73 modules total).
+  - Verified: freevars clean; build/engine/smoke green. Shipped in build `<pending>`.
 
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
