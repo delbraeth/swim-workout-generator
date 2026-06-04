@@ -1,6 +1,7 @@
 // src/components/groups/GroupAssignmentsPanel.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, COMPLETION_LABELS } from "../../lib/shared.js";
+import { csrfHeaders } from "../../lib/api.js";
+import { COMPLETION_LABELS } from "../../lib/constants.js";
 
     const { useState, useCallback, useEffect } = React;
 

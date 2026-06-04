@@ -96,25 +96,10 @@
       generateEngineForSection, generateWorkout, getBankOptions, getOverlayRowsForTuple, inferBlockZone,
       inferSetZone, pick, regenerateSection, scaleInterval,
     } from "./lib/engine.js";
-    import {
-      API_BASE,
-      DRYLAND_OPTIONS,
-      LEVEL_PRESETS,
-      ZONE_ORDER,
-      csrf,
-      csrfHeaders,
-      equipmentForSet,
-      extractMainLabel,
-      formatPscRow,
-      getEquivalents,
-      makeDrylandBlock,
-      makeEntryId,
-      minYardsForType,
-      normalizeInitials,
-      parseIntent,
-      parsePaceMSS,
-      rescaleBlocksForPace
-    } from "./lib/shared.js";
+    import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
+import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
+import { extractMainLabel, formatPscRow, normalizeInitials, parsePaceMSS } from "./lib/format.js";
+import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYardsForType, parseIntent, rescaleBlocksForPace } from "./lib/workout-helpers.js";
 
     const { useState, useCallback, useMemo, useEffect } = React;
 

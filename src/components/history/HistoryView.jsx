@@ -1,7 +1,7 @@
 // src/components/history/HistoryView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { equipMode, inferSetZone, WORKOUT_TYPES, ZONES } from "../../lib/engine.js";
-import { GOAL_METRICS, ZONE_ORDER } from "../../lib/shared.js";
+import { GOAL_METRICS, ZONE_ORDER } from "../../lib/constants.js";
 import { StarRating } from "../StarRating.jsx";
 import { DrylandBlock } from "../workout/DrylandBlock.jsx";
 import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";

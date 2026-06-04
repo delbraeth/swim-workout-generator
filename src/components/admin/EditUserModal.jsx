@@ -1,6 +1,6 @@
 // src/components/admin/EditUserModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components are imported below (freevars-driven).
-import { csrfHeaders } from "../../lib/shared.js";
+import { csrfHeaders } from "../../lib/api.js";
 
     const { useState } = React;
 

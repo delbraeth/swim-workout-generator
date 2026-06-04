@@ -1,6 +1,7 @@
 // src/components/practices/IntentPreviewOverlay.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, makeEntryId } from "../../lib/shared.js";
+import { csrfHeaders } from "../../lib/api.js";
+import { makeEntryId } from "../../lib/workout-helpers.js";
 
     const { useState } = React;
 

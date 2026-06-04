@@ -1,6 +1,6 @@
 // src/components/catalog/MySetsView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { API_BASE } from "../../lib/shared.js";
+import { API_BASE } from "../../lib/api.js";
 import { UgcFormModal } from "./UgcFormModal.jsx";
 
     const { useState, useCallback, useEffect } = React;

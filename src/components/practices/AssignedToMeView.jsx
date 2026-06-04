@@ -1,6 +1,8 @@
 // src/components/practices/AssignedToMeView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, COMPLETION_LABELS, computeSubstitutionsForSwimmer, PSC_LABEL_MAP } from "../../lib/shared.js";
+import { csrfHeaders } from "../../lib/api.js";
+import { COMPLETION_LABELS, PSC_LABEL_MAP } from "../../lib/constants.js";
+import { computeSubstitutionsForSwimmer } from "../../lib/workout-helpers.js";
 import { DrylandBlock } from "../workout/DrylandBlock.jsx";
 import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
 

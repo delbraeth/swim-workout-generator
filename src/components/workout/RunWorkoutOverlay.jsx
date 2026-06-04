@@ -1,6 +1,6 @@
 // src/components/workout/RunWorkoutOverlay.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { SECTION_EMOJIS, SECTION_STYLES } from "../../lib/shared.js";
+import { SECTION_EMOJIS, SECTION_STYLES } from "../../lib/constants.js";
 import { PaceClockView } from "./PaceClockView.jsx";
 import { StarRating } from "../StarRating.jsx";
 

@@ -1,6 +1,6 @@
 // src/components/history/SaveToHistoryForm.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { normalizeInitials } from "../../lib/shared.js";
+import { normalizeInitials } from "../../lib/format.js";
 import { StarRating } from "../StarRating.jsx";
 
     export function SaveToHistoryForm({ dateDraft, setDateDraft, initialsDraft, setInitialsDraft, noteDraft, setNoteDraft, difficultyDraft, setDifficultyDraft, saveStatus, saveError, onSave }) {

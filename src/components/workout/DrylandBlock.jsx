@@ -1,6 +1,6 @@
 // src/components/workout/DrylandBlock.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { DRYLAND_EXPLAINERS } from "../../lib/shared.js";
+import { DRYLAND_EXPLAINERS } from "../../lib/constants.js";
 
     const { useState } = React;
 

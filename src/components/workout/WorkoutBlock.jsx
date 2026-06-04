@@ -1,6 +1,7 @@
 // src/components/workout/WorkoutBlock.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { extractMainLabel, SECTION_STYLES } from "../../lib/shared.js";
+import { SECTION_STYLES } from "../../lib/constants.js";
+import { extractMainLabel } from "../../lib/format.js";
 import { inferBlockZone, ZONES } from "../../lib/engine.js";
 import { RoundRestRow } from "./RoundRestRow.jsx";
 import { SetRow } from "./SetRow.jsx";

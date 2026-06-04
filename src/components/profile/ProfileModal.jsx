@@ -1,6 +1,7 @@
 // src/components/profile/ProfileModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, GOAL_METRICS, LEVEL_PRESETS } from "../../lib/shared.js";
+import { csrfHeaders } from "../../lib/api.js";
+import { GOAL_METRICS, LEVEL_PRESETS } from "../../lib/constants.js";
 import { AddressManager } from "../people/AddressManager.jsx";
 import { ClaimManagedSection } from "../people/ClaimManagedSection.jsx";
 import { COOLDOWN_OPTIONS, DRILL_OPTIONS, MAIN_OPTIONS, WARMUP_OPTIONS, PHASES } from "../../lib/engine.js";
