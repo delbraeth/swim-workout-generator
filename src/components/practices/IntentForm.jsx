@@ -1,6 +1,7 @@
 // src/components/practices/IntentForm.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, DRYLAND_OPTIONS, poolModeLabel, WORKOUT_TYPES } from "../../app.jsx";
+import { csrfHeaders, DRYLAND_OPTIONS, poolModeLabel } from "../../lib/shared.js";
+import { WORKOUT_TYPES } from "../../lib/engine.js";
 
     const MIX_OPTIONS_INTENT = [
       { id: "balanced",     label: "Balanced" },
