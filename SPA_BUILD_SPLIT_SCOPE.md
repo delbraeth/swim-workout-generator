@@ -296,7 +296,23 @@ is the single most important part of this scope — get it wrong and iOS generat
   - **Deploy note:** GitHub still has an orphaned `src/app.jsx` from prior deploys — delete it
     via the Contents API at next deploy (harmless cruft; nothing imports it).
 
-### Phase 4 — React Router
+- ✅ **Phase 4 SHIPPED (2026-06-04) — URL-backed views (custom history router).**
+  - Did NOT use react-router-dom: it `import`s `react`, which esbuild would bundle as a 2nd
+    React instance (the app uses the global CDN React) → "invalid hook call". Instead a
+    ~20-line history router in `src/App.jsx`: `view` derives from `location.pathname`
+    (VIEW_TO_PATH/PATH_TO_VIEW maps for the 13 views), `setView` does `history.pushState`, a
+    `popstate` listener re-derives. All existing `view === "x"` reads + `setView(...)` calls
+    (incl. functional toggles) work unchanged — surgical one-line-area swap.
+  - **Server SPA fallback** (`server.js`, after `express.static`, before the 404): GET non-`/api`
+    requests accepting `text/html` get `public/index.html` → deep links / refresh on `/teams`
+    etc. load the SPA. API routes keep JSON 404s.
+  - Delivers: shareable URLs, working back/forward, refresh-stays-put. Verified: build/freevars/
+    smoke/engine green + `node --check server.js`. **Needs real-browser verify on deploy**
+    (deep-link each route, back/forward, refresh) — jsdom is unauthenticated so it can't.
+  - **Follow-up:** deep-link auth guard (non-coach hitting `/admin` renders AdminView with
+    API-gated 403s — not a security hole, but should redirect to `/`).
+
+#### (original Phase 4 plan — superseded by the custom-router approach above)
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
   are shareable, back-button works, and **refresh no longer dumps to the generator** (§4.1).
 - Incremental: route the top-level views first, keep in-view tabs as-is initially.
