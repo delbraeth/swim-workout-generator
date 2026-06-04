@@ -1,6 +1,6 @@
 // src/components/multipace/MultiLaneControl.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { parsePaceMSS } from "../../lib/shared.js";
+import { parsePaceMSS } from "../../lib/format.js";
 
     export function MultiLaneControl({ multiLaneMode, setMultiLaneMode, manualLanesPace, setManualLanesPace, lanePlansForTarget, generateForPlanId }) {
       const currentPlan = (lanePlansForTarget || []).find(p => p.id === generateForPlanId) || null;
