@@ -225,6 +225,19 @@ is the single most important part of this scope — get it wrong and iOS generat
     with no vm and `generate()` returns a real 4-block workout; build/freevars/smoke clean;
     `node --check` server+generator.
 
+- 🔧 **Session 6 (2026-06-03) — Profile cluster (`src/components/profile/`).**
+  - Carved 10 profile components (`ProfileModal` + `ProfileGenderRow`, `EditableProfileField`,
+    `GoalRow`, `PhaseRow`, `BenchmarksSection`, `LevelRow`, `NextEventRow`,
+    `ProfileActiveConstraintsSection`, `JoinGroupSection`). With the vm retired, the
+    EquipmentBadge boundary no longer constrains anything — all components are freely movable.
+    Engine consts now imported from `../../lib/engine.js`; shared helpers exported from app.jsx
+    (`GENDER_OPTIONS`, `genderLabel`, `GOAL_METRICS`, `LEVEL_PRESETS`, `formatPscRow`,
+    `DOB_*`, + `AddressManager`/`ClaimManagedSection` pending their own carve); `LEVEL_ORDER`/
+    `PHASE_ORDER` moved into their modules. `app.jsx`: 16.2k → **14.15k lines**.
+  - Reusable carve tool (`tools/_carve.mjs`, ad-hoc) now drives slices; verified freevars clean
+    (49 modules), build/engine/smoke green.
+  - Shipped in build `<pending>`.
+
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
   are shareable, back-button works, and **refresh no longer dumps to the generator** (§4.1).
