@@ -1,6 +1,6 @@
 // src/components/groups/GroupRow.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, PHASE_OPTIONS, phaseOption } from "../../app.jsx";
+import { csrfHeaders, PHASE_OPTIONS, phaseOption } from "../../lib/shared.js";
 import { GroupAssignmentsPanel } from "./GroupAssignmentsPanel.jsx";
 import { JoinTokensPanel } from "./JoinTokensPanel.jsx";
 import { LanePlansPanel } from "./LanePlansPanel.jsx";
