@@ -1,6 +1,6 @@
 // src/components/teams/TeamSettingsTab.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders } from "../../lib/shared.js";
+import { csrfHeaders } from "../../lib/api.js";
 import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
 
     const { useState, useCallback, useEffect } = React;
