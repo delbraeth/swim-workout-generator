@@ -1609,6 +1609,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [pinnedSections, setPinnedSections]   = useState({});
       const [recoveryMode, setRecoveryMode]       = useState(false); // C: per-generation toggle, not persisted
       const [sectionBias, setSectionBias]         = useState("balanced"); // Section-proportion bias: balanced / warmup_heavy / drill_heavy / long_main. Per-generation, session-only.
+      const [advancedOpen, setAdvancedOpen]       = useState(false); // Declutter (2026-06-04): collapse Recovery/Mix/Sections behind a disclosure.
       // Section model A2 — which sections to include. `main` always on. Skipping
       // a section drops it from the workout (a correspondingly shorter, honest
       // total). Per-generation, session-only.
@@ -4066,30 +4067,44 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                             boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 180, zIndex: 51,
                             padding: 4,
                           }}>
-                            {[
-                              { id: "teams",     emoji: "👥", label: "Teams",            coachOnly: true },
-                              { id: "swimmers",  emoji: "🏊", label: "Managed swimmers",  coachOnly: false }, // Lesson tier (Phase 5) — shared
-                              { id: "lesson-groups", emoji: "👥", label: "My groups",     coachOnly: false }, // Lesson tier (Phase 5) — minimal groups
-                              { id: "practices", emoji: "📋", label: "Practices",         coachOnly: true },
-                              { id: "catalog",   emoji: "📚", label: "Catalog",           coachOnly: true },
-                              { id: "my-sets",  emoji: "📝", label: "My Sets",            coachOnly: false }, // Lesson tier (Phase 5) — author lesson sets
-                            ].filter(item => effectiveMe?.is_coach || !item.coachOnly).map(item => {
-                              const active = view === item.id;
-                              return (
-                                <button key={item.id}
-                                  onClick={() => { setView(item.id); setCoachMenuOpen(false); }}
-                                  style={{
-                                    display: "flex", width: "100%", alignItems: "center", gap: 8,
-                                    padding: "8px 12px", borderRadius: 5, border: "none",
-                                    background: active ? "rgba(59,130,246,0.12)" : "transparent",
-                                    color: active ? "var(--color-primary)" : "#cbd5e1",
-                                    fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer",
-                                    textAlign: "left",
-                                  }}>
-                                  <span>{item.emoji}</span><span>{item.label}</span>
-                                </button>
-                              );
-                            })}
+                            {(() => {
+                              // Declutter (2026-06-04): group the coach menu into
+                              // Roster / Programming sections with small headers.
+                              const items = [
+                              { id: "swimmers",  emoji: "🏊", label: "Managed swimmers",  group: "Roster",      coachOnly: false }, // Lesson tier — shared
+                              { id: "lesson-groups", emoji: "👥", label: "My groups",     group: "Roster",      coachOnly: false }, // Lesson tier — minimal groups
+                              { id: "teams",     emoji: "👥", label: "Teams",            group: "Roster",      coachOnly: true },
+                              { id: "practices", emoji: "📋", label: "Practices",         group: "Programming", coachOnly: true },
+                              { id: "my-sets",  emoji: "📝", label: "My Sets",            group: "Programming", coachOnly: false }, // Lesson tier — author lesson sets
+                              { id: "catalog",   emoji: "📚", label: "Catalog",           group: "Programming", coachOnly: true },
+                              ].filter(item => effectiveMe?.is_coach || !item.coachOnly);
+                              let lastGroup = null;
+                              return items.map(item => {
+                                const active = view === item.id;
+                                const showHeader = item.group !== lastGroup;
+                                lastGroup = item.group;
+                                return (
+                                  <React.Fragment key={item.id}>
+                                    {showHeader && (
+                                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em",
+                                        color: "var(--color-text-dim)", padding: "8px 12px 2px" }}>{item.group}</div>
+                                    )}
+                                    <button
+                                      onClick={() => { setView(item.id); setCoachMenuOpen(false); }}
+                                      style={{
+                                        display: "flex", width: "100%", alignItems: "center", gap: 8,
+                                        padding: "8px 12px", borderRadius: 5, border: "none",
+                                        background: active ? "rgba(59,130,246,0.12)" : "transparent",
+                                        color: active ? "var(--color-primary)" : "#cbd5e1",
+                                        fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer",
+                                        textAlign: "left",
+                                      }}>
+                                      <span>{item.emoji}</span><span>{item.label}</span>
+                                    </button>
+                                  </React.Fragment>
+                                );
+                              });
+                            })()}
                           </div>
                         </>
                       )}
@@ -4375,12 +4390,20 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               )}
             </div>
 
-            {/* C: Recovery mode toggle (Easy day / Recovery day ON) + section-
-                proportion bias (Mix:) — merged onto one flex row 2026-05-27 per
-                Cap'n's "save vertical space if room permits" request. Both
-                groups flex-wrap as a unit so narrow viewports split them onto
-                two lines cleanly. Outer gap 14 = old marginBottom between the
-                two stacks. */}
+            {/* Advanced options — collapsed by default (declutter, 2026-06-04).
+                Recovery day · Mix bias · Section include/skip are occasional
+                power-user controls, hidden behind a disclosure so the default
+                generate view stays clean. */}
+            <div className="screen-only" style={{ marginBottom: advancedOpen ? 8 : 14 }}>
+              <button onClick={() => setAdvancedOpen(v => !v)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8,
+                  border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-dim)",
+                  fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                ⚙ Advanced options {advancedOpen ? "▴" : "▾"}
+              </button>
+            </div>
+            {/* Recovery day · Mix bias · section include/skip (advanced). */}
+            {advancedOpen && (
             <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
               {/* Easy day / Recovery day ON toggle + helper text */}
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -4467,6 +4490,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                 })}
               </div>
             </div>
+            )}
 
             {/* Workout type selector */}
             <p className="screen-only" style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
