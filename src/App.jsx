@@ -32,6 +32,7 @@
     import { ConstraintsPanel } from "./components/people/ConstraintsPanel.jsx";
     const ManagedSwimmersView = React.lazy(() => import("./components/people/ManagedSwimmersView.jsx").then(m => ({ default: m.ManagedSwimmersView })));
     const LessonGroupsView = React.lazy(() => import("./components/people/LessonGroupsView.jsx").then(m => ({ default: m.LessonGroupsView })));
+    const CoachHomeView = React.lazy(() => import("./components/coach/CoachHomeView.jsx").then(m => ({ default: m.CoachHomeView })));
     import { ManagedSwimmerForm } from "./components/people/ManagedSwimmerForm.jsx";
     import { BulkImportModal } from "./components/people/BulkImportModal.jsx";
     import { DobPromptModal } from "./components/people/DobPromptModal.jsx";
@@ -1427,7 +1428,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         generator: "/", history: "/history", assigned: "/assigned", week: "/week",
         parent: "/parent", teams: "/teams", swimmers: "/swimmers", practices: "/practices",
         catalog: "/catalog", "my-sets": "/my-sets", reports: "/reports", progress: "/progress",
-        admin: "/admin", "lesson-groups": "/lesson-groups",
+        admin: "/admin", "lesson-groups": "/lesson-groups", "coach-home": "/coach",
       };
       const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
       const [path, setPath] = useState(() => (typeof window !== "undefined" ? window.location.pathname : "/"));
@@ -1766,7 +1767,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         // Lesson tier (Phase 5) — managed-swimmer roster, lesson groups, AND My Sets
         // (author your own lesson content) are shared by Coach + Lesson tiers; other
         // coach views (Teams, Practices, Catalog browse) stay coach-only.
-        const LESSON_VIEWS = ["swimmers", "lesson-groups", "my-sets"];
+        const LESSON_VIEWS = ["swimmers", "lesson-groups", "my-sets", "coach-home"];
         const blocked =
           (COACH_VIEWS.includes(view) && !effectiveMe.is_coach) ||
           (LESSON_VIEWS.includes(view) && !effectiveMe.can_lesson) ||
@@ -4050,8 +4051,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                         aria-haspopup="menu"
                         aria-expanded={coachMenuOpen}
                         style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-primary)",
-                          background: ["teams","swimmers","lesson-groups","practices","catalog","my-sets"].includes(view) ? "var(--color-primary)" : "var(--color-card)",
-                          color: ["teams","swimmers","lesson-groups","practices","catalog","my-sets"].includes(view) ? "var(--color-bg)" : "var(--color-primary)",
+                          background: ["coach-home","teams","swimmers","lesson-groups","practices","catalog","my-sets"].includes(view) ? "var(--color-primary)" : "var(--color-card)",
+                          color: ["coach-home","teams","swimmers","lesson-groups","practices","catalog","my-sets"].includes(view) ? "var(--color-bg)" : "var(--color-primary)",
                           fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1,
                           display: "inline-flex", alignItems: "center", gap: 4 }}>
                         🔧 <span style={{ fontSize: 10 }}>▾</span>
@@ -4067,6 +4068,16 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                             boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 180, zIndex: 51,
                             padding: 4,
                           }}>
+                            {/* Coach portal (IA option 2) — the consolidated home, pinned at top. */}
+                            <button onClick={() => { setView("coach-home"); setCoachMenuOpen(false); }}
+                              style={{ display: "flex", width: "100%", alignItems: "center", gap: 8,
+                                padding: "8px 12px", borderRadius: 5, border: "none", marginBottom: 2,
+                                background: view === "coach-home" ? "rgba(59,130,246,0.12)" : "transparent",
+                                color: view === "coach-home" ? "var(--color-primary)" : "#cbd5e1",
+                                fontSize: 13, fontWeight: 700, cursor: "pointer", textAlign: "left",
+                                borderBottom: "1px solid var(--color-border)" }}>
+                              <span>🧭</span><span>Coach home</span>
+                            </button>
                             {(() => {
                               // Declutter (2026-06-04): group the coach menu into
                               // Roster / Programming sections with small headers.
@@ -4207,6 +4218,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             {view === "teams"    && <TeamsView />}
             {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} />}
             {view === "lesson-groups" && <LessonGroupsView />}
+            {view === "coach-home" && <CoachHomeView me={effectiveMe} onNavigate={setView} onGenerate={() => setView("generator")} />}
             {view === "practices" && <PracticesView />}
             {view === "week"     && (
               <WeekView
