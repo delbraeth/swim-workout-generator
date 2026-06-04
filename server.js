@@ -1139,12 +1139,12 @@ app.post("/api/admin/users/:sub/support-role", checkOrigin, requireAuth, require
 // Admin tier grant — bypasses Stripe for testers/pilots. Sets users.tier
 // with tier_source='admin_grant' so the lib/billing.js admin_grant bypass
 // kicks in (revoke also works without BILLING_ACTIVE). Audit-logged.
-// Body: { tier: 'coach' | 'program' | 'free' }
+// Body: { tier: 'lesson' | 'coach' | 'program' | 'free' }
 app.post("/api/admin/users/:sub/tier", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
   try {
     const tier = String(req.body?.tier || "").toLowerCase();
-    if (!["free", "coach", "program"].includes(tier)) {
-      return res.status(400).json({ error: "invalid_tier", message: "tier must be free, coach, or program" });
+    if (!["free", "lesson", "coach", "program"].includes(tier)) {   // Lesson tier (Phase 5)
+      return res.status(400).json({ error: "invalid_tier", message: "tier must be free, lesson, coach, or program" });
     }
     const targetSub = req.params.sub;
     let result;

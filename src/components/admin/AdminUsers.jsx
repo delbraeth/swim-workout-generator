@@ -43,13 +43,10 @@ import { csrfHeaders } from "../../lib/api.js";
           url = `/api/admin/users/${encodeURIComponent(sub)}/support-role`;
           payload = { granted: action === "support-grant" };
         }
-        else if (action === "tier-grant-coach" || action === "tier-grant-program" || action === "tier-revoke") {
+        else if (action === "tier-grant-coach" || action === "tier-grant-lesson" || action === "tier-grant-program" || action === "tier-revoke") {
           url = `/api/admin/users/${encodeURIComponent(sub)}/tier`;
-          payload = {
-            tier: action === "tier-grant-coach" ? "coach"
-                : action === "tier-grant-program" ? "program"
-                : "free",
-          };
+          // tier-grant-<tier> → <tier>; tier-revoke → free.
+          payload = { tier: action === "tier-revoke" ? "free" : action.replace("tier-grant-", "") };
         }
         else if (action === "delete") {
           if (!confirm(`Delete user ${sub.slice(0, 10)}…?\n\nThis cascades and wipes all their workouts, favorites, settings, and sessions. Audit events stay (anonymized). NOT REVERSIBLE.`)) return;
@@ -148,6 +145,7 @@ import { csrfHeaders } from "../../lib/api.js";
                         title={u.tier_source ? `Tier source: ${u.tier_source}` : "Set paid tier (comps testers without Stripe). Free = revoke."}
                         style={{ marginRight: 4, fontSize: 11, padding: "3px 6px", background: u.tier && u.tier !== "free" ? "#0d9488" : "var(--color-border)", border: "none", borderRadius: 4, color: u.tier && u.tier !== "free" ? "#fff" : "#cbd5e1", cursor: "pointer" }}>
                         <option value="free">Free</option>
+                        <option value="lesson">Lesson</option>
                         <option value="coach">Coach</option>
                         <option value="program">Program</option>
                       </select>
