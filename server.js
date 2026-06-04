@@ -5395,6 +5395,18 @@ app.use(express.static(path.join(__dirname, "public"), {
   },
 }));
 
+// SPA client-route fallback: the web app uses History-API routes (/teams, /reports,
+// /week, …). A deep link or refresh on one of those isn't a real file, so after
+// express.static misses, serve index.html for non-/api GET navigations that accept
+// HTML — the client router then renders the right view. Everything else 404s (API
+// routes return their own JSON 404s above; assets/unknown paths fall through here).
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api/")) return next();
+  if (!(req.headers.accept || "").includes("text/html")) return next();
+  res.setHeader("Cache-Control", "no-cache");
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 app.use((req, res) => res.status(404).send("Not found"));
 
 // ─── Boot sequence ────────────────────────────────────────────────────
