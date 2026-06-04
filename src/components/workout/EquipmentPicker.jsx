@@ -1,6 +1,6 @@
 // src/components/workout/EquipmentPicker.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { EQUIPMENT_LIST } from "../../lib/shared.js";
+import { EQUIPMENT_LIST } from "../../lib/constants.js";
 import { equipMode } from "../../lib/engine.js";
 
     export function EquipmentPicker({ equipment, onChange }) {
