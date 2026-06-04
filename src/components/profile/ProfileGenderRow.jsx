@@ -1,6 +1,6 @@
 // src/components/profile/ProfileGenderRow.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, GENDER_OPTIONS, genderLabel } from "../../app.jsx";
+import { csrfHeaders, GENDER_OPTIONS, genderLabel } from "../../lib/shared.js";
 
     const { useState } = React;
 
