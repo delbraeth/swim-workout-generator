@@ -127,7 +127,29 @@ is the single most important part of this scope — get it wrong and iOS generat
     React import). Pattern: `export function X(){…}` in the module, `import { X } from
     "./components/X.jsx"` at the top of `src/app.jsx`. Verified: build clean, engine 9 types,
     jsdom mount identical to baseline (9,961 chars, 0 errors).
-  - New `src/**` files are added to `_deploy.py` FILES (reach the container via `COPY src/`).
+  - Session 1 shipped in build `ed2597e` (deployed; live md5 match + `/api/generate` 401).
+
+- 🔧 **Session 2 (2026-06-03) — Reports tabs subtree (`src/components/reports/`).**
+  - Carved the 6 self-contained Reports sub-tabs `R1ProgrammingMixTab … R6CurationSupportTab`
+    + the shared `_ReportTable` into `src/components/reports/`. Each tab defines its own
+    `card`/`fmt`/`pct`/`Section` locals; only two cross refs needed wiring:
+    `_ReportTable` (→ its own module, imported by R1+R4) and `setIdToName` (a UI helper that
+    lives in the engine prelude but the engine never calls — `export`ed from `src/app.jsx`
+    and imported by R3; the resulting app.jsx↔R3 cycle is runtime-safe since it's a
+    render-time call, and the keystone strips the new `export` before vm-eval).
+  - **Carve mechanics:** a throwaway `fs`-based node script (NOT shell text tools — preserves
+    multibyte/emoji exactly) sliced functions on the `^    function X` / `^    }` boundaries.
+  - **CRITICAL lesson — `npm run build` + the App smoke are NOT sufficient for view extraction.**
+    esbuild leaves *unresolved* identifiers as runtime globals (no error), and the App smoke
+    only renders the unauthenticated sign-in path — so a free reference like `_ReportTable`
+    or `setIdToName` builds clean yet crashes the tab at render. Caught both only by a
+    **render test**: bundle the extracted modules with `esbuild --global-name`, then
+    `ReactDOMServer.renderToStaticMarkup` each component in jsdom with rich mock data (npm
+    react/react-dom, `createRoot` stubbed so app.jsx loads without mounting). All 6 render,
+    0 undefined free vars. **Every future view-extraction slice must do this** (not just the
+    jsdom App smoke). Distinguish `ReferenceError` (real extraction bug) from `TypeError`
+    (incomplete mock).
+  - `_deploy.py` now auto-globs `src/components/**/*.jsx` (no manual FILES edit per file).
 
 ### Phase 4 — React Router
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
