@@ -1758,6 +1758,20 @@
         return next;
       }, [me, viewAsRole, viewAsParent]);
 
+      // SPA-split Phase 4 — deep-link auth guard. A direct URL / refresh into a
+      // role-gated view by a user without that role bounces to "/" (the nav already
+      // hides those buttons; the API also gates the data — this keeps the UI honest).
+      // Uses effectiveMe so admin view-as personas are respected.
+      useEffect(() => {
+        if (!authenticated || !effectiveMe) return;
+        const COACH_VIEWS = ["teams", "swimmers", "practices", "catalog", "my-sets"];
+        const blocked =
+          (COACH_VIEWS.includes(view) && !effectiveMe.is_coach) ||
+          (view === "admin"  && !effectiveMe.is_admin) ||
+          (view === "parent" && !effectiveMe.is_parent);
+        if (blocked) setView("generator");
+      }, [view, authenticated, effectiveMe, setView]);
+
       // View-as v2 (2026-05-23): persona simulation. When admin is viewing-as
       // another role, the read view shows a fresh-new-user empty state AND
       // writes are blocked. Different from v1 which only hid UI surfaces.
