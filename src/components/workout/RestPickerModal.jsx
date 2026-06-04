@@ -1,6 +1,7 @@
 // src/components/workout/RestPickerModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { playRestCue, primeAudioCtx, REST_OPTIONS } from "../../lib/shared.js";
+import { playRestCue, primeAudioCtx } from "../../lib/audio.js";
+import { REST_OPTIONS } from "../../lib/constants.js";
 
     export function RestPickerModal({ restSecs, onChange, onStart, onCancel, audioCues, onAudioCuesChange, lapButton, onLapButtonChange }) {
       return (
