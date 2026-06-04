@@ -1,13 +1,13 @@
 {
   "name": "setforge",
   "version": "1.0.0",
-  "description": "SetForge — swim workout generator + week-view planner with coach-group workflows. Serves the SPA + an Express/MariaDB API.",
+  "description": "SetForge \u2014 swim workout generator + week-view planner with coach-group workflows. Serves the SPA + an Express/MariaDB API.",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "esbuild src/main.jsx --bundle --outfile=public/assets/app.js --format=iife --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --minify --target=es2019",
-    "build:dev": "esbuild src/main.jsx --bundle --outfile=public/assets/app.js --format=iife --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --sourcemap --target=es2019",
+    "build": "rm -rf public/assets/chunks && esbuild src/main.jsx --bundle --outdir=public/assets --entry-names=app --chunk-names=chunks/[name]-[hash] --splitting --format=esm --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --minify --target=es2019",
+    "build:dev": "rm -rf public/assets/chunks && esbuild src/main.jsx --bundle --outdir=public/assets --entry-names=app --chunk-names=chunks/[name]-[hash] --splitting --format=esm --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --sourcemap --target=es2019",
     "smoke": "node tools/jsdom_smoke.mjs",
     "freevars": "node tools/freevars.mjs"
   },

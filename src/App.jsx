@@ -9,28 +9,28 @@
     import { SignInGate } from "./components/shell/SignInGate.jsx";
     import { TourOverlay } from "./components/shell/TourOverlay.jsx";
     import { ReportPrintView } from "./components/reports/ReportPrintView.jsx";
-    import { ProgressDashboard } from "./components/reports/ProgressDashboard.jsx";
-    import { ReportsView } from "./components/reports/ReportsView.jsx";
+    const ProgressDashboard = React.lazy(() => import("./components/reports/ProgressDashboard.jsx").then(m => ({ default: m.ProgressDashboard })));
+    const ReportsView = React.lazy(() => import("./components/reports/ReportsView.jsx").then(m => ({ default: m.ReportsView })));
     import { MultiLaneControl } from "./components/multipace/MultiLaneControl.jsx";
     import { MultiPaceModal } from "./components/multipace/MultiPaceModal.jsx";
     import { MultiPacePrintView } from "./components/multipace/MultiPacePrintView.jsx";
     import { SaveToHistoryForm } from "./components/history/SaveToHistoryForm.jsx";
-    import { HistoryView } from "./components/history/HistoryView.jsx";
-    import { CatalogView } from "./components/catalog/CatalogView.jsx";
-    import { MySetsView } from "./components/catalog/MySetsView.jsx";
+    const HistoryView = React.lazy(() => import("./components/history/HistoryView.jsx").then(m => ({ default: m.HistoryView })));
+    const CatalogView = React.lazy(() => import("./components/catalog/CatalogView.jsx").then(m => ({ default: m.CatalogView })));
+    const MySetsView = React.lazy(() => import("./components/catalog/MySetsView.jsx").then(m => ({ default: m.MySetsView })));
     import { UgcFormModal } from "./components/catalog/UgcFormModal.jsx";
     import { GroupAssignmentsPanel } from "./components/groups/GroupAssignmentsPanel.jsx";
     import { JoinTokensPanel } from "./components/groups/JoinTokensPanel.jsx";
     import { LanePlansPanel } from "./components/groups/LanePlansPanel.jsx";
     import { GroupRow } from "./components/groups/GroupRow.jsx";
-    import { ParentDashboard } from "./components/people/ParentDashboard.jsx";
+    const ParentDashboard = React.lazy(() => import("./components/people/ParentDashboard.jsx").then(m => ({ default: m.ParentDashboard })));
     import { ClaimTokensPanel } from "./components/people/ClaimTokensPanel.jsx";
     import { ClaimManagedSection } from "./components/people/ClaimManagedSection.jsx";
     import { CoachNotesPanel } from "./components/people/CoachNotesPanel.jsx";
     import { ConstraintFormModal } from "./components/people/ConstraintFormModal.jsx";
     import { ParentsPanel } from "./components/people/ParentsPanel.jsx";
     import { ConstraintsPanel } from "./components/people/ConstraintsPanel.jsx";
-    import { ManagedSwimmersView } from "./components/people/ManagedSwimmersView.jsx";
+    const ManagedSwimmersView = React.lazy(() => import("./components/people/ManagedSwimmersView.jsx").then(m => ({ default: m.ManagedSwimmersView })));
     import { ManagedSwimmerForm } from "./components/people/ManagedSwimmerForm.jsx";
     import { BulkImportModal } from "./components/people/BulkImportModal.jsx";
     import { DobPromptModal } from "./components/people/DobPromptModal.jsx";
@@ -60,13 +60,13 @@
     import { IntentParserModal } from "./components/practices/IntentParserModal.jsx";
     import { IntentForm } from "./components/practices/IntentForm.jsx";
     import { IntentPreviewOverlay } from "./components/practices/IntentPreviewOverlay.jsx";
-    import { PracticesView } from "./components/practices/PracticesView.jsx";
+    const PracticesView = React.lazy(() => import("./components/practices/PracticesView.jsx").then(m => ({ default: m.PracticesView })));
     import { MarkPracticeDoneModal } from "./components/practices/MarkPracticeDoneModal.jsx";
-    import { WeekView } from "./components/practices/WeekView.jsx";
-    import { AssignedToMeView } from "./components/practices/AssignedToMeView.jsx";
+    const WeekView = React.lazy(() => import("./components/practices/WeekView.jsx").then(m => ({ default: m.WeekView })));
+    const AssignedToMeView = React.lazy(() => import("./components/practices/AssignedToMeView.jsx").then(m => ({ default: m.AssignedToMeView })));
     import { TeamRosterTab } from "./components/teams/TeamRosterTab.jsx";
     import { TeamSettingsTab } from "./components/teams/TeamSettingsTab.jsx";
-    import { TeamsView } from "./components/teams/TeamsView.jsx";
+    const TeamsView = React.lazy(() => import("./components/teams/TeamsView.jsx").then(m => ({ default: m.TeamsView })));
     import { TeamFacilitiesSection } from "./components/teams/TeamFacilitiesSection.jsx";
     import { R1ProgrammingMixTab } from "./components/reports/R1ProgrammingMixTab.jsx";
     import { R2ScheduleAdherenceTab } from "./components/reports/R2ScheduleAdherenceTab.jsx";
@@ -74,7 +74,7 @@
     import { R4ProgramRecapTab } from "./components/reports/R4ProgramRecapTab.jsx";
     import { R5PlatformHealthTab } from "./components/reports/R5PlatformHealthTab.jsx";
     import { R6CurationSupportTab } from "./components/reports/R6CurationSupportTab.jsx";
-    import { AdminView } from "./components/admin/AdminView.jsx";
+    const AdminView = React.lazy(() => import("./components/admin/AdminView.jsx").then(m => ({ default: m.AdminView })));
     import { AdminPendingUgc } from "./components/admin/AdminPendingUgc.jsx";
     import { AdminPublicUgc } from "./components/admin/AdminPublicUgc.jsx";
     import { UgcGraduateModal } from "./components/admin/UgcGraduateModal.jsx";
@@ -4105,6 +4105,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           </header>
 
           <main id="main-content" style={{ maxWidth: 940, margin: "0 auto", padding: "32px 24px" }}>
+            <React.Suspense fallback={<div style={{ padding: 48, textAlign: "center", color: "var(--color-text-dim)", fontSize: 14 }}>Loading…</div>}>
 
             {view === "admin"    && <AdminView me={me} onStartImpersonation={handleStartImpersonation} />}
             {view === "parent"   && <ParentDashboard me={me} />}
@@ -5118,6 +5119,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             )}
 
             </>}
+            </React.Suspense>
           </main>
           {showPrintDialog && (
             <div className="screen-only" style={{
