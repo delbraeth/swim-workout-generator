@@ -11,6 +11,9 @@ COPY server.js ./
 COPY db.js ./
 COPY lib/ ./lib/
 COPY public/ ./public/
+# DEBUG (temporary — remove after diagnosis): print what actually landed in the image's
+# public/assets so we can see whether the code-split chunks/ subdir reached the container.
+RUN echo "===ASSETS_DEBUG_START===" && ls -laR public/assets 2>&1; echo "===ASSETS_DEBUG_END==="
 COPY vendor-kit/ ./vendor-kit/
 # SPA-split: the server's workout engine (lib/generator.js) reads the engine
 # prelude from src/app.jsx (the esbuild entry). The browser loads the prebuilt
