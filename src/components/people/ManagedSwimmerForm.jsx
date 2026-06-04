@@ -1,6 +1,6 @@
 // src/components/people/ManagedSwimmerForm.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { DOB_MAX_TODAY, DOB_MIN, GENDER_OPTIONS } from "../../lib/shared.js";
+import { DOB_MAX_TODAY, DOB_MIN, GENDER_OPTIONS } from "../../lib/constants.js";
 
     export function ManagedSwimmerForm({ form, setForm, teams }) {
       const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
