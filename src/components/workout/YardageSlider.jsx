@@ -1,6 +1,6 @@
 // src/components/workout/YardageSlider.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { minYardsForType } from "../../lib/shared.js";
+import { minYardsForType } from "../../lib/workout-helpers.js";
 
     const { useState } = React;
 
