@@ -1,6 +1,6 @@
 // src/components/people/ConstraintFormModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, PSC_TYPE_GROUPS } from "../../app.jsx";
+import { csrfHeaders, PSC_TYPE_GROUPS } from "../../lib/shared.js";
 
     const { useState, useEffect } = React;
 
