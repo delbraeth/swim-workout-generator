@@ -31,6 +31,7 @@
     import { ParentsPanel } from "./components/people/ParentsPanel.jsx";
     import { ConstraintsPanel } from "./components/people/ConstraintsPanel.jsx";
     const ManagedSwimmersView = React.lazy(() => import("./components/people/ManagedSwimmersView.jsx").then(m => ({ default: m.ManagedSwimmersView })));
+    const LessonGroupsView = React.lazy(() => import("./components/people/LessonGroupsView.jsx").then(m => ({ default: m.LessonGroupsView })));
     import { ManagedSwimmerForm } from "./components/people/ManagedSwimmerForm.jsx";
     import { BulkImportModal } from "./components/people/BulkImportModal.jsx";
     import { DobPromptModal } from "./components/people/DobPromptModal.jsx";
@@ -1426,7 +1427,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         generator: "/", history: "/history", assigned: "/assigned", week: "/week",
         parent: "/parent", teams: "/teams", swimmers: "/swimmers", practices: "/practices",
         catalog: "/catalog", "my-sets": "/my-sets", reports: "/reports", progress: "/progress",
-        admin: "/admin",
+        admin: "/admin", "lesson-groups": "/lesson-groups",
       };
       const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
       const [path, setPath] = useState(() => (typeof window !== "undefined" ? window.location.pathname : "/"));
@@ -1758,7 +1759,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         const COACH_VIEWS = ["teams", "practices", "catalog", "my-sets"];
         // Lesson tier (Phase 5) — the managed-swimmer roster ("swimmers") is shared
         // by Coach AND Lesson tiers (additive); other coach views stay coach-only.
-        const LESSON_VIEWS = ["swimmers"];
+        const LESSON_VIEWS = ["swimmers", "lesson-groups"];
         const blocked =
           (COACH_VIEWS.includes(view) && !effectiveMe.is_coach) ||
           (LESSON_VIEWS.includes(view) && !effectiveMe.can_lesson) ||
@@ -2910,7 +2911,9 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // Selection resets per target switch (no leaky-state between groups).
       useEffect(() => {
         setTonightSelected(new Set());
-        if (!generateForTarget || !generateForTarget.id) {
+        // Group-only roll-up — managed individuals (kind:"managed") have no group
+        // constraints endpoint, so skip the fetch for them.
+        if (!generateForTarget || generateForTarget.kind !== "group" || !generateForTarget.id) {
           setGroupActiveConstraints({});
           return;
         }
@@ -3420,7 +3423,10 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         // rows in the same /api/log-workout call.
         // R-E: include lane_plan_id when one was selected — server uses the
         // plan's lanes as the authoritative member list with per-lane pace.
-        if (generateForTarget?.id) {
+        if (generateForTarget?.kind === "managed") {
+          // Lesson tier (Phase 5) — individual assignment: one swimmer, no group.
+          entry.assign_to = { managed_id: generateForTarget.managed_id || generateForTarget.id };
+        } else if (generateForTarget?.id) {
           entry.assign_to = { group_id: generateForTarget.id };
           if (generateForPlanId) entry.assign_to.lane_plan_id = generateForPlanId;
         }
@@ -4008,8 +4014,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                         aria-haspopup="menu"
                         aria-expanded={coachMenuOpen}
                         style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-primary)",
-                          background: ["teams","swimmers","practices","catalog","my-sets"].includes(view) ? "var(--color-primary)" : "var(--color-card)",
-                          color: ["teams","swimmers","practices","catalog","my-sets"].includes(view) ? "var(--color-bg)" : "var(--color-primary)",
+                          background: ["teams","swimmers","lesson-groups","practices","catalog","my-sets"].includes(view) ? "var(--color-primary)" : "var(--color-card)",
+                          color: ["teams","swimmers","lesson-groups","practices","catalog","my-sets"].includes(view) ? "var(--color-bg)" : "var(--color-primary)",
                           fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1,
                           display: "inline-flex", alignItems: "center", gap: 4 }}>
                         🔧 <span style={{ fontSize: 10 }}>▾</span>
@@ -4028,6 +4034,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                             {[
                               { id: "teams",     emoji: "👥", label: "Teams",            coachOnly: true },
                               { id: "swimmers",  emoji: "🏊", label: "Managed swimmers",  coachOnly: false }, // Lesson tier (Phase 5) — shared
+                              { id: "lesson-groups", emoji: "👥", label: "My groups",     coachOnly: false }, // Lesson tier (Phase 5) — minimal groups
                               { id: "practices", emoji: "📋", label: "Practices",         coachOnly: true },
                               { id: "catalog",   emoji: "📚", label: "Catalog",           coachOnly: true },
                               { id: "my-sets",  emoji: "📝", label: "My Sets",            coachOnly: true },
@@ -4149,6 +4156,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             {view === "parent"   && <ParentDashboard me={me} />}
             {view === "teams"    && <TeamsView />}
             {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} />}
+            {view === "lesson-groups" && <LessonGroupsView />}
             {view === "practices" && <PracticesView />}
             {view === "week"     && (
               <WeekView
@@ -4560,8 +4568,10 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   #35. State sticks across generations. Phase from the
                   selected group overrides personal phase (decision #39). */}
               {effectiveMe?.can_lesson && coachTargets.length > 0 && (() => {
-                const solos  = coachTargets.filter(t => t.member_count === 1);
-                const groups = coachTargets.filter(t => t.member_count >= 2);
+                // Lesson tier (Phase 5) — Individuals (managed swimmers, direct
+                // managed_id assignment) + Groups (fanout to all members).
+                const individuals = coachTargets.filter(t => t.kind === "managed");
+                const groups      = coachTargets.filter(t => t.kind === "group");
                 return (
                   <div style={{ marginBottom: 10, padding: "10px 12px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 8 }}>
                     <label style={{ display: "block", fontSize: 11, color: "var(--color-warn)", marginBottom: 4, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -4570,10 +4580,10 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     <select value={generateForId} onChange={e => setGenerateForId(e.target.value)}
                       style={{ width: "100%", padding: "6px 10px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
                       <option value="myself">Myself (solo training, no assignment)</option>
-                      {solos.length > 0 && (
-                        <optgroup label="Private students">
-                          {solos.map(t => (
-                            <option key={t.id} value={t.id}>{t.name}{t.team_name ? ` · ${t.team_name}` : ""}</option>
+                      {individuals.length > 0 && (
+                        <optgroup label="Individuals">
+                          {individuals.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}{t.equipment_modes ? " · custom kit" : ""}</option>
                           ))}
                         </optgroup>
                       )}
@@ -4606,7 +4616,9 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     )}
                     {generateForTarget && (
                       <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6 }}>
-                        {generateForPlanId
+                        {generateForTarget.kind === "managed"
+                          ? <>Workout saves to <strong>your history</strong> and is assigned to <strong>{generateForTarget.name}</strong>{generateForTarget.equipment_modes ? <> using their <strong>saved equipment</strong></> : null}.</>
+                          : generateForPlanId
                           ? (() => {
                               const p = lanePlansForTarget.find(pl => pl.id === generateForPlanId);
                               const swimmerCount = (p?.plan_data?.lanes || []).reduce((n, l) => n + (l.members?.length || 0), 0);

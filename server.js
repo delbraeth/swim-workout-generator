@@ -4582,6 +4582,36 @@ app.delete("/api/groups/:id/members/:memberId", checkOrigin, requireAuth, requir
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// ───── Lesson groups (Phase 5) ───────────────────────────────────────
+// Minimal group creation for the Lesson tier WITHOUT exposing the Coach
+// team/club machinery. Lesson groups are "independent" groups (team_id NULL —
+// a first-class shape per dbCreateGroup) so a lesson coach can make a small-
+// group lesson (e.g. "9am Sunday") and fan a workout out to its members.
+// Member add/remove + detail reuse the existing /api/groups/:id* routes (those
+// are group-role-gated, not Coach-gated, so a lesson owner already passes).
+// Coach-tier users keep using full Teams → Groups; this is the lightweight path.
+app.get("/api/lesson-groups", requireAuth, requireLessonAccess, async (req, res) => {
+  try {
+    // Only the caller's team-less (lesson) groups — keeps this list distinct
+    // from any team groups a coach manages in the Teams view.
+    const all = await dbListGroupsForCoach(req.userSub, {});
+    res.json(all.filter(g => g.team_id == null));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/lesson-groups", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const name = (req.body && req.body.name || "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    if (name.length > 120) return res.status(400).json({ error: "name max 120 chars" });
+    // team_id NULL → independent lesson group; creator is added to group_coaches
+    // as primary (so it appears in their generate-for picker + assignment auth).
+    const r = await dbCreateGroup({ teamId: null, primaryCoachSub: req.userSub, name });
+    dbAuditEvent({ userSub: req.userSub, eventType: "lesson_group.create", ...reqMeta(req), details: { group_id: r.id, name } });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
+});
+
 // ───── Managed-swimmer claim tokens (Stage 5 / R-I) ──────────────────
 // Per scope §10 + Flow J. Coach issues a one-time token; swimmer (with own
 // SSO account) redeems to migrate the managed profile into their account.

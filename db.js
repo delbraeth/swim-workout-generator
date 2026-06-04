@@ -7873,25 +7873,23 @@ export async function dbListCoachTargets(coachSub) {
     team_name:      r.team_name,
     member_count:   Number(r.member_count),
   }));
-  // Lesson tier (Phase 5) — for solo (1-member) groups whose member is a managed
-  // swimmer, attach that swimmer's id + per-swimmer equipment profile so the
-  // generate-for flow can override the coach's global equipment. Bounded N+1
-  // (only single-member groups); groups with a real-user member or no managed
-  // member get nothing (override falls back to coach equipment).
-  for (const tgt of targets) {
-    if (tgt.member_count !== 1) continue;
-    const m = await pool.query(
-      "SELECT cms.`id` AS managed_id, cms.`equipment_modes` " +
-      "  FROM `group_members` gm " +
-      "  JOIN `coach_managed_swimmers` cms ON cms.`id` = gm.`member_managed_id` " +
-      " WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL AND gm.`member_managed_id` IS NOT NULL " +
-      " LIMIT 1",
-      [tgt.id]
-    );
-    if (m[0]) {
-      tgt.managed_id      = m[0].managed_id;
-      tgt.equipment_modes = parseEquipmentModes(m[0].equipment_modes);
-    }
+  // Lesson tier (Phase 5) — also expose the caller's managed swimmers as direct
+  // INDIVIDUAL targets (kind:"managed"), so a workout can be assigned to one
+  // swimmer without first putting them in a group (server assign_to:{managed_id}
+  // path). Carries each swimmer's per-swimmer equipment profile so the generate
+  // flow can override the coach's global equipment. This is what makes per-swimmer
+  // equipment + parent recap reachable for pure Lesson-tier users (who have no
+  // groups). Group targets above remain for fanout (assign one workout to many).
+  const managed = await dbListManagedSwimmersForCoach(coachSub, { includeArchived: false });
+  for (const m of managed) {
+    targets.push({
+      kind:            "managed",
+      id:              m.id,            // ms_… — distinct namespace from group ids
+      managed_id:      m.id,
+      name:            m.display_name,
+      member_count:    1,
+      equipment_modes: m.equipment_modes || null,
+    });
   }
   return targets;
 }
