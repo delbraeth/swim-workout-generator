@@ -260,6 +260,12 @@ is the single most important part of this scope — get it wrong and iOS generat
     `../people/{AddressManager,ClaimManagedSection}`. Reused existing exports; 4 more exported
     (`csvParseSwimmers`, `downloadTemplate`, `normalizeImportRow`, `PSC_TYPE_GROUPS`).
     `app.jsx`: 12.2k → **10.24k lines** (73 modules total).
+  - Verified: freevars clean; build/engine/smoke green. Shipped in build `15ff26b`.
+
+- 🔧 **Session 9 (2026-06-03) — Groups cluster (`src/components/groups/`).**
+  - Carved `GroupRow`, `GroupAssignmentsPanel`, `JoinTokensPanel`, `LanePlansPanel`. Repointed
+    `TeamsView` → `../groups/GroupRow`. Exported `PHASE_OPTIONS`/`phaseOption`; reused existing
+    exports. `app.jsx`: 10.24k → **9.52k lines** (77 modules; app.jsx now <10k).
   - Verified: freevars clean; build/engine/smoke green. Shipped in build `<pending>`.
 
 ### Phase 4 — React Router
