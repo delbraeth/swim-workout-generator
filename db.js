@@ -1853,7 +1853,7 @@ export async function dbGetUgcOverlay(userSub) {
     "SELECT DISTINCT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, " +
     "       bo.`type_ids`, bo.`stroke_ids`, " +
     "       bo.`pool_mode`, bo.`label`, bo.`total_yards`, bo.`type_affinity`, " +
-    "       bo.`author_sub`, bo.`visibility` " +
+    "       bo.`lesson_level`, bo.`author_sub`, bo.`visibility` " +
     "FROM `bank_options` bo " +
     "WHERE bo.`promoted_at` IS NULL " +
     "  AND ( " +
@@ -1934,6 +1934,9 @@ export async function dbGetUgcOverlay(userSub) {
       _author_sub:    r.author_sub,
       _visibility:    r.visibility,
       _is_own:        r.author_sub === userSub,
+      // Lesson ability level (Phase 5) — null = untagged (shows at any level).
+      // The engine filters lesson overlay options by this (getBankOptions).
+      ...(r.lesson_level ? { lesson_level: r.lesson_level } : {}),
     };
     if (r.section === "warmup" || r.section === "cooldown") {
       overlay[key].push(option);
@@ -1974,8 +1977,13 @@ export async function dbGetUgcOverlay(userSub) {
 
 const UGC_SECTIONS    = new Set(["warmup", "drill", "main", "cooldown"]);
 const UGC_POOL_MODES  = new Set(["25y", "25m", "50m"]);
-const UGC_TYPE_KEYS   = new Set(["im", "distance", "sprint", "endurance", "mixed", "technique"]);
+// "lesson" (Phase 5) — coaches tag drill/main sets "lesson" so they route into the
+// Lesson workout type (and NOT into IM/Sprint/Technique). See getBankOptions.
+const UGC_TYPE_KEYS   = new Set(["im", "distance", "sprint", "endurance", "mixed", "technique", "lesson"]);
 const UGC_STROKE_KEYS = new Set(["back", "breast", "fly", "free", "im"]);
+// Lesson ability level (Phase 5) — cross-cutting scope for lesson content across
+// the 4–80 age range. Applies to ANY section (incl. type-agnostic warmup/cooldown).
+const LESSON_LEVELS   = new Set(["beginner", "intermediate", "advanced"]);
 const UGC_VISIBILITY  = new Set(["private", "team", "public", "pending", "rejected"]);
 const UGC_INTERVAL_RE = /^(On \d+:\d{2}|No interval.*)$/;
 const UGC_QUOTA_PER_COACH = 50;  // counts unpromoted only
@@ -1996,7 +2004,14 @@ function genUgcSetId() {
 function validateUgcPayload(payload, { allowVisibility = ["private", "team", "public"] } = {}) {
   if (!payload || typeof payload !== "object") throw new Error("payload required");
   const { section, type_id, stroke_id, type_ids: rawTypeIds, stroke_ids: rawStrokeIds,
-          pool_mode, label, total_yards, type_affinity, visibility, sets, team_ids } = payload;
+          pool_mode, label, total_yards, type_affinity, visibility, sets, team_ids,
+          lesson_level: rawLessonLevel } = payload;
+  // Lesson ability level (Phase 5) — optional; valid on any section. null = untagged.
+  let lessonLevel = null;
+  if (rawLessonLevel != null && rawLessonLevel !== "") {
+    if (!LESSON_LEVELS.has(rawLessonLevel)) throw new Error(`bad lesson_level: ${rawLessonLevel}`);
+    lessonLevel = rawLessonLevel;
+  }
   // Phase H — array-form multi-tag. Singletons (type_id / stroke_id) are
   // accepted for backward compat and wrapped to length-1 arrays. Array
   // form is canonical going forward.
@@ -2102,6 +2117,7 @@ function validateUgcPayload(payload, { allowVisibility = ["private", "team", "pu
     type_affinity: type_affinity ? JSON.stringify(type_affinity) : null,
     visibility:    v,
     team_ids:      cleanTeamIds,
+    lesson_level:  lessonLevel,
     sets:          cleanSets,
   };
 }
@@ -2177,11 +2193,11 @@ export async function dbCreateUgcOption(authorSub, payload) {
     await conn.beginTransaction();
     await conn.query(
       "INSERT INTO `bank_options` " +
-      "(`id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, `pool_mode`, `label`, " +
+      "(`id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, `lesson_level`, `pool_mode`, `label`, " +
       " `total_yards`, `type_affinity`, `author_sub`, `visibility`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [optionId, clean.section, clean.type_id, clean.stroke_id,
-       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids),
+       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids), clean.lesson_level,
        clean.pool_mode, clean.label, clean.total_yards, clean.type_affinity,
        authorSub, storedVisibility]
     );
@@ -2217,7 +2233,7 @@ export async function dbCreateUgcOption(authorSub, payload) {
 export async function dbGetUgcOption(optionId) {
   if (!optionId) return null;
   const rows = await pool.query(
-    "SELECT `id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, " +
+    "SELECT `id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, `lesson_level`, " +
     "       `pool_mode`, `label`, " +
     "       `total_yards`, `type_affinity`, `author_sub`, `visibility`, " +
     "       `created_at`, `updated_at`, `version`, `promoted_at`, `promoted_by_sub` " +
@@ -2259,6 +2275,7 @@ export async function dbGetUgcOption(optionId) {
     stroke_id:       r.stroke_id,
     type_ids:        typeIds,      // array form is canonical going forward
     stroke_ids:      strokeIds,
+    lesson_level:    r.lesson_level || null,   // Lesson tier (Phase 5)
     pool_mode:       r.pool_mode,
     label:           r.label,
     total_yards:     r.total_yards,
@@ -2293,7 +2310,7 @@ export async function dbListUgcOptionsByAuthor(authorSub) {
   if (!authorSub) return [];
   const rows = await pool.query(
     "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, " +
-    "       bo.`type_ids`, bo.`stroke_ids`, bo.`pool_mode`, bo.`label`, " +
+    "       bo.`type_ids`, bo.`stroke_ids`, bo.`lesson_level`, bo.`pool_mode`, bo.`label`, " +
     "       bo.`total_yards`, bo.`visibility`, bo.`created_at`, bo.`updated_at`, " +
     "       bo.`version`, bo.`promoted_at`, " +
     // Latest review reason for rejected rows. NULL when no reviews exist
@@ -2320,6 +2337,7 @@ export async function dbListUgcOptionsByAuthor(authorSub) {
     stroke_id:             r.stroke_id,
     type_ids:              parseArr(r.type_ids,   r.type_id   ? [r.type_id]   : []),
     stroke_ids:            parseArr(r.stroke_ids, r.stroke_id ? [r.stroke_id] : []),
+    lesson_level:          r.lesson_level || null,   // Lesson tier (Phase 5)
     pool_mode:             r.pool_mode,
     label:                 r.label,
     total_yards:           r.total_yards,
@@ -2368,12 +2386,12 @@ export async function dbUpdateUgcOption(authorSub, optionId, payload) {
     await conn.query(
       "UPDATE `bank_options` SET " +
       "  `section` = ?, `type_id` = ?, `stroke_id` = ?, " +
-      "  `type_ids` = ?, `stroke_ids` = ?, `pool_mode` = ?, " +
+      "  `type_ids` = ?, `stroke_ids` = ?, `lesson_level` = ?, `pool_mode` = ?, " +
       "  `label` = ?, `total_yards` = ?, `type_affinity` = ?, `visibility` = ?, " +
       "  `version` = `version` + 1 " +
       "WHERE `id` = ?",
       [clean.section, clean.type_id, clean.stroke_id,
-       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids),
+       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids), clean.lesson_level,
        clean.pool_mode, clean.label, clean.total_yards, clean.type_affinity,
        newVisibility, optionId]
     );
@@ -4546,6 +4564,9 @@ function rowToManagedSwimmer(r) {
     // Lesson tier (Phase 5) — per-swimmer equipment profile (JSON, same shape as
     // user settings.equipment). Undefined when the caller's SELECT omits it.
     equipment_modes:      parseEquipmentModes(r.equipment_modes),
+    // Lesson ability level (Phase 5) — beginner/intermediate/advanced|null. Drives
+    // which lesson sets the generator offers for this swimmer.
+    lesson_level:         r.lesson_level || null,
     archived:             !!r.archived,
     created_at:           dtToIso(r.created_at),
     updated_at:           dtToIso(r.updated_at),
@@ -4634,7 +4655,7 @@ export async function dbGetManagedSwimmer(id) {
   const rows = await pool.query(
     "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
     "       m.`parental_contact`, m.`parent_managed_flag`, " +
-    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, m.`equipment_modes`, " +
+    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, m.`equipment_modes`, m.`lesson_level`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
     "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
@@ -4657,7 +4678,7 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
   const rows = await pool.query(
     "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
     "       m.`parental_contact`, m.`parent_managed_flag`, " +
-    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, m.`equipment_modes`, " +
+    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, m.`equipment_modes`, m.`lesson_level`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
     "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
@@ -4690,6 +4711,8 @@ export async function dbUpdateManagedSwimmer(id, patch) {
       if (typeof v !== "object" || Array.isArray(v)) return undefined;
       try { return JSON.stringify(v); } catch (_) { return undefined; }
     },
+    // Lesson ability level (Phase 5) — beginner/intermediate/advanced or null.
+    lesson_level:        v => (v == null || v === "") ? null : (["beginner","intermediate","advanced"].includes(v) ? v : undefined),
   };
   const sets = [], vals = [];
   for (const [k, validator] of Object.entries(cmsAllowed)) {
@@ -7928,6 +7951,7 @@ export async function dbListCoachTargets(coachSub) {
           name:            m.display_name,
           member_count:    1,
           equipment_modes: m.equipment_modes || null,
+          lesson_level:    m.lesson_level || null,   // Phase 5 — defaults the lesson level picker
         });
       }
     }

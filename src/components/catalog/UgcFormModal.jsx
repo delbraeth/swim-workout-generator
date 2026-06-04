@@ -4,7 +4,7 @@ import { API_BASE } from "../../lib/api.js";
 
     const { useState, useEffect, useRef } = React;
 
-    export function UgcFormModal({ option, onSave, onClose }) {
+    export function UgcFormModal({ option, onSave, onClose, isCoach = true }) {
       // isEdit only if we have an option WITH a server id. A pre-filled
       // snapshot from the 📥 button passes a partial option (no id), which
       // should still be treated as create.
@@ -32,6 +32,8 @@ import { API_BASE } from "../../lib/api.js";
         : [{ reps: 1, dist: 100, desc: "", interval: "On 2:00", focus: "" }]);
       // Phase D — visibility + team picker
       const [visibility, setVisibility] = React.useState(option?.visibility || "private");
+      // Lesson tier (Phase 5) — ability level for lesson content (any section).
+      const [lessonLevel, setLessonLevel] = React.useState(option?.lesson_level || "");
       const [teamIds, setTeamIds] = React.useState(Array.isArray(option?.team_ids) ? [...option.team_ids] : []);
       const [allTeams, setAllTeams] = React.useState([]);
       React.useEffect(() => {
@@ -108,6 +110,7 @@ import { API_BASE } from "../../lib/api.js";
             total_yards: computedTotal,
             visibility,
             team_ids: visibility === "team" ? teamIds : [],
+            lesson_level: lessonLevel || null,
             sets: sets.map(s => ({
               reps: Number(s.reps), dist: Number(s.dist),
               desc: s.desc, interval: normalizeInterval(s.interval),
@@ -177,7 +180,7 @@ import { API_BASE } from "../../lib/api.js";
                 <div>
                   <label style={labelStyle}>Type (multi-select)</label>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 6, border: "1px solid var(--color-border)", borderRadius: 4, background: "var(--color-card)" }}>
-                    {["im","distance","sprint","endurance","mixed","technique"].map(t => (
+                    {["im","distance","sprint","endurance","mixed","technique","lesson"].map(t => (
                       <label key={t} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12, cursor: "pointer" }}>
                         <input type="checkbox" checked={typeIds.includes(t)}
                           onChange={(e) => {
@@ -211,6 +214,18 @@ import { API_BASE } from "../../lib/api.js";
               <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120}
                 style={{ ...fieldStyle, width: "100%" }} placeholder="e.g. Build 8×50" />
             </div>
+            {/* Lesson tier (Phase 5) — ability level. Optional; tags the set for the
+                Lesson generator's level filter (works on any section, incl. warmup/
+                cooldown which can't carry a type tag). Leave "Any" for non-lesson sets. */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle}>Lesson level <span style={{ color: "var(--color-muted)", fontWeight: 400 }}>(optional — for lesson content)</span></label>
+              <select value={lessonLevel} onChange={(e) => setLessonLevel(e.target.value)} style={{ ...fieldStyle, width: "100%" }}>
+                <option value="">Any / not a lesson set</option>
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="advanced">Advanced</option>
+              </select>
+            </div>
             {/* Phase D + E — visibility picker. Public goes through admin
                 moderation queue (server coerces to 'pending'). */}
             <div style={{ marginBottom: 12 }}>
@@ -220,12 +235,15 @@ import { API_BASE } from "../../lib/api.js";
                   <input type="radio" name="ugc-visibility" checked={visibility === "private"}
                     onChange={() => setVisibility("private")} /> 📝 Private (only you)
                 </label>
+                {/* Team-shared hidden for non-coach (lesson-tier) authors — they have no teams. */}
+                {isCoach && (
                 <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: allTeams.length === 0 ? "not-allowed" : "pointer", opacity: allTeams.length === 0 ? 0.4 : 1 }}
                   title={allTeams.length === 0 ? "You need to coach at least one team to share." : ""}>
                   <input type="radio" name="ugc-visibility" checked={visibility === "team"}
                     disabled={allTeams.length === 0}
                     onChange={() => setVisibility("team")} /> 👥 Team-shared
                 </label>
+                )}
                 <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
                   <input type="radio" name="ugc-visibility" checked={visibility === "public" || visibility === "pending"}
                     onChange={() => setVisibility("public")} /> 🌐 Public (admin review)

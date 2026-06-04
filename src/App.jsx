@@ -1619,6 +1619,11 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // addKick rather than a skip flag. Order in includedSections must match
       // the engine's block order: warmup → drill → kick → main → cooldown.
       const [addKick,      setAddKick]      = useState(false);
+      // Lesson tier (Phase 5) — coach-authored content controls (lesson type only).
+      // "my sets only" drops built-in technique content; level filters authored sets.
+      // "" level = auto (use the target swimmer's level, else show all).
+      const [lessonMySetsOnly, setLessonMySetsOnly] = useState(false);
+      const [lessonLevelChoice, setLessonLevelChoice] = useState("");
       const includedSections = React.useMemo(() => {
         // Lesson tier (Phase 5) — fixed 3-section shape (Warm-Up / Skill Focus /
         // Send-off). "main" carries the relabeled Skill Focus; drill + kick are
@@ -1756,10 +1761,11 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // Uses effectiveMe so admin view-as personas are respected.
       useEffect(() => {
         if (!authenticated || !effectiveMe) return;
-        const COACH_VIEWS = ["teams", "practices", "catalog", "my-sets"];
-        // Lesson tier (Phase 5) — the managed-swimmer roster ("swimmers") is shared
-        // by Coach AND Lesson tiers (additive); other coach views stay coach-only.
-        const LESSON_VIEWS = ["swimmers", "lesson-groups"];
+        const COACH_VIEWS = ["teams", "practices", "catalog"];
+        // Lesson tier (Phase 5) — managed-swimmer roster, lesson groups, AND My Sets
+        // (author your own lesson content) are shared by Coach + Lesson tiers; other
+        // coach views (Teams, Practices, Catalog browse) stay coach-only.
+        const LESSON_VIEWS = ["swimmers", "lesson-groups", "my-sets"];
         const blocked =
           (COACH_VIEWS.includes(view) && !effectiveMe.is_coach) ||
           (LESSON_VIEWS.includes(view) && !effectiveMe.can_lesson) ||
@@ -3015,6 +3021,9 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           && typeof generateForTarget.equipment_modes === "object"
           && Object.keys(generateForTarget.equipment_modes).length)
           ? generateForTarget.equipment_modes : null;
+        // Lesson tier (Phase 5) — coach-authored content controls. Effective level
+        // = explicit picker choice, else the target swimmer's saved level.
+        const _lessonLevel = _isLessonGen ? (lessonLevelChoice || generateForTarget?.lesson_level || null) : null;
         let newWorkout = generateWorkout({
           typeId:         selectedType,
           maxYards:       _isLessonGen ? Math.min(LESSON_MAX, Math.max(LESSON_MIN, maxYards)) : maxYards,
@@ -3023,6 +3032,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           equipment:      _targetEquip || equipment,
           poolMode,
           userMin:        _isLessonGen ? LESSON_MIN : sliderMin,
+          lessonMySetsOnly: _isLessonGen ? lessonMySetsOnly : false,
+          lessonLevel:    _lessonLevel,
           pinnedBlocks:   pinned,
           recentLabels,
           recoveryMode,
@@ -3195,6 +3206,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           equipment,
           poolMode,
           userMin:      _isLessonRegen ? LESSON_MIN : sliderMin,
+          lessonMySetsOnly: _isLessonRegen ? lessonMySetsOnly : false,
+          lessonLevel:  _isLessonRegen ? (lessonLevelChoice || generateForTarget?.lesson_level || null) : null,
           recentLabels,
           recoveryMode: isRecovery,
           phase,
@@ -4059,7 +4072,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                               { id: "lesson-groups", emoji: "👥", label: "My groups",     coachOnly: false }, // Lesson tier (Phase 5) — minimal groups
                               { id: "practices", emoji: "📋", label: "Practices",         coachOnly: true },
                               { id: "catalog",   emoji: "📚", label: "Catalog",           coachOnly: true },
-                              { id: "my-sets",  emoji: "📝", label: "My Sets",            coachOnly: true },
+                              { id: "my-sets",  emoji: "📝", label: "My Sets",            coachOnly: false }, // Lesson tier (Phase 5) — author lesson sets
                             ].filter(item => effectiveMe?.is_coach || !item.coachOnly).map(item => {
                               const active = view === item.id;
                               return (
@@ -4259,6 +4272,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             {view === "my-sets"  && (
               <MySetsView
                 onChanged={refreshUgcOverlay}
+                isCoach={!!effectiveMe?.is_coach}
               />
             )}
             {view === "reports"  && (
@@ -4494,6 +4508,36 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
 
               {/* Max Yardage / Distance Slider */}
               <div data-tour="step-yardage-slider"><YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} /></div>
+
+              {/* Lesson tier (Phase 5) — coach-authored content controls. Level
+                  defaults to the selected swimmer's saved level (shown as a hint);
+                  "use my sets only" drops the built-in technique content so a
+                  young/beginner lesson uses just the coach's authored sets. */}
+              {selectedType === "lesson" && (
+                <div style={{ marginBottom: 20, padding: "12px 14px", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: "var(--color-primary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Lesson content</div>
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                      <span style={{ color: "var(--color-text-muted)" }}>Level</span>
+                      <select value={lessonLevelChoice} onChange={e => setLessonLevelChoice(e.target.value)}
+                        style={{ padding: "5px 9px", fontSize: 13, borderRadius: 5, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)" }}>
+                        <option value="">{generateForTarget?.lesson_level ? `Auto — ${generateForTarget.lesson_level} (swimmer)` : "Any level"}</option>
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                      </select>
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                      <input type="checkbox" checked={lessonMySetsOnly} onChange={e => setLessonMySetsOnly(e.target.checked)} />
+                      <span>Use my sets only</span>
+                    </label>
+                  </div>
+                  <p style={{ fontSize: 11, color: "var(--color-text-dim)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                    Author lesson content under <strong>🔧 → My Sets</strong> (tag type <em>Lesson</em> + a level).
+                    "Use my sets only" excludes the built-in adult/technique content — best for young or beginner swimmers.
+                  </p>
+                </div>
+              )}
 
               {/* v2.0 — Multi-lane multi-pace generate. Coach-only. When ON, the
                   picker filters options that fit ALL lane paces and the generate

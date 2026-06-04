@@ -2166,7 +2166,7 @@ app.get("/api/bank/my-overlay", requireAuth, async (req, res) => {
 // Spec: UGC_COACH_SETS_SCOPE.md §4 + §5.
 
 // List caller's authored UGC options. Used by the "My Sets" page.
-app.get("/api/bank-options/mine", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/bank-options/mine", requireAuth, requireLessonAccess, async (req, res) => {
   try {
     res.json(await dbListUgcOptionsByAuthor(req.userSub));
   } catch (err) {
@@ -2197,7 +2197,7 @@ app.get("/api/bank-options/:id", requireAuth, async (req, res) => {
 // Create a new UGC option. Body: full payload per validateUgcPayload.
 // Phase D: accepts visibility ∈ {private, team} + team_ids when team.
 // Public (Phase E) still rejected at validation layer.
-app.post("/api/bank-options", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+app.post("/api/bank-options", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, async (req, res) => {
   try {
     const r = await dbCreateUgcOption(req.userSub, req.body || {});
     dbAuditEvent({
@@ -2226,7 +2226,7 @@ app.post("/api/bank-options", checkOrigin, requireAuth, requireCoach, requireCsr
 
 // Update an existing UGC option. Body: full payload (validateUgcPayload).
 // Phase D: accepts visibility ∈ {private, team} + team_ids when team.
-app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, async (req, res) => {
   try {
     const r = await dbUpdateUgcOption(req.userSub, req.params.id, req.body || {});
     dbAuditEvent({
@@ -2251,7 +2251,7 @@ app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requi
 // Standalone visibility change. Body: { visibility, team_ids? }.
 // Lighter than PATCH (no set rewrite, no version bump). Used by the
 // MySetsView "Change visibility" quick-action.
-app.post("/api/bank-options/:id/visibility", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+app.post("/api/bank-options/:id/visibility", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, async (req, res) => {
   try {
     const { visibility, team_ids = [] } = req.body || {};
     const r = await dbSetUgcOptionVisibility(req.userSub, req.params.id, { visibility, team_ids });
@@ -2385,7 +2385,7 @@ app.post("/api/admin/pending-ugc/:id/review", checkOrigin, requireAuth, requireA
 
 // Delete (hard) a UGC option. Cascades to bank_sets via FK.
 // Owner-only in Phase C (admin override for frozen rows = future).
-app.delete("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+app.delete("/api/bank-options/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, async (req, res) => {
   try {
     const r = await dbDeleteUgcOption(req.userSub, req.params.id);
     dbAuditEvent({

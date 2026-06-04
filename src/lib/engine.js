@@ -34,11 +34,13 @@ export const WORKOUT_TYPES = [
 // Lesson tier — the fixed section shape (no main, no kick; the main *slot* carries
 // "Skill Focus"). Engine forces this for typeId="lesson" regardless of caller input.
 export const LESSON_SECTIONS = ["warmup", "main", "cooldown"];
-// Lesson yardage bounds (yd/m) — much shorter than the standard MIN_YARDS floor.
-// Floor is 800 (not 200): the smallest feasible 3-section lesson is warmup(400) +
-// skill focus(200) + send-off(200) given the existing (reused) banks. Going lower
-// would need bespoke short-warmup content, which the locked scope excludes.
-export const LESSON_MIN = 800;
+// Lesson yardage bounds (yd/m). Floor dropped to 100 (Phase 5 coach-authored sets):
+// the built-in (technique-reused) banks can't go below ~800, but coaches author
+// short content for young/beginner swimmers (a 4-year-old's whole lesson may be
+// 200–400yd). The floor is now content-driven — 100 is the artificial minimum;
+// with built-in-only content the practical minimum stays ~800 (banks too big),
+// while authored short sets enable genuinely short lessons.
+export const LESSON_MIN = 100;
 export const LESSON_MAX = 1200;
 
 export const ZONES = {
@@ -6503,6 +6505,8 @@ export function generateWorkout({
       myConstraints = [],               // Phase 3 PSC slice 2 — caller's active swimmer_constraints rows. Step-0 hard-exclude. Skipped entirely in multi-lane mode (per scope §3.5; per-lane sub lands in slice 3).
       tonightOverrides = [],             // Phase 3 PSC slice 3 — in-memory constraint rows added at Generate time from the per-practice checklist. Unioned with myConstraints; never persisted.
       includedSections = ["warmup", "drill", "main", "cooldown"],   // Section model A1 — which sections to build. Default = all 4 (byte-identical to pre-A1). `main` is always required. Subsetting wired in A2.
+      lessonMySetsOnly = false,         // Lesson tier (Phase 5) — use ONLY coach-authored lesson content (drop built-ins).
+      lessonLevel = null,               // Lesson tier (Phase 5) — beginner/intermediate/advanced; filters authored lesson sets.
     } = {}) {
       // Lesson tier (Phase 5) — force the fixed 3-section shape (Warm-Up / Skill
       // Focus / Send-off). drill + kick are excluded; the main slot carries Skill
@@ -6566,11 +6570,12 @@ export function generateWorkout({
       // Unit-aware bank lookup. Each call returns options already in the
       // user's pool unit (converted from yd↔m if the fallback crossed banks).
       // UGC overlay (Phase B+) is appended in getBankOptions per exact pool mode.
-      const _allWarmupsRaw   = getBankOptions("warmup",   typeId, poolMode, ugcOverlay);
-      const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode, ugcOverlay);
-      const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay);
-      const _kickListRaw     = getBankOptions("kick",     typeId, poolMode, ugcOverlay);
-      const _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay);
+      const _lessonOpts = { lessonMySetsOnly, lessonLevel };   // Phase 5 — inert for non-lesson types
+      const _allWarmupsRaw   = getBankOptions("warmup",   typeId, poolMode, ugcOverlay, _lessonOpts);
+      const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode, ugcOverlay, _lessonOpts);
+      const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay, _lessonOpts);
+      const _kickListRaw     = getBankOptions("kick",     typeId, poolMode, ugcOverlay, _lessonOpts);
+      const _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay, _lessonOpts);
 
       // Phase 3 PSC slice 2/3 — hard-exclude step 0. Per
       // PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.4: drop options before weight
@@ -7087,7 +7092,10 @@ export function regenerateSection({
       ugcOverlay = null,             // UGC Phase B — caller's UGC overlay merged into bank picker per exact pool mode
       myConstraints = [],            // Phase 3 PSC slice 2 — caller's active swimmer_constraints rows. Step-0 hard-exclude. Skipped in multi-lane mode.
       tonightOverrides = [],          // Phase 3 PSC slice 3 — in-memory per-practice overrides; unioned with myConstraints.
+      lessonMySetsOnly = false,       // Lesson tier (Phase 5) — use only authored lesson content.
+      lessonLevel = null,             // Lesson tier (Phase 5) — ability-level filter for authored lesson sets.
     } = {}) {
+      const _lessonOpts = { lessonMySetsOnly, lessonLevel };   // Phase 5 — inert for non-lesson types
       // v1.8 — Resolve once for use below.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
       // Phase 3 PSC slice 2/3 — same skip-in-multi-lane rule as generateWorkout.
@@ -7119,12 +7127,12 @@ export function regenerateSection({
       const upper = maxYards - others;
 
       let pool;
-      if (sectionKey === "warmup")        pool = getBankOptions("warmup",   typeId, poolMode, ugcOverlay);
-      else if (sectionKey === "cooldown") pool = getBankOptions("cooldown", typeId, poolMode, ugcOverlay);
-      else if (sectionKey === "drill")    pool = getBankOptions("drill",    typeId, poolMode, ugcOverlay);
-      else if (sectionKey === "kick")     pool = getBankOptions("kick",     typeId, poolMode, ugcOverlay);
+      if (sectionKey === "warmup")        pool = getBankOptions("warmup",   typeId, poolMode, ugcOverlay, _lessonOpts);
+      else if (sectionKey === "cooldown") pool = getBankOptions("cooldown", typeId, poolMode, ugcOverlay, _lessonOpts);
+      else if (sectionKey === "drill")    pool = getBankOptions("drill",    typeId, poolMode, ugcOverlay, _lessonOpts);
+      else if (sectionKey === "kick")     pool = getBankOptions("kick",     typeId, poolMode, ugcOverlay, _lessonOpts);
       else {
-        let basePool = getBankOptions("main", typeId, poolMode, ugcOverlay);
+        let basePool = getBankOptions("main", typeId, poolMode, ugcOverlay, _lessonOpts);
         // C: in recovery mode, only consider easy/aerobic mains, no repeat variants.
         if (recoveryMode) {
           const recoveryMains = basePool.filter(o => {
@@ -8531,18 +8539,25 @@ export function convertOptionUnits(option, fromUnit, toUnit) {
       return { ...option, sets: newSets, totalYards: newTotal };
     }
 
-export function getBankOptions(kind, typeId, poolMode, ugcOverlay = null) {
-      // Lesson tier (Phase 5) reuses Technique content. Its "Skill Focus" is
-      // carried in the main slot but sourced from the DRILL bank so options stay
-      // short enough for 200–1200yd lessons (technique main sets run too long).
-      // warmup/cooldown aren't type-filtered, so the alias only matters for
-      // drill/main lookups. UGC overlay never applies to lesson (not user-authored).
-      if (typeId === "lesson") {
-        typeId = "technique";
-        if (kind === "main") kind = "drill";
+export function getBankOptions(kind, typeId, poolMode, ugcOverlay = null, opts = {}) {
+      const { lessonMySetsOnly = false, lessonLevel = null } = opts;
+      // Lesson tier (Phase 5): built-in (canonical) content reuses Technique banks —
+      // "Skill Focus" (engine main slot) from the DRILL bank so options stay short
+      // for 800–1200yd (and lower with authored content). Coach-AUTHORED lesson
+      // content comes from the OVERLAY under the dedicated "lesson" type tag (+ an
+      // optional ability-level filter). `lessonMySetsOnly` drops the built-ins so a
+      // kids coach uses only their own content. Non-lesson types are byte-identical.
+      const isLesson = typeId === "lesson";
+      let canonKind = kind, canonType = typeId, overlayType = typeId;
+      if (isLesson) {
+        canonType = "technique";
+        if (kind === "main") canonKind = "drill";   // overlayType stays "lesson"
       }
+      // Authored Skill Focus is stored in the DRILL section, so the lesson main slot
+      // reads lesson-tagged DRILL overlay rows.
+      const overlayKind = (isLesson && kind === "main") ? "drill" : kind;
       const targetUnit = poolMode === "25y" ? "yd" : "m";
-      const byType = (kind === "drill" || kind === "main");
+      const byType = (canonKind === "drill" || canonKind === "main");
 
       const TABLE = {
         warmup: {
@@ -8571,7 +8586,7 @@ export function getBankOptions(kind, typeId, poolMode, ugcOverlay = null) {
           "25y": [["yd", MAIN_OPTIONS]],
         },
       };
-      const chain = TABLE[kind][poolMode];
+      const chain = TABLE[canonKind][poolMode];
 
       // Canonical chain — walk fallback list until a non-empty result.
       // Phase H Stage 2: banks are flat arrays with `types: []` + `strokes: []`
@@ -8588,10 +8603,10 @@ export function getBankOptions(kind, typeId, poolMode, ugcOverlay = null) {
           list = data;
         } else {
           list = data.filter(o =>
-            (o.types   && o.types.includes(typeId)) ||
-            (o.strokes && o.strokes.includes(typeId))
+            (o.types   && o.types.includes(canonType)) ||
+            (o.strokes && o.strokes.includes(canonType))
           );
-          if (list.length === 0 && typeId !== "mixed") {
+          if (list.length === 0 && canonType !== "mixed") {
             list = data.filter(o => o.types && o.types.includes("mixed"));
           }
         }
@@ -8602,8 +8617,15 @@ export function getBankOptions(kind, typeId, poolMode, ugcOverlay = null) {
       }
 
       // UGC overlay — exact-pool-mode only (no cross-unit fallback per
-      // spec §9: per-pool-mode authoring; no auto-translate in v1).
-      const overlayRows = getOverlayRowsForTuple(ugcOverlay, kind, typeId, poolMode);
+      // spec §9: per-pool-mode authoring; no auto-translate in v1). For lesson,
+      // the overlay reads lesson-tagged rows (overlayType="lesson") and is filtered
+      // by ability level (untagged rows always pass). `lessonMySetsOnly` returns
+      // ONLY authored content (built-ins dropped) — may be empty if none authored.
+      let overlayRows = getOverlayRowsForTuple(ugcOverlay, overlayKind, overlayType, poolMode);
+      if (isLesson && lessonLevel) {
+        overlayRows = overlayRows.filter(o => !o.lesson_level || o.lesson_level === lessonLevel);
+      }
+      if (isLesson && lessonMySetsOnly) return overlayRows;
       return overlayRows.length > 0 ? canonical.concat(overlayRows) : canonical;
     }
 

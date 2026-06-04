@@ -35,7 +35,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
         return {
           display_name: "", initials: "", dob: "", gender: "", class_year: "", usa_swimming_id: "", team_id: "",
           pace_scy_100: "", pace_scm_100: "", pace_lcm_100: "",
-          parental_contact: "", parent_managed_flag: false,
+          parental_contact: "", parent_managed_flag: false, lesson_level: "",
         };
       }
 
@@ -74,6 +74,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
             pace_lcm_100:        d.pace_lcm_100 || "",
             parental_contact:    d.parental_contact || "",
             parent_managed_flag: !!d.parent_managed_flag,
+            lesson_level:        d.lesson_level || "",
           });
         } catch (err) {
           setMsg(`Error loading swimmer: ${err.message}`);
@@ -121,6 +122,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
               pace_lcm_100:        form.pace_lcm_100.trim() || null,
               parental_contact:    form.parental_contact.trim() || null,
               parent_managed_flag: !!form.parent_managed_flag,
+              lesson_level:        form.lesson_level || null,
             }),
           });
           const j = await res.json();
@@ -154,6 +156,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
               pace_lcm_100:        form.pace_lcm_100.trim() || null,
               parental_contact:    form.parental_contact.trim() || null,
               parent_managed_flag: !!form.parent_managed_flag,
+              lesson_level:        form.lesson_level || null,
             }),
           });
           const j = await res.json();
