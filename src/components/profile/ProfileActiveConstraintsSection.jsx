@@ -1,6 +1,6 @@
 // src/components/profile/ProfileActiveConstraintsSection.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { formatPscRow } from "../../lib/shared.js";
+import { formatPscRow } from "../../lib/format.js";
 
     export function ProfileActiveConstraintsSection({ constraints }) {
       // Burst mitigation — accept constraints as a prop from ProfileModal
