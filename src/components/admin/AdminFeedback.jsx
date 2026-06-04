@@ -1,6 +1,6 @@
 // src/components/admin/AdminFeedback.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components are imported below (freevars-driven).
-import { csrfHeaders } from "../../app.jsx";
+import { csrfHeaders } from "../../lib/shared.js";
 
     const { useState, useCallback, useEffect } = React;
 
