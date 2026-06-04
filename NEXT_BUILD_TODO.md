@@ -1,6 +1,6 @@
 # iOS build status + next steps
 
-Build number is at **10**. **Build 10 UPLOADED to TestFlight 2026-06-03** (person-menu
+Build number is at **10**. **Build 10 LIVE on TestFlight 2026-06-04** (person-menu
 Sections fix, commit a56b041 — Sign-out discoverability at large Dynamic Type). Next
 archive = bump to 11.
 
@@ -26,13 +26,11 @@ without it here). Confirmed login provider is independent of IAP (tested fine).
 
 ## ▶ Next action: IAP PRODUCTION prerequisites (see bottom) when ready to launch.
 
-## 🅱 Waiting to ride build 10 (committed on `build-3`, NOT in build 9)
+## ✅ Shipped in build 10 (LIVE on TestFlight 2026-06-04)
 - **Person-menu Sections fix** (`HomeView.swift`, commit a56b041) — grouped the
   person menu into Workouts / Account sections with **Sign out** isolated in its
   own trailing section. Fixes Sign out scrolling out of view at large Dynamic Type.
-  Build verified. (Batched per user — ship with build 10.)
-- This is now the ONLY thing build 10 must carry (the IAP-capability concern is
-  resolved — products loaded in sandbox). Cut build 10 whenever convenient.
+  (The IAP-capability concern was already resolved — products loaded in sandbox.)
 
 ## To cut a future build (template)
 ```
