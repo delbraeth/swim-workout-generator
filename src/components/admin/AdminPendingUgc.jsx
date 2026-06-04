@@ -1,6 +1,6 @@
 // src/components/admin/AdminPendingUgc.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components are imported below (freevars-driven).
-import { API_BASE } from "../../app.jsx";
+import { API_BASE } from "../../lib/shared.js";
 
     const { useState, useCallback, useEffect, Fragment } = React;
 
