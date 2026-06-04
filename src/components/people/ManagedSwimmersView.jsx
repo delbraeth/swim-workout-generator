@@ -1,6 +1,6 @@
 // src/components/people/ManagedSwimmersView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders, genderLabel } from "../../app.jsx";
+import { csrfHeaders, genderLabel } from "../../lib/shared.js";
 import { AddressManager } from "./AddressManager.jsx";
 import { BulkImportModal } from "./BulkImportModal.jsx";
 import { ClaimTokensPanel } from "./ClaimTokensPanel.jsx";
