@@ -330,9 +330,11 @@ is the single most important part of this scope — get it wrong and iOS generat
     an intermediate state / stale layer where `app.js` landed before all 29 chunks. A **clean
     rebuild after the full push completed** fixed it — live serves all 29 chunks `200`, app loads
     clean. **Operational rule: trigger the Hyperlift build only after `_deploy.py` prints "Done".**
-    Robustness follow-up: make `_deploy.py` push all files in ONE commit (Git Trees API), or move
-    to an in-container build, to remove the race. Orphaned old hashed chunks accumulate on the
-    server across deploys (harmless; unreferenced).
+  - ✅ **Race eliminated (2026-06-04):** `_deploy.py` now pushes **all files in ONE commit** via
+    the Git Data API (blobs → tree on base_tree → commit → fast-forward ref) instead of one
+    PUT-commit per file. `main` only ever advances to the complete file set, so a build can no
+    longer catch a half-pushed state. Verified: a full deploy = a single commit (`e91255a`, 150
+    files). (Remaining harmless cruft: old hashed chunks orphan on the server across deploys.)
 
 #### (original Phase 4 plan — superseded by the custom-router approach above)
 - Replace state-based view switching (`view === …` / `activeTab`) with real routes so URLs
