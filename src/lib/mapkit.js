@@ -41,6 +41,13 @@ export function loadMapKit() {
         if (!window.mapkit) { reject(new Error("mapkit_global_missing")); return; }
         if (!window.__mapkitInited) {
           window.mapkit.init({ authorizationCallback: (done) => done(token) });
+          // Surface auth/origin failures to the console — the most common cause is
+          // the token's `origin` claim not covering the page's domain (e.g. an apex
+          // not matched by a `*.domain` wildcard).
+          try {
+            window.mapkit.addEventListener("error", (e) =>
+              console.error("[mapkit] error event — often a token origin/authorization mismatch:", e));
+          } catch (_) {}
           window.__mapkitInited = true;
         }
         resolve(window.mapkit);
@@ -68,7 +75,10 @@ export function geocodeAddress(addressString) {
   return loadMapKit().then((mapkit) => new Promise((resolve, reject) => {
     const geocoder = new mapkit.Geocoder({ getsUserLocation: false, language: "en-US" });
     geocoder.lookup(addressString, (error, data) => {
-      if (error) { reject(error instanceof Error ? error : new Error("geocode_failed")); return; }
+      if (error) {
+        console.error("[mapkit] geocode lookup error (check token origin/authorization):", error);
+        reject(error instanceof Error ? error : new Error("geocode_failed")); return;
+      }
       const r = data && data.results && data.results[0];
       if (!r || !r.coordinate) { reject(new Error("geocode_no_results")); return; }
       resolve({

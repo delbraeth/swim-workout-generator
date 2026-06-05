@@ -55,7 +55,7 @@ export function FacilityMap({ facility = null, height = 220 }) {
   const note = {
     unconfigured: "Map unavailable (location service not configured).",
     empty:        "No address on file to map.",
-    error:        "Couldn’t locate this address on the map.",
+    error:        "Couldn’t load this location (check the address, or the map service’s domain authorization).",
     loading:      "Loading map…",
   }[status];
 
