@@ -50,6 +50,7 @@ import express   from "express";
 import crypto    from "crypto";
 import path      from "path";
 import { readFile } from "fs/promises";
+import { readFileSync } from "fs";
 import helmet    from "helmet";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
@@ -5510,6 +5511,31 @@ app.get("/api/events/upcoming", requireAuth, async (req, res) => {
 });
 
 // ───── Static files ───────────────────────────────────────────────────
+// index.html is served with the MapKit JS token substituted at boot from the
+// runtime env (MAPKIT_TOKEN — an origin-scoped, client-public ES256 JWT). Cached
+// once; process.env is fixed for the process lifetime. The token lives only in the
+// platform env (never the repo) and is rotatable without a code redeploy — just a
+// restart. When unset, the literal "__MAPKIT_TOKEN__" placeholder remains, which the
+// client loader treats as "not configured" and skips MapKit. The `__BUILD_STAMP__`/
+// `__BUILD_SHA__` placeholders were already replaced at deploy time by _deploy.py.
+const INDEX_HTML_PATH = path.join(__dirname, "public", "index.html");
+let INDEX_HTML = "";
+try {
+  INDEX_HTML = readFileSync(INDEX_HTML_PATH, "utf8")
+    .replaceAll("__MAPKIT_TOKEN_VALUE__", process.env.MAPKIT_TOKEN || "__MAPKIT_TOKEN_VALUE__");
+  console.log(`[web] index.html preloaded (MapKit token ${process.env.MAPKIT_TOKEN ? "injected" : "absent"})`);
+} catch (e) {
+  console.warn("[web] could not preload index.html — falling back to sendFile:", e.message);
+}
+function sendIndex(res) {
+  res.setHeader("Cache-Control", "no-cache");
+  if (INDEX_HTML) return res.type("html").send(INDEX_HTML);
+  return res.sendFile(INDEX_HTML_PATH);
+}
+// Serve the templated index for the document routes BEFORE express.static, so the
+// raw (un-templated) file isn't returned for "/" or "/index.html".
+app.get(["/", "/index.html"], (req, res) => sendIndex(res));
+
 app.use(express.static(path.join(__dirname, "public"), {
   extensions: ["html"],
   setHeaders: (res, filePath) => {
@@ -5527,8 +5553,7 @@ app.use(express.static(path.join(__dirname, "public"), {
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) return next();
   if (!(req.headers.accept || "").includes("text/html")) return next();
-  res.setHeader("Cache-Control", "no-cache");
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  sendIndex(res);
 });
 
 app.use((req, res) => res.status(404).send("Not found"));

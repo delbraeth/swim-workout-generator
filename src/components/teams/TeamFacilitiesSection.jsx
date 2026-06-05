@@ -1,6 +1,8 @@
 // src/components/teams/TeamFacilitiesSection.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { API_BASE, csrfHeaders } from "../../lib/api.js";
+import { isMapKitConfigured } from "../../lib/mapkit.js";
+import { FacilityMap } from "./FacilityMap.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -19,6 +21,10 @@ import { API_BASE, csrfHeaders } from "../../lib/api.js";
       const [adding, setAdding] = React.useState(false);
       const emptyF = () => ({ name: "", course: "", lanes: "", is_primary: false, line1: "", city: "", region: "", postal_code: "" });
       const [form, setForm] = React.useState(emptyF());
+      const [openMaps, setOpenMaps] = React.useState({}); // facility id → bool (lazy-mounted maps)
+      const mapKitOn = isMapKitConfigured();
+      const toggleMap = (id) => setOpenMaps(m => ({ ...m, [id]: !m[id] }));
+      const hasAddress = (f) => !!(f.address && (f.address.line1 || f.address.city || f.address.postal_code));
       const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
       const load = React.useCallback(async () => {
         try {
@@ -69,21 +75,27 @@ import { API_BASE, csrfHeaders } from "../../lib/api.js";
             <div style={{ color: "var(--color-text-dim)", fontSize: 12, marginBottom: 8 }}>No facilities yet.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-              {list.map(f => (
-                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", background: "var(--color-bg)", borderRadius: 6 }}>
+              {list.map(f => {
+                const mappable = mapKitOn && hasAddress(f);
+                const isOpen = !!openMaps[f.id];
+                return (
+                <React.Fragment key={f.id}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", background: "var(--color-bg)", borderRadius: 6 }}>
                   <span style={{ fontWeight: 700, color: "var(--color-text)", fontSize: 13 }}>{f.name}</span>
                   {f.is_primary && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 4, padding: "1px 6px" }}>PRIMARY</span>}
                   {f.course && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>{courseLabel(f.course)}</span>}
                   {f.lanes != null && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>{f.lanes} lanes</span>}
                   {f.address && (f.address.city || f.address.line1) && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>· {[f.address.line1, f.address.city, f.address.region].filter(Boolean).join(", ")}</span>}
-                  {canWrite && (
-                    <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                      {!f.is_primary && <button onClick={() => makePrimary(f.id)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Make primary</button>}
-                      <button onClick={() => archive(f.id, f.name)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Remove</button>
-                    </span>
-                  )}
+                  <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    {mappable && <button onClick={() => toggleMap(f.id)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary)", cursor: "pointer" }}>{isOpen ? "Hide map" : "📍 Map"}</button>}
+                    {canWrite && !f.is_primary && <button onClick={() => makePrimary(f.id)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Make primary</button>}
+                    {canWrite && <button onClick={() => archive(f.id, f.name)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Remove</button>}
+                  </span>
                 </div>
-              ))}
+                {mappable && isOpen && <FacilityMap facility={f} />}
+                </React.Fragment>
+                );
+              })}
             </div>
           )}
           {canWrite && (adding ? (
