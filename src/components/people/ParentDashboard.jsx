@@ -102,7 +102,7 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
             </span>
           </h2>
 
-          <TeamCalendarDownload />
+          <TeamCalendarDownload teams={Array.isArray(thisWeek?.team_calendars) ? thisWeek.team_calendars : []} />
 
           {/* Swimmer selector */}
           {swimmers.length > 1 && (

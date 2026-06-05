@@ -1590,6 +1590,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // ProfileModal-open doesn't need their three GETs anymore.
       const [sessions, setSessions]               = useState([]);   // auth/sessions
       const [teamDefaults, setTeamDefaults]       = useState([]);   // team-defaults inherited
+      const [teamCalendars, setTeamCalendars]     = useState([]);   // team .ics feed links (from bootstrap)
       const [pendingInvites, setPendingInvites]   = useState([]);   // parent invites awaiting accept
       const [billingStatus, setBillingStatus]     = useState(null); // { tier, ... } | null
       const [audioCues, setAudioCues]             = useState(true); // W1: rest-timer beeps default ON
@@ -2046,6 +2047,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         // seed from props instead of fetching on open.
         if (Array.isArray(d.sessions))     setSessions(d.sessions);
         if (Array.isArray(d.teamDefaults)) setTeamDefaults(d.teamDefaults);
+        if (Array.isArray(d.team_calendars)) setTeamCalendars(d.team_calendars);
         if (Array.isArray(d.pendingInvites)) setPendingInvites(d.pendingInvites);
         if (d.billing && d.billing.status) setBillingStatus(d.billing.status);
         // Settings — applied through the shared applySettings helper so
@@ -5465,6 +5467,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                  + /api/me/team-defaults fetches on open. */
               appSessions={sessions}
               appTeamDefaults={teamDefaults}
+              appTeamCalendars={teamCalendars}
               appBillingStatus={billingStatus}
               appLevel={level}
               appNextEvent={nextEvent}

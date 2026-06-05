@@ -10,20 +10,30 @@ function slug(s) {
   return String(s || "team").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "team";
 }
 
-export function TeamCalendarDownload({ heading = "📆 Team calendar" }) {
-  const [teams, setTeams] = React.useState(null); // null = loading
+// `teams` may be passed in (from a composite bootstrap — preferred, no extra
+// request) or omitted (standalone fallback: a deferred self-fetch). Folding the
+// data into the page's bootstrap avoids the load burst that trips Hyperlift's rate
+// limit (429), per the codebase's composite-endpoint pattern.
+export function TeamCalendarDownload({ heading = "📆 Team calendar", teams: teamsProp = null }) {
+  const [teamsState, setTeamsState] = React.useState(null); // null = loading
+  const provided = Array.isArray(teamsProp);
+  const teams = provided ? teamsProp : teamsState;
 
   React.useEffect(() => {
+    if (provided) return;            // data came from bootstrap — no fetch needed
     let alive = true;
-    (async () => {
-      try {
-        const r = await fetch("/api/me/team-calendars", { cache: "no-store" });
-        const a = r.ok ? await r.json() : [];
-        if (alive) setTeams(Array.isArray(a) ? a : []);
-      } catch (_) { if (alive) setTeams([]); }
-    })();
-    return () => { alive = false; };
-  }, []);
+    // Standalone fallback only: defer off the initial burst (~1.2s).
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const r = await fetch("/api/me/team-calendars", { cache: "no-store" });
+          const a = r.ok ? await r.json() : [];
+          if (alive) setTeamsState(Array.isArray(a) ? a : []);
+        } catch (_) { if (alive) setTeamsState([]); }
+      })();
+    }, 1200);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [provided]);
 
   if (teams === null || teams.length === 0) return null; // silent when nothing to show
 

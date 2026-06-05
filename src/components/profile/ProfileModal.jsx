@@ -18,7 +18,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites }) {
+    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites }) {
       // Burst-mitigation B — seed ALL local state from App-level props.
       // /api/me/bootstrap returns everything ProfileModal needs (sessions +
       // team-defaults + billing-status added in B). loadAll's Promise.all is
@@ -548,8 +548,9 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     <JoinGroupSection me={me} setMe={setMe} onJoined={() => { if (onProfileChange) onProfileChange(); }} />
                     {/* R-I: claim a managed profile a coach created for you */}
                     <ClaimManagedSection me={me} setMe={setMe} onClaimed={() => { if (onProfileChange) onProfileChange(); }} />
-                    {/* Team calendar — one-click .ics download for any team the user is in. */}
-                    <TeamCalendarDownload />
+                    {/* Team calendar — one-click .ics download for any team the user is in.
+                        Data comes from /api/me/bootstrap (via App props) — no extra request. */}
+                    <TeamCalendarDownload teams={Array.isArray(appTeamCalendars) ? appTeamCalendars : []} />
                   </div>
                   {/* Setforge rebrand 2026-05-20 — Send feedback + Sign out
                       folded down from the top nav (REBRAND_SCOPE §8.1, §8.4). */}

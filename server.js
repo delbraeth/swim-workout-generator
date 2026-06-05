@@ -876,15 +876,19 @@ app.get("/api/me", requireAuth, async (req, res) => {
 // helpers that failed so the client can decide to re-fetch lazily.
 app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
   try {
-    const [bootstrap, billingStatus] = await Promise.all([
+    const [bootstrap, billingStatus, teamCalendars] = await Promise.all([
       dbGetBootstrapForUser(req.userSub),
       getBillingStatusFor(req.userSub).catch(err => {
         console.warn(`[bootstrap] billing status failed for ${req.userSub}: ${err.message}`);
         return { tier: "free" };
       }),
+      // Folded into bootstrap so the parent/swimmer calendar widget needs no extra
+      // request (avoids the page-load burst that trips Hyperlift's rate limit).
+      dbListTeamCalendarsForUser(req.userSub).catch(() => []),
     ]);
     if (!bootstrap || !bootstrap.me) return res.status(404).json({ error: "user not found" });
-    res.json({ ...bootstrap, billing: { status: billingStatus } });
+    const team_calendars = (teamCalendars || []).map(t => ({ team_id: t.team_id, team_name: t.team_name, url: calendarFeedUrl(req, t.token) }));
+    res.json({ ...bootstrap, team_calendars, billing: { status: billingStatus } });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -3866,7 +3870,12 @@ app.get("/api/parent/digest", requireAuth, requireParent, async (req, res) => {
       week = d.toISOString().slice(0, 10);
     }
     const payload = await dbGetWeeklyDigestPayload({ parentSub: req.userSub, weekStart: week });
-    res.json(payload);
+    // Fold team calendar links into the digest so the parent portal's calendar
+    // widget needs no extra request (Hyperlift burst-limit avoidance). guardianOnly:
+    // the parent portal shows only the kids' teams, not the parent's own.
+    const tc = await dbListTeamCalendarsForUser(req.userSub, { guardianOnly: true }).catch(() => []);
+    const team_calendars = (tc || []).map(t => ({ team_id: t.team_id, team_name: t.team_name, url: calendarFeedUrl(req, t.token) }));
+    res.json({ ...payload, team_calendars });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

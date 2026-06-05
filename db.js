@@ -5758,24 +5758,28 @@ export async function dbTeamCalendarFeedData(teamId) {
 // real). Returns [{ team_id, team_name, token }] with the token lazy-created. The
 // feed itself carries no minor PII (titles/dates/facility only), so parent +
 // swimmer exposure is MAAP-safe; only coaches can rotate the token.
-export async function dbListTeamCalendarsForUser(userSub) {
+export async function dbListTeamCalendarsForUser(userSub, { guardianOnly = false } = {}) {
   if (!userSub) return [];
   const parentPid = await _swimmerPersonId({ swimmerSub: userSub });
-  const clauses = [
-    "t.`id` IN (SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL)",
-    "t.`id` IN (SELECT g.`team_id` FROM `group_members` gm JOIN `groups` g ON g.`id` = gm.`group_id` " +
-      "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` IS NOT NULL)",
-  ];
-  const params = [userSub, userSub];
-  if (parentPid) {
-    // Guardian → swimmers' teams: managed swimmers attached by team_id, AND any
-    // guardianed swimmer (managed or real) who is a group member of a team.
+  const clauses = [];
+  const params = [];
+  if (!guardianOnly) {
+    // The user's OWN teams (coach, or swimmer group-member). Excluded for the
+    // parent portal, which should show only the kids' teams.
+    clauses.push("t.`id` IN (SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL)");
+    params.push(userSub);
     clauses.push(
-      "t.`id` IN (SELECT m.`team_id` FROM `coach_managed_swimmers` m " +
-      "WHERE m.`archived` = 0 AND m.`team_id` IS NOT NULL " +
-      "AND m.`person_id` IN (SELECT `swimmer_person_id` FROM `guardians` WHERE `guardian_person_id` = ? AND `removed_at` IS NULL))"
+      "t.`id` IN (SELECT g.`team_id` FROM `group_members` gm JOIN `groups` g ON g.`id` = gm.`group_id` " +
+      "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` IS NOT NULL)"
     );
-    params.push(parentPid);
+    params.push(userSub);
+  }
+  if (parentPid) {
+    // Guardian → teams where a guardianed swimmer (managed OR real) is an ACTIVE
+    // GROUP MEMBER. That's the real "my kid practices here" signal. We intentionally
+    // do NOT use coach_managed_swimmers.team_id here — it's a looser roster
+    // attachment that can point at a team the kid isn't actually grouped in, which
+    // surfaced phantom calendars in the parent portal.
     clauses.push(
       "t.`id` IN (SELECT gr.`team_id` FROM `group_members` gm2 " +
       "JOIN `groups` gr ON gr.`id` = gm2.`group_id` AND gr.`team_id` IS NOT NULL " +
@@ -5786,6 +5790,7 @@ export async function dbListTeamCalendarsForUser(userSub) {
     );
     params.push(parentPid);
   }
+  if (clauses.length === 0) return [];
   const rows = await pool.query(
     "SELECT DISTINCT t.`id`, t.`name` FROM `teams` t " +
     "WHERE t.`archived` = 0 AND (" + clauses.join(" OR ") + ") ORDER BY t.`name` ASC",
