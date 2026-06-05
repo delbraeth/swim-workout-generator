@@ -4595,6 +4595,26 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     Author lesson content under <strong>🔧 → My Sets</strong> (tag type <em>Lesson</em> + a level).
                     "Use my sets only" excludes the built-in adult/technique content — best for young or beginner swimmers.
                   </p>
+                  {/* Empty-state guard: "my sets only" needs authored content per
+                      lesson section (in the current pool). Warn precisely which are
+                      missing so generation doesn't just silently fail. */}
+                  {lessonMySetsOnly && (() => {
+                    const k = poolMode === "25m" ? "_SCM" : poolMode === "50m" ? "_50M" : "";
+                    const ov = ugcOverlay || {};
+                    const drills  = ((ov["DRILL_OPTIONS" + k] || {}).lesson) || [];
+                    const warmups = ov["WARMUP_OPTIONS" + k] || [];
+                    const cools   = ov["COOLDOWN_OPTIONS" + k] || [];
+                    const missing = [];
+                    if (!warmups.length) missing.push("Warm-Up");
+                    if (!drills.length)  missing.push("Skill Focus");
+                    if (!cools.length)   missing.push("Send-off");
+                    if (!missing.length) return null;
+                    return (
+                      <div style={{ marginTop: 8, padding: "8px 12px", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, fontSize: 12, color: "#fca5a5", lineHeight: 1.5 }}>
+                        ⚠️ <strong>No lesson sets for {missing.join(" / ")}</strong> in this pool ({poolMode}). With “Use my sets only” on, generation can’t fill {missing.length === 1 ? "that section" : "those sections"} — author <em>Lesson</em>-tagged sets under 🔧 → My Sets, or uncheck to use built-in content.
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
