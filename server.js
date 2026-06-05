@@ -31,7 +31,8 @@
 //   GET  /api/auth/signout          → revoke current session, redirect /
 //
 // Required env vars:
-//   DB_HOST, DB_USER, DB_PASSWORD   — see db.js for the full list
+//   DB_CONFIG (JSON blob: host/user/password/port/name) — or the legacy
+//   DB_HOST/DB_USER/DB_PASSWORD fallback. See db.js for details.
 //
 // Apple Sign-In env vars (all required when Apple auth is active):
 //   APPLE_TEAM_ID            — 10-char team ID from Apple Developer console

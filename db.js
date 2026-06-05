@@ -1,10 +1,15 @@
 // db.js — MariaDB connection pool + per-table helpers for vero_swimgen.
 //
-// Required env vars (pool fails to initialize if any are missing):
-//   DB_HOST, DB_USER, DB_PASSWORD
+// Connection config (pool fails to initialize if host/user/password missing):
+//   Preferred: DB_CONFIG — a single JSON blob, e.g.
+//     {"host":"…","user":"…","password":"…","port":3306,"name":"vero_swimgen","mode":"full"}
+//   This collapses the DB_* vars into one env slot (the Hyperlift env cap is
+//   tight). The legacy individual vars (DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME/
+//   DB_MODE) still work as a fallback and override any unset blob key, so the cutover
+//   is safe: set DB_CONFIG, verify boot, then remove the individual vars.
 //
-// Optional:
-//   DB_PORT (default 3306), DB_NAME (default vero_swimgen)
+//   NOTE: DB_MODE ("full") is carried here so the var can be retired, but it is NOT
+//   currently read by any app code — exported as `dbMode` for future use.
 //
 // TLS is required at the server (REQUIRE SSL on the user). The pool passes
 // `ssl: { rejectUnauthorized: false }` — encrypted, no cert chain validation
@@ -14,15 +19,44 @@ import { createPool } from "mariadb";
 import crypto          from "crypto";
 import { suggestedPhaseFromWeeksOut, weeksUntilEvent } from "./lib/season.js";
 
-const {
-  DB_HOST,
-  DB_PORT     = "3306",
-  DB_USER,
-  DB_PASSWORD,
-  DB_NAME     = "vero_swimgen",
-} = process.env;
+// Parse the optional DB_CONFIG JSON blob; malformed JSON is ignored (falls back
+// to the individual vars) with a warning rather than crashing boot.
+let _dbBlob = {};
+if (process.env.DB_CONFIG) {
+  try {
+    const parsed = JSON.parse(process.env.DB_CONFIG);
+    if (parsed && typeof parsed === "object") _dbBlob = parsed;
+  } catch (e) {
+    console.warn("[db] DB_CONFIG is not valid JSON — ignoring, using DB_* vars");
+  }
+}
+
+// Individual vars take precedence when set (so an ops override always wins);
+// otherwise fall back to the blob, then to defaults.
+const DB_HOST     = process.env.DB_HOST     ?? _dbBlob.host;
+const DB_PORT     = process.env.DB_PORT     ?? _dbBlob.port     ?? "3306";
+const DB_USER     = process.env.DB_USER     ?? _dbBlob.user;
+const DB_PASSWORD = process.env.DB_PASSWORD ?? _dbBlob.password;
+const DB_NAME     = process.env.DB_NAME     ?? _dbBlob.name     ?? "vero_swimgen";
+// Carried for env consolidation only — not consumed by the pool or app today.
+export const dbMode = process.env.DB_MODE   ?? _dbBlob.mode     ?? null;
 
 export const dbActive = Boolean(DB_HOST && DB_USER && DB_PASSWORD);
+
+// One-line boot log of where each connection value resolved from (env var vs the
+// DB_CONFIG blob) — no values printed. Lets the env cutover be verified from logs:
+// after deleting the individual DB_* vars + restart, every key should read "blob".
+{
+  const src = (k) => (process.env[k] != null ? "env" : (_dbBlob[{
+    DB_HOST: "host", DB_PORT: "port", DB_USER: "user",
+    DB_PASSWORD: "password", DB_NAME: "name", DB_MODE: "mode",
+  }[k]] != null ? "blob" : "default"));
+  console.log(
+    `[db] config sources — host=${src("DB_HOST")} port=${src("DB_PORT")} ` +
+    `user=${src("DB_USER")} password=${src("DB_PASSWORD")} name=${src("DB_NAME")} ` +
+    `mode=${src("DB_MODE")} (DB_CONFIG ${process.env.DB_CONFIG ? "present" : "absent"})`
+  );
+}
 
 export const pool = dbActive
   ? createPool({
