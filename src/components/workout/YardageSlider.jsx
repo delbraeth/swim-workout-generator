@@ -1,6 +1,7 @@
 // src/components/workout/YardageSlider.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { minYardsForType } from "../../lib/workout-helpers.js";
+import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
 
     const { useState } = React;
 
@@ -11,11 +12,15 @@ import { minYardsForType } from "../../lib/workout-helpers.js";
       const is25m    = poolMode === "25m";
       const is50m    = poolMode === "50m";
       const isMeters = is25m || is50m;
-      const ABS_MIN     = isMeters ? 2000 : 1900;
-      const ABS_MAX     = 6000;
-      const SLIDER_STEP = is50m ? 100 : 50;     // SCM uses 50m step like SCY (more granular than LCM)
-      const SLIDER_MIN  = Math.max(ABS_MIN, sliderMinProp ?? ABS_MIN);
-      const SLIDER_MAX  = Math.min(ABS_MAX, sliderMaxProp ?? 5000);
+      // Lesson tier (Phase 5) — fixed short band (800–1200), bypasses the user's
+      // saved slider prefs and the standard 1900/2000 floor. Bounds aren't
+      // user-editable for lesson.
+      const isLesson    = selectedType === "lesson";
+      const ABS_MIN     = isLesson ? LESSON_MIN : (isMeters ? 2000 : 1900);
+      const ABS_MAX     = isLesson ? LESSON_MAX : 6000;
+      const SLIDER_STEP = isLesson ? 100 : (is50m ? 100 : 50);     // SCM uses 50m step like SCY (more granular than LCM)
+      const SLIDER_MIN  = isLesson ? LESSON_MIN : Math.max(ABS_MIN, sliderMinProp ?? ABS_MIN);
+      const SLIDER_MAX  = isLesson ? LESSON_MAX : Math.min(ABS_MAX, sliderMaxProp ?? 5000);
       const unit = isMeters ? "m" : "yds";
       const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN) * 100).toFixed(1);
       // 5 evenly-spaced ticks between SLIDER_MIN and SLIDER_MAX
@@ -81,7 +86,7 @@ import { minYardsForType } from "../../lib/workout-helpers.js";
                   style={{ width: 52, fontFamily: "monospace", fontSize: 13, padding: "4px 7px", borderRadius: 6,
                            border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)", outline: "none" }}
                 />
-                {presets.map(({ label, mins }) => {
+                {!isLesson && presets.map(({ label, mins }) => {
                   const y = yardsForMins(mins);
                   const active = activePreset === label;
                   return (
@@ -114,7 +119,8 @@ import { minYardsForType } from "../../lib/workout-helpers.js";
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
             {ticks.map((v, i) => {
               const isMin = i === 0, isMax = i === ticks.length - 1;
-              const boundKey = isMin ? "min" : isMax ? "max" : null;
+              // Lesson bounds are fixed (not user-editable) — don't expose ✎ edit.
+              const boundKey = isLesson ? null : (isMin ? "min" : isMax ? "max" : null);
               if (boundKey && editingBound === boundKey) {
                 return (
                   <input key={v} type="number" value={boundDraft} autoFocus

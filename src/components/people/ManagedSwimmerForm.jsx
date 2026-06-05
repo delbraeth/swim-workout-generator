@@ -74,6 +74,14 @@ import { DOB_MAX_TODAY, DOB_MIN, GENDER_OPTIONS } from "../../lib/constants.js";
             </div>
           </div>
 
+          <label style={labelStyle}>Lesson level <span style={{ color: "var(--color-text-dim)", fontWeight: 400 }}>(defaults the lesson generator's level)</span></label>
+          <select value={form.lesson_level || ""} onChange={e => upd("lesson_level", e.target.value)} style={inputStyle}>
+            <option value="">— Not set —</option>
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select>
+
           <label style={labelStyle}>Parental contact (email or phone, required for minors in high-school teams)</label>
           <input value={form.parental_contact} onChange={e => upd("parental_contact", e.target.value)}
             placeholder="parent@example.com" maxLength={255} style={inputStyle} />

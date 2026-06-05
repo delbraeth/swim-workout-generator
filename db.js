@@ -555,7 +555,7 @@ export async function dbGetMe(sub) {
     // "(unknown)" rather than crashing.
     const userRows = await conn.query(
       "SELECT u.`sub`, u.`email`, u.`email_verified`, " +
-      "       u.`is_admin`, u.`is_coach`, " +
+      "       u.`is_admin`, u.`is_coach`, u.`tier`, " +
       "       u.`created_at`, u.`last_login_at`, " +
       "       p.`first_name`, p.`last_name`, p.`preferred_name`, " +
       "       p.`initials` AS person_initials, " +
@@ -648,6 +648,13 @@ export async function dbGetMe(sub) {
       // Coach is granted by either explicit is_coach flag OR is_admin (admin
       // implicitly has coach capability). Mirrors dbIsCoach's check.
       is_coach:                !!(u.is_coach || u.is_admin),
+      // Billing tier (free/coach/lesson/program). Lesson tier (Phase 5) is
+      // ADDITIVE: Coach/Program are a superset, so lesson surfaces also unlock
+      // for coaches/admins. `can_lesson` is the single client-side gate for the
+      // Lesson workout type, managed-swimmer roster, per-swimmer equipment, and
+      // the parent-recap export. Mirrors the server-side dbHasLessonAccess check.
+      tier:                    u.tier || "free",
+      can_lesson:              !!(u.is_coach || u.is_admin) || ["lesson", "coach", "program"].includes(u.tier || "free"),
       created_at:              u.created_at,
       last_login_at:           u.last_login_at,
       workout_count:           workoutCount,
@@ -836,6 +843,21 @@ export async function dbIsCoach(sub) {
 // Privacy note: v1 lists ALL coaches system-wide. At multi-tenant scale this
 // becomes PII leakage; scope down (e.g., "only coaches in teams I'm in") when
 // the threat model warrants.
+// Lesson tier (Phase 5) — entitlement check for lesson surfaces (Lesson workout
+// type, managed-swimmer roster, per-swimmer equipment, parent-recap export).
+// ADDITIVE: Coach/Program tiers + admins are a superset, so they pass too.
+// Mirrors the `can_lesson` flag on the dbGetMe payload. Server-side gate for the
+// recap route and lesson-tier managed-swimmer access.
+export async function dbHasLessonAccess(sub) {
+  if (!sub) return false;
+  const rows = await pool.query(
+    "SELECT 1 FROM `users` WHERE `sub` = ? AND `is_disabled` = 0 " +
+    "  AND (`is_coach` = 1 OR `is_admin` = 1 OR `tier` IN ('lesson','coach','program')) LIMIT 1",
+    [sub]
+  );
+  return rows.length > 0;
+}
+
 export async function dbListCoachesForPicker(excludeSub) {
   // Identity: name/initials come from persons (JOIN via person_id); sorted
   // by persons.last_name, first_name. Legacy users columns dropped in 044.
@@ -1831,7 +1853,7 @@ export async function dbGetUgcOverlay(userSub) {
     "SELECT DISTINCT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, " +
     "       bo.`type_ids`, bo.`stroke_ids`, " +
     "       bo.`pool_mode`, bo.`label`, bo.`total_yards`, bo.`type_affinity`, " +
-    "       bo.`author_sub`, bo.`visibility` " +
+    "       bo.`lesson_level`, bo.`author_sub`, bo.`visibility` " +
     "FROM `bank_options` bo " +
     "WHERE bo.`promoted_at` IS NULL " +
     "  AND ( " +
@@ -1912,6 +1934,9 @@ export async function dbGetUgcOverlay(userSub) {
       _author_sub:    r.author_sub,
       _visibility:    r.visibility,
       _is_own:        r.author_sub === userSub,
+      // Lesson ability level (Phase 5) — null = untagged (shows at any level).
+      // The engine filters lesson overlay options by this (getBankOptions).
+      ...(r.lesson_level ? { lesson_level: r.lesson_level } : {}),
     };
     if (r.section === "warmup" || r.section === "cooldown") {
       overlay[key].push(option);
@@ -1952,8 +1977,13 @@ export async function dbGetUgcOverlay(userSub) {
 
 const UGC_SECTIONS    = new Set(["warmup", "drill", "main", "cooldown"]);
 const UGC_POOL_MODES  = new Set(["25y", "25m", "50m"]);
-const UGC_TYPE_KEYS   = new Set(["im", "distance", "sprint", "endurance", "mixed", "technique"]);
+// "lesson" (Phase 5) — coaches tag drill/main sets "lesson" so they route into the
+// Lesson workout type (and NOT into IM/Sprint/Technique). See getBankOptions.
+const UGC_TYPE_KEYS   = new Set(["im", "distance", "sprint", "endurance", "mixed", "technique", "lesson"]);
 const UGC_STROKE_KEYS = new Set(["back", "breast", "fly", "free", "im"]);
+// Lesson ability level (Phase 5) — cross-cutting scope for lesson content across
+// the 4–80 age range. Applies to ANY section (incl. type-agnostic warmup/cooldown).
+const LESSON_LEVELS   = new Set(["beginner", "intermediate", "advanced"]);
 const UGC_VISIBILITY  = new Set(["private", "team", "public", "pending", "rejected"]);
 const UGC_INTERVAL_RE = /^(On \d+:\d{2}|No interval.*)$/;
 const UGC_QUOTA_PER_COACH = 50;  // counts unpromoted only
@@ -1974,7 +2004,14 @@ function genUgcSetId() {
 function validateUgcPayload(payload, { allowVisibility = ["private", "team", "public"] } = {}) {
   if (!payload || typeof payload !== "object") throw new Error("payload required");
   const { section, type_id, stroke_id, type_ids: rawTypeIds, stroke_ids: rawStrokeIds,
-          pool_mode, label, total_yards, type_affinity, visibility, sets, team_ids } = payload;
+          pool_mode, label, total_yards, type_affinity, visibility, sets, team_ids,
+          lesson_level: rawLessonLevel } = payload;
+  // Lesson ability level (Phase 5) — optional; valid on any section. null = untagged.
+  let lessonLevel = null;
+  if (rawLessonLevel != null && rawLessonLevel !== "") {
+    if (!LESSON_LEVELS.has(rawLessonLevel)) throw new Error(`bad lesson_level: ${rawLessonLevel}`);
+    lessonLevel = rawLessonLevel;
+  }
   // Phase H — array-form multi-tag. Singletons (type_id / stroke_id) are
   // accepted for backward compat and wrapped to length-1 arrays. Array
   // form is canonical going forward.
@@ -2080,6 +2117,7 @@ function validateUgcPayload(payload, { allowVisibility = ["private", "team", "pu
     type_affinity: type_affinity ? JSON.stringify(type_affinity) : null,
     visibility:    v,
     team_ids:      cleanTeamIds,
+    lesson_level:  lessonLevel,
     sets:          cleanSets,
   };
 }
@@ -2155,11 +2193,11 @@ export async function dbCreateUgcOption(authorSub, payload) {
     await conn.beginTransaction();
     await conn.query(
       "INSERT INTO `bank_options` " +
-      "(`id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, `pool_mode`, `label`, " +
+      "(`id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, `lesson_level`, `pool_mode`, `label`, " +
       " `total_yards`, `type_affinity`, `author_sub`, `visibility`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [optionId, clean.section, clean.type_id, clean.stroke_id,
-       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids),
+       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids), clean.lesson_level,
        clean.pool_mode, clean.label, clean.total_yards, clean.type_affinity,
        authorSub, storedVisibility]
     );
@@ -2195,7 +2233,7 @@ export async function dbCreateUgcOption(authorSub, payload) {
 export async function dbGetUgcOption(optionId) {
   if (!optionId) return null;
   const rows = await pool.query(
-    "SELECT `id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, " +
+    "SELECT `id`, `section`, `type_id`, `stroke_id`, `type_ids`, `stroke_ids`, `lesson_level`, " +
     "       `pool_mode`, `label`, " +
     "       `total_yards`, `type_affinity`, `author_sub`, `visibility`, " +
     "       `created_at`, `updated_at`, `version`, `promoted_at`, `promoted_by_sub` " +
@@ -2237,6 +2275,7 @@ export async function dbGetUgcOption(optionId) {
     stroke_id:       r.stroke_id,
     type_ids:        typeIds,      // array form is canonical going forward
     stroke_ids:      strokeIds,
+    lesson_level:    r.lesson_level || null,   // Lesson tier (Phase 5)
     pool_mode:       r.pool_mode,
     label:           r.label,
     total_yards:     r.total_yards,
@@ -2271,7 +2310,7 @@ export async function dbListUgcOptionsByAuthor(authorSub) {
   if (!authorSub) return [];
   const rows = await pool.query(
     "SELECT bo.`id`, bo.`section`, bo.`type_id`, bo.`stroke_id`, " +
-    "       bo.`type_ids`, bo.`stroke_ids`, bo.`pool_mode`, bo.`label`, " +
+    "       bo.`type_ids`, bo.`stroke_ids`, bo.`lesson_level`, bo.`pool_mode`, bo.`label`, " +
     "       bo.`total_yards`, bo.`visibility`, bo.`created_at`, bo.`updated_at`, " +
     "       bo.`version`, bo.`promoted_at`, " +
     // Latest review reason for rejected rows. NULL when no reviews exist
@@ -2298,6 +2337,7 @@ export async function dbListUgcOptionsByAuthor(authorSub) {
     stroke_id:             r.stroke_id,
     type_ids:              parseArr(r.type_ids,   r.type_id   ? [r.type_id]   : []),
     stroke_ids:            parseArr(r.stroke_ids, r.stroke_id ? [r.stroke_id] : []),
+    lesson_level:          r.lesson_level || null,   // Lesson tier (Phase 5)
     pool_mode:             r.pool_mode,
     label:                 r.label,
     total_yards:           r.total_yards,
@@ -2346,12 +2386,12 @@ export async function dbUpdateUgcOption(authorSub, optionId, payload) {
     await conn.query(
       "UPDATE `bank_options` SET " +
       "  `section` = ?, `type_id` = ?, `stroke_id` = ?, " +
-      "  `type_ids` = ?, `stroke_ids` = ?, `pool_mode` = ?, " +
+      "  `type_ids` = ?, `stroke_ids` = ?, `lesson_level` = ?, `pool_mode` = ?, " +
       "  `label` = ?, `total_yards` = ?, `type_affinity` = ?, `visibility` = ?, " +
       "  `version` = `version` + 1 " +
       "WHERE `id` = ?",
       [clean.section, clean.type_id, clean.stroke_id,
-       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids),
+       JSON.stringify(clean.type_ids), JSON.stringify(clean.stroke_ids), clean.lesson_level,
        clean.pool_mode, clean.label, clean.total_yards, clean.type_affinity,
        newVisibility, optionId]
     );
@@ -3714,8 +3754,21 @@ export async function dbCreateParentInvite({ swimmerSub = null, managedId = null
 // Coach (or invite creator) revokes a pending invite before parent
 // accepts it. State='revoked' rather than DELETE so audit + analytics
 // preserve the attempt.
-export async function dbRevokeParentInvite(inviteId) {
-  if (!inviteId) return { ok: false, reason: "missing_args" };
+export async function dbRevokeParentInvite(inviteId, callerSub) {
+  if (!inviteId || !callerSub) return { ok: false, reason: "missing_args" };
+  // Ownership scope (Phase 5 hardening): the caller must coach the invite's
+  // swimmer. Without this, any authed coach/lesson user could revoke ANY invite
+  // by id (IDOR). Tightened when lesson tier widened who can reach this route.
+  const inv = (await pool.query(
+    "SELECT `swimmer_sub`, `swimmer_managed_id` FROM `parent_invites` WHERE `id` = ? LIMIT 1",
+    [Number(inviteId)]
+  ))[0];
+  if (!inv) return { ok: false, reason: "not_found" };
+  const authz = await dbAuthzCoachOfSwimmer(callerSub, {
+    swimmerSub: inv.swimmer_sub || null,
+    managedId:  inv.swimmer_managed_id || null,
+  });
+  if (!authz) return { ok: false, reason: "forbidden" };
   const r = await pool.query(
     "UPDATE `parent_invites` SET `state` = 'revoked' WHERE `id` = ? AND `state` = 'pending'",
     [Number(inviteId)]
@@ -3924,8 +3977,24 @@ export async function dbListParentInvitesForSwimmer({ managedId = null, swimmerS
 // Coach removes a parent (tombstones the guardians row). Parent's
 // ParentDashboard no longer shows this swimmer next load. Audit-logged
 // at the route layer.
-export async function dbRemoveGuardian(guardianId) {
-  if (!guardianId) return { ok: false, reason: "missing_args" };
+export async function dbRemoveGuardian(guardianId, callerSub) {
+  if (!guardianId || !callerSub) return { ok: false, reason: "missing_args" };
+  // Ownership scope (Phase 5 hardening): the caller must coach the swimmer this
+  // guardian belongs to. Previously unscoped ("v1.1 hardening" TODO) — closed now
+  // that lesson tier widened route access (was an IDOR on a FERPA-sensitive link).
+  const g = (await pool.query(
+    "SELECT `swimmer_person_id` FROM `guardians` WHERE `id` = ? AND `removed_at` IS NULL LIMIT 1",
+    [Number(guardianId)]
+  ))[0];
+  if (!g) return { ok: false, reason: "not_found" };
+  // Resolve the swimmer person → managed-swimmer or full-account ref for authz.
+  const ms = (await pool.query("SELECT `id` FROM `coach_managed_swimmers` WHERE `person_id` = ? LIMIT 1", [g.swimmer_person_id]))[0];
+  const usr = ms ? null : (await pool.query("SELECT `sub` FROM `users` WHERE `person_id` = ? LIMIT 1", [g.swimmer_person_id]))[0];
+  const authz = await dbAuthzCoachOfSwimmer(callerSub, {
+    managedId:  ms ? ms.id : null,
+    swimmerSub: usr ? usr.sub : null,
+  });
+  if (!authz) return { ok: false, reason: "forbidden" };
   const r = await pool.query(
     "UPDATE `guardians` SET `removed_at` = CURRENT_TIMESTAMP WHERE `id` = ? AND `removed_at` IS NULL",
     [Number(guardianId)]
@@ -4453,6 +4522,16 @@ function validateDob(dob) {
   return { ok: true };
 }
 
+// Lesson tier (Phase 5) — normalize a coach_managed_swimmers.equipment_modes
+// value to an object|null. MariaDB may return JSON columns pre-parsed (object)
+// or as a string depending on driver/config; handle both. Undefined (column not
+// selected) → null.
+function parseEquipmentModes(v) {
+  if (v == null) return null;
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch (_) { return null; }
+}
+
 function rowToManagedSwimmer(r) {
   // Phase 4 Identity I-D slice 2: if the caller JOINed persons and
   // projected r.first_name, compute display_name from the helper.
@@ -4482,6 +4561,12 @@ function rowToManagedSwimmer(r) {
     pace_scy_100:         r.pace_scy_100,
     pace_scm_100:         r.pace_scm_100,
     pace_lcm_100:         r.pace_lcm_100,
+    // Lesson tier (Phase 5) — per-swimmer equipment profile (JSON, same shape as
+    // user settings.equipment). Undefined when the caller's SELECT omits it.
+    equipment_modes:      parseEquipmentModes(r.equipment_modes),
+    // Lesson ability level (Phase 5) — beginner/intermediate/advanced|null. Drives
+    // which lesson sets the generator offers for this swimmer.
+    lesson_level:         r.lesson_level || null,
     archived:             !!r.archived,
     created_at:           dtToIso(r.created_at),
     updated_at:           dtToIso(r.updated_at),
@@ -4570,7 +4655,7 @@ export async function dbGetManagedSwimmer(id) {
   const rows = await pool.query(
     "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
     "       m.`parental_contact`, m.`parent_managed_flag`, " +
-    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
+    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, m.`equipment_modes`, m.`lesson_level`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
     "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
@@ -4593,7 +4678,7 @@ export async function dbListManagedSwimmersForCoach(coachSub, { includeArchived 
   const rows = await pool.query(
     "SELECT m.`id`, m.`owner_coach_sub`, m.`team_id`, " +
     "       m.`parental_contact`, m.`parent_managed_flag`, " +
-    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, " +
+    "       m.`pace_scy_100`, m.`pace_scm_100`, m.`pace_lcm_100`, m.`equipment_modes`, m.`lesson_level`, " +
     "       m.`archived`, m.`created_at`, m.`updated_at`, " +
     "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
     "       p.`dob` AS person_dob, p.`gender` AS person_gender, p.`class_year` AS person_class_year, " +
@@ -4619,6 +4704,15 @@ export async function dbUpdateManagedSwimmer(id, patch) {
     pace_scy_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
     pace_scm_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
     pace_lcm_100:        v => (v == null || v === "") ? null : (typeof v === "string" && v.length <= 8) ? v : undefined,
+    // Lesson tier (Phase 5) — per-swimmer equipment profile. Object (settings.
+    // equipment shape) → JSON string for the JSON column; null clears it.
+    equipment_modes:     v => {
+      if (v == null) return null;
+      if (typeof v !== "object" || Array.isArray(v)) return undefined;
+      try { return JSON.stringify(v); } catch (_) { return undefined; }
+    },
+    // Lesson ability level (Phase 5) — beginner/intermediate/advanced or null.
+    lesson_level:        v => (v == null || v === "") ? null : (["beginner","intermediate","advanced"].includes(v) ? v : undefined),
   };
   const sets = [], vals = [];
   for (const [k, validator] of Object.entries(cmsAllowed)) {
@@ -7822,7 +7916,7 @@ export async function dbListCoachTargets(coachSub) {
     "ORDER BY g.`name` ASC",
     [coachSub]
   );
-  return rows.map(r => ({
+  const targets = rows.map(r => ({
     kind:           "group",
     id:             r.id,
     name:           r.name,
@@ -7831,6 +7925,38 @@ export async function dbListCoachTargets(coachSub) {
     team_name:      r.team_name,
     member_count:   Number(r.member_count),
   }));
+  // Lesson tier (Phase 5) — expose INDIVIDUAL targets (kind:"managed") for direct
+  // single-swimmer assignment (server assign_to:{managed_id} path), carrying each
+  // swimmer's per-swimmer equipment profile. SCOPED to swimmers who are members of
+  // one of the caller's LESSON groups (team-less groups) — so the lesson picker
+  // shows only the people actually in your lessons, not your entire managed roster.
+  // To make a 1-on-1 student assignable, put them in their own lesson group.
+  const lessonGroupIds = targets.filter(g => g.team_id == null).map(g => g.id);
+  if (lessonGroupIds.length) {
+    const ph = lessonGroupIds.map(() => "?").join(",");
+    const memRows = await pool.query(
+      `SELECT DISTINCT \`member_managed_id\` FROM \`group_members\` ` +
+      `WHERE \`group_id\` IN (${ph}) AND \`left_at\` IS NULL AND \`member_managed_id\` IS NOT NULL`,
+      lessonGroupIds
+    );
+    const lessonMemberIds = new Set(memRows.map(r => r.member_managed_id));
+    if (lessonMemberIds.size) {
+      const managed = await dbListManagedSwimmersForCoach(coachSub, { includeArchived: false });
+      for (const m of managed) {
+        if (!lessonMemberIds.has(m.id)) continue;
+        targets.push({
+          kind:            "managed",
+          id:              m.id,            // ms_… — distinct namespace from group ids
+          managed_id:      m.id,
+          name:            m.display_name,
+          member_count:    1,
+          equipment_modes: m.equipment_modes || null,
+          lesson_level:    m.lesson_level || null,   // Phase 5 — defaults the lesson level picker
+        });
+      }
+    }
+  }
+  return targets;
 }
 
 // ── Workout assignments (Stage 3 / R-D) ──────────────────────────────

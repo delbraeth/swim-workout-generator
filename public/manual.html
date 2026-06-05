@@ -306,6 +306,7 @@
     <a href="#admin">Admin (admins only)</a>
     <a href="#teams">Teams (coaches)</a>
     <a href="#swimmers">Managed Swimmers (coaches)</a>
+    <a href="#lesson-tier">Lesson Tier (lesson/coach)</a>
     <a href="#catalog">Workout Catalog (coaches)</a>
     <a href="#practices-screen">Practices screen (coaches)</a>
     <a href="#coach-fanout">Coach: Planning for a Group</a>
@@ -354,6 +355,11 @@
         <div class="feat"><div class="feat-icon">📊</div><div class="feat-title">History &amp; Stats</div><div class="feat-desc">Every saved workout is logged. Stats panel shows sessions, total yards, weekly rate, and type breakdown.</div></div>
         <div class="feat"><div class="feat-icon">⭐</div><div class="feat-title">Favorites</div><div class="feat-desc">Star your favorite main sets. They get extra weight in the generator and are pinned in your History.</div></div>
         <div class="feat"><div class="feat-icon">☁️</div><div class="feat-title">Cloud Sync</div><div class="feat-desc">Your workout history, favorites, and settings are stored in the cloud and sync across devices.</div></div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-icon">🌐</div>
+        <div class="callout-body"><strong>Web first, then iOS.</strong> New features ship to the web app first; the iOS app follows with parity in a later build. If something documented here isn't in the iOS app yet, it's on the way — use the web app in the meantime.</div>
       </div>
     </section>
 
@@ -404,12 +410,18 @@
           <tr><td>🔙 Backstroke</td><td>Backstroke-specific drills and main sets</td><td>Stroke specialty training</td></tr>
           <tr><td>🐸 Breaststroke</td><td>Breaststroke technique and endurance</td><td>Stroke specialty training</td></tr>
           <tr><td>🦋 Butterfly</td><td>Butterfly sets with free recovery</td><td>Stroke specialty training</td></tr>
+          <tr><td>🎓 Lesson <span style="color: var(--muted); font-weight: 400;">(Lesson tier)</span></td><td>Short skill session — Warm-Up / Skill Focus / Send-off, no main set, 800–1,200 yd</td><td>Private &amp; small-group lessons</td></tr>
         </tbody>
       </table>
 
       <div class="callout tip">
         <div class="callout-icon">💡</div>
         <div class="callout-body"><strong>Specialty types &amp; SCM</strong> — every workout type now has native content in SCY (yards), SCM (25m), and LCM (50m). When you switch pool modes, the generator picks from the matching bank.</div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-icon">🎓</div>
+        <div class="callout-body"><strong>Lesson type</strong> is a short, no-"Main Set" skill session (Warm-Up / Skill Focus / Send-off, 800–1,200 yd) drawn from technique content. It's available on the <strong>Lesson</strong> and <strong>Coach</strong>/<strong>Program</strong> tiers — see <a href="#lesson-tier">Lesson tier</a>.</div>
       </div>
     </section>
 
@@ -1332,7 +1344,40 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       </div>
 
       <h3 id="subscription">Subscription</h3>
-      <p>SetForge is free for swimmers (Swimmer / Free tier). Coaches who want to use the coach-specific features — managed swimmers, groups, team curation, parent portal, Reports — pay a <strong>Coach</strong> tier subscription at <strong>$10/month</strong> with a <strong>14-day free trial</strong>. Card on file at trial start; no charge until the trial ends; cancel anytime from the same panel.</p>
+      <p>SetForge is free for swimmers (Swimmer / Free tier). Coaches who want the coach-specific features — managed swimmers, groups, team curation, parent portal, Reports — pay a <strong>Coach</strong> tier subscription at <strong>$9.99/month</strong> with a <strong>14-day free trial</strong>. Card on file at trial start; no charge until the trial ends; cancel anytime from the same panel.</p>
+      <p>There's also a <strong>Lesson</strong> tier at <strong>$4.99/month</strong> for private &amp; small-group instructors who don't need full club infrastructure. It unlocks the <a href="#lesson-tier">Lesson workout type, managed swimmers, lesson groups, per-swimmer equipment, and parent recap exports</a> — but not teams, multi-coach, curation, or Reports. Coach includes everything Lesson has. Subscribe from the same panel via the <strong>Subscribe to Lesson — $4.99/mo</strong> button.</p>
+
+      <h4>Compare plans</h4>
+      <table>
+        <thead><tr><th>Feature</th><th>Free</th><th>Lesson</th><th>Coach</th><th>Platform</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Price</strong></td><td>$0</td><td>$4.99/mo</td><td>$9.99/mo</td><td>—</td></tr>
+          <tr><td>Workout generator (all types)</td><td>✓</td><td>✓</td><td>✓</td><td>Universal</td></tr>
+          <tr><td>History, stats &amp; Run mode</td><td>✓</td><td>✓</td><td>✓</td><td>Universal</td></tr>
+          <tr><td>Goals &amp; Progress dashboard</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🎓 Lesson workout type</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Managed swimmers &amp; lesson groups</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Per-swimmer equipment &amp; parent recap</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Author lesson sets (leveled)</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Assign to individuals / groups</td><td>—</td><td>✓</td><td>✓</td><td>Web · Universal (coach groups)</td></tr>
+          <tr><td>Catalog &amp; UGC sharing</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Team curation (fav/disfavor propagation)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Reports</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Practices, attendance &amp; coach notes</td><td>—</td><td>—</td><td>✓</td><td>Universal</td></tr>
+          <tr><td>Lane plans &amp; multi-lane generate</td><td>—</td><td>—</td><td>✓</td><td>Universal</td></tr>
+          <tr><td>Free assistant seats (limited, for athlete-safety two-deep)</td><td>—</td><td>—</td><td>✓ up to 2</td><td>Web</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size: 13px; color: var(--muted);"><strong>Platform:</strong> Universal = web + iOS app · Web = web app first (the iOS app gains parity in a later build).</p>
+
+      <div class="callout">
+        <div class="callout-icon">🔜</div>
+        <div class="callout-body"><strong>Program (coming soon)</strong> — for clubs &amp; teams with <strong>multiple coaches</strong>: everything in Coach, plus a roster shared across coaches, team communication, and org-wide reports. In development.</div>
+      </div>
+      <div class="callout tip">
+        <div class="callout-icon">👥</div>
+        <div class="callout-body"><strong>Coach includes 2 free assistant seats</strong> (limited access — view roster, take attendance, add notes). So a head coach + assistant meet USA Swimming MAAP two-deep athlete-safety guidance at no extra cost. <strong>HS &amp; summer teams:</strong> per-season passes are available (cover the competitive season; roster &amp; history are preserved off-season).</div>
+      </div>
 
       <h4>How the panel works</h4>
       <ul>
@@ -1677,6 +1722,37 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <div class="callout note">
         <div class="callout-icon">ℹ️</div>
         <div class="callout-body"><strong>Relationships scope v1.1 is fully shipped:</strong> managed swimmers, DOB, bulk import, teams, groups, lane plans, workout assignments, "Assigned to me" view, claim flow, coach notes, admin tier — all live. See <code>RELATIONSHIPS_SCOPE.md</code> at the repo root for the design history.</div>
+      </div>
+    </section>
+
+    <!-- ══ LESSON TIER ══ -->
+    <section id="lesson-tier">
+      <h2>Lesson Tier (lesson / coach access)</h2>
+      <p>The <strong>Lesson</strong> tier ($4.99/month) is built for private and small-group instructors. Coach includes everything below as well. It adds these on top of the free swimmer experience:</p>
+
+      <h3>1 · Lesson workout type</h3>
+      <p>Pick the 🎓 <strong>Lesson</strong> type card to generate a short skill session: <strong>Warm-Up → Skill Focus → Send-off</strong> (no "Main Set"), <strong>800–1,200 yards</strong>. Content is drawn from the technique library, with the Skill Focus as the bulk of the session. The yardage slider locks to the lesson range automatically when you select the type.</p>
+
+      <h3>2 · My Groups</h3>
+      <p>Open <strong>🔧 → My groups</strong> to create small-group lessons (e.g. "9:00 AM Sunday"). Create a group, then add your managed swimmers to it. A group is a lightweight, team-free roster — you don't need to set up a Team to use it. (For a 1-on-1 student, make a group with just that swimmer.)</p>
+
+      <h3>3 · Assigning a lesson — group or individual</h3>
+      <p>With the Lesson type selected, the <strong>Generate for</strong> dropdown shows two scopes:</p>
+      <ul>
+        <li><strong>Individuals</strong> — each swimmer who's in one of your lesson groups. Pick one to assign the workout to just that swimmer (their saved equipment applies, and the parent-recap button appears).</li>
+        <li><strong>Groups</strong> — your lesson groups. Pick one to fan the same workout out to every member at once.</li>
+      </ul>
+      <p>Generate, then <strong>Save</strong> — the workout lands in your history and creates the assignment(s), which the swimmer sees under <strong>Assigned to me</strong>. (For non-lesson workout types the picker shows only your team groups — individuals and lesson groups stay scoped to the Lesson type.)</p>
+
+      <h3>4 · Per-swimmer equipment profile</h3>
+      <p>On a managed swimmer's detail page, the <strong>Equipment profile</strong> panel sets the equipment available to <em>that</em> swimmer. When you generate for them, this overrides your own equipment selection. Leave it empty (or clear it) to fall back to your default.</p>
+
+      <h3>5 · Parent recap export</h3>
+      <p>After generating a lesson <em>for</em> a managed swimmer, the ✉️ <strong>Send recap to parent</strong> button appears. It emails a branded one-page summary of the lesson (with an optional note from you) to the swimmer's parent/guardian. The swimmer must have a guardian with an email on file (add one via the swimmer's <strong>Parents</strong> panel / parent invite).</p>
+
+      <div class="callout">
+        <div class="callout-icon">🔒</div>
+        <div class="callout-body">You only ever see and manage <strong>your own</strong> swimmers, groups, and their parent links. Recaps go to the parent/guardian's email (an adult), never to a minor directly.</div>
       </div>
     </section>
 

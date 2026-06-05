@@ -1,10 +1,81 @@
 # Lesson Tier — scope
 
-**Status:** SPEC — **decisions LOCKED, BUILD-READY (2026-06-03).** Promoted from
-`PHASE_5_SCOPE.md` item 1. All three decisions resolved (price $5/mo · additive ·
-web-Stripe-first — see below). Still demand-gated on go (build when a private/lesson
-coach asks or a Coach downgrade request arrives), but no decisions block it now.
-Source: `PRICING.md` §"Lesson tier" + the coach-eval Private-coach persona.
+**Status:** ✅ **BUILT (web) 2026-06-04** — all 4 features shipped behind tier
+gating. Two build-time refinements vs this spec: (a) **section shape = 3 sections**
+(Warm-Up / **Skill Focus** / Send-off), not Skill Focus 1/2 — the simplest faithful
+no-"Main Set" lesson; (b) **lesson range 800–1200yd**, not 200–1200 — the smallest
+feasible 3-section lesson is warmup(400)+skill(200)+send-off(200)=800 given the reused
+banks ("no new content" was locked). Implementation note: "Skill Focus" rides the
+engine's **main slot** (the budget-absorbing flex section), drill-bank-sourced and
+relabeled — output has no "Main Set" while reusing the proven picker (no risky
+main-skip rewrite). **Paywall LIVE (test mode) 2026-06-04:** Stripe lesson price
+`price_1Teddo…` wired into `STRIPE_CONFIG.price_id_lesson_monthly`; `has_price_id_lesson:true`;
+"Subscribe to Lesson — $5/mo" button renders for free tier; 14-day trial (matches Coach).
+Migrations 046 + 047 applied to prod. **Not yet:** iOS parity; swap test→live Stripe keys +
+a live-mode `price_…` when taking real Lesson revenue.
+
+**Original status (pre-build):** SPEC — decisions LOCKED, BUILD-READY (2026-06-03).
+Promoted from `PHASE_5_SCOPE.md` item 1. All three decisions resolved (price $5/mo ·
+additive · web-Stripe-first). Source: `PRICING.md` §"Lesson tier" + coach-eval Private persona.
+
+## Built — file map (2026-06-04)
+- **Lesson type + engine:** `src/lib/engine.js` (WORKOUT_TYPES `lesson`; `LESSON_SECTIONS`/
+  `LESSON_MIN`/`LESSON_MAX`; forced shape + lesson floor in `generateWorkout`; `long_main`
+  default bias; `getBankOptions` aliases lesson→technique + main→drill; `buildWorkout` relabel;
+  `regenerateSection` lesson floor), `src/lib/workout-helpers.js` (`minYardsForType` 3-section),
+  `src/components/workout/YardageSlider.jsx` (800–1200), `src/App.jsx` (gated card, includedSections, clamps, userMin).
+- **Per-swimmer equipment:** `migrations/046_managed_swimmer_equipment.sql` (`equipment_modes` JSON),
+  `db.js` (read/update/`parseEquipmentModes`/`dbListCoachTargets` managed individuals),
+  `src/components/people/SwimmerEquipmentPanel.jsx` + mount, generate-payload override in `src/App.jsx`.
+- **Assignment (2026-06-04 follow-up):** managed swimmers appear as direct **Individual** targets in
+  the generate-for picker (`dbListCoachTargets` kind:"managed" → server `assign_to:{managed_id}`),
+  so per-swimmer equipment + recap are reachable without a group. **Minimal groups** for lesson tier:
+  team-less independent groups (`dbCreateGroup` teamId=null) via `GET/POST /api/lesson-groups` +
+  `src/components/people/LessonGroupsView.jsx` ("My groups" nav, gated `can_lesson`); member add/remove
+  reuse the group-role-gated `/api/groups/:id/members` routes. Group pick = fanout to all members.
+  (NB: chose team-less groups over the proposed hidden personal team — same "no team UI" UX, simpler.)
+- **Parent recap:** `lib/email-templates/lesson-recap.js` + `lib/email.js` registry,
+  `POST /api/lessons/recap` (server.js), `src/components/workout/LessonRecapButton.jsx` + mount.
+- **Gating + paywall:** `db.js` `dbHasLessonAccess` + `tier`/`can_lesson` on me payload,
+  `server.js` `requireLessonAccess` (managed-swimmer/parent/notes/coach-targets routes),
+  `src/App.jsx` (card/nav/guard/generate-for gated on `can_lesson`), `ProfileModal.jsx`
+  "Subscribe to Lesson — $5/mo" button (gated on `has_price_id_lesson`).
+
+## Coach-authored lesson sets (in progress 2026-06-04)
+Decisions: dedicated **`lesson` type tag** + **"use my sets only"** toggle; **ability levels**
+(beginner/intermediate/advanced, NOT age bands — works across the 4–80 range and is the
+cross-cutting scope for type-agnostic warmup/cooldown too); **floor dropped to 100** (built-ins
+still ~800, authored content enables shorter). Three slices:
+- **L1 ✅ BUILT (not yet deployed)** — data model + engine. Migration **048** (`bank_options.lesson_level`
+  + `coach_managed_swimmers.lesson_level`). `db.js`: `lesson` in UGC_TYPE_KEYS, `LESSON_LEVELS`,
+  validate/persist `lesson_level` (create+update), `dbGetUgcOverlay` projects it, managed-swimmer
+  read/write. `engine.js`: `getBankOptions(...opts)` routes lesson overlay to the `lesson` tag (canonical
+  stays technique), `lessonLevel` filter + `lessonMySetsOnly`; `generateWorkout`/`regenerateSection`
+  thread both; `LESSON_MIN`→100. Verified: built-in lessons + all 9 types unaffected; level/my-sets-only
+  filters correct; no cross-type leak. **Deploy needs migration 048 applied first** (db.js now SELECTs the
+  new columns) — and L1 has no UI, so deploy alongside L2/L3.
+- **L2 ✅ BUILT** — authoring UI: My Sets opened to lesson tier (nav/guard + `bank-options` routes →
+  requireLessonAccess); `UgcFormModal` adds `lesson` type checkbox + a Beginner/Intermediate/Advanced
+  level select; team visibility hidden for non-coach (`isCoach` prop); `lesson_level` round-trips through
+  `dbGetUgcOption`/`dbListUgcOptionsByAuthor`.
+- **L3 ✅ BUILT** — generator: lesson "Lesson content" block (level select defaulting to the target
+  swimmer's level + "Use my sets only" toggle), threaded into generate + regen payloads; slider 100–1200
+  (LESSON_MIN=100); managed-swimmer `lesson_level` editor in the edit form; `dbListCoachTargets` carries it.
+  E2E verified: a 325yd beginner kids lesson from authored content only, no advanced/adult leak.
+- **Deploy:** apply **migration 048** to prod FIRST (db.js SELECTs the new columns), then build. All three
+  slices ship together.
+
+## Next / deferred (demand-gated)
+- ~~Coach-authored sets FOR lessons~~ — now in progress (above).
+- _(original note)_ open **My Sets**
+  authoring to the lesson tier (today Coach-only). Two parts: (1) ungate `my-sets` for `can_lesson`
+  + hide the **team** visibility option for pure lesson users (no team → private/public only); (2) the
+  real lever for "appears in lessons" is the **type tag** — sets tagged `technique`/`drill` already flow
+  into lessons (lesson→technique alias). If coaches want a set that shows in lessons but NOT regular
+  technique workouts, add a `lesson` *type tag* (not a visibility) so the bank filter can target it.
+  Build when the need is concrete.
+- Stripe lesson price + `price_id_lesson_monthly` env (lights up the paywall button).
+- iOS parity for the Lesson tier surfaces.
 
 ## Why / audience
 A paid tier **below** Coach for private / 1-on-1 / small-lesson coaches who want

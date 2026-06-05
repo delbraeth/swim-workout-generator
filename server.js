@@ -79,7 +79,7 @@ import {
   dbListGoals, dbSetGoal, dbDeleteGoal,
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   isMinor, postFeedbackToDiscord,
-  dbIsUser, dbIsAdmin, dbIsCoach, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe, dbGetBootstrapForUser,
+  dbIsUser, dbIsAdmin, dbIsCoach, dbHasLessonAccess, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe, dbGetBootstrapForUser,
   dbGetUserSubByProvider, dbLinkOAuthProvider, dbFindUserByVerifiedEmail,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbExportAccount,
@@ -463,6 +463,24 @@ async function requireCoach(req, res, next) {
     if (!(await dbIsCoach(req.userSub))) {
       dbAuditEvent({ userSub: req.userSub, eventType: "coach.access_denied", ...reqMeta(req), details: { path: req.path, method: req.method } });
       return res.status(403).json({ error: "coach access required" });
+    }
+  } catch (err) {
+    return res.status(503).json({ error: "auth backend unavailable" });
+  }
+  next();
+}
+
+// Lesson tier (Phase 5) — gate for surfaces shared by Coach AND Lesson tiers
+// (managed-swimmer roster, per-swimmer equipment, parent recap, generate-for).
+// ADDITIVE: is_coach / is_admin / tier ∈ {lesson,coach,program} all pass. Per-
+// resource ownership (owner_coach_sub = req.userSub) still scopes access to the
+// caller's own rows. Coach-ONLY surfaces (catalog authoring, teams, reports)
+// keep requireCoach.
+async function requireLessonAccess(req, res, next) {
+  try {
+    if (!(await dbHasLessonAccess(req.userSub))) {
+      dbAuditEvent({ userSub: req.userSub, eventType: "lesson.access_denied", ...reqMeta(req), details: { path: req.path, method: req.method } });
+      return res.status(403).json({ error: "lesson or coach access required" });
     }
   } catch (err) {
     return res.status(503).json({ error: "auth backend unavailable" });
@@ -1121,12 +1139,12 @@ app.post("/api/admin/users/:sub/support-role", checkOrigin, requireAuth, require
 // Admin tier grant — bypasses Stripe for testers/pilots. Sets users.tier
 // with tier_source='admin_grant' so the lib/billing.js admin_grant bypass
 // kicks in (revoke also works without BILLING_ACTIVE). Audit-logged.
-// Body: { tier: 'coach' | 'program' | 'free' }
+// Body: { tier: 'lesson' | 'coach' | 'program' | 'free' }
 app.post("/api/admin/users/:sub/tier", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
   try {
     const tier = String(req.body?.tier || "").toLowerCase();
-    if (!["free", "coach", "program"].includes(tier)) {
-      return res.status(400).json({ error: "invalid_tier", message: "tier must be free, coach, or program" });
+    if (!["free", "lesson", "coach", "program"].includes(tier)) {   // Lesson tier (Phase 5)
+      return res.status(400).json({ error: "invalid_tier", message: "tier must be free, lesson, coach, or program" });
     }
     const targetSub = req.params.sub;
     let result;
@@ -1730,7 +1748,7 @@ async function resolveSwimmerPaceForRoute(swimmerSub /* , poolMode */) {
 
 // Coach-targets list for the generate-for picker (R-D). Returns active
 // groups the caller coaches with member counts + current_phase + team name.
-app.get("/api/picker/coach-targets", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/picker/coach-targets", requireAuth, requireLessonAccess, async (req, res) => {
   try { res.json(await dbListCoachTargets(req.userSub)); }
   catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
@@ -2148,7 +2166,7 @@ app.get("/api/bank/my-overlay", requireAuth, async (req, res) => {
 // Spec: UGC_COACH_SETS_SCOPE.md §4 + §5.
 
 // List caller's authored UGC options. Used by the "My Sets" page.
-app.get("/api/bank-options/mine", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/bank-options/mine", requireAuth, requireLessonAccess, async (req, res) => {
   try {
     res.json(await dbListUgcOptionsByAuthor(req.userSub));
   } catch (err) {
@@ -2179,7 +2197,7 @@ app.get("/api/bank-options/:id", requireAuth, async (req, res) => {
 // Create a new UGC option. Body: full payload per validateUgcPayload.
 // Phase D: accepts visibility ∈ {private, team} + team_ids when team.
 // Public (Phase E) still rejected at validation layer.
-app.post("/api/bank-options", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+app.post("/api/bank-options", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, async (req, res) => {
   try {
     const r = await dbCreateUgcOption(req.userSub, req.body || {});
     dbAuditEvent({
@@ -2208,7 +2226,7 @@ app.post("/api/bank-options", checkOrigin, requireAuth, requireCoach, requireCsr
 
 // Update an existing UGC option. Body: full payload (validateUgcPayload).
 // Phase D: accepts visibility ∈ {private, team} + team_ids when team.
-app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, async (req, res) => {
   try {
     const r = await dbUpdateUgcOption(req.userSub, req.params.id, req.body || {});
     dbAuditEvent({
@@ -2233,7 +2251,7 @@ app.patch("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requi
 // Standalone visibility change. Body: { visibility, team_ids? }.
 // Lighter than PATCH (no set rewrite, no version bump). Used by the
 // MySetsView "Change visibility" quick-action.
-app.post("/api/bank-options/:id/visibility", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+app.post("/api/bank-options/:id/visibility", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, async (req, res) => {
   try {
     const { visibility, team_ids = [] } = req.body || {};
     const r = await dbSetUgcOptionVisibility(req.userSub, req.params.id, { visibility, team_ids });
@@ -2367,7 +2385,7 @@ app.post("/api/admin/pending-ugc/:id/review", checkOrigin, requireAuth, requireA
 
 // Delete (hard) a UGC option. Cascades to bank_sets via FK.
 // Owner-only in Phase C (admin override for frozen rows = future).
-app.delete("/api/bank-options/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, async (req, res) => {
+app.delete("/api/bank-options/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, async (req, res) => {
   try {
     const r = await dbDeleteUgcOption(req.userSub, req.params.id);
     dbAuditEvent({
@@ -3571,7 +3589,7 @@ function _parseSwimmerRef(ref) {
 
 // Coach issues parent invite for a swimmer. Authz: caller must be
 // coach-of-swimmer (primary or assistant; for managed = owner).
-app.post("/api/swimmers/:swimmerRef/parent-invite", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.post("/api/swimmers/:swimmerRef/parent-invite", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const tgt = _parseSwimmerRef(req.params.swimmerRef);
     const authz = await dbAuthzCoachOfSwimmer(req.userSub, tgt);
@@ -3616,10 +3634,10 @@ app.post("/api/swimmers/:swimmerRef/parent-invite", checkOrigin, requireAuth, re
 // Coach (or original inviter) revokes a pending invite before parent
 // accepts. Idempotent on already-accepted/expired — returns ok with
 // affected=0 in that case.
-app.delete("/api/parent-invites/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.delete("/api/parent-invites/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const r = await dbRevokeParentInvite(req.params.id);
-    if (!r.ok) return res.status(400).json({ error: r.reason });
+    const r = await dbRevokeParentInvite(req.params.id, req.userSub);
+    if (!r.ok) return res.status(r.reason === "forbidden" ? 403 : r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "parent.invite.revoke",
@@ -3738,7 +3756,7 @@ app.get("/api/swimmers/:ref/household", requireAuth, async (req, res) => {
 
 // Coach lists parents + pending invites for a swimmer. Used by the
 // "Parents/Guardians" section in the swimmer-edit modal.
-app.get("/api/swimmers/:swimmerRef/parents", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/swimmers/:swimmerRef/parents", requireAuth, requireLessonAccess, async (req, res) => {
   try {
     const tgt = _parseSwimmerRef(req.params.swimmerRef);
     const authz = await dbAuthzCoachOfSwimmer(req.userSub, tgt);
@@ -3754,14 +3772,12 @@ app.get("/api/swimmers/:swimmerRef/parents", requireAuth, requireCoach, async (r
 // Coach removes a guardian (tombstones the row). Authz: must be
 // coach-of-swimmer (re-checked via the guardians row indirectly —
 // caller must own the swimmer this guardian is attached to).
-app.delete("/api/guardians/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.delete("/api/guardians/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    // Trust the route's CSRF + coach gate for v1; tight authz of which
-    // swimmer the guardian belongs to is a v1.1 hardening. The coach
-    // removing the guardian must already know the id from their own
-    // /api/swimmers/:ref/parents call.
-    const r = await dbRemoveGuardian(req.params.id);
-    if (!r.ok) return res.status(400).json({ error: r.reason });
+    // Ownership scope enforced in dbRemoveGuardian (Phase 5): caller must coach
+    // the swimmer this guardian belongs to (closes the prior unscoped IDOR).
+    const r = await dbRemoveGuardian(req.params.id, req.userSub);
+    if (!r.ok) return res.status(r.reason === "forbidden" ? 403 : r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "parent.guardian.remove",
@@ -3856,7 +3872,7 @@ app.patch("/api/parent/settings", checkOrigin, requireAuth, requireParent, requi
 // their OWN managed swimmers (no cross-coach visibility in v1).
 
 // List the caller's own managed swimmers. Optionally include archived.
-app.get("/api/managed-swimmers", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/managed-swimmers", requireAuth, requireLessonAccess, async (req, res) => {
   try {
     const includeArchived = req.query.archived === "1" || req.query.archived === "true";
     res.json(await dbListManagedSwimmersForCoach(req.userSub, { includeArchived }));
@@ -3864,7 +3880,7 @@ app.get("/api/managed-swimmers", requireAuth, requireCoach, async (req, res) => 
 });
 
 // Create a managed swimmer in the caller's roster.
-app.post("/api/managed-swimmers", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.post("/api/managed-swimmers", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const b = req.body || {};
     const r = await dbCreateManagedSwimmer({
@@ -3891,7 +3907,7 @@ app.post("/api/managed-swimmers", checkOrigin, requireAuth, requireCoach, requir
 });
 
 // Get a managed swimmer detail (owner only).
-app.get("/api/managed-swimmers/:id", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/managed-swimmers/:id", requireAuth, requireLessonAccess, async (req, res) => {
   try {
     const owned = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
     if (!owned) return res.status(403).json({ error: "not owner of this profile" });
@@ -3906,7 +3922,7 @@ app.get("/api/managed-swimmers/:id", requireAuth, requireCoach, async (req, res)
 // of ~7 (the burst that tripped Hyperlift's platform rate-limit → 429s).
 // Same play as /api/me/bootstrap. Panels seed from this; they keep their own
 // fetch as a post-mutation refresh fallback.
-app.get("/api/managed-swimmers/:id/detail", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/managed-swimmers/:id/detail", requireAuth, requireLessonAccess, async (req, res) => {
   try {
     const id = req.params.id;
     const owned = await dbIsManagedSwimmerOwnedBy(id, req.userSub);
@@ -3949,7 +3965,7 @@ app.get("/api/managed-swimmers/:id/detail", requireAuth, requireCoach, async (re
 });
 
 // Update a managed swimmer (owner only). Patch shape mirrors db.js whitelist.
-app.patch("/api/managed-swimmers/:id", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.patch("/api/managed-swimmers/:id", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const owned = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
     if (!owned) return res.status(403).json({ error: "not owner of this profile" });
@@ -3966,7 +3982,7 @@ app.patch("/api/managed-swimmers/:id", checkOrigin, requireAuth, requireCoach, r
 });
 
 // Archive / unarchive a managed swimmer (owner only). Body { archived: true|false }.
-app.post("/api/managed-swimmers/:id/archive", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.post("/api/managed-swimmers/:id/archive", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const owned = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
     if (!owned) return res.status(403).json({ error: "not owner of this profile" });
@@ -3982,11 +3998,80 @@ app.post("/api/managed-swimmers/:id/archive", checkOrigin, requireAuth, requireC
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// Lesson tier (Phase 5) — parent recap export. Coach/instructor emails a
+// branded one-pager of a lesson workout to the managed swimmer's guardian(s).
+// Recipient is the GUARDIAN's email (an adult) → enqueued via toEmail, so the
+// minor-bypass (which protects emailing minors) does not apply. Gated to lesson
+// access; per-resource ownership enforced via dbIsManagedSwimmerOwnedBy.
+// Body: { managed_id, workout: {typeLabel,totalYards,estimatedMin,unit,blocks},
+//         note? }. Returns { sent, skipped: [{guardian, reason}] }.
+app.post("/api/lessons/recap", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const managedId = req.body?.managed_id;
+    const workout   = req.body?.workout;
+    const note      = typeof req.body?.note === "string" ? req.body.note.slice(0, 1000) : null;
+    if (!managedId) return res.status(400).json({ error: "managed_id required" });
+    if (!workout || !Array.isArray(workout.blocks)) return res.status(400).json({ error: "workout with blocks required" });
+    const owned = await dbIsManagedSwimmerOwnedBy(managedId, req.userSub);
+    if (!owned) return res.status(403).json({ error: "not owner of this profile" });
+
+    const swimmer   = await dbGetManagedSwimmer(managedId);
+    const me        = await dbGetMe(req.userSub).catch(() => null);
+    const guardians = await dbListGuardiansForSwimmer({ managedId });
+    const withEmail = guardians.filter(g => g.email);
+    if (withEmail.length === 0) {
+      return res.status(409).json({ error: "no_guardian_email", message: "No parent/guardian with an email is linked to this swimmer. Add or invite one first." });
+    }
+
+    // Sanitize the workout to the recap template's expected shape (never trust
+    // client blob wholesale). Only the fields the template reads.
+    const safeWorkout = {
+      typeLabel:    typeof workout.typeLabel === "string" ? workout.typeLabel.slice(0, 60) : "Lesson",
+      totalYards:   Number(workout.totalYards) || 0,
+      estimatedMin: Number(workout.estimatedMin) || null,
+      unit:         workout.unit === "m" ? "m" : "yds",
+      blocks:       workout.blocks.slice(0, 12).map(b => ({
+        name:       typeof b.name === "string" ? b.name.slice(0, 80) : "Section",
+        totalYards: Number(b.totalYards) || 0,
+        sets:       (Array.isArray(b.sets) ? b.sets : []).slice(0, 30).map(s => ({
+          reps:     s.reps != null ? Number(s.reps) || null : null,
+          dist:     s.dist != null ? Number(s.dist) || null : null,
+          desc:     typeof s.desc === "string" ? s.desc.slice(0, 200) : "",
+          interval: typeof s.interval === "string" ? s.interval.slice(0, 20) : "",
+        })),
+      })),
+    };
+
+    const sent = [], skipped = [];
+    for (const g of withEmail) {
+      const ts = Date.now();
+      const r = await enqueueEmail({
+        dedupKey:    `lesson-recap:${managedId}:${g.id}:${ts}`,
+        toEmail:     g.email,
+        templateId:  "lesson-recap",
+        swimmerName: swimmer?.display_name || "your swimmer",
+        coachName:   me?.display_name || null,
+        note,
+        workout:     safeWorkout,
+      }).catch(err => ({ error: err.message || String(err) }));
+      if (r && r.id) sent.push(g.email);
+      else skipped.push({ guardian: g.email, reason: r?.skipped || r?.bypassed || r?.error || "unknown" });
+    }
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "lesson.recap_sent",
+      ...reqMeta(req),
+      details:   { managed_id: managedId, sent: sent.length, skipped: skipped.length },
+    });
+    res.json({ sent: sent.length, recipients: sent, skipped });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // Bulk import (R-B'). Accepts an array of swimmer-shaped rows (already
 // validated and normalized client-side) and inserts them per-row-atomic.
 // Cap at 500 rows per call to prevent runaway writes; the importer chunks
 // larger files. Returns {inserted, errors: [{row_idx, error}]}.
-app.post("/api/managed-swimmers/bulk", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.post("/api/managed-swimmers/bulk", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const rows    = (req.body && req.body.rows) || [];
     const team_id = (req.body && req.body.team_id) || null;
@@ -4495,12 +4580,42 @@ app.delete("/api/groups/:id/members/:memberId", checkOrigin, requireAuth, requir
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// ───── Lesson groups (Phase 5) ───────────────────────────────────────
+// Minimal group creation for the Lesson tier WITHOUT exposing the Coach
+// team/club machinery. Lesson groups are "independent" groups (team_id NULL —
+// a first-class shape per dbCreateGroup) so a lesson coach can make a small-
+// group lesson (e.g. "9am Sunday") and fan a workout out to its members.
+// Member add/remove + detail reuse the existing /api/groups/:id* routes (those
+// are group-role-gated, not Coach-gated, so a lesson owner already passes).
+// Coach-tier users keep using full Teams → Groups; this is the lightweight path.
+app.get("/api/lesson-groups", requireAuth, requireLessonAccess, async (req, res) => {
+  try {
+    // Only the caller's team-less (lesson) groups — keeps this list distinct
+    // from any team groups a coach manages in the Teams view.
+    const all = await dbListGroupsForCoach(req.userSub, {});
+    res.json(all.filter(g => g.team_id == null));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+app.post("/api/lesson-groups", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const name = (req.body && req.body.name || "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    if (name.length > 120) return res.status(400).json({ error: "name max 120 chars" });
+    // team_id NULL → independent lesson group; creator is added to group_coaches
+    // as primary (so it appears in their generate-for picker + assignment auth).
+    const r = await dbCreateGroup({ teamId: null, primaryCoachSub: req.userSub, name });
+    dbAuditEvent({ userSub: req.userSub, eventType: "lesson_group.create", ...reqMeta(req), details: { group_id: r.id, name } });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
+});
+
 // ───── Managed-swimmer claim tokens (Stage 5 / R-I) ──────────────────
 // Per scope §10 + Flow J. Coach issues a one-time token; swimmer (with own
 // SSO account) redeems to migrate the managed profile into their account.
 
 // Coach issues a claim token for a managed swimmer they own.
-app.post("/api/managed-swimmers/:id/claim-tokens", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.post("/api/managed-swimmers/:id/claim-tokens", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const owns = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
     if (!owns) return res.status(403).json({ error: "not owner of this managed profile" });
@@ -4524,7 +4639,7 @@ app.post("/api/managed-swimmers/:id/claim-tokens", checkOrigin, requireAuth, req
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
-app.get("/api/managed-swimmers/:id/claim-tokens", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/managed-swimmers/:id/claim-tokens", requireAuth, requireLessonAccess, async (req, res) => {
   try {
     const owns = await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub);
     if (!owns) return res.status(403).json({ error: "not owner of this managed profile" });
@@ -4631,7 +4746,7 @@ async function resolveNoteScope({ authorCoachSub, swimmerSub, managedId }) {
 
 // Create a coach note. Visibility default is applied client-side from
 // the swimmer's team_type; server just validates the enum + scope.
-app.post("/api/coach-notes", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+app.post("/api/coach-notes", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
   try {
     const b = req.body || {};
     const swimmerSub = b.swimmer_sub || null;
@@ -4691,7 +4806,7 @@ app.post("/api/coach-notes", checkOrigin, requireAuth, requireCoach, requireCsrf
 // the target via team/group OR be the author of any of the returned notes.
 // `dbListCoachNotesForTarget` already filters on the caller's coaching
 // scope, so we only need a light auth gate here.
-app.get("/api/coach-notes", requireAuth, requireCoach, async (req, res) => {
+app.get("/api/coach-notes", requireAuth, requireLessonAccess, async (req, res) => {
   try {
     const swimmerSub = req.query.swimmer_sub || null;
     const managedId  = req.query.managed_id  || null;

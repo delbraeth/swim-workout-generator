@@ -5,7 +5,7 @@ import { UgcFormModal } from "./UgcFormModal.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function MySetsView({ onChanged }) {
+    export function MySetsView({ onChanged, isCoach = true }) {
       const [rows, setRows] = React.useState([]);
       const [loading, setLoading] = React.useState(true);
       const [err, setErr] = React.useState(null);
@@ -163,6 +163,7 @@ import { UgcFormModal } from "./UgcFormModal.jsx";
               option={formState.mode === 'edit' ? formState.option : null}
               onSave={handleSaved}
               onClose={() => setFormState(null)}
+              isCoach={isCoach}
             />
           )}
         </div>

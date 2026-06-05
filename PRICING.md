@@ -1,6 +1,6 @@
 # SetForge pricing
 
-**Status:** workshop locked 2026-05-19 (original 4-tier model). **Revised 2026-05-25** after the three-eval sweep (coach + swimmer + team). Implementation trigger: **first paying pilot.**
+**Status:** workshop locked 2026-05-19 (original 4-tier model). **Revised 2026-05-25** after the three-eval sweep (coach + swimmer + team). **Consolidated 2026-06-04** — progression model, Coach↔Team line, free MAAP assistant seat, coach-seat bands, per-team billing, per-season passes, platform audit, and the tier×feature chart all locked into **§1A below (current source of truth).** Lesson tier is now **BUILT & live (web).** Implementation trigger for the rest: **first paying pilot.**
 **Origin:** initial direction captured 2026-05-18 ("free today, Patreon-tiered later"). Workshop 2026-05-19. Doc reconstructed from memory checkpoint [[swim-generator-pricing-direction]] on 2026-05-25 after evaluation sweep flagged the source doc was missing from disk. Eval-driven revisions captured in §6.
 **Why this doc exists:** to lock the tier model + commitments before any billing code or marketing surface ships, so downstream decisions (ToS, Privacy Policy, landing page, feature gating) have one source of truth.
 
@@ -14,10 +14,108 @@ Three paid tiers + free baseline. **Supporter $3 demoted from product tier to "b
 |---|---|---|---|
 | **Free** | $0 | All swimmers, all parents, exploratory coaches | Always live |
 | **Tip jar** | $3 (one-time or recurring, no feature unlock) | "I like this, take my money" | Replaces Supporter $3; not advertised as a tier |
-| **Coach** | $10/mo | Working coach with 1+ groups | Original tier, unchanged |
-| **Lesson** | **$5/mo** (~$50/yr) | Private/individual lesson coaches | Decisions LOCKED 2026-06-03 (additive tier, no managed cap v1, web-Stripe-first); build-ready — see `LESSON_TIER_SCOPE.md` |
-| **Program** | $25/mo (or $300/yr invoiced) | Multi-coach club teams | Original tier; **gated on team-level curation shipping** + vendor paper kit |
-| **Institutional / Program+** | TBD (~$1–2k/yr) | Boards requiring cyber insurance + signed MSA/DPA + formal procurement | NEW (2026-06-03) — the **home for board-gated compliance costs**: priced to cover the cyber-insurance premium + lawyer pass + procurement time, so those are passed through, never absorbed into $300 Program (a ~$1k/yr policy ≈ 3× a Program seat). |
+| **Coach** | **$9.99/mo** | Single coach + up to 2 free MAAP assistants | Original tier; price charm-locked 2026-06-04 |
+| **Lesson** | **$4.99/mo** (~$49.99/yr) | Private/individual lesson coaches | ✅ **BUILT & live (web), 2026-06-04** — additive tier; see `LESSON_TIER_SCOPE.md` + §1A |
+| **Program** | **from $24.99/mo** (per-team; **bands + per-season — see §1A ladder**) | Organizations with multiple coaches | Reframed 2026-06-04: multi-coach is the line; per-team billing + seat bands. **Still gated on team-level features shipping** (see §1A FUTURE) |
+| **Institutional / Program+** | TBD (~$1–2k/yr) | Boards requiring cyber insurance + signed MSA/DPA + formal procurement | NEW (2026-06-03) — the **home for board-gated compliance costs**: priced to cover the cyber-insurance premium + lawyer pass + procurement time, so those are passed through, never absorbed into a standard Program plan (a ~$1k/yr policy ≈ 4× a Program·Small annual). |
+
+## 1A. Tier model — 2026-06-04 consolidation (CURRENT source of truth)
+
+Supersedes §1 where they conflict. The §1 table + per-tier lists below remain accurate for Free/Lesson/Coach features; this section refines the **Coach↔Program(Team) line, multi-coach safety, seat bands, billing entity, season pricing, and platform.**
+
+### The ladder + progression principle
+`Free (swimmer) → Lesson ($4.99, private instructor) → Coach ($9.99, single coach outside an org) → Program (organization, multi-coach; banded)`. A user **progresses up the ladder with NO DATA LOSS** — `users.tier` is one column; raising it only *unlocks*. The one transition with data semantics (solo Coach → Team: private roster/sets becoming *shared*) is **sharing, not moving** — primitives already exist (`coach_managed_swimmers.team_id`, UGC `visibility:team` + team curation, `team_coaches` roles, ownership transfer). A one-click "promote my solo setup to a team" flow is FUTURE; the data model already favors it.
+
+### The Coach↔Team line = MULTI-COACH (not "has teams")
+- **Coach** = a **single operating coach** outside an org. Owns their athletes, curation, reports. May organize athletes into solo groups.
+- **Program / "Team"** = an **organization with multiple *authoring* coaches** sharing athletes, + team communication, team admin, org-level reports, priority support.
+- The differentiator is **a second *full* coach + shared authoring/admin/comms** — NOT merely "a second adult exists" (see safety rule next).
+- ⚠️ **Re-tiering note (OPEN):** multi-coach surfaces (`team_coaches`, co-coach invite, ownership transfer, team curation) are currently gated on `is_coach` — i.e., available at Coach today. Lean **(b): gate only NEW collaboration surfaces** (co-coach *invite*, team comms, org reports) behind Program; let Coach still organize solo; **grandfather** existing users. Not yet implemented.
+
+### Free MAAP assistant seat — safety is NEVER paywalled
+USA Swimming **MAAP / Safe Sport two-deep leadership** (and no-one-on-one) *requires* ≥2 screened adults with a minor group. **We will not put the safety-required second adult behind a paywall** — that would financially nudge a budget HS team toward a policy violation.
+- **Coach tier includes a free, *limited* assistant seat** (role `assistant` — already in `GROUP_COACH_ROLES`). Capabilities: **view roster, view practices/schedule/assigned, take attendance, add coach notes (co-supervise)**. NOT: author/assign workouts, curation, roster edits, team admin, invite coaches, billing.
+- A **small HS team (head + assistant) = Coach tier** (with the free assistant seat) — compliant, no upsell on safety. **Team tier is for when the *operation* grows** (multiple authoring coaches / 3rd adult / org features), not when the 2nd adult appears.
+- Upgrading to **Team promotes assistants to full authoring coaches** + unlocks comms/admin/org reports.
+- **Soft-enforce:** nudge "add a second adult (recommended — MAAP two-deep)" on minor groups; never gate it. Cap free assistant seats at Coach (**2**) so it's the safety minimum, not free staff.
+
+### Team (Program) seat bands — by number of FULL coaches
+| Band | Full coaches | Notes |
+|---|---|---|
+| Small | 2–4 | |
+| Medium | 5–9 | |
+| Large | 10+ | dedicated support / SLA |
+
+- **Assistants don't count** toward the band — safety staffing never inflates the bill. 1 head + free assistant = 1 full coach = **Coach** (not Team).
+- **Flat price per band** ("up to N coaches"), not per-seat. Adding a coach past the cap → soft prompt to the next band (count = active `team_coaches` rows). Never disable an existing coach.
+- **Don't gate *coaching* by band** — all bands get the full toolset. What **scales S→M→L: support** (standard→priority→dedicated) **and reporting depth** (per-team → org/cross-team → + export). What else scales is OPEN (athlete caps? probably none).
+
+### Billing entity — Team is per-TEAM, not per-user
+- Free / Lesson / Coach = **per-user** subscriptions (each person pays their own `users.tier`).
+- **Team/Program = a per-*team* subscription** (the org owns the plan; coaches are seats). A coach's **effective tier = max(own `users.tier`, the tier of any team they're a seat in)** — so a free-tier assistant added to a Team gets Team access *through the team*, without personally paying.
+- Implementation: a `team_subscriptions` concept (plan + Stripe customer + band on the `teams` row; band derived from active coach count). This is the one real **re-architecture** the model implies. FUTURE.
+
+### Per-season pricing — HS & summer teams
+Seasonal operations shouldn't pay 12 months. Detected via `team_type` (`high_school`, `summer` → season pass eligible; `club`, `masters` → year-round).
+- **Season pass = a fixed-window grant** (HS ~4 mo / summer ~3 mo). **Price = (monthly × months) − $5** flat seasonal discount, charm-rounded — always cheaper than paying monthly across the season. Available at **both Coach and Team** for HS/summer contexts (a solo HS coach gets a Coach season pass too).
+- **Off-season = data preserved + read-only.** Roster, history, sets, groups all persist and stay viewable; full coaching pauses until renewal — next season picks up with zero re-entry (same "no data loss" rule).
+- Mechanics: timed grant via `tier_granted_at` expiry (Stripe fixed-term schedule or one-time pass that auto-reverts to free, data retained). FUTURE build.
+
+### Platform — web-first, then iOS parity
+New features ship to the **web app first**; iOS follows in a later build. Audited 2026-06-04:
+- **Universal** (iOS view exists): generator (types, equipment, phase, recovery, multi-lane, generate-for), History, Run mode, Assigned-to-me, Practices + attendance, Coach notes, Profile/subscription.
+- **Web-only** (no iOS yet): Teams, Catalog, My Sets/UGC authoring, Reports, Progress dashboard, Goals, managed-swimmer roster, **all Lesson-tier surfaces** (lesson type, groups, per-swimmer equipment, parent recap, lesson-set authoring).
+
+### Tier × feature comparison chart (working draft → for the manual)
+✓ = included · — = not · Platform = Universal (web+iOS) / Web (web-only). Program(Team) band-scaled rows at the bottom.
+
+| Feature | Free | Lesson | Coach | Program/Team | Platform |
+|---|:--:|:--:|:--:|:--:|---|
+| Workout generator (9 types) | ✓ | ✓ | ✓ | ✓ | Universal |
+| History + stats · Run mode | ✓ | ✓ | ✓ | ✓ | Universal |
+| Goals · Progress dashboard | ✓ | ✓ | ✓ | ✓ | Web |
+| Account + subscription | ✓ | ✓ | ✓ | ✓ | Universal |
+| Lesson workout type | — | ✓ | ✓ | ✓ | Web |
+| Managed swimmers · lesson groups | — | ✓ | ✓ | ✓ | Web |
+| Per-swimmer equipment · parent recap | — | ✓ | ✓ | ✓ | Web |
+| Author lesson sets (My Sets, leveled) | — | ✓ | ✓ | ✓ | Web |
+| Individual / group assignment | — | ✓ | ✓ | ✓ | Web (lesson) · Universal (coach groups) |
+| Catalog browse · UGC team-share/public | — | — | ✓ | ✓ | Web |
+| Team curation (fav/disfavor propagation) | — | — | ✓ | ✓ | Web |
+| Reports | — | — | ✓ | ✓ | Web |
+| Practices + attendance · coach notes | — | — | ✓ | ✓ | Universal |
+| Lane plans · multi-lane generate | — | — | ✓ | ✓ | Universal |
+| Meet anchors / taper | — | — | ✓ | ✓ | Web |
+| Free assistant seat (limited, MAAP) | — | — | ✓ (2) | ✓ | Web |
+| **Multiple full coaches** (invite, shared authoring) | — | — | — | ✓ | Web |
+| **Team communication** | — | — | — | ✓ (FUTURE build) | — |
+| **Org / cross-team reports + export** | — | — | — | ✓ (FUTURE) | Web |
+| Coaches on shared roster | 1 | 1 | 1 (+free asst) | **2–4 / 5–9 / 10+** | — |
+| Support | community | community | standard | **standard / priority / dedicated** | — |
+
+### BUILT vs FUTURE (as of 2026-06-04)
+- **BUILT & live (web):** Free baseline, **Lesson tier (all features)**, Coach features, per-user Stripe billing (Lesson + Coach prices, test mode), admin tier grant, coach-authored leveled lesson sets.
+- **FUTURE (this model implies):** per-team billing + `team_subscriptions`, coach-seat bands + enforcement, the Coach→Team re-tiering (option b), free-assistant-seat capability gating + cap, **team communication** (net-new — no messaging today), org/cross-team reports + export, per-season passes, the solo→team "promote" flow, iOS parity.
+
+### Price ladder — LOCKED 2026-06-04 (charm pricing; supersedes any older $ in this doc)
+| Tier / band | Coaches | Monthly | Annual (~2 mo free) | Season pass (HS ~4mo / summer ~3mo) |
+|---|---|---|---|---|
+| Free | — | $0 | — | — |
+| Lesson | 1 (private) | **$4.99** | $49.99 | — |
+| Coach | 1 (+2 free assistants) | **$9.99** | $99.99 | $34.99 / $24.99 |
+| Program · Small | 2–4 | **$24.99** | $249.99 | $94.99 / $69.99 |
+| Program · Medium | 5–9 | **$49.99** | $499.99 | $194.99 / $144.99 |
+| Program · Large | 10+ | **$99.99** | $999.99 | custom |
+| Institutional | board procurement | — | ~$1–2k custom | — |
+
+Per-coach effective rate dips as the band grows (volume incentive) while staying ≤ the $9.99 Coach anchor: Small $6.25–12.49/coach, Medium $5.55–10, Large ≤$10. Large is **self-serve big-club**; Institutional is **board-procurement-only** (signed MSA/DPA + cyber-insurance pass-through) — distinguished by *process*, not size. Tip jar stays $3 (not a tier).
+
+### Resolved decisions (2026-06-04 — LOCKED)
+1. **Name:** **Program** (keep code name); marketed "for teams/clubs with multiple coaches." No collision with the Teams *feature*.
+2. **Coach→Program line:** **(b)** — gate only NEW collaboration (co-coach invite, team comms, org reports) behind Program; Coach keeps solo organizing; **existing users grandfathered**.
+3. **Free assistant seats at Coach:** **2** (head + up to 2 limited MAAP assistants free; 3rd adult / authoring coach → Program).
+4. **Program pricing:** **per-band flat** (table above); only **support + reporting depth** scale S→M→L — coaching tools are NOT metered by team size (no athlete caps).
+5. **Band price points:** locked in the table above (charm-priced).
 
 ### Free tier — what's in it
 
@@ -34,7 +132,7 @@ Every existing user-facing surface. Specifically:
 
 **ToS-bound permanence:** the v1 free feature set stays free forever. Future paid features can be added; existing free features cannot be moved to a paid tier.
 
-### Coach tier — $10/mo
+### Coach tier — $9.99/mo
 
 Free tier PLUS:
 - UGC authoring (📝 My Sets, snapshot, team-share, public-submit)
@@ -45,17 +143,21 @@ Free tier PLUS:
 - Coach impact panel (curation reach + effectiveness)
 - Team membership (as a non-Owner; one team)
 
-### Lesson tier — $5/mo (LOCKED 2026-06-03)
+### Lesson tier — $4.99/mo (✅ BUILT & live web, 2026-06-04)
 
-For private/individual coaches who don't need full club infrastructure but want more than Free. Coach evaluation's Private coach persona identified specific gaps that should be the lesson-tier value-add:
+For private/individual coaches who don't need full club infrastructure but want more than Free. **Shipped** (web; iOS later):
 - Per-managed-swimmer equipment profile (stored on the swimmer, not the coach)
-- Lesson workout type (200-1200yd, no forced main set — Warm-Up / Skill Focus 1 / Skill Focus 2 / Send-off)
-- Parent recap export (one-button branded one-pager to `parental_contact`)
-- Managed swimmer roster (the existing Managed Swimmers feature; currently Coach-tier)
+- **Lesson workout type** — 3-section (Warm-Up / **Skill Focus** / Send-off), no "Main Set", **800–1,200 yd** built-in (down to ~100 with coach-authored short content). NB: built as 3 sections + 800 floor, not the spec's "Skill Focus 1/2 / 200yd" — smallest feasible 3-section lesson from reused banks is 800; coach-authored sets unlock genuinely short kids lessons.
+- Parent recap export (one-button branded one-pager to the swimmer's guardian)
+- Managed swimmer roster + minimal **lesson groups** + individual/group assignment
+- **Coach-authored lesson sets** — author leveled content (Beginner/Intermediate/Advanced) tagged `lesson`; "use my sets only" toggle for young/beginner swimmers
+- Tier gating + admin grant + web "$4.99/mo" paywall. See `LESSON_TIER_SCOPE.md`.
 
-Open question: does Lesson tier replace the Managed Swimmers feature in the Coach tier (Coach drops to "coaches with full-account swimmers only," Lesson adds managed-swimmer suite), or is Lesson tier an additive tier?
+Resolved: Lesson is **additive** (Coach unchanged; Coach keeps managed swimmers). Lesson surfaces unlock at tier ∈ {lesson, coach, program}.
 
-### Program tier — $25/mo or $300/yr invoiced
+### Program tier — from $24.99/mo (per-band; see §1A ladder)
+
+> **2026-06-04 reframe — see §1A for the current model:** Program = the **multi-coach / organization** tier (the line is a 2nd *full authoring* coach, not "a 2nd adult" — the safety-required assistant is free at Coach). Billed **per-team** (org owns the plan; coaches are seats; effective tier = max(own, team-seat)), **seat-banded** Small 2–4 / Medium 5–9 / Large 10+, with **per-season passes** for HS/summer. The pre-conditions below still gate launch.
 
 Coach tier × N seats PLUS team-level features that don't yet exist. Per [[swim-generator-team-evaluation-2026-05-25]], **Program tier should not be advertised until these ship:**
 
@@ -66,7 +168,7 @@ Coach tier × N seats PLUS team-level features that don't yet exist. Per [[swim-
 5. **Outbound email infrastructure** (required for breach-notification SLA the Treasurer persona surfaced)
 6. **Ownership transfer + UGC reassignment on departure** (without it teams orphan on founder-exit)
 
-Quote as **annual contract ($300/yr invoiced)** when relaunched — boards approve annual contracts, not monthly SaaS.
+Quote as an **annual contract** when relaunched (see §1A ladder — e.g. Program Small $249.99/yr; Institutional custom $1–2k) — boards approve annual contracts, not monthly SaaS.
 
 ## 2. Coaches pay; swimmers free (the central thesis)
 
@@ -125,16 +227,17 @@ For users who can't or won't use Patreon (corporate, allergic to subscriptions, 
 | Tier | Patreon | Stripe Invoice |
 |---|---|---|
 | Tip jar | ✓ | ✗ |
-| Coach $10 | ✓ | ✓ (annual, $120/yr) |
-| Lesson | ✓ | ✓ (annual) |
-| Program $25 | ✓ | ✓ (**preferred**, annual $300/yr) |
+| Coach $9.99 | ✓ | ✓ (annual $99.99/yr) |
+| Lesson $4.99 | ✓ | ✓ (annual $49.99/yr) |
+| Program (from $24.99) | ✓ | ✓ (**preferred**, annual — §1A ladder) |
 
 ## 10. Open questions
 
-- **Lesson tier** — ✅ all decisions LOCKED 2026-06-03: $5/mo · additive standalone tier (Coach unchanged, no managed-swimmer cap in v1) · web-Stripe-first (Apple IAP later). Build-ready; see `LESSON_TIER_SCOPE.md`.
-- **Does Lesson replace Managed Swimmers feature in Coach?** If yes, Coach-tier users with managed swimmers grandfather in. Open.
+- **Program/Team + season-pricing decisions** now live in **§1A → "Open decisions"** (name, re-tiering line a/b, free-assistant cap, S→M→L scaling, band price points). That's the active list.
+- **Lesson tier** — ✅ **BUILT & live (web) 2026-06-04**; additive (Coach unchanged). See `LESSON_TIER_SCOPE.md` + §1A.
+- **Does Lesson replace Managed Swimmers in Coach?** ✅ Resolved — **no, additive**; Coach keeps managed swimmers, Lesson unlocks the same suite at $4.99.
 - **Patreon's coach-creator-fee model vs. flat-tier model** — Patreon supports either. Workshop noted "specifics need [more] workshopping."
-- **Annual prepay discount** — boards expect it. 10% off Program annual ($270/yr) is industry norm.
+- **Annual prepay discount** — ✅ resolved in §1A ladder: annual = **~2 months free** (~17%), e.g. Coach $99.99/yr, Program Small $249.99/yr.
 - **Sub-processor list** for the paper kit. Currently: Spaceship Hyperlift (hosting), Apple (OAuth), planned Google (OAuth), planned Resend or Postmark (email). Lock the list before Treasurer asks.
 
 ---
