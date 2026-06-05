@@ -1,6 +1,7 @@
 // src/components/teams/TeamsView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
+import { EVENT_KINDS, eventKindEmoji } from "../../lib/eventKinds.js";
 import { GroupRow } from "../groups/GroupRow.jsx";
 import { TeamRosterTab } from "./TeamRosterTab.jsx";
 import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
@@ -50,9 +51,11 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
       const [creatingEvent, setCreatingEvent] = React.useState(false);
       const [newEventName,  setNewEventName]  = React.useState("");
       const [newEventDate,  setNewEventDate]  = React.useState("");
+      const [newEventKind,  setNewEventKind]  = React.useState("meet");
       const [editingEventId, setEditingEventId] = React.useState(null);
       const [editEventName,  setEditEventName]  = React.useState("");
       const [editEventDate,  setEditEventDate]  = React.useState("");
+      const [editEventKind,  setEditEventKind]  = React.useState("meet");
       // Meet-anchored taper (MEET_ANCHORED_TAPER_SCOPE §3.6): inline picker
       // appears when coach clicks 🎯 on an event row. anchoringEventId = ev.id
       // while the picker is open. Groups list fetched on open.
@@ -380,11 +383,11 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
           const res = await fetch(`/api/teams/${detail.id}/events`, {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate }),
+            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate, kind: newEventKind }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-          setNewEventName(""); setNewEventDate(""); setCreatingEvent(false); setMsg(null);
+          setNewEventName(""); setNewEventDate(""); setNewEventKind("meet"); setCreatingEvent(false); setMsg(null);
           await loadEvents(detail.id);
         } catch (err) { setMsg(`Error creating event: ${err.message}`); }
       };
@@ -394,12 +397,14 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
         setEditingEventId(ev.id);
         setEditEventName(ev.name);
         setEditEventDate(ev.date);
+        setEditEventKind(ev.kind || "meet");
         setMsg(null);
       };
       const cancelEditEvent = () => {
         setEditingEventId(null);
         setEditEventName("");
         setEditEventDate("");
+        setEditEventKind("meet");
       };
       const handleSaveEditEvent = async () => {
         if (!editEventName.trim()) { setMsg("Event name required"); return; }
@@ -408,7 +413,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
           const res = await fetch(`/api/events/${editingEventId}`, {
             method:  "PATCH",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate }),
+            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate, kind: editEventKind }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
@@ -729,12 +734,19 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
               </div>
               {creatingEvent && (
                 <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6, padding: 10, marginBottom: 10 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
                     <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Event name</label>
                       <input value={newEventName} onChange={e => setNewEventName(e.target.value)}
                         placeholder="e.g. Cincinnati Invite"
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Type</label>
+                      <select value={newEventKind} onChange={e => setNewEventKind(e.target.value)}
+                        style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                        {EVENT_KINDS.map(k => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}
+                      </select>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Date</label>
@@ -760,11 +772,15 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                     if (isEditing) {
                       return (
                         <div key={ev.id} style={{ padding: "8px 10px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6 }}>
-                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
                             <input value={editEventName} onChange={e => setEditEventName(e.target.value)} placeholder="Event name"
                               onKeyDown={e => { if (e.key === "Enter") handleSaveEditEvent(); if (e.key === "Escape") cancelEditEvent(); }}
                               autoFocus
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                            <select value={editEventKind} onChange={e => setEditEventKind(e.target.value)}
+                              style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                              {EVENT_KINDS.map(k => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}
+                            </select>
                             <input type="date" value={editEventDate} onChange={e => setEditEventDate(e.target.value)}
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                           </div>
@@ -782,15 +798,16 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                       <div key={ev.id}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6, opacity: isPast ? 0.6 : 1 }}>
                           <div>
+                            <span style={{ marginRight: 6 }} title={ev.kind || "meet"}>{eventKindEmoji(ev.kind)}</span>
                             <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13 }}>{ev.name}</span>
                             <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}</span>
                             {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
                           </div>
                           {detail.viewer_role && (
                             <div style={{ display: "flex", gap: 6 }}>
-                              {!isPast && (
+                              {!isPast && (ev.kind || "meet") === "meet" && (
                                 <button onClick={() => openAnchorPicker(ev.id)}
-                                  title="Set as training-phase anchor for a group"
+                                  title="Set as training-phase anchor for a group (meets only)"
                                   style={{ padding: "3px 9px", background: "transparent", color: "var(--color-warn)", border: "1px solid var(--color-warn)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                                   🎯 Anchor
                                 </button>

@@ -23,7 +23,13 @@ export function TeamCalendarFeed({ teamId, canManage = false }) {
   React.useEffect(() => { load(); }, [load]);
 
   const rotate = async () => {
-    if (!window.confirm("Generate a new link? Any calendar already subscribed to the old link will stop updating.")) return;
+    if (!window.confirm(
+      "⚠️ Regenerate the team calendar link?\n\n" +
+      "This immediately breaks the current link. EVERY parent and swimmer who " +
+      "subscribed or downloaded it will stop getting updates until you re-share the " +
+      "new link with them.\n\n" +
+      "Only do this if the link was shared outside the team or leaked."
+    )) return;
     setBusy(true); setMsg(null);
     try {
       const r = await fetch(`/api/teams/${teamId}/calendar-token/rotate`, { method: "POST", headers: { ...csrfHeaders() } });

@@ -60,6 +60,7 @@ import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortal
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
 import { buildIcs } from "./lib/ics.js";
 import { toCsv } from "./lib/csv.js";
+import { eventKindEmoji } from "./src/lib/eventKinds.js";
 
 import {
   pool, dbActive, pingDb,
@@ -103,7 +104,7 @@ import {
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
   dbListTeamFacilities, dbCreateTeamFacility, dbUpdateTeamFacility, dbArchiveTeamFacility,
   dbGetOrCreateTeamCalendarToken, dbRotateTeamCalendarToken, dbGetTeamByCalendarToken,
-  dbTeamCalendarFeedData, dbTeamRosterForExport,
+  dbTeamCalendarFeedData, dbTeamRosterForExport, dbListTeamCalendarsForUser,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
@@ -4296,6 +4297,9 @@ app.post("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writeL
     const event = await dbGetTeamEvent(eventId);
     if (!event) return res.status(404).json({ error: "event not found" });
     if (event.team_id !== group.team_id) return res.status(400).json({ error: "event/team mismatch" });
+    // Only meets are taper-anchor eligible (MEET_SCHEDULE_WEATHER_SCOPE §3.3.1 / §8 #10):
+    // a banquet or meeting must never become a taper anchor.
+    if (event.kind && event.kind !== "meet") return res.status(400).json({ error: "only meets can be taper anchors" });
 
     const anchorId = await dbSetGroupAnchor({
       groupId:     req.params.id,
@@ -4386,6 +4390,16 @@ app.post("/api/teams/:id/calendar-token/rotate", checkOrigin, requireAuth, requi
     res.json({ token, url: calendarFeedUrl(req, token) });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
+// Calendar feed links for every team the caller is connected to (coach, swimmer,
+// or guardian) — drives the copy buttons in the parent + swimmer portals. Returns
+// the URL so the client can copy it without rendering it. MAAP-safe: the feed has
+// no minor PII, and this only exposes (not rotates) the shared team token.
+app.get("/api/me/team-calendars", requireAuth, async (req, res) => {
+  try {
+    const teams = await dbListTeamCalendarsForUser(req.userSub);
+    res.json(teams.map(t => ({ team_id: t.team_id, team_name: t.team_name, url: calendarFeedUrl(req, t.token) })));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
 // Public live-subscribe feed — the token IS the authorization (no cookies/CSRF).
 // URL shape is /calendar/<token>.ics; we capture the filename and strip .ics so
 // the route is unambiguous (base64url tokens contain no dot).
@@ -4405,7 +4419,7 @@ app.get("/calendar/:file", feedLimiter, async (req, res) => {
       });
     }
     for (const ev of events) {
-      items.push({ uid: "te-" + ev.id, date: ev.date, summary: ev.name || "Team event" });
+      items.push({ uid: "te-" + ev.id, date: ev.date, summary: `${eventKindEmoji(ev.kind)} ${ev.name || "Team event"}` });
     }
     const ics = buildIcs(items, { calName: team.name || "SetForge", nowIso: new Date().toISOString() });
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
@@ -5550,13 +5564,13 @@ app.post("/api/teams/:teamId/events", checkOrigin, requireAuth, requireCsrf, wri
   try {
     const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date } = req.body || {};
-    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, createdByCoachSub: req.userSub });
+    const { name, date, kind } = req.body || {};
+    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, kind, createdByCoachSub: req.userSub });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "team_event.create",
       ...reqMeta(req),
-      details:   { event_id: r.id, team_id: req.params.teamId, name, date },
+      details:   { event_id: r.id, team_id: req.params.teamId, name, date, kind: kind || "meet" },
     });
     res.json(r);
   } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
@@ -5585,10 +5599,11 @@ app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter
     if (!ev) return res.status(404).json({ error: "not found" });
     const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date } = req.body || {};
+    const { name, date, kind } = req.body || {};
     const patch = {};
     if (name !== undefined) patch.name = name;
     if (date !== undefined) patch.date = date;
+    if (kind !== undefined) patch.kind = kind;
     const r = await dbUpdateTeamEvent(req.params.id, patch);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({

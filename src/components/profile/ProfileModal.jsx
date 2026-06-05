@@ -9,6 +9,7 @@ import { BenchmarksSection } from "./BenchmarksSection.jsx";
 import { EditableProfileField } from "./EditableProfileField.jsx";
 import { GoalRow } from "./GoalRow.jsx";
 import { JoinGroupSection } from "./JoinGroupSection.jsx";
+import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
 import { LevelRow } from "./LevelRow.jsx";
 import { NextEventRow } from "./NextEventRow.jsx";
 import { PhaseRow } from "./PhaseRow.jsx";
@@ -547,6 +548,8 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     <JoinGroupSection me={me} setMe={setMe} onJoined={() => { if (onProfileChange) onProfileChange(); }} />
                     {/* R-I: claim a managed profile a coach created for you */}
                     <ClaimManagedSection me={me} setMe={setMe} onClaimed={() => { if (onProfileChange) onProfileChange(); }} />
+                    {/* Team calendar — one-click .ics download for any team the user is in. */}
+                    <TeamCalendarDownload />
                   </div>
                   {/* Setforge rebrand 2026-05-20 — Send feedback + Sign out
                       folded down from the top nav (REBRAND_SCOPE §8.1, §8.4). */}

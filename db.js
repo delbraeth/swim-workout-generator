@@ -18,6 +18,7 @@
 import { createPool } from "mariadb";
 import crypto          from "crypto";
 import { suggestedPhaseFromWeeksOut, weeksUntilEvent } from "./lib/season.js";
+import { EVENT_KIND_VALUES, DEFAULT_EVENT_KIND } from "./src/lib/eventKinds.js";
 
 // Parse the optional DB_CONFIG JSON blob; malformed JSON is ignored (falls back
 // to the individual vars) with a warning rather than crashing boot.
@@ -5558,16 +5559,17 @@ export async function dbGetGroupMember(memberId) {
 
 // ── Team events (decision #38) ────────────────────────────────────────
 
-export async function dbCreateTeamEvent({ teamId, name, date, createdByCoachSub }) {
+export async function dbCreateTeamEvent({ teamId, name, date, kind = DEFAULT_EVENT_KIND, createdByCoachSub }) {
   if (!teamId) throw new Error("teamId required");
   if (!name || typeof name !== "string") throw new Error("name required");
   if (name.length > 120) throw new Error("name max 120 chars");
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error("date must be YYYY-MM-DD");
+  const k = EVENT_KIND_VALUES.includes(kind) ? kind : DEFAULT_EVENT_KIND;
   const id = genEventId();
   await pool.query(
-    "INSERT INTO `team_events` (`id`, `team_id`, `name`, `date`, `created_by_coach_sub`) " +
-    "VALUES (?, ?, ?, ?, ?)",
-    [id, teamId, name.trim(), date, createdByCoachSub || null]
+    "INSERT INTO `team_events` (`id`, `team_id`, `name`, `kind`, `date`, `created_by_coach_sub`) " +
+    "VALUES (?, ?, ?, ?, ?, ?)",
+    [id, teamId, name.trim(), k, date, createdByCoachSub || null]
   );
   return { ok: true, id };
 }
@@ -5575,7 +5577,7 @@ export async function dbCreateTeamEvent({ teamId, name, date, createdByCoachSub 
 export async function dbGetTeamEvent(eventId) {
   if (!eventId) return null;
   const rows = await pool.query(
-    "SELECT `id`, `team_id`, `name`, `date`, `created_by_coach_sub`, `created_at` " +
+    "SELECT `id`, `team_id`, `name`, `kind`, `date`, `created_by_coach_sub`, `created_at` " +
     "FROM `team_events` WHERE `id` = ?",
     [eventId]
   );
@@ -5585,6 +5587,7 @@ export async function dbGetTeamEvent(eventId) {
     id:        r.id,
     team_id:   r.team_id,
     name:      r.name,
+    kind:      r.kind || DEFAULT_EVENT_KIND,
     date:      dateToYmd(r.date),
     created_by_coach_sub: r.created_by_coach_sub,
     created_at: dtToIso(r.created_at),
@@ -5599,7 +5602,7 @@ export async function dbDeleteTeamEvent(eventId) {
 
 // Update name / date on an existing event. team_id and created_by_coach_sub
 // are intentionally not editable — creator attribution is a tombstone.
-export async function dbUpdateTeamEvent(eventId, { name, date } = {}) {
+export async function dbUpdateTeamEvent(eventId, { name, date, kind } = {}) {
   if (!eventId) return { ok: false, reason: "no_id" };
   const sets = [], vals = [];
   if (name !== undefined) {
@@ -5610,6 +5613,10 @@ export async function dbUpdateTeamEvent(eventId, { name, date } = {}) {
   if (date !== undefined) {
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return { ok: false, reason: "bad_date" };
     sets.push("`date` = ?"); vals.push(date);
+  }
+  if (kind !== undefined) {
+    if (!EVENT_KIND_VALUES.includes(kind)) return { ok: false, reason: "bad_kind" };
+    sets.push("`kind` = ?"); vals.push(kind);
   }
   if (!sets.length) return { ok: true, affected: 0 };
   vals.push(eventId);
@@ -5623,12 +5630,13 @@ export async function dbUpdateTeamEvent(eventId, { name, date } = {}) {
 export async function dbListTeamEvents(teamId) {
   if (!teamId) return [];
   const rows = await pool.query(
-    "SELECT `id`, `team_id`, `name`, `date`, `created_by_coach_sub`, `created_at` " +
+    "SELECT `id`, `team_id`, `name`, `kind`, `date`, `created_by_coach_sub`, `created_at` " +
     "FROM `team_events` WHERE `team_id` = ? ORDER BY `date` ASC",
     [teamId]
   );
   return rows.map(r => ({
     id: r.id, team_id: r.team_id, name: r.name,
+    kind: r.kind || DEFAULT_EVENT_KIND,
     date: dateToYmd(r.date),
     created_by_coach_sub: r.created_by_coach_sub,
     created_at: dtToIso(r.created_at),
@@ -5743,6 +5751,52 @@ export async function dbTeamCalendarFeedData(teamId) {
   const allEvents = await dbListTeamEvents(teamId);
   const events = allEvents.filter(e => e.date >= startYmd && e.date <= endYmd);
   return { scheduled, events };
+}
+
+// Teams whose calendar feed a user should be able to copy: teams they coach, OR
+// are a swimmer in (group member), OR are a guardian of a swimmer in (managed or
+// real). Returns [{ team_id, team_name, token }] with the token lazy-created. The
+// feed itself carries no minor PII (titles/dates/facility only), so parent +
+// swimmer exposure is MAAP-safe; only coaches can rotate the token.
+export async function dbListTeamCalendarsForUser(userSub) {
+  if (!userSub) return [];
+  const parentPid = await _swimmerPersonId({ swimmerSub: userSub });
+  const clauses = [
+    "t.`id` IN (SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL)",
+    "t.`id` IN (SELECT g.`team_id` FROM `group_members` gm JOIN `groups` g ON g.`id` = gm.`group_id` " +
+      "WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` IS NOT NULL)",
+  ];
+  const params = [userSub, userSub];
+  if (parentPid) {
+    // Guardian → swimmers' teams: managed swimmers attached by team_id, AND any
+    // guardianed swimmer (managed or real) who is a group member of a team.
+    clauses.push(
+      "t.`id` IN (SELECT m.`team_id` FROM `coach_managed_swimmers` m " +
+      "WHERE m.`archived` = 0 AND m.`team_id` IS NOT NULL " +
+      "AND m.`person_id` IN (SELECT `swimmer_person_id` FROM `guardians` WHERE `guardian_person_id` = ? AND `removed_at` IS NULL))"
+    );
+    params.push(parentPid);
+    clauses.push(
+      "t.`id` IN (SELECT gr.`team_id` FROM `group_members` gm2 " +
+      "JOIN `groups` gr ON gr.`id` = gm2.`group_id` AND gr.`team_id` IS NOT NULL " +
+      "LEFT JOIN `coach_managed_swimmers` m2 ON m2.`id` = gm2.`member_managed_id` " +
+      "LEFT JOIN `users` u2 ON u2.`sub` = gm2.`member_swimmer_sub` " +
+      "WHERE gm2.`left_at` IS NULL AND COALESCE(m2.`person_id`, u2.`person_id`) IN " +
+      "(SELECT `swimmer_person_id` FROM `guardians` WHERE `guardian_person_id` = ? AND `removed_at` IS NULL))"
+    );
+    params.push(parentPid);
+  }
+  const rows = await pool.query(
+    "SELECT DISTINCT t.`id`, t.`name` FROM `teams` t " +
+    "WHERE t.`archived` = 0 AND (" + clauses.join(" OR ") + ") ORDER BY t.`name` ASC",
+    params
+  );
+  const out = [];
+  for (const r of rows) {
+    const token = await dbGetOrCreateTeamCalendarToken(r.id);
+    out.push({ team_id: r.id, team_name: r.name, token });
+  }
+  return out;
 }
 
 // Roster for a team's CSV export, with the fields a Hy-Tek Meet Manager import
@@ -8469,7 +8523,7 @@ export async function dbListUpcomingEventsForUser(userSub) {
   // the user has a swimmer membership in. Dedupe by team_id implicitly via
   // DISTINCT on the outer query.
   const rows = await pool.query(
-    "SELECT DISTINCT te.`id`, te.`team_id`, t.`name` AS team_name, te.`name`, te.`date` " +
+    "SELECT DISTINCT te.`id`, te.`team_id`, t.`name` AS team_name, te.`name`, te.`kind`, te.`date` " +
     "FROM `team_events` te " +
     "JOIN `teams` t ON t.`id` = te.`team_id` " +
     "WHERE te.`date` >= CURRENT_DATE " +
@@ -8486,6 +8540,6 @@ export async function dbListUpcomingEventsForUser(userSub) {
   );
   return rows.map(r => ({
     id: r.id, team_id: r.team_id, team_name: r.team_name,
-    name: r.name, date: dateToYmd(r.date),
+    name: r.name, kind: r.kind || DEFAULT_EVENT_KIND, date: dateToYmd(r.date),
   }));
 }
