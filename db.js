@@ -5635,55 +5635,113 @@ export async function dbListTeamEvents(teamId) {
   }));
 }
 
-// ─── Export bridges (Phase 5 Slice A: .ics feed + roster CSV) ────────────────
-// Lazy-create the user's calendar feed token (the sole credential on the public
-// /calendar/:token.ics route — random + revocable).
-export async function dbGetOrCreateCalendarToken(userSub) {
-  if (!userSub) return null;
-  const rows = await pool.query("SELECT `calendar_feed_token` FROM `users` WHERE `sub` = ?", [userSub]);
+// ─── Export bridges (Phase 5 Slice A: team .ics feed + roster CSV) ───────────
+// Per-team calendar feed token (the sole credential on the public
+// /calendar/:token.ics route — random + revocable). Lazy-created on first read.
+export async function dbGetOrCreateTeamCalendarToken(teamId) {
+  if (!teamId) return null;
+  const rows = await pool.query("SELECT `calendar_feed_token` FROM `teams` WHERE `id` = ?", [teamId]);
   if (!rows[0]) return null;
   if (rows[0].calendar_feed_token) return rows[0].calendar_feed_token;
   const token = crypto.randomBytes(24).toString("base64url");
-  await pool.query("UPDATE `users` SET `calendar_feed_token` = ? WHERE `sub` = ?", [token, userSub]);
+  await pool.query("UPDATE `teams` SET `calendar_feed_token` = ? WHERE `id` = ?", [token, teamId]);
   return token;
 }
 
-// Rotate (revoke + reissue) the feed token — invalidates any previously shared URL.
-export async function dbRotateCalendarToken(userSub) {
-  if (!userSub) return null;
+// Rotate (revoke + reissue) the team feed token — invalidates any shared URL.
+export async function dbRotateTeamCalendarToken(teamId) {
+  if (!teamId) return null;
   const token = crypto.randomBytes(24).toString("base64url");
-  const r = await pool.query("UPDATE `users` SET `calendar_feed_token` = ? WHERE `sub` = ?", [token, userSub]);
+  const r = await pool.query("UPDATE `teams` SET `calendar_feed_token` = ? WHERE `id` = ?", [token, teamId]);
   return r.affectedRows ? token : null;
 }
 
-// Resolve a feed token → user sub (disabled accounts excluded). Used by the
+// Resolve a feed token → team (archived teams excluded). Used by the
 // unauthenticated feed route; the token IS the authorization.
-export async function dbGetUserSubByCalendarToken(token) {
+export async function dbGetTeamByCalendarToken(token) {
   if (!token || typeof token !== "string") return null;
   const rows = await pool.query(
-    "SELECT `sub` FROM `users` WHERE `calendar_feed_token` = ? AND `is_disabled` = 0 LIMIT 1",
+    "SELECT `id`, `name` FROM `teams` WHERE `calendar_feed_token` = ? AND `archived` = 0 LIMIT 1",
     [token]
   );
-  return rows[0] ? rows[0].sub : null;
+  return rows[0] ? { id: rows[0].id, name: rows[0].name } : null;
 }
 
-// Feed contents for a coach: their scheduled practices (−60d…+365d window) plus
-// team events for every team they coach. Returned raw for the route to map to ICS.
-export async function dbCalendarFeedData(userSub) {
-  if (!userSub) return { scheduled: [], events: [] };
+// The group a scheduled practice belongs to lives in its JSON, not a column:
+// intent_params/payload `.group_id` (or `.assignment_target.group_id`). Mirrors
+// the inGroup logic in dbGetScheduleAdherence.
+function schedRowGroupId(sw) {
+  for (const f of ["intent_params", "payload"]) {
+    let v = sw[f];
+    if (typeof v === "string") { try { v = JSON.parse(v); } catch (_) { v = null; } }
+    if (!v) continue;
+    if (v.group_id) return v.group_id;
+    if (v.assignment_target && v.assignment_target.group_id) return v.assignment_target.group_id;
+  }
+  return null;
+}
+
+// Feed contents for a TEAM: the team's events plus practices scheduled for any of
+// the team's groups (practices→groups→teams). Practices live on each coach's
+// account with the group_id embedded in the schedule JSON, so we pull scheduled
+// rows for all the team's coaches in the window and keep those whose group_id is
+// one of the team's groups. Deduped by scheduled_workouts.id. Window −60d…+365d.
+export async function dbTeamCalendarFeedData(teamId) {
+  if (!teamId) return { scheduled: [], events: [] };
   const today = new Date();
   const start = new Date(today); start.setUTCDate(start.getUTCDate() - 60);
   const end   = new Date(today); end.setUTCDate(end.getUTCDate() + 365);
-  const scheduled = await dbListScheduledWorkouts(userSub, {
-    startDate: start.toISOString().slice(0, 10),
-    endDate:   end.toISOString().slice(0, 10),
-  });
-  const teams = await dbListTeamsForCoach(userSub);
-  const events = [];
-  for (const t of teams) {
-    const evs = await dbListTeamEvents(t.id);
-    for (const e of evs) events.push({ ...e, team_name: t.name });
+  const startYmd = start.toISOString().slice(0, 10);
+  const endYmd   = end.toISOString().slice(0, 10);
+
+  // Team groups (include archived so older practices still resolve a group name).
+  const groups = await dbListGroupsForTeam(teamId, { includeArchived: true });
+  const groupName = new Map(groups.map(g => [g.id, g.name]));
+  const groupIds  = new Set(groups.map(g => g.id));
+
+  let scheduled = [];
+  if (groupIds.size > 0) {
+    const cc = await pool.query(
+      "SELECT `coach_sub` FROM `team_coaches` WHERE `team_id` = ? AND `removed_at` IS NULL",
+      [teamId]
+    );
+    const coachSubs = cc.map(r => r.coach_sub).filter(Boolean);
+    if (coachSubs.length > 0) {
+      const ph = coachSubs.map(() => "?").join(",");
+      const rows = await pool.query(
+        "SELECT sw.`id`, sw.`scheduled_date`, sw.`notes`, sw.`payload`, sw.`intent_params`, " +
+        "       f.`name` AS facility_name " +
+        "  FROM `scheduled_workouts` sw " +
+        "  LEFT JOIN `team_facilities` f ON f.`id` = sw.`facility_id` " +
+        ` WHERE sw.\`user_sub\` IN (${ph}) AND sw.\`scheduled_date\` BETWEEN ? AND ?`,
+        [...coachSubs, startYmd, endYmd]
+      );
+      const seen = new Set();
+      for (const r of rows) {
+        const gid = schedRowGroupId(r);
+        if (!gid || !groupIds.has(gid)) continue;
+        const id = Number(r.id);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        let payload = r.payload;
+        if (typeof payload === "string") { try { payload = JSON.parse(payload); } catch (_) { payload = null; } }
+        scheduled.push({
+          id,
+          scheduled_date: dateToYmd(r.scheduled_date),
+          notes:          r.notes || null,
+          payload,
+          facility_name:  r.facility_name || null,
+          group_name:     groupName.get(gid) || null,
+        });
+      }
+      scheduled.sort((a, b) =>
+        a.scheduled_date < b.scheduled_date ? -1 :
+        a.scheduled_date > b.scheduled_date ?  1 : a.id - b.id);
+    }
   }
+
+  const allEvents = await dbListTeamEvents(teamId);
+  const events = allEvents.filter(e => e.date >= startYmd && e.date <= endYmd);
   return { scheduled, events };
 }
 

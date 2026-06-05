@@ -2,6 +2,7 @@
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
 import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
+import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -252,6 +253,11 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
               <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)" }}>(read-only — owner + admin can edit)</span>
             )}
           </h3>
+
+          {/* Team calendar feed — shareable live-subscribe .ics (team events +
+              practices for the team's groups). Visible to any member; only
+              owner/admin can rotate the token. */}
+          <TeamCalendarFeed teamId={teamId} canManage={canWrite} />
 
           {/* Team code / abbreviation — used as the "Team Name" column in meet-entry
               (Hy-Tek) roster exports. Owner-only (matches the rename route). */}

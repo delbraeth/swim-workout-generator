@@ -102,8 +102,8 @@ import {
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
   dbListTeamFacilities, dbCreateTeamFacility, dbUpdateTeamFacility, dbArchiveTeamFacility,
-  dbGetOrCreateCalendarToken, dbRotateCalendarToken, dbGetUserSubByCalendarToken,
-  dbCalendarFeedData, dbTeamRosterForExport,
+  dbGetOrCreateTeamCalendarToken, dbRotateTeamCalendarToken, dbGetTeamByCalendarToken,
+  dbTeamCalendarFeedData, dbTeamRosterForExport,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
@@ -4357,27 +4357,32 @@ app.get("/api/me/export", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
-// ── Export bridges (Phase 5 Slice A): calendar feed ─────────────────────
+// ── Export bridges (Phase 5 Slice A): team calendar feed ────────────────
 // Build the absolute live-subscribe URL from the proxied request.
 function calendarFeedUrl(req, token) {
   const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim();
   const host  = req.headers["x-forwarded-host"] || req.headers.host || "setforge.io";
   return `${proto}://${host}/calendar/${token}.ics`;
 }
-// The coach's calendar link (token lazy-creates on first read).
-app.get("/api/me/calendar-token", requireAuth, async (req, res) => {
+// A team's calendar link (token lazy-creates on first read). Any team coach can
+// read it (to share with families); only owner/admin can rotate it.
+app.get("/api/teams/:id/calendar-token", requireAuth, async (req, res) => {
   try {
-    const token = await dbGetOrCreateCalendarToken(req.userSub);
-    if (!token) return res.status(404).json({ error: "user not found" });
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const token = await dbGetOrCreateTeamCalendarToken(req.params.id);
+    if (!token) return res.status(404).json({ error: "team not found" });
     res.json({ token, url: calendarFeedUrl(req, token) });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
-// Rotate (revoke + reissue) — any previously shared URL stops working.
-app.post("/api/me/calendar-token/rotate", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+// Rotate (revoke + reissue) — any previously shared URL stops working. Owner/admin.
+app.post("/api/teams/:id/calendar-token/rotate", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const token = await dbRotateCalendarToken(req.userSub);
-    if (!token) return res.status(404).json({ error: "user not found" });
-    dbAuditEvent({ userSub: req.userSub, eventType: "calendar.token.rotate", ...reqMeta(req) });
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "owner or admin required" });
+    const token = await dbRotateTeamCalendarToken(req.params.id);
+    if (!token) return res.status(404).json({ error: "team not found" });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.calendar.token_rotate", ...reqMeta(req), details: { team_id: req.params.id } });
     res.json({ token, url: calendarFeedUrl(req, token) });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
@@ -4387,26 +4392,24 @@ app.post("/api/me/calendar-token/rotate", checkOrigin, requireAuth, requireCsrf,
 app.get("/calendar/:file", feedLimiter, async (req, res) => {
   try {
     const token = String(req.params.file || "").replace(/\.ics$/i, "");
-    const userSub = token ? await dbGetUserSubByCalendarToken(token) : null;
-    if (!userSub) return res.status(404).type("text/plain").send("Not found");
-    const { scheduled, events } = await dbCalendarFeedData(userSub);
+    const team = token ? await dbGetTeamByCalendarToken(token) : null;
+    if (!team) return res.status(404).type("text/plain").send("Not found");
+    const { scheduled, events } = await dbTeamCalendarFeedData(team.id);
     const items = [];
     for (const sw of scheduled) {
       const title = (sw.payload && (sw.payload.title || sw.payload.name)) || "Practice";
+      const groupBit = sw.group_name ? ` (${sw.group_name})` : "";
       items.push({
-        uid: "sw-" + sw.id, date: sw.scheduled_date, summary: "🏊 " + title,
+        uid: "sw-" + sw.id, date: sw.scheduled_date, summary: "🏊 " + title + groupBit,
         description: sw.notes || "", location: sw.facility_name || "",
       });
     }
     for (const ev of events) {
-      items.push({
-        uid: "te-" + ev.id, date: ev.date, summary: ev.name || "Team event",
-        description: ev.team_name ? `${ev.team_name} event` : "",
-      });
+      items.push({ uid: "te-" + ev.id, date: ev.date, summary: ev.name || "Team event" });
     }
-    const ics = buildIcs(items, { calName: "SetForge", nowIso: new Date().toISOString() });
+    const ics = buildIcs(items, { calName: team.name || "SetForge", nowIso: new Date().toISOString() });
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
-    res.setHeader("Content-Disposition", 'inline; filename="setforge.ics"');
+    res.setHeader("Content-Disposition", 'inline; filename="team.ics"');
     res.setHeader("Cache-Control", "private, max-age=300");
     res.send(ics);
   } catch (err) { res.status(500).type("text/plain").send("error"); }
