@@ -2969,7 +2969,7 @@ export async function dbCreateTeam({ ownerSub, name, teamType }) {
 export async function dbGetTeam(id) {
   if (!id) return null;
   const rows = await pool.query(
-    "SELECT `id`, `owner_coach_sub`, `name`, `team_type`, `archived`, `created_at`, `updated_at` " +
+    "SELECT `id`, `owner_coach_sub`, `name`, `team_code`, `team_type`, `archived`, `created_at`, `updated_at` " +
     "FROM `teams` WHERE `id` = ?",
     [id]
   );
@@ -2979,6 +2979,7 @@ export async function dbGetTeam(id) {
     id:              r.id,
     owner_coach_sub: r.owner_coach_sub,
     name:            r.name,
+    team_code:       r.team_code || null,
     team_type:       r.team_type,
     archived:        !!r.archived,
     created_at:      dtToIso(r.created_at),
@@ -3010,16 +3011,30 @@ export async function dbListTeamsForCoach(coachSub) {
   }));
 }
 
-export async function dbUpdateTeam(id, { name }) {
+export async function dbUpdateTeam(id, { name, team_code } = {}) {
   if (!id) return { ok: false, reason: "no_id" };
-  // Only `name` is mutable (team_type is immutable per #25; owner change is
-  // a separate flow not built in v1).
-  if (typeof name !== "string" || !name.trim()) return { ok: false, reason: "bad_name" };
-  if (name.length > 120) return { ok: false, reason: "name_too_long" };
-  const r = await pool.query(
-    "UPDATE `teams` SET `name` = ? WHERE `id` = ?",
-    [name.trim(), id]
-  );
+  // `name` and `team_code` are mutable (team_type is immutable per #25; owner
+  // change is a separate flow not built in v1). Each is optional in a patch.
+  const sets = [], vals = [];
+  if (name !== undefined) {
+    if (typeof name !== "string" || !name.trim()) return { ok: false, reason: "bad_name" };
+    if (name.length > 120) return { ok: false, reason: "name_too_long" };
+    sets.push("`name` = ?"); vals.push(name.trim());
+  }
+  if (team_code !== undefined) {
+    // null / "" clears the code; otherwise 1–6 alphanumeric chars, stored uppercased.
+    if (team_code === null || team_code === "") {
+      sets.push("`team_code` = NULL");
+    } else {
+      if (typeof team_code !== "string" || !/^[A-Za-z0-9]{1,6}$/.test(team_code.trim())) {
+        return { ok: false, reason: "bad_team_code" };
+      }
+      sets.push("`team_code` = ?"); vals.push(team_code.trim().toUpperCase());
+    }
+  }
+  if (!sets.length) return { ok: false, reason: "no_fields" };
+  vals.push(id);
+  const r = await pool.query(`UPDATE \`teams\` SET ${sets.join(", ")} WHERE \`id\` = ?`, vals);
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
@@ -5617,6 +5632,88 @@ export async function dbListTeamEvents(teamId) {
     date: dateToYmd(r.date),
     created_by_coach_sub: r.created_by_coach_sub,
     created_at: dtToIso(r.created_at),
+  }));
+}
+
+// ─── Export bridges (Phase 5 Slice A: .ics feed + roster CSV) ────────────────
+// Lazy-create the user's calendar feed token (the sole credential on the public
+// /calendar/:token.ics route — random + revocable).
+export async function dbGetOrCreateCalendarToken(userSub) {
+  if (!userSub) return null;
+  const rows = await pool.query("SELECT `calendar_feed_token` FROM `users` WHERE `sub` = ?", [userSub]);
+  if (!rows[0]) return null;
+  if (rows[0].calendar_feed_token) return rows[0].calendar_feed_token;
+  const token = crypto.randomBytes(24).toString("base64url");
+  await pool.query("UPDATE `users` SET `calendar_feed_token` = ? WHERE `sub` = ?", [token, userSub]);
+  return token;
+}
+
+// Rotate (revoke + reissue) the feed token — invalidates any previously shared URL.
+export async function dbRotateCalendarToken(userSub) {
+  if (!userSub) return null;
+  const token = crypto.randomBytes(24).toString("base64url");
+  const r = await pool.query("UPDATE `users` SET `calendar_feed_token` = ? WHERE `sub` = ?", [token, userSub]);
+  return r.affectedRows ? token : null;
+}
+
+// Resolve a feed token → user sub (disabled accounts excluded). Used by the
+// unauthenticated feed route; the token IS the authorization.
+export async function dbGetUserSubByCalendarToken(token) {
+  if (!token || typeof token !== "string") return null;
+  const rows = await pool.query(
+    "SELECT `sub` FROM `users` WHERE `calendar_feed_token` = ? AND `is_disabled` = 0 LIMIT 1",
+    [token]
+  );
+  return rows[0] ? rows[0].sub : null;
+}
+
+// Feed contents for a coach: their scheduled practices (−60d…+365d window) plus
+// team events for every team they coach. Returned raw for the route to map to ICS.
+export async function dbCalendarFeedData(userSub) {
+  if (!userSub) return { scheduled: [], events: [] };
+  const today = new Date();
+  const start = new Date(today); start.setUTCDate(start.getUTCDate() - 60);
+  const end   = new Date(today); end.setUTCDate(end.getUTCDate() + 365);
+  const scheduled = await dbListScheduledWorkouts(userSub, {
+    startDate: start.toISOString().slice(0, 10),
+    endDate:   end.toISOString().slice(0, 10),
+  });
+  const teams = await dbListTeamsForCoach(userSub);
+  const events = [];
+  for (const t of teams) {
+    const evs = await dbListTeamEvents(t.id);
+    for (const e of evs) events.push({ ...e, team_name: t.name });
+  }
+  return { scheduled, events };
+}
+
+// Roster for a team's CSV export, with the fields a Hy-Tek Meet Manager import
+// needs (Swimming ID + DOB + names + gender). Sourced from the SAME group
+// membership the roster tab shows (dbGetTeamRoster) — members are polymorphic
+// (managed swimmer OR real user), both resolving to a person — so the CSV matches
+// what the coach sees. DISTINCT dedupes athletes who belong to multiple groups.
+export async function dbTeamRosterForExport(teamId) {
+  if (!teamId) return [];
+  const rows = await pool.query(
+    "SELECT DISTINCT p.`id` AS person_id, p.`first_name`, p.`last_name`, " +
+    "       p.`preferred_name`, p.`dob`, p.`gender`, xe.`external_id` AS usa_swimming_id " +
+    "  FROM `group_members` gm " +
+    "  JOIN `groups` g ON g.`id` = gm.`group_id` AND g.`archived` = 0 AND g.`team_id` = ? " +
+    "  LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
+    "  LEFT JOIN `users` u ON u.`sub` = gm.`member_swimmer_sub` " +
+    "  JOIN `persons` p ON p.`id` = COALESCE(m.`person_id`, u.`person_id`) " +
+    "  LEFT JOIN `person_external_ids` xe ON xe.`person_id` = p.`id` AND xe.`system` = 'usa_swimming' " +
+    " WHERE gm.`left_at` IS NULL " +
+    " ORDER BY p.`last_name` ASC, p.`first_name` ASC",
+    [teamId]
+  );
+  return rows.map(r => ({
+    first_name:      r.first_name || "",
+    last_name:       r.last_name || "",
+    preferred_name:  r.preferred_name || "",
+    dob:             dateToYmd(r.dob),
+    gender:          r.gender || null,
+    usa_swimming_id: r.usa_swimming_id || null,
   }));
 }
 

@@ -3,6 +3,7 @@
 // surfaces (roster, groups, teams, practices, catalog, my sets, reports) into one
 // home, so the generator stays focused on generating. Reached from the nav; not
 // the forced default landing. React is a runtime global.
+import { CalendarFeedSection } from "./CalendarFeedSection.jsx";
 
     export function CoachHomeView({ me = null, onNavigate = () => {}, onGenerate = () => {} }) {
       const isCoach   = !!me?.is_coach;
@@ -81,6 +82,8 @@
               </button>
             ))}
           </div>
+
+          <CalendarFeedSection />
         </div>
       );
     }

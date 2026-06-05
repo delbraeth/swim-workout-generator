@@ -28,13 +28,20 @@
 
       return (
         <div className="card" style={{ borderRadius: 10, padding: 16, marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
             <h3 style={{ color: "var(--color-text)", marginTop: 0, marginBottom: 0, fontSize: 15 }}>
               🏊 Team Roster
               <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "var(--color-text-muted)" }}>
                 ({totalMembers} {totalMembers === 1 ? "swimmer" : "swimmers"} across {data.length} {data.length === 1 ? "group" : "groups"})
               </span>
             </h3>
+            {totalMembers > 0 && (
+              <a href={`/api/teams/${teamId}/roster.csv`} download
+                 title="Download roster as a Hy-Tek Meet Manager CSV"
+                 style={{ fontSize: 12, fontWeight: 700, color: "var(--color-primary)", textDecoration: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 10px", whiteSpace: "nowrap" }}>
+                ⬇ Roster CSV
+              </a>
+            )}
           </div>
           {data.length === 0 ? (
             <div style={{ color: "var(--color-text-dim)", fontSize: 12, fontStyle: "italic", padding: 12 }}>

@@ -58,6 +58,8 @@ import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
+import { buildIcs } from "./lib/ics.js";
+import { toCsv } from "./lib/csv.js";
 
 import {
   pool, dbActive, pingDb,
@@ -100,6 +102,8 @@ import {
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
   dbListTeamFacilities, dbCreateTeamFacility, dbUpdateTeamFacility, dbArchiveTeamFacility,
+  dbGetOrCreateCalendarToken, dbRotateCalendarToken, dbGetUserSubByCalendarToken,
+  dbCalendarFeedData, dbTeamRosterForExport,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
@@ -286,6 +290,17 @@ const writeLimiter = rateLimit({
     })).catch(err => console.error("[rate_limit.hit audit insert failed]", err.message));
     res.status(options.statusCode).json(options.message);
   },
+});
+
+// Public calendar-feed limiter. The .ics route is unauthenticated (token-only) and
+// polled by calendar clients on a schedule, so keyed by IP with a generous cap.
+const feedLimiter = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           120,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  keyGenerator:    (req) => req.ip,
+  message:         "too many requests, try again later",
 });
 
 // ───── Cookie helper ─────────────────────────────────────────────────
@@ -3185,14 +3200,17 @@ app.patch("/api/teams/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter,
   try {
     const role = await getCallerTeamRole(req.params.id, req.userSub);
     if (role !== "owner") return res.status(403).json({ error: "owner only" });
-    const { name } = req.body || {};
-    const r = await dbUpdateTeam(req.params.id, { name });
+    const { name, team_code } = req.body || {};
+    const patch = {};
+    if (name !== undefined) patch.name = name;
+    if (team_code !== undefined) patch.team_code = team_code;
+    const r = await dbUpdateTeam(req.params.id, patch);
     if (!r.ok) return res.status(400).json({ error: r.reason || "update failed" });
     dbAuditEvent({
       userSub:   req.userSub,
-      eventType: "team.rename",
+      eventType: "team.update",
       ...reqMeta(req),
-      details:   { team_id: req.params.id, name },
+      details:   { team_id: req.params.id, fields: Object.keys(patch) },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
@@ -4339,6 +4357,61 @@ app.get("/api/me/export", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// ── Export bridges (Phase 5 Slice A): calendar feed ─────────────────────
+// Build the absolute live-subscribe URL from the proxied request.
+function calendarFeedUrl(req, token) {
+  const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim();
+  const host  = req.headers["x-forwarded-host"] || req.headers.host || "setforge.io";
+  return `${proto}://${host}/calendar/${token}.ics`;
+}
+// The coach's calendar link (token lazy-creates on first read).
+app.get("/api/me/calendar-token", requireAuth, async (req, res) => {
+  try {
+    const token = await dbGetOrCreateCalendarToken(req.userSub);
+    if (!token) return res.status(404).json({ error: "user not found" });
+    res.json({ token, url: calendarFeedUrl(req, token) });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+// Rotate (revoke + reissue) — any previously shared URL stops working.
+app.post("/api/me/calendar-token/rotate", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const token = await dbRotateCalendarToken(req.userSub);
+    if (!token) return res.status(404).json({ error: "user not found" });
+    dbAuditEvent({ userSub: req.userSub, eventType: "calendar.token.rotate", ...reqMeta(req) });
+    res.json({ token, url: calendarFeedUrl(req, token) });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+// Public live-subscribe feed — the token IS the authorization (no cookies/CSRF).
+// URL shape is /calendar/<token>.ics; we capture the filename and strip .ics so
+// the route is unambiguous (base64url tokens contain no dot).
+app.get("/calendar/:file", feedLimiter, async (req, res) => {
+  try {
+    const token = String(req.params.file || "").replace(/\.ics$/i, "");
+    const userSub = token ? await dbGetUserSubByCalendarToken(token) : null;
+    if (!userSub) return res.status(404).type("text/plain").send("Not found");
+    const { scheduled, events } = await dbCalendarFeedData(userSub);
+    const items = [];
+    for (const sw of scheduled) {
+      const title = (sw.payload && (sw.payload.title || sw.payload.name)) || "Practice";
+      items.push({
+        uid: "sw-" + sw.id, date: sw.scheduled_date, summary: "🏊 " + title,
+        description: sw.notes || "", location: sw.facility_name || "",
+      });
+    }
+    for (const ev of events) {
+      items.push({
+        uid: "te-" + ev.id, date: ev.date, summary: ev.name || "Team event",
+        description: ev.team_name ? `${ev.team_name} event` : "",
+      });
+    }
+    const ics = buildIcs(items, { calName: "SetForge", nowIso: new Date().toISOString() });
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", 'inline; filename="setforge.ics"');
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(ics);
+  } catch (err) { res.status(500).type("text/plain").send("error"); }
+});
+
 // Team Curation v1 slice 5 (2026-05-27): list every team default the
 // caller inherits. Drives ProfileModal inheritance disclosure. Empty
 // array = user isn't in any team that has set defaults yet.
@@ -4355,6 +4428,45 @@ app.get("/api/teams/:id/roster", requireAuth, async (req, res) => {
     const role = await getCallerTeamRole(req.params.id, req.userSub);
     if (!role) return res.status(403).json({ error: "not a team member" });
     res.json(await dbGetTeamRoster(req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Export bridges (Phase 5 Slice A): roster CSV in Hy-Tek Meet Manager import
+// format. Required column order: Swimming ID, Date of Birth, First Name, Last
+// Name, Gender, Team Name (+ optional Preferred Name). Gender spelled out
+// (M→MALE, F→FEMALE); X / prefer_not_to_say → blank (coach fills in MM). DOB as
+// MM/DD/YYYY (Hy-Tek's expected format). Source = active managed swimmers on the
+// team. Any team coach can export.
+app.get("/api/teams/:id/roster.csv", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const roster = await dbTeamRosterForExport(req.params.id);
+    const genderMap = { M: "MALE", F: "FEMALE" };
+    const ymdToMdy = (ymd) => {
+      if (!ymd) return "";
+      const [y, m, d] = String(ymd).split("-");
+      return (y && m && d) ? `${m}/${d}/${y}` : "";
+    };
+    const headers = ["Swimming ID", "Date of Birth", "First Name", "Last Name", "Gender", "Team Name", "Preferred Name"];
+    const rows = roster.map(s => [
+      s.usa_swimming_id || "",
+      ymdToMdy(s.dob),
+      s.first_name || "",
+      s.last_name || "",
+      genderMap[s.gender] || "",
+      team.team_code || team.name || "",   // Hy-Tek "Team Name" wants the abbreviation
+      s.preferred_name || "",
+    ]);
+    const csv = toCsv(headers, rows);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safeName = (team.name || "team").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "team";
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="roster-${safeName}-${stamp}.csv"`);
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.roster.export_csv", ...reqMeta(req), details: { team_id: req.params.id, count: rows.length } });
+    res.send(csv);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

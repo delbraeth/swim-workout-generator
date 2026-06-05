@@ -17,6 +17,8 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
       const [newDisfav, setNewDisfav] = React.useState("");
       const [paceDraft, setPaceDraft] = React.useState("");                   // pending edit
       const [busy, setBusy]         = React.useState(false);
+      const [teamCode, setTeamCode] = React.useState("");                     // team abbreviation (meet exports)
+      const [teamCodeSaved, setTeamCodeSaved] = React.useState("");           // last persisted value
       // Ownership transfer (owner-only section).
       const [coaches, setCoaches]                 = React.useState([]);
       const [pendingTransfer, setPendingTransfer] = React.useState(null);
@@ -25,11 +27,12 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
 
       const load = React.useCallback(async () => {
         try {
-          const [cRes, sRes, coRes, ptRes] = await Promise.all([
+          const [cRes, sRes, coRes, ptRes, tRes] = await Promise.all([
             fetch(`/api/teams/${teamId}/curation`, { cache: "no-store" }),
             fetch(`/api/teams/${teamId}/settings`, { cache: "no-store" }),
             fetch(`/api/teams/${teamId}/coaches`, { cache: "no-store" }),
             fetch(`/api/teams/${teamId}/pending-transfer`, { cache: "no-store" }),
+            fetch(`/api/teams/${teamId}`, { cache: "no-store" }),
           ]);
           if (!cRes.ok) throw new Error(`curation HTTP ${cRes.status}`);
           if (!sRes.ok) throw new Error(`settings HTTP ${sRes.status}`);
@@ -38,6 +41,7 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
           setCuration(c);
           setSettings(s);
           setPaceDraft(s.default_pace_base || "");
+          if (tRes.ok) { try { const t = await tRes.json(); const tc = t.team_code || ""; setTeamCode(tc); setTeamCodeSaved(tc); } catch (_) {} }
           if (coRes.ok) { try { setCoaches(await coRes.json()); } catch (_) {} }
           if (ptRes.ok) { try { const pt = await ptRes.json(); setPendingTransfer(pt && pt.id ? pt : null); } catch (_) {} }
         } catch (e) {
@@ -104,6 +108,25 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
             throw new Error(j.error || `HTTP ${res.status}`);
           }
           await load();
+        } catch (e) { setMsg(`Save failed: ${e.message}`); }
+        finally { setBusy(false); }
+      };
+
+      const saveTeamCode = async () => {
+        const value = teamCode.trim().toUpperCase();
+        if (value && !/^[A-Z0-9]{1,6}$/.test(value)) { setMsg("Team code must be 1–6 letters/numbers."); return; }
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/teams/${teamId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ team_code: value || null }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          setTeamCode(value); setTeamCodeSaved(value);
         } catch (e) { setMsg(`Save failed: ${e.message}`); }
         finally { setBusy(false); }
       };
@@ -229,6 +252,28 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
               <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)" }}>(read-only — owner + admin can edit)</span>
             )}
           </h3>
+
+          {/* Team code / abbreviation — used as the "Team Name" column in meet-entry
+              (Hy-Tek) roster exports. Owner-only (matches the rename route). */}
+          {viewerRole === "owner" && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+                🏷 Team code (meet-entry abbreviation)
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                <input value={teamCode}
+                  onChange={e => setTeamCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 6).toUpperCase())}
+                  onKeyDown={e => { if (e.key === "Enter") saveTeamCode(); }}
+                  placeholder="e.g. WSU" maxLength={6}
+                  style={{ width: 110, padding: "6px 9px", fontSize: 13, fontFamily: "monospace", letterSpacing: "0.05em", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                <button onClick={saveTeamCode} disabled={busy || teamCode.trim().toUpperCase() === teamCodeSaved}
+                  style={{ padding: "6px 12px", background: (busy || teamCode.trim().toUpperCase() === teamCodeSaved) ? "var(--color-border)" : "var(--color-primary)", color: "#fff", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: (busy || teamCode.trim().toUpperCase() === teamCodeSaved) ? "not-allowed" : "pointer" }}>
+                  Save
+                </button>
+                <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>1–6 letters/numbers. Falls back to the team name in exports when empty.</span>
+              </div>
+            </div>
+          )}
 
           <div style={{ marginBottom: 18 }}>
             <div style={{ color: "var(--color-positive)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
