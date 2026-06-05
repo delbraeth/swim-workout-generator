@@ -881,9 +881,17 @@ app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
 
 // The workout-type catalog the client's Generate form needs (id/label/…).
 // Static engine data, no DB. 503 if the engine failed to extract at boot.
-app.get("/api/workout-types", requireAuth, (req, res) => {
+app.get("/api/workout-types", requireAuth, async (req, res) => {
   if (!generatorReady()) return res.status(503).json({ error: "generator_unavailable" });
-  res.json({ types: engineWorkoutTypes() });
+  // Lesson tier (Phase 5) — gate the `lesson` type to lesson-access users.
+  // This endpoint feeds BOTH the web type grid AND the native iOS picker, so
+  // gating here removes lesson from non-lesson clients everywhere (the web also
+  // filters client-side; this is the authoritative gate + free iOS gating).
+  let types = engineWorkoutTypes();
+  try {
+    if (!(await dbHasLessonAccess(req.userSub))) types = types.filter(t => t.id !== "lesson");
+  } catch (_) { types = types.filter(t => t.id !== "lesson"); }  // fail closed
+  res.json({ types });
 });
 
 const POOL_MODES = ["25y", "25m", "50m"];
