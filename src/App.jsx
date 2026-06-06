@@ -14,6 +14,7 @@
     import { MultiLaneControl } from "./components/multipace/MultiLaneControl.jsx";
     import { MultiPaceModal } from "./components/multipace/MultiPaceModal.jsx";
     import { MultiPacePrintView } from "./components/multipace/MultiPacePrintView.jsx";
+    import { WhiteboardPrintView } from "./components/multipace/WhiteboardPrintView.jsx";
     import { SaveToHistoryForm } from "./components/history/SaveToHistoryForm.jsx";
     const HistoryView = React.lazy(() => import("./components/history/HistoryView.jsx").then(m => ({ default: m.HistoryView })));
     const CatalogView = React.lazy(() => import("./components/catalog/CatalogView.jsx").then(m => ({ default: m.CatalogView })));
@@ -1718,6 +1719,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // is non-null while the print overlay is mounted ({lanes, mode}).
       const [showMultiPace,   setShowMultiPace]   = useState(false);
       const [multiPaceLanes,  setMultiPaceLanes]  = useState(null);
+      const [showWhiteboard,  setShowWhiteboard]  = useState(false);
       const [copyFlash,       setCopyFlash]       = useState(false);
       // Auth state: null = checking, false = not signed in, true = signed in
       const [authenticated, setAuthenticated] = useState(null);
@@ -2912,6 +2914,10 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // generateForPlanId is "" = no plan (stored paces) or plan id.
       const [lanePlansForTarget, setLanePlansForTarget] = useState([]);
       const [generateForPlanId,  setGenerateForPlanId]  = useState("");
+      // Meet-anchored taper (eval 2026-06-06): opt-in, per-session apply of the
+      // selected group's anchor suggested_phase for THIS generation. Reset on
+      // target change so a stale toggle can't leak across groups.
+      const [applySuggestedPhase, setApplySuggestedPhase] = useState(false);
       useEffect(() => {
         // Lesson tier (Phase 5) — generate-for picker is available to lesson access
         // too (managed swimmers); the route gates with requireLessonAccess.
@@ -2954,9 +2960,17 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         const isLessonGroup = t.team_id == null;
         return (isLessonType === isLessonGroup) ? t : null;
       }, [generateForId, coachTargets, selectedType]);
+      // Reset the opt-in suggested-phase toggle whenever the target changes.
+      useEffect(() => { setApplySuggestedPhase(false); }, [generateForId]);
       // Effective phase: group's current_phase overrides the user's personal
-      // phase when generating for a group (decision #39).
-      const effectivePhase = generateForTarget?.current_phase || phase;
+      // phase when generating for a group (decision #39). Meet-anchored taper
+      // (eval 2026-06-06): if the coach opts in, the active anchor's
+      // suggested_phase takes precedence for THIS generation only — turning the
+      // taper from advisory (badge) into something that actually drives Generate.
+      const effectivePhase =
+        (applySuggestedPhase && generateForTarget?.suggested_phase)
+        || generateForTarget?.current_phase
+        || phase;
 
       // Phase 3 PSC slice 3 — per-practice checklist data fetch.
       // When Generate target switches to a group, fetch its active constraints
@@ -4854,8 +4868,24 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                             })()
                           : <>Workout will save to <strong>your history</strong> and fan out as <strong>{generateForTarget.member_count} assignment{generateForTarget.member_count === 1 ? "" : "s"}</strong> to {generateForTarget.name}'s members.</>
                         }
-                        {generateForTarget.current_phase && <span> Phase override: <strong>{generateForTarget.current_phase}</strong>.</span>}
+                        {generateForTarget.current_phase && <span> Phase override: <strong>{effectivePhase}</strong>{applySuggestedPhase && generateForTarget.suggested_phase ? " (from meet anchor)" : ""}.</span>}
                       </div>
+                    )}
+                    {/* Meet-anchored taper (eval 2026-06-06): when the group's
+                        active anchor suggests a different phase than the stored
+                        one, offer a one-tap opt-in to apply it for this
+                        generation (advisory → drives Generate). */}
+                    {generateForTarget && generateForTarget.suggested_phase
+                      && generateForTarget.suggested_phase !== generateForTarget.current_phase && (
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11, color: "var(--color-text-muted)", cursor: "pointer", lineHeight: 1.4 }}>
+                        <input type="checkbox" checked={applySuggestedPhase}
+                          onChange={e => setApplySuggestedPhase(e.target.checked)} />
+                        <span>
+                          🎯 {generateForTarget.anchor_event_name || "Meet"}
+                          {generateForTarget.anchor_weeks_out != null && <> in <strong>{generateForTarget.anchor_weeks_out} wk{generateForTarget.anchor_weeks_out === 1 ? "" : "s"}</strong></>}
+                          {" "}suggests <strong>{generateForTarget.suggested_phase}</strong> phase — apply for this workout
+                        </span>
+                      </label>
                     )}
                   </div>
                 );
@@ -5100,6 +5130,19 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                       }}
                       title="Print a clean B&W 8.5×11 version of this workout">
                       🖨 Print Workout
+                    </button>
+                    {/* Eval 2026-06-06 #2 — Whiteboard print: one big-font
+                        landscape page to post on deck / copy onto a whiteboard. */}
+                    <button
+                      onClick={() => setShowWhiteboard(true)}
+                      style={{
+                        padding: "10px 16px", borderRadius: 8,
+                        border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)",
+                        fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                      }}
+                      title="One big-font landscape page sized to post on deck or copy onto a pool whiteboard (no swimmer names)">
+                      🪧 Whiteboard
                     </button>
                     {/* N6 — Multi-pace export. Coach-only, group-only. Visible only
                         when generating for a group with ≥2 members (lane plans can't
@@ -5359,13 +5402,27 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                 {/* Coach note (screen only — user opted not to include in print) */}
                 <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid var(--color-border)", color: "var(--color-text-muted)", fontSize: 13 }}>
                   <span style={{ fontWeight: 600, color: "#cbd5e1" }}>📋 Coach's Note: </span>
-                  {poolMode === "50m"
-                    ? "Intervals are scaled from your pace setting. Adjust ±10–15 sec to match your base in long-course."
-                    : poolMode === "25m"
-                    ? "Intervals are scaled from your pace setting. Adjust ±10–15 sec to match your base in short-course meters."
-                    : "Intervals are calibrated for a masters pace of 2:00–2:15/100 yds. Adjust ±10–15 sec to match your base."
-                  }
-                  Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets.
+                  {(() => {
+                    // Type/context/pace-aware note. Branches on workout type,
+                    // race-pace, and coach-vs-self context instead of asserting a
+                    // fixed masters pace on every workout (eval 2026-06-06, 6/6).
+                    const blocks    = workout?.blocks || [];
+                    const isLesson  = workout?.typeId === "lesson";
+                    const isTech    = workout?.typeId === "technique";
+                    const isRace    = blocks.some(b => /race[\s-]?pace/i.test(b?.name || ""));
+                    const forSwimmer = !!(generateForTarget && generateForTarget.name);
+                    const whose     = forSwimmer ? "your swimmers'" : "your";
+                    const course    = poolMode === "50m" ? "long-course meters"
+                                    : poolMode === "25m" ? "short-course meters"
+                                    : "short-course yards";
+                    if (isLesson) {
+                      return "This is a skill session — let stroke mechanics lead. Treat the intervals as soft suggestions: give generous rest, keep cues short, and end a set when form breaks down rather than when the clock says so.";
+                    }
+                    if (isRace) {
+                      return `Race-pace targets are computed from the goal/PR time on file, not a generic pace. Hold the listed split and take the full rest; if ${forSwimmer ? "a swimmer" : "you"} can't hold pace, cut the rep count before easing the speed.`;
+                    }
+                    return `Intervals are scaled from ${forSwimmer ? "the" : "your"} pace setting (${paceInput}/100 ${course}). Adjust ±10–15 sec to match ${whose} base. ${isTech ? "On drill and technique sets, prioritize stroke mechanics over hitting a split." : "Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets."}`;
+                  })()}
                 </div>
 
                 {/* Save-to-history form (only for freshly generated workouts) */}
@@ -5606,6 +5663,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               mode={multiPaceLanes.mode}
               groupActiveConstraints={groupActiveConstraints}
               onClose={() => setMultiPaceLanes(null)}
+            />
+          )}
+          {/* Eval 2026-06-06 #2 — Whiteboard print overlay. */}
+          {showWhiteboard && workout && (
+            <WhiteboardPrintView
+              workout={workout}
+              unit={unit}
+              onClose={() => setShowWhiteboard(false)}
             />
           )}
           {/* I — schedule-for-day picker. Opens when scheduleDate state is

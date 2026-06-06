@@ -8244,6 +8244,21 @@ export async function dbListCoachTargets(coachSub) {
     team_name:      r.team_name,
     member_count:   Number(r.member_count),
   }));
+  // Meet-anchored taper (eval 2026-06-06): attach each group's active-anchor
+  // suggested phase + countdown so the generator can offer an opt-in
+  // "apply suggested phase" instead of the coach hand-flipping the pill each
+  // week. Non-destructive — does NOT change the group's stored current_phase.
+  for (const tg of targets) {
+    try {
+      const a = await dbGetActiveAnchor(tg.id);
+      if (a && a.suggested_phase) {
+        tg.suggested_phase   = a.suggested_phase;
+        tg.anchor_weeks_out  = a.weeks_out;
+        tg.anchor_event_name = a.event_name;
+        tg.anchor_event_date = a.event_date;
+      }
+    } catch { /* anchor is optional; ignore lookup errors */ }
+  }
   // Lesson tier (Phase 5) — expose INDIVIDUAL targets (kind:"managed") for direct
   // single-swimmer assignment (server assign_to:{managed_id} path), carrying each
   // swimmer's per-swimmer equipment profile. SCOPED to swimmers who are members of

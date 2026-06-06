@@ -347,6 +347,16 @@
       /* Phase E — Reports print overlay. Same scope-isolation pattern. */
       body.reports-print-active > *:not(.reports-print-overlay) { display: none !important; }
       .reports-print-overlay { position: static !important; overflow: visible !important; }
+
+      /* Eval 2026-06-06 #2 — Whiteboard print: one big-font LANDSCAPE page.
+         Named page so only this overlay flips to landscape (the default
+         @page stays portrait for normal workout/multipace prints). Degrades
+         to portrait on engines without named-page support — still usable. */
+      @page whiteboard { size: letter landscape; margin: 0.4in; }
+      .whiteboard-page { page: whiteboard !important; }
+      body.whiteboard-active > *:not(.whiteboard-overlay) { display: none !important; }
+      .whiteboard-overlay { position: static !important; overflow: visible !important; }
+      .whiteboard-block { page-break-inside: avoid !important; break-inside: avoid !important; }
     }
 
     /* N6 — Multi-pace overlay on screen: the .multipace-overlay element is
@@ -355,6 +365,8 @@
     body.multipace-active { overflow: hidden !important; }
     /* Phase E — Reports print overlay (same screen-side behavior). */
     body.reports-print-active { overflow: hidden !important; }
+    /* Eval 2026-06-06 #2 — Whiteboard print overlay (same screen-side behavior). */
+    body.whiteboard-active { overflow: hidden !important; }
   </style>
 </head>
 <body>
@@ -362,7 +374,7 @@
 
   <!-- SPA bundle (esbuild). The value placeholder below is a distinct token (not the
        window.__BUILD_ID__ property name) so _deploy.py's stamp can't clobber the property. -->
-  <script>window.__BUILD_ID__ = "5a49dbd-dirty · 2026-06-06 09:04 UTC · bundle 6688d88b62c1";</script>
+  <script>window.__BUILD_ID__ = "5a49dbd-dirty · 2026-06-06 09:47 UTC · bundle 2be48c4a933b";</script>
   <!-- MapKit JS token (origin-scoped, client-public by design). The value
        placeholder __MAPKIT_TOKEN_VALUE__ is deliberately distinct from the property
        name so the substitution can't corrupt `window.__MAPKIT_TOKEN__`. Replaced at
@@ -372,6 +384,6 @@
   <!-- ESM module (code-split): app.js statically imports shared chunks + dynamically
        imports lazy route views from /assets/chunks/. Deferred, so the classic React
        CDN scripts above run first (window.React global is set before this executes). -->
-  <script type="module" src="/assets/app.js?v=6688d88b62c1"></script>
+  <script type="module" src="/assets/app.js?v=2be48c4a933b"></script>
 </body>
 </html>
