@@ -81,6 +81,7 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
                   type="text"
                   value={paceInput}
                   data-tour="step-pace-input"
+                  aria-label={`Pace per 100 ${unit} (minutes:seconds)`}
                   onChange={e => { setActivePreset(null); onPaceChange && onPaceChange(e.target.value); }}
                   placeholder="M:SS"
                   style={{ width: 52, fontFamily: "monospace", fontSize: 13, padding: "4px 7px", borderRadius: 6,
@@ -111,6 +112,7 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
                             borderRadius: 3 }} />
             </div>
             <input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={SLIDER_STEP} value={value}
+              aria-label="Target yardage" aria-valuetext={`${value} ${unit}`}
               onChange={e => { setActivePreset(null); onChange(Number(e.target.value)); }}
               style={{ position: "absolute", top: -4, left: 0, width: "100%", opacity: 0, height: 14, cursor: "pointer", margin: 0 }} />
           </div>

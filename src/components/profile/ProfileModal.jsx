@@ -10,6 +10,7 @@ import { EditableProfileField } from "./EditableProfileField.jsx";
 import { GoalRow } from "./GoalRow.jsx";
 import { JoinGroupSection } from "./JoinGroupSection.jsx";
 import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 import { LevelRow } from "./LevelRow.jsx";
 import { NextEventRow } from "./NextEventRow.jsx";
 import { PhaseRow } from "./PhaseRow.jsx";
@@ -19,6 +20,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
     const { useState, useCallback, useEffect } = React;
 
     export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites }) {
+      const dialogRef = useDialogA11y(onClose);
       // Burst-mitigation B — seed ALL local state from App-level props.
       // /api/me/bootstrap returns everything ProfileModal needs (sessions +
       // team-defaults + billing-status added in B). loadAll's Promise.all is
@@ -384,13 +386,14 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
       return (
         <div className="modal-overlay" style={{ padding: 16 }} onClick={onClose}>
-          <div onClick={e => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="profile-modal-title"
+            onClick={e => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             maxWidth: 560, width: "100%", maxHeight: "85vh", overflowY: "auto",
             color: "#cbd5e1",
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text)" }}>👤 Profile</div>
+              <div id="profile-modal-title" style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text)" }}>👤 Profile</div>
               <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", color: "var(--color-text-muted)", fontSize: 20, cursor: "pointer", padding: 4 }}>✕</button>
             </div>
 

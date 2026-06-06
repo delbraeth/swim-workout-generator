@@ -1,10 +1,12 @@
 // src/components/practices/MarkPracticeDoneModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 
     const { useState, useEffect } = React;
 
     export function MarkPracticeDoneModal({ sw, onClose, onSaved }) {
+      const dialogRef = useDialogA11y(onClose);
       const [ctx, setCtx] = React.useState(null);    // { roster, attendance, group_id, completed_at, ... }
       const [absent, setAbsent] = React.useState(() => new Set()); // keys of swimmers marked absent
       const [busy, setBusy] = React.useState(false);
@@ -68,7 +70,7 @@ import { csrfHeaders } from "../../lib/api.js";
 
       return (
         <div onClick={onClose} className="modal-overlay" style={{ padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Mark practice done" onClick={e => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             padding: 22, maxWidth: 480, width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column",
           }}>

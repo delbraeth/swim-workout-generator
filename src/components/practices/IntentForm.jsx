@@ -4,6 +4,7 @@ import { csrfHeaders } from "../../lib/api.js";
 import { DRYLAND_OPTIONS } from "../../lib/constants.js";
 import { poolModeLabel } from "../../lib/format.js";
 import { WORKOUT_TYPES } from "../../lib/engine.js";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 
     const MIX_OPTIONS_INTENT = [
       { id: "balanced",     label: "Balanced" },
@@ -15,6 +16,7 @@ import { WORKOUT_TYPES } from "../../lib/engine.js";
     const { useState, useEffect } = React;
 
     export function IntentForm({ initialDate, initialIntent, editingId, initialFacilityId = null, onClose, onSaved }) {
+      const dialogRef = useDialogA11y(onClose);
       const safeInitial = initialIntent || {};
       const [date,       setDate]       = React.useState(initialDate || "");
       const [type,       setType]       = React.useState(safeInitial.type || (WORKOUT_TYPES[0] && WORKOUT_TYPES[0].id) || "");
@@ -155,7 +157,7 @@ import { WORKOUT_TYPES } from "../../lib/engine.js";
 
       return (
         <div onClick={onClose} className="modal-overlay" style={{ padding: 20 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Plan a practice" onClick={(e) => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             padding: 22, maxWidth: 520, width: "100%", maxHeight: "90vh", overflowY: "auto",
           }}>

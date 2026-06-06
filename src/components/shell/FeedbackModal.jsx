@@ -1,10 +1,12 @@
 // src/components/shell/FeedbackModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
+import { useDialogA11y } from "./useDialogA11y.js";
 
     const { useState } = React;
 
     export function FeedbackModal({ onClose, initialCategory = "idea", initialSubject = "", initialBody = "" }) {
+      const dialogRef = useDialogA11y(onClose);
       const [category, setCategory] = React.useState(initialCategory);
       const [subject, setSubject]   = React.useState(initialSubject);
       const [body, setBody]         = React.useState(initialBody);
@@ -48,7 +50,7 @@ import { csrfHeaders } from "../../lib/api.js";
 
       return (
         <div onClick={onClose} className="modal-overlay" style={{ padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-          <div onClick={e => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Send feedback" onClick={e => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto",
             color: "#cbd5e1",

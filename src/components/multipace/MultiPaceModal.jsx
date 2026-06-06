@@ -1,10 +1,12 @@
 // src/components/multipace/MultiPaceModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { parsePaceMSS } from "../../lib/format.js";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 
     const { useState } = React;
 
     export function MultiPaceModal({ workout, generateForTarget, lanePlansForTarget, onClose, onPreview }) {
+      const dialogRef = useDialogA11y(onClose);
       // Default: plan source if a default plan exists, else manual.
       const defaultPlan = (lanePlansForTarget || []).find(p => p.is_default) || (lanePlansForTarget || [])[0] || null;
       const [source, setSource] = React.useState(defaultPlan ? "plan" : "manual");
@@ -55,7 +57,7 @@ import { parsePaceMSS } from "../../lib/format.js";
 
       return (
         <div onClick={onClose} className="modal-overlay" style={{ padding: 20 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Multi-pace print" onClick={(e) => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             padding: 22, maxWidth: 640, width: "100%", maxHeight: "90vh", overflowY: "auto",
           }}>

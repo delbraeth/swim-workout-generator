@@ -1,9 +1,12 @@
 // src/components/shell/ImpersonationStartModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 
+    import { useDialogA11y } from "./useDialogA11y.js";
+
     const { useState, useMemo, useEffect } = React;
 
     export function ImpersonationStartModal({ me, onClose, onStartImpersonation }) {
+      const dialogRef = useDialogA11y(onClose);
       const [users,  setUsers]  = React.useState(null);
       const [query,  setQuery]  = React.useState("");
       const [picked, setPicked] = React.useState(null);
@@ -38,7 +41,7 @@
       };
       return (
         <div onClick={onClose} className="modal-overlay" style={{ padding: 20 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Start impersonation" onClick={(e) => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             padding: 22, maxWidth: 560, width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column",
           }}>
