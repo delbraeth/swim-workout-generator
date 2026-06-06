@@ -11,6 +11,7 @@ import { GoalRow } from "./GoalRow.jsx";
 import { JoinGroupSection } from "./JoinGroupSection.jsx";
 import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
 import { RaceGoalsPanel } from "./RaceGoalsPanel.jsx";
+import { CompliancePanel } from "./CompliancePanel.jsx";
 import { useDialogA11y } from "../shell/useDialogA11y.js";
 import { LevelRow } from "./LevelRow.jsx";
 import { NextEventRow } from "./NextEventRow.jsx";
@@ -557,6 +558,11 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     <TeamCalendarDownload teams={Array.isArray(appTeamCalendars) ? appTeamCalendars : []} />
                     {/* Race goals / PRs — anchor Race-Pace workout targets to your times. */}
                     <RaceGoalsPanel endpoint="/api/me/event-times" />
+                    {/* MAAP / SafeSport (Phase 5 #3) — coaches record their own
+                        compliance credentials (cert + expiry). Coach-only. */}
+                    {(appEffectiveMe ? appEffectiveMe.is_coach : appMe?.is_coach) && (
+                      <CompliancePanel endpoint="/api/me/credentials" />
+                    )}
                   </div>
                   {/* Setforge rebrand 2026-05-20 — Send feedback + Sign out
                       folded down from the top nav (REBRAND_SCOPE §8.1, §8.4). */}

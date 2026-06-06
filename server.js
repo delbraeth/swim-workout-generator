@@ -135,6 +135,7 @@ import {
   dbCreateGroupLanePlan, dbGetGroupLanePlan, dbListGroupLanePlans,
   dbUpdateGroupLanePlan, dbArchiveGroupLanePlan, dbSetDefaultLanePlan,
   dbCreateGroupJoinToken, dbGetGroupJoinToken, dbListGroupJoinTokens,
+  dbGetPersonIdForUser, dbListPersonCredentials, dbSetPersonCredential, dbDeletePersonCredential, CREDENTIAL_SYSTEMS,
   dbDeleteGroupJoinToken, dbRedeemGroupJoinToken,
   dbCreateClaimToken, dbGetClaimToken, dbListClaimTokensForManaged,
   dbDeleteClaimToken, dbRedeemClaimToken,
@@ -5061,6 +5062,34 @@ app.get("/api/benchmarks", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// ── Compliance credentials (Phase 5 #3 MAAP, Slice A) ────────────────
+// SELF — a coach records their own USA-Swimming ID, SafeSport cert (+ expiry),
+// and background-check ID. Display + expiry warning only; nothing is gated.
+app.get("/api/me/credentials", requireAuth, async (req, res) => {
+  try {
+    const personId = await dbGetPersonIdForUser(req.userSub);
+    if (!personId) return res.json([]);
+    res.json(await dbListPersonCredentials(personId));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.put("/api/me/credentials", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const personId = await dbGetPersonIdForUser(req.userSub);
+    if (!personId) return res.status(400).json({ error: "no_person" });
+    const { system, external_id, expires_at } = req.body || {};
+    const r = await dbSetPersonCredential({ personId, system, externalId: external_id, expiresAt: expires_at || null });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/me/credentials/:system", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const personId = await dbGetPersonIdForUser(req.userSub);
+    if (!personId) return res.status(400).json({ error: "no_person" });
+    res.json(await dbDeletePersonCredential(personId, req.params.system));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // ── Race event goal/PR times (Phase 5 #4) ────────────────────────────
 // SELF — any authed swimmer manages their own goal/PR times.
 app.get("/api/me/event-times", requireAuth, async (req, res) => {
@@ -5578,11 +5607,15 @@ app.get("/api/join-tokens/:token/preview", requireAuth, async (req, res) => {
 // the UI can prompt before retrying. Atomic group-membership write per #33.
 app.post("/api/join-tokens/:token/redeem", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    // Hard gate: DOB required per scope (joining a group is a meaningful
-    // commitment that triggers compliance derivations).
+    // Hard gate: DOB required per scope (joining a group triggers minor-
+    // compliance derivations). MAAP (Phase 5 #3) team-type posture: MASTERS
+    // (adults-only) groups don't run minor derivations, so they skip the DOB
+    // gate — removes the friction the Masters coach flagged in the eval.
+    const tok = await dbGetGroupJoinToken(req.params.token);
+    const dobExempt = tok?.team_type === "masters";
     const me = await dbGetMe(req.userSub);
     if (!me) return res.status(404).json({ error: "user not found" });
-    if (!me.dob) return res.status(400).json({ error: "dob_required", reason: "dob_required" });
+    if (!dobExempt && !me.dob) return res.status(400).json({ error: "dob_required", reason: "dob_required" });
 
     const r = await dbRedeemGroupJoinToken(req.params.token, req.userSub);
     if (!r.ok) return res.status(400).json({ error: r.reason, ...r });

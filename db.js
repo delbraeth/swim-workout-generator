@@ -6242,9 +6242,10 @@ export async function dbGetGroupJoinToken(token) {
   const rows = await pool.query(
     "SELECT t.`token`, t.`group_id`, t.`intended_role`, t.`issued_by_coach`, t.`issued_at`, " +
     "       t.`expires_at`, t.`redeemed_at`, t.`redeemed_by_swimmer_sub`, " +
-    "       g.`name` AS group_name, g.`primary_coach_sub` " +
+    "       g.`name` AS group_name, g.`primary_coach_sub`, g.`team_id`, tm.`team_type` " +
     "FROM `group_join_tokens` t " +
     "LEFT JOIN `groups` g ON g.`id` = t.`group_id` " +
+    "LEFT JOIN `teams` tm ON tm.`id` = g.`team_id` " +
     "WHERE t.`token` = ? LIMIT 1",
     [token]
   );
@@ -6255,6 +6256,8 @@ export async function dbGetGroupJoinToken(token) {
     group_id:                 r.group_id,
     group_name:               r.group_name,
     primary_coach_sub:        r.primary_coach_sub,
+    team_id:                  r.team_id || null,
+    team_type:                r.team_type || null,
     intended_role:            r.intended_role,
     issued_by_coach:          r.issued_by_coach,
     issued_at:                dtToIso(r.issued_at),
@@ -7066,6 +7069,60 @@ export async function dbDeleteEventPrHistory(id, { userSub = null, managedId = n
   if (!id) return { ok: false, reason: "no_id" };
   const { where, val } = _eventTimeOwner(userSub, managedId);
   const r = await pool.query("DELETE FROM `swimmer_event_pr_history` WHERE `id`=? AND " + where, [Number(id), val]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// ─── Person compliance credentials (Phase 5 #3 MAAP, Slice A) ─────────────────
+// person_external_ids (mig 039 + 055 expires_at) holds per-person credential IDs.
+// MAAP credential systems = USA-Swimming Member ID + SafeSport cert + background
+// check. Display + expiry warning only; nothing is gated on expiry (v1 decision).
+export const CREDENTIAL_SYSTEMS = ["usa_swimming", "safesport_cert", "background_check"];
+
+export async function dbGetPersonIdForUser(userSub) {
+  if (!userSub) return null;
+  const rows = await pool.query("SELECT `person_id` FROM `users` WHERE `sub` = ? LIMIT 1", [userSub]);
+  return rows[0]?.person_id || null;
+}
+
+export async function dbListPersonCredentials(personId) {
+  if (!personId) return [];
+  const rows = await pool.query(
+    "SELECT `system`,`external_id`,`expires_at`,`verified_at`,`added_at` " +
+    "FROM `person_external_ids` WHERE `person_id` = ? AND `system` IN (?,?,?) ORDER BY `system` ASC",
+    [personId, ...CREDENTIAL_SYSTEMS]
+  );
+  return rows.map(r => ({
+    system: r.system, external_id: r.external_id,
+    expires_at: r.expires_at ? dateToYmd(r.expires_at) : null,
+    verified_at: dtToIso(r.verified_at), added_at: dtToIso(r.added_at),
+  }));
+}
+
+export async function dbSetPersonCredential({ personId, system, externalId, expiresAt = null }) {
+  if (!personId) return { ok: false, reason: "no_person" };
+  if (!CREDENTIAL_SYSTEMS.includes(system)) return { ok: false, reason: "bad_system" };
+  const ext = (externalId == null ? "" : String(externalId)).trim();
+  if (!ext) return { ok: false, reason: "empty_id" };
+  let exp = null;
+  if (expiresAt) {
+    exp = dateToYmd(expiresAt);
+    if (!exp || !/^\d{4}-\d{2}-\d{2}$/.test(exp)) return { ok: false, reason: "bad_date" };
+  }
+  // UNIQUE(person_id, system) — upsert in place.
+  await pool.query(
+    "INSERT INTO `person_external_ids` (`person_id`,`system`,`external_id`,`expires_at`) VALUES (?,?,?,?) " +
+    "ON DUPLICATE KEY UPDATE `external_id`=VALUES(`external_id`), `expires_at`=VALUES(`expires_at`)",
+    [personId, system, ext, exp]
+  );
+  return { ok: true };
+}
+
+export async function dbDeletePersonCredential(personId, system) {
+  if (!personId || !CREDENTIAL_SYSTEMS.includes(system)) return { ok: false, reason: "bad_request" };
+  const r = await pool.query(
+    "DELETE FROM `person_external_ids` WHERE `person_id` = ? AND `system` = ?",
+    [personId, system]
+  );
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
