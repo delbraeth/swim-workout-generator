@@ -58,7 +58,7 @@ import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 import { PUSH_ACTIVE, pushConfigState, sendPushToUser } from "./lib/push.js";
-import { WEATHER_ACTIVE, weatherConfigState, getForecast } from "./lib/weather.js";
+import { WEATHER_ACTIVE, weatherConfigState, getForecast, weatherSelfTest } from "./lib/weather.js";
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
 import { buildIcs } from "./lib/ics.js";
 import { toCsv } from "./lib/csv.js";
@@ -3107,6 +3107,14 @@ app.get("/api/admin/billing/config", requireAuth, requireAdmin, async (req, res)
   try {
     res.json({ stripe: billingConfigState(), apple_iap: appleIapConfigState(), push: pushConfigState(), weather: weatherConfigState() });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// WeatherKit live probe (admin) — signs a token + makes one real WeatherKit
+// call so config issues surface as a concrete HTTP status (200 ok / 401 bad
+// sub-or-token / 403 capability missing). See lib/weather.js weatherSelfTest.
+app.get("/api/admin/weather/selftest", requireAuth, requireAdmin, async (req, res) => {
+  try { res.json(await weatherSelfTest()); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 app.post("/api/admin/email/test", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
