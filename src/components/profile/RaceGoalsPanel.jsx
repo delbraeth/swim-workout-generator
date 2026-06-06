@@ -6,10 +6,19 @@
 import { csrfHeaders } from "../../lib/api.js";
 import { RACE_EVENTS, parseRaceTime, formatRaceTime } from "../../lib/raceEvents.js";
 
-export function RaceGoalsPanel({ endpoint, course = "25y", heading = "🎯 Race goals / PRs" }) {
+const COURSES = [
+  { id: "25y", label: "SCY", full: "Short-course yards" },
+  { id: "25m", label: "SCM", full: "Short-course meters" },
+  { id: "50m", label: "LCM", full: "Long-course meters" },
+];
+
+export function RaceGoalsPanel({ endpoint, course: initialCourse = "25y", heading = "🎯 Race goals / PRs" }) {
   const [rows, setRows]   = React.useState(null);  // null = loading
   const [drafts, setDrafts] = React.useState({});  // `${event}_${kind}` → typed string
   const [msg, setMsg]     = React.useState(null);
+  // Eval #7 — course tabs so race-pace works across a full season (SCY/SCM/LCM),
+  // not just SCY. The data model (053) already stores `course` per time.
+  const [course, setCourse] = React.useState(initialCourse);
 
   const load = React.useCallback(async () => {
     try {
@@ -66,9 +75,20 @@ export function RaceGoalsPanel({ endpoint, course = "25y", heading = "🎯 Race 
 
   return (
     <div style={{ marginTop: 16, padding: 14, borderRadius: 12, border: "1px solid var(--color-border)", background: "var(--color-card)" }}>
-      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{heading}</div>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{heading}</div>
+      <div role="tablist" aria-label="Course" style={{ display: "inline-flex", gap: 4, marginBottom: 8, background: "var(--color-bg)", borderRadius: 7, padding: 3, border: "1px solid var(--color-border-strong)" }}>
+        {COURSES.map(c => (
+          <button key={c.id} role="tab" aria-selected={course === c.id} title={c.full}
+            onClick={() => { setCourse(c.id); setDrafts({}); setMsg(null); }}
+            style={{ padding: "4px 12px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
+              background: course === c.id ? "var(--color-primary)" : "transparent",
+              color: course === c.id ? "var(--color-bg)" : "var(--color-text-muted)" }}>
+            {c.label}
+          </button>
+        ))}
+      </div>
       <p style={{ fontSize: 12, color: "var(--color-text-dim)", marginTop: 0, marginBottom: 10 }}>
-        Short-course yards. These set the target splits for Race-Pace workouts — goal is used first, PR as a fallback.
+        {(COURSES.find(c => c.id === course) || {}).full}. These set the target splits for Race-Pace workouts in this course — goal is used first, PR as a fallback.
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "6px 10px", alignItems: "center" }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)" }}>Event</span>

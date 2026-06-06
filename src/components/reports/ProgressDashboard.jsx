@@ -1,6 +1,7 @@
 // src/components/reports/ProgressDashboard.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { BenchmarksSection } from "../profile/BenchmarksSection.jsx";
+import { PrProgressionPanel } from "../profile/PrProgressionPanel.jsx";
 
     const { useState, useEffect } = React;
 
@@ -107,6 +108,9 @@ import { BenchmarksSection } from "../profile/BenchmarksSection.jsx";
                   </div>
                 )}
               </div>
+
+              {/* Eval #7 — per-event PR progression (race events, dated). */}
+              <PrProgressionPanel endpoint="/api/me/event-pr-history" />
 
               {/* Logger (reuses the existing component) */}
               <div style={card}>

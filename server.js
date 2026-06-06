@@ -106,6 +106,7 @@ import {
   dbGetOrCreateTeamCalendarToken, dbRotateTeamCalendarToken, dbGetTeamByCalendarToken,
   dbTeamCalendarFeedData, dbTeamRosterForExport, dbListTeamCalendarsForUser,
   dbListEventTimes, dbUpsertEventTime, dbDeleteEventTime, dbResolveRaceGoals,
+  dbAddEventPrHistory, dbListEventPrHistory, dbDeleteEventPrHistory,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
@@ -5097,6 +5098,63 @@ app.delete("/api/managed-swimmers/:id/event-times/:etid", checkOrigin, requireAu
   try {
     if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
     res.json(await dbDeleteEventTime(req.params.etid, { managedId: Number(req.params.id) }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ─── Per-event PR history (eval 2026-06-06 #7 — progression) ──────────────────
+// Logging a dated result also PROMOTES the current PR when it's faster, so the
+// two systems (current PR ↔ dated history) stay in sync.
+async function _promotePrIfFaster(owner, event, course, timeSecs) {
+  try {
+    const times = await dbListEventTimes(owner);
+    const cur = times.find(x => x.event === event && x.course === course && x.kind === "pr");
+    if (!cur || Number(timeSecs) < Number(cur.time_secs)) {
+      await dbUpsertEventTime({ ...owner, event, course, kind: "pr", timeSecs, skipHistory: true });
+      return true;
+    }
+  } catch (_) { /* promotion is best-effort */ }
+  return false;
+}
+
+app.get("/api/me/event-pr-history", requireAuth, async (req, res) => {
+  try { res.json(await dbListEventPrHistory({ userSub: req.userSub })); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/me/event-pr-history", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { event, course, time_secs, achieved_on, note } = req.body || {};
+    const r = await dbAddEventPrHistory({ userSub: req.userSub, event, course, timeSecs: time_secs, achievedOn: achieved_on, note: note || null, source: "logged" });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    const promoted = await _promotePrIfFaster({ userSub: req.userSub }, event, course, time_secs);
+    res.json({ ...r, promoted });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/me/event-pr-history/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try { res.json(await dbDeleteEventPrHistory(req.params.id, { userSub: req.userSub })); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// MANAGED variant — coach-owned (lesson access + owner check).
+app.get("/api/managed-swimmers/:id/event-pr-history", requireAuth, requireLessonAccess, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    res.json(await dbListEventPrHistory({ managedId: Number(req.params.id) }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/managed-swimmers/:id/event-pr-history", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    const { event, course, time_secs, achieved_on, note } = req.body || {};
+    const r = await dbAddEventPrHistory({ managedId: Number(req.params.id), event, course, timeSecs: time_secs, achievedOn: achieved_on, note: note || null, source: "logged" });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    const promoted = await _promotePrIfFaster({ managedId: Number(req.params.id) }, event, course, time_secs);
+    res.json({ ...r, promoted });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/managed-swimmers/:id/event-pr-history/:hid", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    res.json(await dbDeleteEventPrHistory(req.params.hid, { managedId: Number(req.params.id) }));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

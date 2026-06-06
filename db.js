@@ -6980,7 +6980,7 @@ export async function dbListEventTimes({ userSub = null, managedId = null } = {}
   }));
 }
 
-export async function dbUpsertEventTime({ userSub = null, managedId = null, event, course = "25y", kind, timeSecs }) {
+export async function dbUpsertEventTime({ userSub = null, managedId = null, event, course = "25y", kind, timeSecs, skipHistory = false }) {
   if (managedId == null && !userSub) return { ok: false, reason: "no_owner" };
   if (!RACE_EVENT_IDS.includes(event)) return { ok: false, reason: "bad_event" };
   if (!["25y", "25m", "50m"].includes(course)) return { ok: false, reason: "bad_course" };
@@ -6992,15 +6992,81 @@ export async function dbUpsertEventTime({ userSub = null, managedId = null, even
     "SELECT `id` FROM `swimmer_event_times` WHERE " + where + " AND `event`=? AND `course`=? AND `kind`=? LIMIT 1",
     [val, event, course, kind]
   );
+  let savedId, flag;
   if (existing[0]) {
-    await pool.query("UPDATE `swimmer_event_times` SET `time_secs`=? WHERE `id`=?", [t, Number(existing[0].id)]);
-    return { ok: true, id: Number(existing[0].id), updated: true };
+    savedId = Number(existing[0].id);
+    await pool.query("UPDATE `swimmer_event_times` SET `time_secs`=? WHERE `id`=?", [t, savedId]);
+    flag = { updated: true };
+  } else {
+    const r = await pool.query(
+      "INSERT INTO `swimmer_event_times` (`user_sub`,`managed_id`,`event`,`course`,`kind`,`time_secs`) VALUES (?,?,?,?,?,?)",
+      [userSub, managedId, event, course, kind, t]
+    );
+    savedId = Number(r.insertId);
+    flag = { created: true };
+  }
+  // Eval #7 — auto-capture a dated PR point so the progression chart fills as
+  // PRs move. Best-effort: a history failure must never block the PR save.
+  if (kind === "pr" && !skipHistory) {
+    try {
+      await dbAddEventPrHistory({ userSub, managedId, event, course, timeSecs: t, achievedOn: dateToYmd(new Date()), source: "auto" });
+    } catch (_) { /* ignore */ }
+  }
+  return { ok: true, id: savedId, ...flag };
+}
+
+// ─── Per-event PR history (eval 2026-06-06 #7 — progression) ──────────────────
+// Append-only dated points behind the 📈 Progress per-event chart. One point per
+// owner+event+course+day (best/lowest time wins on the same day).
+export async function dbAddEventPrHistory({ userSub = null, managedId = null, event, course = "25y", timeSecs, achievedOn, note = null, source = "logged" }) {
+  if (managedId == null && !userSub) return { ok: false, reason: "no_owner" };
+  if (!RACE_EVENT_IDS.includes(event)) return { ok: false, reason: "bad_event" };
+  if (!["25y", "25m", "50m"].includes(course)) return { ok: false, reason: "bad_course" };
+  const t = Number(timeSecs);
+  if (!Number.isFinite(t) || t <= 0 || t > 3600) return { ok: false, reason: "bad_time" };
+  const day = dateToYmd(achievedOn);
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, reason: "bad_date" };
+  const src = source === "auto" ? "auto" : "logged";
+  const { where, val } = _eventTimeOwner(userSub, managedId);
+  const existing = await pool.query(
+    "SELECT `id`,`time_secs` FROM `swimmer_event_pr_history` WHERE " + where + " AND `event`=? AND `course`=? AND `achieved_on`=? LIMIT 1",
+    [val, event, course, day]
+  );
+  if (existing[0]) {
+    // Keep the day's best (lowest) time; only overwrite when faster.
+    if (t < Number(existing[0].time_secs)) {
+      await pool.query("UPDATE `swimmer_event_pr_history` SET `time_secs`=?,`note`=?,`source`=? WHERE `id`=?",
+        [t, note, src, Number(existing[0].id)]);
+      return { ok: true, id: Number(existing[0].id), updated: true };
+    }
+    return { ok: true, id: Number(existing[0].id), kept: true };
   }
   const r = await pool.query(
-    "INSERT INTO `swimmer_event_times` (`user_sub`,`managed_id`,`event`,`course`,`kind`,`time_secs`) VALUES (?,?,?,?,?,?)",
-    [userSub, managedId, event, course, kind, t]
+    "INSERT INTO `swimmer_event_pr_history` (`user_sub`,`managed_id`,`event`,`course`,`time_secs`,`achieved_on`,`note`,`source`) VALUES (?,?,?,?,?,?,?,?)",
+    [userSub, managedId, event, course, t, day, note, src]
   );
   return { ok: true, id: Number(r.insertId), created: true };
+}
+
+export async function dbListEventPrHistory({ userSub = null, managedId = null } = {}) {
+  if (managedId == null && !userSub) return [];
+  const { where, val } = _eventTimeOwner(userSub, managedId);
+  const rows = await pool.query(
+    "SELECT `id`,`event`,`course`,`time_secs`,`achieved_on`,`note`,`source` " +
+    "FROM `swimmer_event_pr_history` WHERE " + where + " ORDER BY `event` ASC, `course` ASC, `achieved_on` ASC",
+    [val]
+  );
+  return rows.map(r => ({
+    id: Number(r.id), event: r.event, course: r.course, time_secs: Number(r.time_secs),
+    achieved_on: dateToYmd(r.achieved_on), note: r.note || null, source: r.source,
+  }));
+}
+
+export async function dbDeleteEventPrHistory(id, { userSub = null, managedId = null } = {}) {
+  if (!id) return { ok: false, reason: "no_id" };
+  const { where, val } = _eventTimeOwner(userSub, managedId);
+  const r = await pool.query("DELETE FROM `swimmer_event_pr_history` WHERE `id`=? AND " + where, [Number(id), val]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
 export async function dbDeleteEventTime(id, { userSub = null, managedId = null } = {}) {
