@@ -312,6 +312,9 @@
     <a href="#coach-fanout">Coach: Planning for a Group</a>
     <a href="#coach-propagation">Coach group propagation</a>
     <a href="#reports">Reports</a>
+    <a href="#team-events">Team events &amp; meets</a>
+    <a href="#export-roster">Export: roster CSV</a>
+    <a href="#export-calendar">Export: team calendar</a>
     <a href="#multi-lane-generate">Multi-lane generate</a>
     <a href="#parse-intent">Quick Input (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
@@ -1932,6 +1935,58 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li>No charts (stacked bars, pies, heatmaps) — numbers and tables only in v1. Charts deferred to a later phase.</li>
         <li>No cross-coach comparison ("how does my Coach A compare to my Coach B"). Head-coach oversight is a v2 feature.</li>
       </ul>
+    </section>
+
+    <!-- ══ TEAM EVENTS ══ -->
+    <section id="team-events">
+      <h2>📆 Team events &amp; meets</h2>
+      <p>From a team's <strong>Events</strong> tab, any team coach can add dated events — meets, picture day, banquets, parent meetings, fundraisers, travel, socials. Each event has a <strong>type</strong>, and the type drives an icon so the schedule reads at a glance.</p>
+      <h3>Event types</h3>
+      <ul>
+        <li>🏊 Meet · 📸 Picture day · 🍽️ Team meal / banquet · 📋 Team meeting · 💰 Fundraiser · ✈️ Travel · 🎉 Social · 📌 Other.</li>
+        <li>Pick the type in the create/edit form; the icon shows next to the event in the list and in the exported calendar.</li>
+      </ul>
+      <h3>Meets drive the taper</h3>
+      <div class="callout">
+        <div class="callout-icon">🎯</div>
+        <div class="callout-body"><strong>Only meets can be taper anchors.</strong> The <strong>🎯 Anchor</strong> button appears only on <em>meet</em>-type events. Anchoring a meet to a group sets that group's <a href="#training-phase">Training Phase</a> suggestion from how many weeks out the meet is. A banquet or meeting can never accidentally become a taper anchor.</div>
+      </div>
+    </section>
+
+    <!-- ══ EXPORT: ROSTER CSV ══ -->
+    <section id="export-roster">
+      <h2>⬇ Export: roster CSV (meet entry)</h2>
+      <p>From a team's <strong>Roster</strong> tab, the <strong>⬇ Roster CSV</strong> button downloads your active roster in <strong>Hy-Tek Meet Manager</strong> import format — ready to load into meet-entry software. Any team coach can export.</p>
+      <h3>What's in the file</h3>
+      <ul>
+        <li>Columns, in order: <strong>Swimming ID, Date of Birth, First Name, Last Name, Gender, Team Name, Preferred Name</strong>.</li>
+        <li><strong>Team Name</strong> uses your <strong>team code</strong> (the abbreviation set in Team → Settings), falling back to the full team name if no code is set. Set a code like <code>RIV</code> first so the file is meet-ready.</li>
+        <li><strong>Gender</strong> is spelled out as <code>MALE</code> / <code>FEMALE</code>; non-binary / prefer-not-to-say is left blank for you to fill in. <strong>Date of Birth</strong> is formatted <code>MM/DD/YYYY</code>.</li>
+        <li>Source is the team's roster (the swimmers in the team's groups), one row per athlete.</li>
+      </ul>
+      <div class="callout">
+        <div class="callout-icon">🔒</div>
+        <div class="callout-body">The roster CSV contains athlete personal details (DOB, registration ID), so it is <strong>coach-only</strong> — it is never exposed to swimmers or parents.</div>
+      </div>
+    </section>
+
+    <!-- ══ EXPORT: TEAM CALENDAR ══ -->
+    <section id="export-calendar">
+      <h2>📆 Export: team calendar (subscribe / download)</h2>
+      <p>Every team has a calendar feed covering its <strong>events</strong> plus the <strong>practices scheduled for its groups</strong>. It comes in two forms.</p>
+      <h3>Coaches — live-subscribe link</h3>
+      <ul>
+        <li>In Team → <strong>Settings</strong> → <strong>📆 Calendar feed</strong>, copy the link and share it. Added as a <em>subscription</em> in Apple/Google Calendar, it updates automatically as your schedule changes.</li>
+        <li><strong>Regenerate</strong> rotates the link if it's ever shared too widely. We warn you before you do — rotating immediately breaks the old link, and everyone who subscribed stops getting updates until you re-share the new one. Rotation is coach-only.</li>
+      </ul>
+      <h3>Parents &amp; swimmers — one-click download</h3>
+      <ul>
+        <li>In the <strong>parent view</strong> and on a swimmer's <strong>Profile</strong>, a <strong>📆 Team calendar</strong> card offers a one-click <strong>⬇ Download .ics</strong> for each of their teams — opens straight in any calendar app.</li>
+      </ul>
+      <div class="callout">
+        <div class="callout-icon">🛡</div>
+        <div class="callout-body"><strong>Safe to share with families.</strong> The calendar carries event and practice titles, dates, and the facility — but <strong>no swimmer names, birthdates, or contact details</strong>. Sharing a schedule never means sharing the kids. This keeps the feed aligned with athlete-safety (MAAP) practices, and parent access supports the transparency MAAP expects.</div>
+      </div>
     </section>
 
     <!-- ══ MULTI-LANE GENERATE ══ -->
