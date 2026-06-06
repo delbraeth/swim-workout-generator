@@ -62,11 +62,24 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
               </span>
             </h3>
             {totalMembers > 0 && (
-              <a href={`/api/teams/${teamId}/roster.csv`} download
-                 title="Download roster as a Hy-Tek Meet Manager CSV"
-                 style={{ fontSize: 12, fontWeight: 700, color: "var(--color-primary-text)", textDecoration: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 10px", whiteSpace: "nowrap" }}>
-                ⬇ Roster CSV
-              </a>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <a href={`/api/teams/${teamId}/roster.csv`} download
+                   title="Download roster as a Hy-Tek Meet Manager CSV"
+                   style={{ fontSize: 12, fontWeight: 700, color: "var(--color-primary-text)", textDecoration: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 10px", whiteSpace: "nowrap" }}>
+                  ⬇ Roster CSV
+                </a>
+                {/* MAAP exports (eval 2026-06-06 #3) — anonymized roster + attendance log. */}
+                <a href={`/api/teams/${teamId}/roster-anon.csv`} download
+                   title="Anonymized roster — initials/age/gender only, no names/DOB/contact"
+                   style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-muted)", textDecoration: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 10px", whiteSpace: "nowrap" }}>
+                  ⬇ Anon roster
+                </a>
+                <a href={`/api/teams/${teamId}/attendance.csv`} download
+                   title="Attendance log (last 90 days) — present/absent per practice, a safety record"
+                   style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-muted)", textDecoration: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 10px", whiteSpace: "nowrap" }}>
+                  ⬇ Attendance
+                </a>
+              </div>
             )}
           </div>
           {data.length === 0 ? (

@@ -3066,10 +3066,12 @@ export async function dbListTeamCoaches(teamId) {
   const rows = await pool.query(
     "SELECT tc.`coach_sub`, tc.`role`, tc.`added_at`, " +
     "       u.`email`, " +
-    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials " +
+    "       p.`first_name`, p.`last_name`, p.`preferred_name`, p.`initials` AS person_initials, " +
+    "       ss.`external_id` AS safesport_id, ss.`expires_at` AS safesport_expires " +
     "FROM `team_coaches` tc " +
     "LEFT JOIN `users` u ON u.`sub` = tc.`coach_sub` " +
     "LEFT JOIN `persons` p ON p.`id` = u.`person_id` " +
+    "LEFT JOIN `person_external_ids` ss ON ss.`person_id` = u.`person_id` AND ss.`system` = 'safesport_cert' " +
     "WHERE tc.`team_id` = ? AND tc.`removed_at` IS NULL " +
     "ORDER BY FIELD(tc.`role`, 'owner', 'admin', 'coach'), tc.`added_at` ASC",
     [teamId]
@@ -3081,6 +3083,9 @@ export async function dbListTeamCoaches(teamId) {
     initials:     r.person_initials,
     email:        r.email,
     added_at:     dtToIso(r.added_at),
+    // MAAP cert rollup (eval 2026-06-06 #3): SafeSport status for the coaches roster.
+    safesport_on:      !!r.safesport_id,
+    safesport_expires: r.safesport_expires ? dateToYmd(r.safesport_expires) : null,
   }));
 }
 
@@ -7715,6 +7720,66 @@ export async function dbGetProgrammingMix(userSub, { startYmd, endYmd, groupId =
     }
   }
   out.bankLabels = Array.from(labelSet).sort();
+  return out;
+}
+
+// MAAP attendance log (eval 2026-06-06 #3) — per-swimmer present/absent across a
+// team's completed practices in a date range, for a safety/attendance record.
+// scheduled_workouts store group_id inside intent_params/payload JSON (not a
+// column) and are per-coach, so we date-range scan + JSON-filter to the team's
+// groups (mirrors dbGetScheduleAdherence), then join attendance + identity.
+export async function dbGetTeamAttendanceLog(teamId, { startYmd, endYmd } = {}) {
+  if (!teamId || !isYmd(startYmd) || !isYmd(endYmd)) return [];
+  const groups = await dbListGroupsForTeam(teamId, { includeArchived: true });
+  const groupName = new Map(groups.map(g => [g.id, g.name]));
+  const groupIds = new Set(groups.map(g => g.id));
+  if (!groupIds.size) return [];
+  const scheduled = await pool.query(
+    "SELECT `id`, `scheduled_date`, `intent_params`, `payload` FROM `scheduled_workouts` " +
+    "WHERE `scheduled_date` BETWEEN ? AND ? AND `completed_at` IS NOT NULL",
+    [startYmd, endYmd]
+  );
+  const swMeta = new Map(); // scheduled_workout_id → { gid, date }
+  for (const sw of scheduled) {
+    let gid = null;
+    for (const f of ["intent_params", "payload"]) {
+      let v = sw[f]; if (typeof v === "string") { try { v = JSON.parse(v); } catch (_) { v = null; } }
+      if (!v) continue;
+      const cand = v.group_id || (v.assignment_target && v.assignment_target.group_id) || null;
+      if (cand && groupIds.has(cand)) { gid = cand; break; }
+    }
+    if (gid) swMeta.set(Number(sw.id), { gid, date: dateToYmd(sw.scheduled_date) });
+  }
+  if (!swMeta.size) return [];
+  const ids = [...swMeta.keys()];
+  const ph = ids.map(() => "?").join(",");
+  const arows = await pool.query(
+    "SELECT pa.`scheduled_workout_id`, pa.`present`, " +
+    "  COALESCE(up.`first_name`, mp.`first_name`) AS first_name, " +
+    "  COALESCE(up.`last_name`, mp.`last_name`) AS last_name, " +
+    "  COALESCE(up.`preferred_name`, mp.`preferred_name`) AS preferred_name, " +
+    "  COALESCE(up.`initials`, mp.`initials`) AS initials " +
+    "FROM `practice_attendance` pa " +
+    "LEFT JOIN `users` u ON u.`sub` = pa.`swimmer_sub` " +
+    "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = pa.`managed_id` " +
+    "LEFT JOIN `persons` up ON up.`id` = u.`person_id` " +
+    "LEFT JOIN `persons` mp ON mp.`id` = m.`person_id` " +
+    `WHERE pa.\`scheduled_workout_id\` IN (${ph})`,
+    ids
+  );
+  const out = [];
+  for (const r of arows) {
+    const meta = swMeta.get(Number(r.scheduled_workout_id));
+    if (!meta) continue;
+    out.push({
+      date:     meta.date,
+      group:    groupName.get(meta.gid) || "",
+      name:     displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }) || r.initials || "",
+      initials: r.initials || "",
+      present:  !!r.present,
+    });
+  }
+  out.sort((a, b) => a.date.localeCompare(b.date) || a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
   return out;
 }
 

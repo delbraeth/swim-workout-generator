@@ -594,6 +594,18 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                         <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: colors.bg, border: `1px solid ${colors.border}`, color: colors.color, fontWeight: 700 }}>{c.role}</span>
                       );
                     })()}
+                    {(() => {
+                      // MAAP cert rollup (eval 2026-06-06 #3): SafeSport status badge.
+                      let label, col;
+                      if (!c.safesport_on) { label = "no SafeSport"; col = "var(--color-text-dim)"; }
+                      else if (c.safesport_expires) {
+                        const days = Math.round((new Date(c.safesport_expires + "T00:00:00") - new Date().setHours(0,0,0,0)) / 86400000);
+                        if (days < 0)       { label = "SafeSport expired"; col = "var(--color-destructive-text)"; }
+                        else if (days <= 30){ label = `SafeSport ${days}d`; col = "var(--color-warn)"; }
+                        else                { label = "SafeSport ✓"; col = "var(--color-positive)"; }
+                      } else { label = "SafeSport ✓"; col = "var(--color-positive)"; }
+                      return <span title="SafeSport certification status" style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 4, border: `1px solid ${col}`, color: col, fontWeight: 700 }}>🛡 {label}</span>;
+                    })()}
                     <div style={{ fontSize: 10, color: "var(--color-text-dim)", fontFamily: "monospace", marginTop: 2 }}>{c.coach_sub}</div>
                   </div>
                   {isOwner && c.role !== "owner" && (

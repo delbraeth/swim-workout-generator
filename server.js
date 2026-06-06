@@ -108,7 +108,7 @@ import {
   dbTeamCalendarFeedData, dbTeamRosterForExport, dbListTeamCalendarsForUser,
   dbListEventTimes, dbUpsertEventTime, dbDeleteEventTime, dbResolveRaceGoals,
   dbAddEventPrHistory, dbListEventPrHistory, dbDeleteEventPrHistory,
-  dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
+  dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster, dbGetTeamAttendanceLog,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
   dbListGuardiansForSwimmer, dbListParentInvitesForSwimmer, dbRemoveGuardian,
@@ -4514,6 +4514,56 @@ app.get("/api/teams/:id/roster.csv", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// MAAP exports (eval 2026-06-06 #3) — coach/owner-only safety records.
+// Anonymized roster: initials + age + gender + group only (no names/DOB/contact).
+app.get("/api/teams/:id/roster-anon.csv", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const sections = await dbGetTeamRoster(req.params.id);
+    const headers = ["Group", "Initials", "Age", "Gender"];
+    const rows = [];
+    for (const sec of sections) {
+      for (const m of (sec.members || [])) {
+        rows.push([sec.group_name || "", m.initials || "", m.age != null ? m.age : "", m.gender || ""]);
+      }
+    }
+    const csv = toCsv(headers, rows);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safeName = (team.name || "team").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "team";
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="roster-anon-${safeName}-${stamp}.csv"`);
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.roster.export_anon_csv", ...reqMeta(req), details: { team_id: req.params.id, count: rows.length } });
+    res.send(csv);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Attendance log: per-swimmer present/absent across completed practices in a
+// range (default last 90 days). A coach-side safety/attendance record.
+app.get("/api/teams/:id/attendance.csv", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const ymd = (d) => d.toISOString().slice(0, 10);
+    const end = /^\d{4}-\d{2}-\d{2}$/.test(req.query.end || "") ? req.query.end : ymd(new Date());
+    const start = /^\d{4}-\d{2}-\d{2}$/.test(req.query.start || "") ? req.query.start : ymd(new Date(Date.now() - 90 * 86400000));
+    const log = await dbGetTeamAttendanceLog(req.params.id, { startYmd: start, endYmd: end });
+    const headers = ["Date", "Group", "Swimmer", "Initials", "Present"];
+    const rows = log.map(r => [r.date, r.group, r.name, r.initials, r.present ? "Y" : "N"]);
+    const csv = toCsv(headers, rows);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safeName = (team.name || "team").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "team";
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="attendance-${safeName}-${stamp}.csv"`);
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.attendance.export_csv", ...reqMeta(req), details: { team_id: req.params.id, count: rows.length, start, end } });
+    res.send(csv);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // ── Per-Swimmer Constraints (PSC) — Phase 3 ─────────────────────────
 // Read/write the swimmer_constraints table (migration 037). Authz:
 // - reads: coach-of-swimmer OR the swimmer themselves
@@ -4957,6 +5007,30 @@ app.post("/api/coach-notes", checkOrigin, requireAuth, requireLessonAccess, requ
         ...reqMeta(req),
         details:   { note_id: r.id, swimmer_sub: swimmerSub, managed_id: managedId, visibility, workout_id: workoutId },
       });
+      // MAAP parent-CC (eval 2026-06-06 #3): if the target swimmer is a minor,
+      // CC their guardian(s) so coach↔minor communication is parent-visible.
+      // Fire-and-forget + fully guarded — never blocks or breaks note creation.
+      (async () => {
+        try {
+          let dob = null, swimmerName = "your swimmer";
+          if (managedId) { const ms = await dbGetManagedSwimmer(managedId); dob = ms?.dob || null; swimmerName = ms?.display_name || swimmerName; }
+          else { const u = await dbGetMe(swimmerSub); dob = u?.dob || null; swimmerName = u?.display_name || u?.first_name || swimmerName; }
+          if (isMinor(dob) !== true) return;
+          const guardians = await dbListGuardiansForSwimmer({ swimmerSub, managedId });
+          const author = await dbGetMe(req.userSub);
+          const coachName = author?.display_name || author?.first_name || "Your coach";
+          for (const g of guardians) {
+            if (!g.email && !g.user_sub) continue;
+            enqueueEmail({
+              dedupKey:  `coach-note-guardian:${r.id}:${g.id}`,
+              toEmail:   g.email || null,
+              toUserSub: g.email ? null : g.user_sub,
+              templateId: "coach-note-guardian",
+              swimmerName, coachName, note: body,
+            }).catch(() => {});
+          }
+        } catch (_) { /* parent-CC is best-effort */ }
+      })();
       res.json(r);
     } catch (e) {
       const msg = e.message || String(e);

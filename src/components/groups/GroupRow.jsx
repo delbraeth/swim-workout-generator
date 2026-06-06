@@ -190,6 +190,14 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                 <div style={{ color: "var(--color-text-dim)", fontSize: 12, padding: "10px 0" }}>Loading…</div>
               ) : (
                 <>
+                  {/* MAAP two-deep soft-warning (eval 2026-06-06 #3). Non-blocking:
+                      a group with any under-18 member and fewer than 2 active
+                      coaches falls short of USA Swimming's two-deep guidance. */}
+                  {(detail.members || []).some(m => m.is_minor === true) && (detail.coaches || []).length < 2 && (
+                    <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "rgba(245,158,11,0.12)", border: "1px solid var(--color-warn)", color: "var(--color-warn)", fontSize: 12, lineHeight: 1.4 }}>
+                      ⚠ <strong>Two-deep recommended.</strong> This group has under-18 swimmers and only one coach. USA Swimming MAAP guidance calls for at least two adults — add a co-coach below.
+                    </div>
+                  )}
                   {/* Members */}
                   <div style={{ marginTop: 10 }}>
                     <div style={{ fontSize: 11, color: "var(--color-text-muted)", fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
