@@ -5705,7 +5705,9 @@ export async function dbGetRsvpSummary(targetKind, targetId) {
     "  COALESCE(up.`preferred_name`, mp.`preferred_name`) AS preferred_name, " +
     "  COALESCE(up.`initials`, mp.`initials`) AS initials " +
     "FROM `event_rsvp` er " +
-    "LEFT JOIN `users` u ON u.`sub` COLLATE utf8mb4_unicode_ci = er.`swimmer_sub` COLLATE utf8mb4_unicode_ci " +
+    // event_rsvp.swimmer_sub may be utf8mb3 (new-table default) while users.sub is
+    // utf8mb4 — CONVERT both to utf8mb4 so the join works regardless of charset.
+    "LEFT JOIN `users` u ON CONVERT(u.`sub` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(er.`swimmer_sub` USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = er.`managed_id` " +
     "LEFT JOIN `persons` up ON up.`id` = u.`person_id` " +
     "LEFT JOIN `persons` mp ON mp.`id` = m.`person_id` " +
