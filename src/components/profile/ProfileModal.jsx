@@ -12,6 +12,7 @@ import { JoinGroupSection } from "./JoinGroupSection.jsx";
 import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
 import { RaceGoalsPanel } from "./RaceGoalsPanel.jsx";
 import { CompliancePanel } from "./CompliancePanel.jsx";
+import { PushNotificationsPanel } from "./PushNotificationsPanel.jsx";
 import { useDialogA11y } from "../shell/useDialogA11y.js";
 import { LevelRow } from "./LevelRow.jsx";
 import { NextEventRow } from "./NextEventRow.jsx";
@@ -562,6 +563,12 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                         compliance credentials (cert + expiry). Coach-only. */}
                     {(appEffectiveMe ? appEffectiveMe.is_coach : appMe?.is_coach) && (
                       <CompliancePanel endpoint="/api/me/credentials" />
+                    )}
+                    {/* Web Push opt-in (notification infra). Self-hides unless
+                        VAPID is configured + browser supports it. Minors blocked
+                        server-side at subscribe. */}
+                    {!(appEffectiveMe ? appEffectiveMe.is_minor : appMe?.is_minor) && (
+                      <PushNotificationsPanel />
                     )}
                   </div>
                   {/* Setforge rebrand 2026-05-20 — Send feedback + Sign out

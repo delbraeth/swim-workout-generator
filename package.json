@@ -1,7 +1,7 @@
 {
   "name": "setforge",
   "version": "1.0.0",
-  "description": "SetForge \u2014 swim workout generator + week-view planner with coach-group workflows. Serves the SPA + an Express/MariaDB API.",
+  "description": "SetForge — swim workout generator + week-view planner with coach-group workflows. Serves the SPA + an Express/MariaDB API.",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -25,7 +25,8 @@
     "helmet": "^8.0.0",
     "mariadb": "^3.5.2",
     "resend": "^6.12.4",
-    "stripe": "^22.2.0"
+    "stripe": "^22.2.0",
+    "web-push": "^3.6.7"
   },
   "engines": {
     "node": ">=20.0.0"

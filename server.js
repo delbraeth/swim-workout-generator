@@ -57,6 +57,7 @@ import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
+import { PUSH_ACTIVE, pushConfigState, sendPushToUser } from "./lib/push.js";
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
 import { buildIcs } from "./lib/ics.js";
 import { toCsv } from "./lib/csv.js";
@@ -136,6 +137,7 @@ import {
   dbUpdateGroupLanePlan, dbArchiveGroupLanePlan, dbSetDefaultLanePlan,
   dbCreateGroupJoinToken, dbGetGroupJoinToken, dbListGroupJoinTokens,
   dbGetPersonIdForUser, dbListPersonCredentials, dbSetPersonCredential, dbDeletePersonCredential, CREDENTIAL_SYSTEMS,
+  dbAddPushSubscription, dbDeletePushSubscription,
   dbDeleteGroupJoinToken, dbRedeemGroupJoinToken,
   dbCreateClaimToken, dbGetClaimToken, dbListClaimTokensForManaged,
   dbDeleteClaimToken, dbRedeemClaimToken,
@@ -5087,6 +5089,43 @@ app.delete("/api/me/credentials/:system", checkOrigin, requireAuth, requireCsrf,
     const personId = await dbGetPersonIdForUser(req.userSub);
     if (!personId) return res.status(400).json({ error: "no_person" });
     res.json(await dbDeletePersonCredential(personId, req.params.system));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ── Web Push (notification infrastructure) ───────────────────────────
+// Inert until VAPID keys are set (PUSH_CONFIG). Minor-safety: subscribing is
+// refused for minors server-side, mirroring the email/Discord minor-bypass.
+app.get("/api/push/config", requireAuth, async (req, res) => {
+  res.json(pushConfigState());
+});
+app.post("/api/push/subscribe", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!PUSH_ACTIVE) return res.status(503).json({ error: "push_not_configured" });
+    const me = await dbGetMe(req.userSub);
+    if (me?.is_minor) return res.status(403).json({ error: "minor_not_eligible" });
+    const s = req.body?.subscription || req.body || {};
+    const endpoint = s.endpoint;
+    const p256dh = s.keys?.p256dh, auth = s.keys?.auth;
+    if (!endpoint || !p256dh || !auth) return res.status(400).json({ error: "bad_subscription" });
+    const r = await dbAddPushSubscription({
+      userSub: req.userSub, endpoint, p256dh, auth,
+      platform: "web", userAgent: (req.get("user-agent") || "").slice(0, 255),
+    });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/push/unsubscribe", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const endpoint = req.body?.endpoint;
+    if (!endpoint) return res.status(400).json({ error: "no_endpoint" });
+    res.json(await dbDeletePushSubscription(endpoint, req.userSub));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/push/test", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await sendPushToUser(req.userSub, { title: "SetForge", body: "🔔 Notifications are working.", url: "/" });
+    res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

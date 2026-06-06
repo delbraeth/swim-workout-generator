@@ -7126,6 +7126,41 @@ export async function dbDeletePersonCredential(personId, system) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// ─── Web Push subscriptions (notification infra foundation) ───────────────────
+// One row per browser endpoint. Upsert on endpoint so re-subscribing the same
+// browser refreshes keys + owner rather than duplicating.
+export async function dbAddPushSubscription({ userSub, endpoint, p256dh, auth, platform = null, userAgent = null }) {
+  if (!userSub || !endpoint || !p256dh || !auth) return { ok: false, reason: "bad_request" };
+  await pool.query(
+    "INSERT INTO `push_subscriptions` (`user_sub`,`endpoint`,`p256dh`,`auth`,`platform`,`user_agent`) VALUES (?,?,?,?,?,?) " +
+    "ON DUPLICATE KEY UPDATE `user_sub`=VALUES(`user_sub`), `p256dh`=VALUES(`p256dh`), `auth`=VALUES(`auth`), " +
+    "`platform`=VALUES(`platform`), `user_agent`=VALUES(`user_agent`), `last_seen_at`=CURRENT_TIMESTAMP",
+    [userSub, String(endpoint).slice(0, 512), String(p256dh).slice(0, 255), String(auth).slice(0, 255),
+     platform ? String(platform).slice(0, 32) : null, userAgent ? String(userAgent).slice(0, 255) : null]
+  );
+  return { ok: true };
+}
+
+export async function dbListPushSubscriptionsForUser(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    "SELECT `endpoint`,`p256dh`,`auth` FROM `push_subscriptions` WHERE `user_sub` = ?",
+    [userSub]
+  );
+  return rows.map(r => ({ endpoint: r.endpoint, keys: { p256dh: r.p256dh, auth: r.auth } }));
+}
+
+export async function dbDeletePushSubscription(endpoint, userSub = null) {
+  if (!endpoint) return { ok: false, reason: "no_endpoint" };
+  // Scope to the owner when provided (user-initiated unsubscribe); allow
+  // owner-less delete for dead-endpoint pruning (404/410 from the push service).
+  const sql = userSub
+    ? "DELETE FROM `push_subscriptions` WHERE `endpoint` = ? AND `user_sub` = ?"
+    : "DELETE FROM `push_subscriptions` WHERE `endpoint` = ?";
+  const r = await pool.query(sql, userSub ? [endpoint, userSub] : [endpoint]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 export async function dbDeleteEventTime(id, { userSub = null, managedId = null } = {}) {
   if (!id) return { ok: false, reason: "no_id" };
   const { where, val } = _eventTimeOwner(userSub, managedId);
