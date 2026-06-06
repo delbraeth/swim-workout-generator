@@ -45,6 +45,89 @@ export const LESSON_SECTIONS = ["warmup", "main", "cooldown"];
 export const LESSON_MIN = 100;
 export const LESSON_MAX = 1200;
 
+// ── Youth / Learn-to-Swim content pack (eval 2026-06-06 #5) ──────────────────
+// A dedicated BEGINNER bank for the lesson type: all 25/50-based, generous rest
+// or "Coach starts each" (no-interval / on-the-whistle) so a coach paces from the
+// deck, plus stroke-survival + DQ-avoidance drills (breast pullout/whip kick, fly
+// two-hand touch, IM order). Enabled by the youthMode flag (🧒 Learn-to-Swim);
+// getBankOptions swaps these IN for the lesson sections so genuinely short
+// (~150–400yd) sessions are possible — the technique-reused banks floor ~800yd
+// and are adult-coded, which locked out summer-league + learn-to-swim coaches.
+// Authored in yards; getBankOptions converts to the active pool unit.
+const _YW = "Coach starts each (on the whistle)";   // no fixed interval — deck-paced
+const _YR = "No interval — rest as needed";
+export const YOUTH_WARMUP = [
+  { label: "Splash-In 75", totalYards: 75, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_wu1", reps: 3, dist: 25, desc: "Easy freestyle — get wet, blow big bubbles", interval: _YW, focus: "Get comfortable, exhale underwater" },
+  ]},
+  { label: "Float & Glide 100", totalYards: 100, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_wu2", reps: 4, dist: 25, desc: "Push off wall in a tight streamline + glide, then swim", interval: _YW, focus: "Squeeze ears, point toes" },
+  ]},
+  { label: "Back Float Intro 100", totalYards: 100, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_wu3", reps: 4, dist: 25, desc: "Backstroke, eyes up, slow flutter kick", interval: _YW, focus: "Stay calm on your back, ears in" },
+  ]},
+  { label: "Mixed Easy 150", totalYards: 150, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_wu4", reps: 6, dist: 25, desc: "Alternate freestyle / backstroke by 25", interval: _YW, focus: "Switch strokes, stay relaxed" },
+  ]},
+];
+export const YOUTH_SKILL = [
+  { label: "Freestyle Survival 25s 150", totalYards: 150, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk1", reps: 6, dist: 25, desc: "Freestyle — breathe every 3–4 strokes, relax", interval: _YW, focus: "Calm breathing, long reach" },
+  ]},
+  { label: "Streamline Push-Offs 100", totalYards: 100, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk2", reps: 4, dist: 25, desc: "Streamline off the wall + 3 kicks underwater, then swim", interval: _YW, focus: "Tight streamline, no early breath" },
+  ]},
+  { label: "Kick With Board 150", totalYards: 150, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk3", reps: 6, dist: 25, desc: "Flutter kick with a board", interval: _YW, focus: "Small fast kicks from the hips", eq: "kick" },
+  ]},
+  { label: "Catch-Up Freestyle Drill 100", totalYards: 100, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk4", reps: 4, dist: 25, desc: "Catch-up freestyle — one hand waits in front", interval: _YW, focus: "One arm at a time, full reach" },
+  ]},
+  { label: "Breaststroke Pullout — legal (DQ) 100", totalYards: 100, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk5", reps: 4, dist: 25, desc: "Breaststroke: ONE pull + ONE kick off the wall, then swim", interval: _YR, focus: "Avoid the DQ — one pulldown only" },
+  ]},
+  { label: "Breaststroke Whip Kick — legal (DQ) 100", totalYards: 100, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk6", reps: 4, dist: 25, desc: "Breaststroke kick with a board — heels out, snap together", interval: _YR, focus: "Whip kick, no scissor (DQ)", eq: "kick" },
+  ]},
+  { label: "Butterfly Two-Hand Touch (DQ) 75", totalYards: 75, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk7", reps: 3, dist: 25, desc: "Fly kick + arms, finish with a TWO-HAND touch at the wall", interval: _YR, focus: "Both hands touch together (legal)" },
+  ]},
+  { label: "IM Order Game 100", totalYards: 100, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk8", reps: 4, dist: 25, desc: "One length each in IM order: fly, back, breast, free", interval: _YR, focus: "Learn the stroke order" },
+  ]},
+  { label: "Backstroke Safety 100", totalYards: 100, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk9", reps: 4, dist: 25, desc: "Backstroke, steady kick, spot the flags/wall", interval: _YW, focus: "Know where the wall is" },
+  ]},
+  { label: "Bubbles & Breathing 75", totalYards: 75, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_sk10", reps: 3, dist: 25, desc: "Freestyle — big exhale (bubbles) under water, breathe one side", interval: _YR, focus: "Never hold your breath" },
+  ]},
+  // Multi-drill combos — give the solver richer mid-size skill blocks so a
+  // bigger target (e.g. 400yd) composes a fuller lesson, not one lone drill.
+  { label: "Freestyle Focus Combo 200", totalYards: 200, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_skc1a", reps: 4, dist: 25, desc: "Catch-up freestyle — one hand waits in front", interval: _YW, focus: "Long reach, one arm at a time" },
+    { id: "y_skc1b", reps: 4, dist: 25, desc: "Freestyle — breathe every 3, big bubbles out", interval: _YW, focus: "Calm rhythmic breathing" },
+  ]},
+  { label: "DQ-Avoidance Combo 200", totalYards: 200, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_skc2a", reps: 4, dist: 25, desc: "Breaststroke: ONE pull + ONE kick off the wall, then swim", interval: _YR, focus: "One legal pulldown only" },
+    { id: "y_skc2b", reps: 4, dist: 25, desc: "Breaststroke whip kick w/ board — heels out, snap together", interval: _YR, focus: "No scissor kick (DQ)", eq: "kick" },
+  ]},
+  { label: "Survival & Streamline Combo 250", totalYards: 250, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_skc3a", reps: 4, dist: 25, desc: "Streamline off the wall + 3 kicks, then swim", interval: _YW, focus: "Tight streamline" },
+    { id: "y_skc3b", reps: 6, dist: 25, desc: "Freestyle survival — relaxed, breathe when you need", interval: _YW, focus: "Stay calm, finish every 25" },
+  ]},
+];
+export const YOUTH_COOLDOWN = [
+  { label: "Easy Choice 50", totalYards: 50, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_cd1", reps: 2, dist: 25, desc: "Easy swim — any stroke you like", interval: _YR, focus: "Relax and have fun" },
+  ]},
+  { label: "Float & Relax 50", totalYards: 50, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_cd2", reps: 1, dist: 50, desc: "Easy back float / gentle backstroke", interval: _YR, focus: "Calm breathing" },
+  ]},
+  { label: "Bubble Down 75", totalYards: 75, types: ["lesson"], strokes: [], lesson_level: "youth", sets: [
+    { id: "y_cd3", reps: 3, dist: 25, desc: "Easy freestyle with big slow bubbles", interval: _YR, focus: "Slow down the breathing" },
+  ]},
+];
+
 export const ZONES = {
       easy:      { id: "easy",      label: "Easy",      color: "var(--color-positive)", rank: 1 },
       aerobic:   { id: "aerobic",   label: "Aerobic",   color: "var(--color-primary)", rank: 2 },
@@ -6509,6 +6592,7 @@ export function generateWorkout({
       includedSections = ["warmup", "drill", "main", "cooldown"],   // Section model A1 — which sections to build. Default = all 4 (byte-identical to pre-A1). `main` is always required. Subsetting wired in A2.
       lessonMySetsOnly = false,         // Lesson tier (Phase 5) — use ONLY coach-authored lesson content (drop built-ins).
       lessonLevel = null,               // Lesson tier (Phase 5) — beginner/intermediate/advanced; filters authored lesson sets.
+      youthMode = false,                // Eval #5 — Learn-to-Swim: swap lesson banks for the beginner YOUTH pack (25-based, deck-paced).
       racePace = false,                 // Phase 5 #4 — build the MAIN block as race-pace reps for `raceEvent`.
       raceEvent = "free_100",           // which race event the set anchors to (see raceEvents.js).
       raceGoals = {},                   // { event_id: secs } — goal→pr resolved server-side; fills the per-rep target.
@@ -6583,7 +6667,7 @@ export function generateWorkout({
       // Unit-aware bank lookup. Each call returns options already in the
       // user's pool unit (converted from yd↔m if the fallback crossed banks).
       // UGC overlay (Phase B+) is appended in getBankOptions per exact pool mode.
-      const _lessonOpts = { lessonMySetsOnly, lessonLevel };   // Phase 5 — inert for non-lesson types
+      const _lessonOpts = { lessonMySetsOnly, lessonLevel, youthMode };   // Phase 5 / eval #5 — inert for non-lesson types
       const _allWarmupsRaw   = getBankOptions("warmup",   typeId, poolMode, ugcOverlay, _lessonOpts);
       const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode, ugcOverlay, _lessonOpts);
       const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay, _lessonOpts);
@@ -7141,8 +7225,9 @@ export function regenerateSection({
       tonightOverrides = [],          // Phase 3 PSC slice 3 — in-memory per-practice overrides; unioned with myConstraints.
       lessonMySetsOnly = false,       // Lesson tier (Phase 5) — use only authored lesson content.
       lessonLevel = null,             // Lesson tier (Phase 5) — ability-level filter for authored lesson sets.
+      youthMode = false,              // Eval #5 — Learn-to-Swim youth bank swap (inert for non-lesson types).
     } = {}) {
-      const _lessonOpts = { lessonMySetsOnly, lessonLevel };   // Phase 5 — inert for non-lesson types
+      const _lessonOpts = { lessonMySetsOnly, lessonLevel, youthMode };   // Phase 5 / eval #5 — inert for non-lesson types
       // v1.8 — Resolve once for use below.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
       // Phase 3 PSC slice 2/3 — same skip-in-multi-lane rule as generateWorkout.
@@ -8587,7 +8672,23 @@ export function convertOptionUnits(option, fromUnit, toUnit) {
     }
 
 export function getBankOptions(kind, typeId, poolMode, ugcOverlay = null, opts = {}) {
-      const { lessonMySetsOnly = false, lessonLevel = null } = opts;
+      const { lessonMySetsOnly = false, lessonLevel = null, youthMode = false } = opts;
+      // Youth / Learn-to-Swim (eval 2026-06-06 #5): when youthMode is on for a
+      // lesson, swap the built-in (technique-reused) banks for the dedicated
+      // beginner YOUTH bank — short, 25-based, deck-paced. Authored-overlay rows
+      // still append (coaches can extend), and lessonMySetsOnly still wins.
+      if (typeId === "lesson" && youthMode && !lessonMySetsOnly) {
+        const _ybank = kind === "warmup" ? YOUTH_WARMUP
+                     : kind === "cooldown" ? YOUTH_COOLDOWN
+                     : (kind === "main" || kind === "drill") ? YOUTH_SKILL
+                     : [];
+        const _tgt = poolMode === "25y" ? "yd" : "m";
+        const youthOpts = _tgt === "yd" ? _ybank : _ybank.map(o => convertOptionUnits(o, "yd", _tgt));
+        const _ovlKind = (kind === "main") ? "drill" : kind;
+        let ovl = getOverlayRowsForTuple(ugcOverlay, _ovlKind, "lesson", poolMode);
+        if (lessonLevel) ovl = ovl.filter(o => !o.lesson_level || o.lesson_level === lessonLevel);
+        return ovl.length > 0 ? youthOpts.concat(ovl) : youthOpts;
+      }
       // Lesson tier (Phase 5): built-in (canonical) content reuses Technique banks —
       // "Skill Focus" (engine main slot) from the DRILL bank so options stay short
       // for 800–1200yd (and lower with authored content). Coach-AUTHORED lesson

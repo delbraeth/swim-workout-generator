@@ -961,12 +961,14 @@ app.post("/api/generate", requireAuth, writeLimiter, async (req, res) => {
     const raceKind  = b.raceKind === "pr" ? "pr" : "goal";
     const usrpt     = !!b.usrpt;
     const raceGoals = racePace ? await dbResolveRaceGoals({ userSub: req.userSub, course: poolMode }) : {};
+    const youthMode = !!b.youthMode;   // Eval #5 — Learn-to-Swim youth bank (native/iOS path)
 
     const workout = engineGenerate({
       typeId, maxYards, poolMode, equipment, sectionBias, includedSections,
       recoveryMode, phase, userMin, sectionSources, lanesPaceSecs,
       racePace, raceEvent, raceKind, usrpt, raceGoals,
       ...curation,
+      youthMode,
     });
 
     // Engine failure sentinel (e.g. required equipment can't be satisfied).

@@ -1629,6 +1629,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // "" level = auto (use the target swimmer's level, else show all).
       const [lessonMySetsOnly, setLessonMySetsOnly] = useState(false);
       const [lessonLevelChoice, setLessonLevelChoice] = useState("");
+      const [lessonYouth, setLessonYouth] = useState(false);   // Eval #5 — Learn-to-Swim youth bank
       // Phase 5 #4 — race-pace mode. When on, the MAIN set becomes race-pace reps
       // for `raceEvent`, anchored to the target swimmer's goal→PR time at the
       // current course. raceGoals/raceKindMap are loaded by an effect below.
@@ -3114,6 +3115,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           userMin:        _isLessonGen ? LESSON_MIN : sliderMin,
           lessonMySetsOnly: _isLessonGen ? lessonMySetsOnly : false,
           lessonLevel:    _lessonLevel,
+          youthMode:      _isLessonGen ? lessonYouth : false,   // Eval #5 — Learn-to-Swim youth bank
           // Phase 5 #4 — race-pace MAIN (ignored unless racePace). raceGoals is the
           // target's goal→PR map (loaded by effect); raceKind labels the chosen event.
           racePace:       racePace && !_isLessonGen,
@@ -3265,7 +3267,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, lessonYouth, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -3295,6 +3297,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           userMin:      _isLessonRegen ? LESSON_MIN : sliderMin,
           lessonMySetsOnly: _isLessonRegen ? lessonMySetsOnly : false,
           lessonLevel:  _isLessonRegen ? (lessonLevelChoice || generateForTarget?.lesson_level || null) : null,
+          youthMode:    _isLessonRegen ? lessonYouth : false,   // Eval #5 — Learn-to-Swim youth bank
           recentLabels,
           recoveryMode: isRecovery,
           phase,
@@ -3396,7 +3399,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, favoriteSets, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, lessonMySetsOnly, lessonLevelChoice, generateForTarget]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, favoriteSets, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, lessonMySetsOnly, lessonLevelChoice, lessonYouth, generateForTarget]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -4667,6 +4670,13 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               {selectedType === "lesson" && (
                 <div style={{ marginBottom: 20, padding: "12px 14px", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10 }}>
                   <div style={{ fontSize: 11, color: "var(--color-primary-text)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Lesson content</div>
+                  {/* Eval #5 — Learn-to-Swim: swap in the beginner youth bank
+                      (25-based, deck-paced "on the whistle", stroke-survival +
+                      DQ-avoidance drills) so genuinely short kids' lessons work. */}
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", marginBottom: 8 }}>
+                    <input type="checkbox" checked={lessonYouth} onChange={e => setLessonYouth(e.target.checked)} />
+                    <span>🧒 <strong>Learn-to-Swim</strong> — beginner 25s, deck-paced, stroke-survival + DQ drills</span>
+                  </label>
                   <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
                       <span style={{ color: "var(--color-text-muted)" }}>Level</span>
