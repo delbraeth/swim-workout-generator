@@ -1570,8 +1570,14 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       </ul>
 
       <h3>Team events (decision #38)</h3>
-      <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. v1 captures just name + date.</p>
+      <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. Each event has a name, type, date, optional <strong>start time</strong>, and an optional <strong>venue</strong>.</p>
       <p>Upcoming events surface on the main app via the pool-mode selector row: a <strong>📅 amber pill</strong> showing the most-imminent event across all teams you're in (as either a coach or a group member). Renders alongside your personal <strong>🏁 next-event</strong> pill — both coexist; team events take the leading position.</p>
+
+      <h3>RSVP (expected attendance)</h3>
+      <p>Swimmers see upcoming team events on their <strong>📥 Assigned to me</strong> home with a <strong>✅ Going / 🤔 Maybe / ❌ Out</strong> control; their choice saves instantly. Coaches see a per-event <strong>📋 RSVP</strong> tally (going/maybe/out) plus the per-swimmer list. Cancelling an event (Cancel/Restore on the event row) freezes RSVP and shows a struck-through <strong>CANCELLED</strong> badge everywhere — events never silently disappear. RSVP is forward-looking <em>intent</em>, separate from after-the-fact roll-call attendance.</p>
+
+      <h3>Venues &amp; outdoor-pool weather</h3>
+      <p>When creating or editing an event, pick a <strong>venue</strong> from the shared catalog or add a new one (name + address + indoor/outdoor). Venues are a <em>universal</em> catalog — one team's home pool is another's away meet, so a venue is created once and reused; addresses are geocoded in your browser via Apple Maps. For an <strong>outdoor</strong> venue, events within the ~10-day forecast window show a small <strong>weather chip</strong> (condition emoji · temperature) on both the coach event row and the swimmer's RSVP list, with <strong>⚡ lightning</strong> and <strong>🥵 heat</strong> advisories when relevant. Indoor / venue-less events never show weather. Forecasts come from Apple WeatherKit and are cached so a busy meet doesn't hammer the API.</p>
 
       <h3>Transferring team ownership</h3>
       <p>A team has one <strong>owner</strong>. To hand the team off — say you're leaving the club — open <strong>Team → Settings → Ownership</strong> (owner-only). Pick an existing <strong>admin</strong> as the new owner and tap <strong>Transfer →</strong>. (No admins yet? Promote a coach to admin first on the <em>Members &amp; Coaches</em> tab.)</p>

@@ -58,6 +58,7 @@ import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 import { PUSH_ACTIVE, pushConfigState, sendPushToUser } from "./lib/push.js";
+import { WEATHER_ACTIVE, weatherConfigState, getForecast } from "./lib/weather.js";
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
 import { buildIcs } from "./lib/ics.js";
 import { toCsv } from "./lib/csv.js";
@@ -130,6 +131,7 @@ import {
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
   dbSetRsvp, dbGetMyRsvp, dbGetRsvpSummary, dbSetTeamEventStatus,
+  dbCreateOrLinkVenue, dbGetVenue, dbListVenues, dbGetWeatherCache, dbPutWeatherCache,
   dbIsSwimmerInTeam, dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
   dbListAssignmentsForSwimmer, dbListAssignmentsForGroup,
@@ -3103,7 +3105,7 @@ app.get("/api/billing/history", requireAuth, async (req, res) => {
 //   portal_return }.
 app.get("/api/admin/billing/config", requireAuth, requireAdmin, async (req, res) => {
   try {
-    res.json({ stripe: billingConfigState(), apple_iap: appleIapConfigState() });
+    res.json({ stripe: billingConfigState(), apple_iap: appleIapConfigState(), push: pushConfigState(), weather: weatherConfigState() });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -5834,13 +5836,13 @@ app.post("/api/teams/:teamId/events", checkOrigin, requireAuth, requireCsrf, wri
   try {
     const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date, kind } = req.body || {};
-    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, kind, createdByCoachSub: req.userSub });
+    const { name, date, kind, venue_id, start_time } = req.body || {};
+    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, kind, venueId: venue_id || null, startTime: start_time || null, createdByCoachSub: req.userSub });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "team_event.create",
       ...reqMeta(req),
-      details:   { event_id: r.id, team_id: req.params.teamId, name, date, kind: kind || "meet" },
+      details:   { event_id: r.id, team_id: req.params.teamId, name, date, kind: kind || "meet", venue_id: venue_id || null },
     });
     res.json(r);
   } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
@@ -5935,11 +5937,13 @@ app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter
     if (!ev) return res.status(404).json({ error: "not found" });
     const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date, kind } = req.body || {};
+    const { name, date, kind, venue_id, start_time } = req.body || {};
     const patch = {};
     if (name !== undefined) patch.name = name;
     if (date !== undefined) patch.date = date;
     if (kind !== undefined) patch.kind = kind;
+    if (venue_id !== undefined) patch.venueId = venue_id;
+    if (start_time !== undefined) patch.startTime = start_time;
     const r = await dbUpdateTeamEvent(req.params.id, patch);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({
@@ -5974,6 +5978,66 @@ app.delete("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimite
 app.get("/api/events/upcoming", requireAuth, async (req, res) => {
   try { res.json(await dbListUpcomingEventsForUser(req.userSub)); }
   catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── Venues (universal pool catalog) + WeatherKit (Phase 5 #5 Slice B) ─────
+// Create or link a venue. Coach-gated (any coach may extend the shared catalog).
+// The CLIENT geocodes the address via MapKit JS (browser-scoped token) and POSTs
+// latitude/longitude/timezone — the server cannot use the MapKit token itself.
+app.post("/api/venues", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { name, address, latitude, longitude, indoor_outdoor, course, timezone } = req.body || {};
+    const r = await dbCreateOrLinkVenue({
+      name, address: address || null,
+      latitude: latitude ?? null, longitude: longitude ?? null,
+      indoorOutdoor: indoor_outdoor || "unknown", course: course || null,
+      timezone: timezone || null, coachSub: req.userSub,
+    });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    const venue = await dbGetVenue(r.id);
+    res.json({ ...r, venue });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Search the venue catalog for the picker (coach-only). Nearest-first when lat/lng given.
+app.get("/api/venues", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const lat = req.query.lat != null ? Number(req.query.lat) : null;
+    const lng = req.query.lng != null ? Number(req.query.lng) : null;
+    const near = (Number.isFinite(lat) && Number.isFinite(lng)) ? { latitude: lat, longitude: lng } : null;
+    res.json(await dbListVenues({ q: req.query.q || null, near, limit: 20 }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Outdoor-venue forecast for an event. Visible to anyone who can see the event.
+// Returns { weather: null, reason } when not applicable (indoor / no coords /
+// not configured / outside horizon) — never an error, so the event still renders.
+app.get("/api/events/:id/weather", requireAuth, async (req, res) => {
+  try {
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "not found" });
+    const role = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!role) {
+      const isMember = await dbIsSwimmerInTeam(req.userSub, ev.team_id);
+      if (!isMember) return res.status(403).json({ error: "no access to this event" });
+    }
+    const v = ev.venue;
+    if (!v || v.latitude == null || v.longitude == null) return res.json({ weather: null, reason: "no_venue_coords" });
+    if (v.indoor_outdoor !== "outdoor") return res.json({ weather: null, reason: "not_outdoor" });
+    if (!WEATHER_ACTIVE) return res.json({ weather: null, reason: "not_configured" });
+
+    // Cache per (venue, day); refresh hourly within 24h of the event, else 6-hourly.
+    const cached = await dbGetWeatherCache(v.id, ev.date);
+    const hrsToEvent = (new Date(`${ev.date}T12:00:00Z`).getTime() - Date.now()) / 3600000;
+    const ttlMs = (hrsToEvent <= 24 ? 1 : 6) * 3600000;
+    if (cached && cached.payload && (Date.now() - cached.fetched_ms) < ttlMs) {
+      return res.json({ weather: cached.payload, cached: true });
+    }
+    const fc = await getForecast({ lat: v.latitude, lng: v.longitude, tz: v.timezone || "UTC", dayYmd: ev.date, startTime: ev.start_time || null });
+    if (!fc) return res.json({ weather: cached?.payload || null, reason: "no_forecast", cached: !!cached?.payload });
+    await dbPutWeatherCache(v.id, ev.date, fc);
+    res.json({ weather: fc, cached: false });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // ───── Static files ───────────────────────────────────────────────────

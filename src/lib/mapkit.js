@@ -81,10 +81,15 @@ export function geocodeAddress(addressString) {
       }
       const r = data && data.results && data.results[0];
       if (!r || !r.coordinate) { reject(new Error("geocode_no_results")); return; }
+      // timezone / postCode are best-effort: present on newer MapKit JS Place
+      // objects, undefined on older ones — callers must tolerate null.
+      const tz = (typeof r.timezone === "string" && r.timezone) ? r.timezone : null;
       resolve({
         latitude:  r.coordinate.latitude,
         longitude: r.coordinate.longitude,
         formatted: r.formattedAddress || addressString,
+        timezone:  tz,
+        postalCode: r.postCode || null,
       });
     });
   }));

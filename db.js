@@ -5565,17 +5565,32 @@ export async function dbGetGroupMember(memberId) {
 
 // ── Team events (decision #38) ────────────────────────────────────────
 
-export async function dbCreateTeamEvent({ teamId, name, date, kind = DEFAULT_EVENT_KIND, createdByCoachSub }) {
+// Normalize an event start time: null/"" → null (date-only/all-day), a valid
+// HH:MM[:SS] → "HH:MM:SS", anything else → undefined (signals "invalid" so the
+// caller can reject). The time is the VENUE-local clock time (the instant for
+// weather is resolved as date+start_time in the venue tz, MEET_SCHEDULE §3.3.2).
+function _normEventTime(t) {
+  if (t == null || t === "") return null;
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(String(t).trim());
+  if (!m) return undefined;
+  const hh = Number(m[1]), mm = Number(m[2]), ss = m[3] ? Number(m[3]) : 0;
+  if (hh > 23 || mm > 59 || ss > 59) return undefined;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
+export async function dbCreateTeamEvent({ teamId, name, date, kind = DEFAULT_EVENT_KIND, venueId = null, startTime = null, createdByCoachSub }) {
   if (!teamId) throw new Error("teamId required");
   if (!name || typeof name !== "string") throw new Error("name required");
   if (name.length > 120) throw new Error("name max 120 chars");
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error("date must be YYYY-MM-DD");
   const k = EVENT_KIND_VALUES.includes(kind) ? kind : DEFAULT_EVENT_KIND;
+  const st = _normEventTime(startTime);
+  if (st === undefined) throw new Error("start_time must be HH:MM");
   const id = genEventId();
   await pool.query(
-    "INSERT INTO `team_events` (`id`, `team_id`, `name`, `kind`, `date`, `created_by_coach_sub`) " +
-    "VALUES (?, ?, ?, ?, ?, ?)",
-    [id, teamId, name.trim(), k, date, createdByCoachSub || null]
+    "INSERT INTO `team_events` (`id`, `team_id`, `name`, `kind`, `date`, `venue_id`, `start_time`, `created_by_coach_sub`) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [id, teamId, name.trim(), k, date, venueId || null, st, createdByCoachSub || null]
   );
   return { ok: true, id };
 }
@@ -5583,8 +5598,12 @@ export async function dbCreateTeamEvent({ teamId, name, date, kind = DEFAULT_EVE
 export async function dbGetTeamEvent(eventId) {
   if (!eventId) return null;
   const rows = await pool.query(
-    "SELECT `id`, `team_id`, `name`, `kind`, `date`, `created_by_coach_sub`, `created_at` " +
-    "FROM `team_events` WHERE `id` = ?",
+    "SELECT te.`id`, te.`team_id`, te.`name`, te.`kind`, te.`date`, te.`venue_id`, te.`start_time`, " +
+    "       te.`status`, te.`status_note`, te.`created_by_coach_sub`, te.`created_at`, " +
+    "       v.`name` AS venue_name, v.`latitude` AS venue_lat, v.`longitude` AS venue_lng, " +
+    "       v.`indoor_outdoor` AS venue_io, v.`timezone` AS venue_tz " +
+    "FROM `team_events` te LEFT JOIN `venues` v ON v.`id` = te.`venue_id` " +
+    "WHERE te.`id` = ?",
     [eventId]
   );
   if (!rows[0]) return null;
@@ -5595,8 +5614,25 @@ export async function dbGetTeamEvent(eventId) {
     name:      r.name,
     kind:      r.kind || DEFAULT_EVENT_KIND,
     date:      dateToYmd(r.date),
+    start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,
+    status:     r.status || "scheduled",
+    status_note: r.status_note || null,
+    venue:     _eventVenue(r),
     created_by_coach_sub: r.created_by_coach_sub,
     created_at: dtToIso(r.created_at),
+  };
+}
+
+// Shape the venue columns hung off a team_events row (joined as venue_*).
+function _eventVenue(r) {
+  if (!r || !r.venue_id) return null;
+  return {
+    id: r.venue_id,
+    name: r.venue_name || null,
+    latitude:  r.venue_lat == null ? null : Number(r.venue_lat),
+    longitude: r.venue_lng == null ? null : Number(r.venue_lng),
+    indoor_outdoor: r.venue_io || "unknown",
+    timezone: r.venue_tz || null,
   };
 }
 
@@ -5608,7 +5644,7 @@ export async function dbDeleteTeamEvent(eventId) {
 
 // Update name / date on an existing event. team_id and created_by_coach_sub
 // are intentionally not editable — creator attribution is a tombstone.
-export async function dbUpdateTeamEvent(eventId, { name, date, kind } = {}) {
+export async function dbUpdateTeamEvent(eventId, { name, date, kind, venueId, startTime } = {}) {
   if (!eventId) return { ok: false, reason: "no_id" };
   const sets = [], vals = [];
   if (name !== undefined) {
@@ -5624,6 +5660,15 @@ export async function dbUpdateTeamEvent(eventId, { name, date, kind } = {}) {
     if (!EVENT_KIND_VALUES.includes(kind)) return { ok: false, reason: "bad_kind" };
     sets.push("`kind` = ?"); vals.push(kind);
   }
+  if (venueId !== undefined) {
+    // null/"" clears the venue; a string sets it.
+    sets.push("`venue_id` = ?"); vals.push(venueId || null);
+  }
+  if (startTime !== undefined) {
+    const st = _normEventTime(startTime);
+    if (st === undefined) return { ok: false, reason: "bad_time" };
+    sets.push("`start_time` = ?"); vals.push(st);
+  }
   if (!sets.length) return { ok: true, affected: 0 };
   vals.push(eventId);
   const r = await pool.query(
@@ -5636,15 +5681,20 @@ export async function dbUpdateTeamEvent(eventId, { name, date, kind } = {}) {
 export async function dbListTeamEvents(teamId) {
   if (!teamId) return [];
   const rows = await pool.query(
-    "SELECT `id`, `team_id`, `name`, `kind`, `date`, `status`, `status_note`, `rsvp_closes_at`, " +
-    "       `created_by_coach_sub`, `created_at` " +
-    "FROM `team_events` WHERE `team_id` = ? ORDER BY `date` ASC",
+    "SELECT te.`id`, te.`team_id`, te.`name`, te.`kind`, te.`date`, te.`venue_id`, te.`start_time`, " +
+    "       te.`status`, te.`status_note`, te.`rsvp_closes_at`, te.`created_by_coach_sub`, te.`created_at`, " +
+    "       v.`name` AS venue_name, v.`latitude` AS venue_lat, v.`longitude` AS venue_lng, " +
+    "       v.`indoor_outdoor` AS venue_io, v.`timezone` AS venue_tz " +
+    "FROM `team_events` te LEFT JOIN `venues` v ON v.`id` = te.`venue_id` " +
+    "WHERE te.`team_id` = ? ORDER BY te.`date` ASC",
     [teamId]
   );
   return rows.map(r => ({
     id: r.id, team_id: r.team_id, name: r.name,
     kind: r.kind || DEFAULT_EVENT_KIND,
     date: dateToYmd(r.date),
+    start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,
+    venue: _eventVenue(r),
     status: r.status || "scheduled",
     status_note: r.status_note || null,
     rsvp_closes_at: dtToIso(r.rsvp_closes_at),
@@ -5733,6 +5783,148 @@ export async function dbSetTeamEventStatus(eventId, status, note = null) {
     [status, note ? String(note).slice(0, 280) : null, String(eventId)]
   );
   return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// ─── Venues (universal pool/location catalog — MEET_SCHEDULE_WEATHER_SCOPE §2) ──
+// One row per physical place; team_facilities + team_events reference it so the
+// geocode + indoor/outdoor + tz are defined ONCE (one team's home pool is
+// another's away venue). Created lazily by coaches; dedup-on-create avoids the
+// "Mason Rec Center" ×6 problem (scope §2 #3). v1 venues are usable immediately
+// (moderation_status defaults 'approved'); edit-moderation is reserved (§2 #4).
+const VENUE_INDOOR_OUTDOOR = ["indoor", "outdoor", "unknown"];
+const VENUE_COURSES = ["SCY", "SCM", "LCM"];
+
+function genVenueId() {
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "vn_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+
+// Normalize a venue name for dedup matching (case/spacing/punctuation-insensitive).
+function _normVenueName(s) {
+  return String(s || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// Great-circle distance in meters (for proximity dedup, ~150m threshold).
+function _haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000, toRad = d => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function _venueRow(r) {
+  if (!r) return null;
+  return {
+    id: r.id, name: r.name,
+    latitude:  r.latitude  == null ? null : Number(r.latitude),
+    longitude: r.longitude == null ? null : Number(r.longitude),
+    indoor_outdoor: r.indoor_outdoor || "unknown",
+    course: r.course || null,
+    timezone: r.timezone || null,
+    address: r.address_id ? { line1: r.line1, line2: r.line2, city: r.city, region: r.region, postal_code: r.postal_code, country: r.country } : null,
+  };
+}
+
+export async function dbGetVenue(venueId) {
+  if (!venueId) return null;
+  const rows = await pool.query(
+    "SELECT v.`id`, v.`name`, v.`address_id`, v.`latitude`, v.`longitude`, v.`indoor_outdoor`, v.`course`, v.`timezone`, " +
+    "       a.`line1`, a.`line2`, a.`city`, a.`region`, a.`postal_code`, a.`country` " +
+    "FROM `venues` v LEFT JOIN `addresses` a ON a.`id` = v.`address_id` " +
+    "WHERE v.`id` = ? AND v.`archived_at` IS NULL",
+    [venueId]
+  );
+  return _venueRow(rows[0]);
+}
+
+// Catalog search for the picker: name match, nearest-first when coords supplied.
+export async function dbListVenues({ q = null, near = null, limit = 20 } = {}) {
+  const where = ["v.`archived_at` IS NULL"]; const vals = [];
+  if (q && String(q).trim()) { where.push("v.`name` LIKE ?"); vals.push("%" + String(q).trim() + "%"); }
+  const rows = await pool.query(
+    "SELECT v.`id`, v.`name`, v.`address_id`, v.`latitude`, v.`longitude`, v.`indoor_outdoor`, v.`course`, v.`timezone`, " +
+    "       a.`line1`, a.`line2`, a.`city`, a.`region`, a.`postal_code`, a.`country` " +
+    "FROM `venues` v LEFT JOIN `addresses` a ON a.`id` = v.`address_id` " +
+    "WHERE " + where.join(" AND ") + " ORDER BY v.`name` ASC LIMIT 100",
+    vals
+  );
+  let out = rows.map(_venueRow);
+  if (near && Number.isFinite(near.latitude) && Number.isFinite(near.longitude)) {
+    out = out
+      .map(v => ({ v, d: (v.latitude != null && v.longitude != null) ? _haversineMeters(near.latitude, near.longitude, v.latitude, v.longitude) : Infinity }))
+      .sort((a, b) => a.d - b.d)
+      .map(x => x.v);
+  }
+  return out.slice(0, Math.min(Number(limit) || 20, 50));
+}
+
+// Create a venue, OR link to an existing near-identical one (dedup, scope §2 #3):
+// same normalized name AND within ~150m by geo, else same normalized name + postal.
+export async function dbCreateOrLinkVenue({ name, address = null, latitude = null, longitude = null, indoorOutdoor = "unknown", course = null, timezone = null, coachSub = null }) {
+  if (!name || typeof name !== "string" || !name.trim()) return { ok: false, reason: "name_required" };
+  if (name.length > 200) return { ok: false, reason: "name_too_long" };
+  const io  = VENUE_INDOOR_OUTDOOR.includes(indoorOutdoor) ? indoorOutdoor : "unknown";
+  const crs = (course && VENUE_COURSES.includes(course)) ? course : null;
+  const lat = (latitude  == null || latitude  === "") ? null : Number(latitude);
+  const lng = (longitude == null || longitude === "") ? null : Number(longitude);
+  if (lat != null && !(lat >= -90  && lat <= 90))  return { ok: false, reason: "bad_lat" };
+  if (lng != null && !(lng >= -180 && lng <= 180)) return { ok: false, reason: "bad_lng" };
+  const norm = _normVenueName(name);
+
+  const cands = await pool.query(
+    "SELECT v.`id`, v.`name`, v.`latitude`, v.`longitude`, a.`postal_code` " +
+    "FROM `venues` v LEFT JOIN `addresses` a ON a.`id` = v.`address_id` " +
+    "WHERE v.`archived_at` IS NULL",
+    []
+  );
+  const postal = address && address.postal_code ? String(address.postal_code).trim() : null;
+  for (const c of cands) {
+    if (_normVenueName(c.name) !== norm) continue;
+    if (lat != null && lng != null && c.latitude != null && c.longitude != null) {
+      if (_haversineMeters(lat, lng, Number(c.latitude), Number(c.longitude)) <= 150) return { ok: true, id: c.id, linked: true };
+    } else if (postal && c.postal_code && String(c.postal_code).trim() === postal) {
+      return { ok: true, id: c.id, linked: true };
+    }
+  }
+
+  const addressId = await _upsertFacilityAddress(null, address || {});
+  const id = genVenueId();
+  await pool.query(
+    "INSERT INTO `venues` (`id`,`name`,`address_id`,`latitude`,`longitude`,`indoor_outdoor`,`course`,`timezone`,`created_by_coach_sub`) " +
+    "VALUES (?,?,?,?,?,?,?,?,?)",
+    [id, name.trim(), addressId, lat, lng, io, crs, timezone || null, coachSub || null]
+  );
+  return { ok: true, id, created: true };
+}
+
+export async function dbSetEventVenue(eventId, venueId) {
+  if (!eventId) return { ok: false, reason: "no_id" };
+  const r = await pool.query("UPDATE `team_events` SET `venue_id` = ? WHERE `id` = ?", [venueId || null, String(eventId)]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// ─── Weather forecast cache (one row per venue+day; TTL enforced by caller) ───
+export async function dbGetWeatherCache(venueId, day) {
+  if (!venueId || !day) return null;
+  const rows = await pool.query(
+    "SELECT `payload`, `fetched_at` FROM `weather_cache` WHERE `venue_id`=? AND `day`=?",
+    [venueId, day]
+  );
+  if (!rows[0]) return null;
+  let payload = rows[0].payload;
+  if (typeof payload === "string") { try { payload = JSON.parse(payload); } catch (_) { payload = null; } }
+  const ms = rows[0].fetched_at ? new Date(rows[0].fetched_at).getTime() : 0;
+  return { payload, fetched_at: dtToIso(rows[0].fetched_at), fetched_ms: ms };
+}
+
+export async function dbPutWeatherCache(venueId, day, payload) {
+  if (!venueId || !day) return { ok: false };
+  await pool.query(
+    "INSERT INTO `weather_cache` (`venue_id`,`day`,`payload`) VALUES (?,?,?) " +
+    "ON DUPLICATE KEY UPDATE `payload`=VALUES(`payload`), `fetched_at`=CURRENT_TIMESTAMP",
+    [venueId, day, JSON.stringify(payload || {})]
+  );
+  return { ok: true };
 }
 
 // ─── Export bridges (Phase 5 Slice A: team .ics feed + roster CSV) ───────────
@@ -8926,9 +9118,12 @@ export async function dbListUpcomingEventsForUser(userSub) {
   // DISTINCT on the outer query.
   const rows = await pool.query(
     "SELECT DISTINCT te.`id`, te.`team_id`, t.`name` AS team_name, te.`name`, te.`kind`, te.`date`, " +
+    "       te.`start_time`, te.`venue_id`, v.`name` AS venue_name, v.`latitude` AS venue_lat, " +
+    "       v.`longitude` AS venue_lng, v.`indoor_outdoor` AS venue_io, v.`timezone` AS venue_tz, " +
     "       te.`status`, te.`status_note`, er.`status` AS my_rsvp " +
     "FROM `team_events` te " +
     "JOIN `teams` t ON t.`id` = te.`team_id` " +
+    "LEFT JOIN `venues` v ON v.`id` = te.`venue_id` " +
     // caller's own RSVP for the event (Slice B2). event_rsvp.swimmer_sub may be
     // utf8mb3 vs the param's utf8mb4 — CONVERT both so the join is charset-safe.
     "LEFT JOIN `event_rsvp` er ON er.`target_kind` = 'meet' AND er.`target_id` = te.`id` " +
@@ -8948,6 +9143,8 @@ export async function dbListUpcomingEventsForUser(userSub) {
   return rows.map(r => ({
     id: r.id, team_id: r.team_id, team_name: r.team_name,
     name: r.name, kind: r.kind || DEFAULT_EVENT_KIND, date: dateToYmd(r.date),
+    start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,
+    venue: _eventVenue(r),
     status: r.status || "scheduled", status_note: r.status_note || null,
     my_rsvp: r.my_rsvp || null,
   }));

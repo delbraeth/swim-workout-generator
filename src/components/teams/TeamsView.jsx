@@ -5,6 +5,8 @@ import { EVENT_KINDS, eventKindEmoji } from "../../lib/eventKinds.js";
 import { GroupRow } from "../groups/GroupRow.jsx";
 import { TeamRosterTab } from "./TeamRosterTab.jsx";
 import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
+import { VenuePicker } from "./VenuePicker.jsx";
+import { WeatherChip } from "./WeatherChip.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -52,10 +54,14 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
       const [newEventName,  setNewEventName]  = React.useState("");
       const [newEventDate,  setNewEventDate]  = React.useState("");
       const [newEventKind,  setNewEventKind]  = React.useState("meet");
+      const [newEventVenue, setNewEventVenue] = React.useState(null);          // { id, name, indoor_outdoor } | null
+      const [newEventTime,  setNewEventTime]  = React.useState("");
       const [editingEventId, setEditingEventId] = React.useState(null);
       const [editEventName,  setEditEventName]  = React.useState("");
       const [editEventDate,  setEditEventDate]  = React.useState("");
       const [editEventKind,  setEditEventKind]  = React.useState("meet");
+      const [editEventVenue, setEditEventVenue] = React.useState(null);
+      const [editEventTime,  setEditEventTime]  = React.useState("");
       // Meet-anchored taper (MEET_ANCHORED_TAPER_SCOPE §3.6): inline picker
       // appears when coach clicks 🎯 on an event row. anchoringEventId = ev.id
       // while the picker is open. Groups list fetched on open.
@@ -407,11 +413,11 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
           const res = await fetch(`/api/teams/${detail.id}/events`, {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate, kind: newEventKind }),
+            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate, kind: newEventKind, venue_id: newEventVenue?.id || null, start_time: newEventTime || null }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-          setNewEventName(""); setNewEventDate(""); setNewEventKind("meet"); setCreatingEvent(false); setMsg(null);
+          setNewEventName(""); setNewEventDate(""); setNewEventKind("meet"); setNewEventVenue(null); setNewEventTime(""); setCreatingEvent(false); setMsg(null);
           await loadEvents(detail.id);
         } catch (err) { setMsg(`Error creating event: ${err.message}`); }
       };
@@ -422,6 +428,8 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
         setEditEventName(ev.name);
         setEditEventDate(ev.date);
         setEditEventKind(ev.kind || "meet");
+        setEditEventVenue(ev.venue ? { id: ev.venue.id, name: ev.venue.name, indoor_outdoor: ev.venue.indoor_outdoor } : null);
+        setEditEventTime(ev.start_time || "");
         setMsg(null);
       };
       const cancelEditEvent = () => {
@@ -429,6 +437,8 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
         setEditEventName("");
         setEditEventDate("");
         setEditEventKind("meet");
+        setEditEventVenue(null);
+        setEditEventTime("");
       };
       const handleSaveEditEvent = async () => {
         if (!editEventName.trim()) { setMsg("Event name required"); return; }
@@ -437,7 +447,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
           const res = await fetch(`/api/events/${editingEventId}`, {
             method:  "PATCH",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate, kind: editEventKind }),
+            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate, kind: editEventKind, venue_id: editEventVenue?.id || null, start_time: editEventTime || null }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
@@ -790,6 +800,14 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                     </div>
                   </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8, alignItems: "start" }}>
+                    <VenuePicker value={newEventVenue} onChange={setNewEventVenue} />
+                    <div>
+                      <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Start time (optional)</label>
+                      <input type="time" value={newEventTime} onChange={e => setNewEventTime(e.target.value)}
+                        style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                    </div>
+                  </div>
                   <button onClick={handleCreateEvent}
                     style={{ padding: "6px 14px", background: "var(--color-warn)", color: "var(--color-bg)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                     Create event
@@ -820,6 +838,14 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                             <input type="date" value={editEventDate} onChange={e => setEditEventDate(e.target.value)}
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                           </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8, alignItems: "start" }}>
+                            <VenuePicker value={editEventVenue} onChange={setEditEventVenue} />
+                            <div>
+                              <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Start time</label>
+                              <input type="time" value={editEventTime} onChange={e => setEditEventTime(e.target.value)}
+                                style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                            </div>
+                          </div>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button onClick={handleSaveEditEvent}
                               style={{ padding: "5px 11px", background: "var(--color-positive)", color: "var(--color-bg)", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
@@ -836,7 +862,9 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                           <div>
                             <span style={{ marginRight: 6 }} title={ev.kind || "meet"}>{eventKindEmoji(ev.kind)}</span>
                             <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13, textDecoration: ev.status === "cancelled" ? "line-through" : "none" }}>{ev.name}</span>
-                            <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}</span>
+                            <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}{ev.start_time ? ` · ${ev.start_time}` : ""}</span>
+                            {ev.venue && <span style={{ marginLeft: 8, color: "var(--color-text-dim)", fontSize: 12 }}>{ev.venue.indoor_outdoor === "outdoor" ? "🌤" : "🏟"} {ev.venue.name}</span>}
+                            {ev.venue && ev.venue.indoor_outdoor === "outdoor" && ev.status !== "cancelled" && !isPast && <WeatherChip eventId={ev.id} />}
                             {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
                             {ev.status === "cancelled" && <span title={ev.status_note || ""} style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,0.15)", color: "var(--color-destructive-text)", fontWeight: 700 }}>CANCELLED{ev.status_note ? ` — ${ev.status_note}` : ""}</span>}
                           </div>

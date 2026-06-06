@@ -4,6 +4,7 @@
 // Cancelled events show struck-through + CANCELLED and freeze RSVP. React global.
 import { csrfHeaders } from "../../lib/api.js";
 import { eventKindEmoji } from "../../lib/eventKinds.js";
+import { WeatherChip } from "../teams/WeatherChip.jsx";
 
 const OPTS = [
   { v: "going", label: "✅ Going",  color: "var(--color-positive)" },
@@ -53,9 +54,11 @@ export function RsvpEventsPanel() {
                 <div>
                   <span style={{ marginRight: 6 }}>{eventKindEmoji(ev.kind)}</span>
                   <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 14, textDecoration: cancelled ? "line-through" : "none" }}>{ev.name}</span>
+                  {ev.venue && <span style={{ marginLeft: 8, color: "var(--color-text-dim)", fontSize: 12 }}>{ev.venue.indoor_outdoor === "outdoor" ? "🌤" : "🏟"} {ev.venue.name}</span>}
+                  {ev.venue && ev.venue.indoor_outdoor === "outdoor" && !cancelled && <WeatherChip eventId={ev.id} />}
                   {cancelled && <span title={ev.status_note || ""} style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,0.15)", color: "var(--color-destructive-text)", fontWeight: 700 }}>CANCELLED{ev.status_note ? ` — ${ev.status_note}` : ""}</span>}
                 </div>
-                <span style={muted}>{ev.team_name ? `${ev.team_name} · ` : ""}{ev.date}</span>
+                <span style={muted}>{ev.team_name ? `${ev.team_name} · ` : ""}{ev.date}{ev.start_time ? ` · ${ev.start_time}` : ""}</span>
               </div>
               {cancelled ? (
                 <div style={{ ...muted, marginTop: 6, fontStyle: "italic" }}>RSVP closed — event cancelled.</div>
