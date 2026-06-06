@@ -5775,6 +5775,55 @@ export async function dbGetRsvpSummary(targetKind, targetId) {
   return { tally, list };
 }
 
+// Subs of FULL-ACCOUNT swimmers who RSVP'd one of `statuses` to an event (for
+// push fan-out). Managed swimmers are excluded — they have no login / push
+// subscription. Charset-safe (event_rsvp.swimmer_sub may be utf8mb3).
+export async function dbListRsvpRespondentSubs(targetKind, targetId, statuses = ["going", "maybe"]) {
+  if (!targetKind || !targetId || !statuses.length) return [];
+  const ph = statuses.map(() => "?").join(",");
+  const rows = await pool.query(
+    "SELECT DISTINCT er.`swimmer_sub` AS sub FROM `event_rsvp` er " +
+    "WHERE er.`target_kind` = ? AND er.`target_id` = ? AND er.`swimmer_sub` IS NOT NULL " +
+    "AND er.`status` IN (" + ph + ")",
+    [targetKind, String(targetId), ...statuses]
+  );
+  return rows.map(r => r.sub).filter(Boolean);
+}
+
+// Record a one-time notification; returns true only on the FIRST send for this
+// (kind, target, user) — INSERT IGNORE against the UNIQUE key (mig 059). Cron
+// sweeps call this to fire each notice at most once.
+export async function dbMarkNotifiedOnce(kind, targetId, userSub) {
+  if (!kind || !targetId || !userSub) return false;
+  const r = await pool.query(
+    "INSERT IGNORE INTO `notifications_sent` (`kind`, `target_id`, `user_sub`) VALUES (?, ?, ?)",
+    [kind, String(targetId), userSub]
+  );
+  return Number(r.affectedRows || 0) > 0;
+}
+
+// Upcoming OUTDOOR team events with coords, within `withinHours` (for the
+// weather-advisory cron). Only scheduled (non-cancelled) future events.
+export async function dbListUpcomingOutdoorEvents(withinHours = 48) {
+  const rows = await pool.query(
+    "SELECT te.`id`, te.`name`, te.`team_id`, te.`date`, te.`start_time`, te.`venue_id`, " +
+    "       v.`name` AS venue_name, v.`latitude` AS venue_lat, v.`longitude` AS venue_lng, v.`timezone` AS venue_tz " +
+    "FROM `team_events` te JOIN `venues` v ON v.`id` = te.`venue_id` " +
+    "WHERE te.`status` = 'scheduled' AND v.`indoor_outdoor` = 'outdoor' " +
+    "  AND v.`latitude` IS NOT NULL AND v.`longitude` IS NOT NULL " +
+    "  AND te.`date` >= CURRENT_DATE " +
+    "  AND te.`date` <= DATE_ADD(CURRENT_DATE, INTERVAL ? DAY)",
+    [Math.ceil((Number(withinHours) || 48) / 24)]
+  );
+  return rows.map(r => ({
+    id: r.id, name: r.name, team_id: r.team_id,
+    date: dateToYmd(r.date),
+    start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,
+    venue_id: r.venue_id,
+    venue: { name: r.venue_name, latitude: Number(r.venue_lat), longitude: Number(r.venue_lng), timezone: r.venue_tz || null },
+  }));
+}
+
 export async function dbSetTeamEventStatus(eventId, status, note = null) {
   if (!eventId) return { ok: false, reason: "no_id" };
   if (!["scheduled", "cancelled", "postponed"].includes(status)) return { ok: false, reason: "bad_status" };

@@ -132,6 +132,7 @@ import {
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
   dbSetRsvp, dbGetMyRsvp, dbGetRsvpSummary, dbSetTeamEventStatus,
   dbCreateOrLinkVenue, dbGetVenue, dbListVenues, dbArchiveVenue, dbGetWeatherCache, dbPutWeatherCache,
+  dbListRsvpRespondentSubs,
   dbIsSwimmerInTeam, dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
   dbListAssignmentsForSwimmer, dbListAssignmentsForGroup,
@@ -4457,7 +4458,14 @@ app.get("/calendar/:file", feedLimiter, async (req, res) => {
       });
     }
     for (const ev of events) {
-      items.push({ uid: "te-" + ev.id, date: ev.date, summary: `${eventKindEmoji(ev.kind)} ${ev.name || "Team event"}` });
+      const item = { uid: "te-" + ev.id, date: ev.date, summary: `${eventKindEmoji(ev.kind)} ${ev.name || "Team event"}` };
+      // Venue → LOCATION (name only; venues carry no city/region field).
+      if (ev.venue && ev.venue.name) item.location = ev.venue.name;
+      // start_time + venue tz → timed DTSTART (UTC); otherwise stays all-day.
+      if (ev.start_time && ev.venue && ev.venue.timezone) {
+        item.start = { date: ev.date, time: ev.start_time, tz: ev.venue.timezone };
+      }
+      items.push(item);
     }
     const ics = buildIcs(items, { calName: team.name || "SetForge", nowIso: new Date().toISOString() });
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
@@ -5934,6 +5942,18 @@ app.post("/api/events/:id/status", checkOrigin, requireAuth, requireCsrf, writeL
     const r = await dbSetTeamEventStatus(req.params.id, status, note);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({ userSub: req.userSub, eventType: "team_event.status", ...reqMeta(req), details: { event_id: req.params.id, status, note: note || null } });
+    // Notify trigger: on cancellation, push everyone who RSVP'd going/maybe.
+    // Event-driven (fires on the coach's explicit action) so no dedup needed.
+    if (status === "cancelled" && PUSH_ACTIVE) {
+      dbListRsvpRespondentSubs("meet", req.params.id, ["going", "maybe"])
+        .then(subs => Promise.all(subs.map(sub => sendPushToUser(sub, {
+          title: "⚠️ Event cancelled",
+          body: `${ev.name} on ${ev.date} is cancelled${note ? ` — ${note}` : ""}.`,
+          url: "/assigned",
+        }))))
+        .then(out => { if (out.length) console.log(`[notify] cancellation push fanned to ${out.length} swimmer(s) for ${req.params.id}`); })
+        .catch(e => console.warn(`[notify] cancellation push failed: ${e.message}`));
+    }
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
