@@ -1,11 +1,37 @@
 // src/components/teams/TeamRosterTab.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
+import { ConstraintsPanel } from "../people/ConstraintsPanel.jsx";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 
     const { useState, useEffect, Fragment } = React;
+
+    // Eval 2026-06-06 #4 — per-roster-member constraints. Opens the polymorphic
+    // ConstraintsPanel for a real swimmer (swimmer_sub) OR managed swimmer
+    // (managed_id) right from the team roster, so a coach can record an injury /
+    // equipment / cap limit on the self-registered swimmers who dominate
+    // masters + HS rosters (not just managed rows).
+    function RosterConstraintsModal({ target, onClose }) {
+      const dialogRef = useDialogA11y(onClose);
+      return (
+        <div onClick={onClose} className="modal-overlay"
+          style={{ position: "fixed", inset: 0, zIndex: 8500, background: "rgba(2,6,23,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 16px", overflowY: "auto" }}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Constraints for ${target.name}`} onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 520 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h3 style={{ color: "var(--color-text)", margin: 0, fontSize: 16 }}>🚱 {target.name}</h3>
+              <button onClick={onClose} aria-label="Close"
+                style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", fontSize: 24, cursor: "pointer", lineHeight: 1 }}>×</button>
+            </div>
+            <ConstraintsPanel managedId={target.managedId} swimmerSub={target.swimmerSub} />
+          </div>
+        </div>
+      );
+    }
 
     export function TeamRosterTab({ teamId }) {
       const [data, setData] = React.useState(null);                            // null = loading
       const [msg,  setMsg]  = React.useState(null);
+      const [constraintTarget, setConstraintTarget] = React.useState(null);     // {name, swimmerSub, managedId}
       React.useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -62,7 +88,7 @@
                     No swimmers in this group yet.
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, fontSize: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 8, fontSize: 12 }}>
                     {section.members.map(m => (
                       <React.Fragment key={m.id}>
                         <div style={{ color: "var(--color-text)", padding: "4px 8px", borderBottom: "1px solid var(--color-card)" }}>
@@ -76,6 +102,18 @@
                         <div style={{ color: "var(--color-text-muted)", padding: "4px 8px", borderBottom: "1px solid var(--color-card)" }}>
                           {m.gender || "—"}
                         </div>
+                        <div style={{ padding: "2px 8px", borderBottom: "1px solid var(--color-card)" }}>
+                          <button
+                            onClick={() => setConstraintTarget({
+                              name:       m.display_name || m.initials || "Swimmer",
+                              swimmerSub: m.member_swimmer_sub || null,
+                              managedId:  m.member_managed_id  || null,
+                            })}
+                            title="Set injury / equipment / cap constraints for this swimmer"
+                            style={{ padding: "3px 9px", background: "var(--color-card)", color: "var(--color-text-muted)", border: "1px solid var(--color-border)", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                            🚱 Limits
+                          </button>
+                        </div>
                       </React.Fragment>
                     ))}
                   </div>
@@ -84,6 +122,9 @@
             ))
           )}
           {msg && <div style={{ color: "var(--color-warn)", fontSize: 12, marginTop: 10 }}>{msg}</div>}
+          {constraintTarget && (
+            <RosterConstraintsModal target={constraintTarget} onClose={() => setConstraintTarget(null)} />
+          )}
         </div>
       );
     }

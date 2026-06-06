@@ -6,7 +6,8 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
 
     const { useState, useEffect } = React;
 
-    export function ConstraintFormModal({ open, managedId, prefill, onClose, onSaved }) {
+    // Polymorphic target: EITHER managedId OR swimmerSub (eval 2026-06-06 #4).
+    export function ConstraintFormModal({ open, managedId = null, swimmerSub = null, prefill, onClose, onSaved }) {
       const dialogRef = useDialogA11y(onClose);
       const [type,     setType]     = React.useState(prefill?.constraint_type || "stroke_no_fly");
       const [valueNum, setValueNum] = React.useState(prefill?.value_num != null ? String(prefill.value_num) : "");
@@ -39,7 +40,9 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
 
       const submit = async () => {
         setErr(null);
-        const body = { managed_id: managedId, constraint_type: type };
+        const body = swimmerSub
+          ? { swimmer_sub: swimmerSub, constraint_type: type }
+          : { managed_id: managedId, constraint_type: type };
         if (needsYd) {
           const n = parseInt(valueNum, 10);
           if (!Number.isInteger(n) || n <= 0) { setErr("Yardage cap must be a positive integer"); return; }
