@@ -305,6 +305,8 @@
     <div class="nav-section">Settings</div>
     <a href="#user-settings">Your Settings</a>
     <a href="#account">Profile (Account / Curation / Subscription)</a>
+    <a href="#notifications">🔔 Browser notifications</a>
+    <a href="#compliance">🛡 Compliance credentials (coaches)</a>
     <a href="#admin">Admin (admins only)</a>
     <a href="#teams">Teams (coaches)</a>
     <a href="#swimmers">Managed Swimmers (coaches)</a>
@@ -1252,6 +1254,9 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <div class="callout-icon">💡</div>
         <div class="callout-body"><strong>Printing from history.</strong> Tap 🖨 Print on any history entry to load that workout and print it directly.</div>
       </div>
+
+      <h3>🪧 Whiteboard print</h3>
+      <p>Next to Print Workout is <strong>🪧 Whiteboard</strong> — a single <strong>big-font, landscape</strong> page sized to post on the pool deck or copy onto a whiteboard. It strips everything to large type (section headers with yardage, each set on its own line with the interval right-aligned) and includes <strong>no swimmer names</strong>, so it's safe to tape up where everyone can read it from across the deck. One page, readable from ~6 feet.</p>
     </section>
 
     <!-- ══ USER SETTINGS ══ -->
@@ -1276,7 +1281,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h2>Profile (Account / Curation / Subscription)</h2>
       <p>Click the <strong>👤</strong> button in the top-right of the header to open the Profile modal. It's organized into three tabs at the top:</p>
       <ul>
-        <li><strong>Account</strong> — identity (name, email, initials, gender, member-since), workout stats, goals, Community (Discord), admin View-as switcher, active sessions.</li>
+        <li><strong>Account</strong> — identity (name, email, initials, gender, member-since), workout stats, goals, race goals/PRs, 🔔 browser notifications, Community (Discord), admin View-as switcher, active sessions.</li>
         <li><strong>Curation</strong> — active constraints (if any), favorites audit panel, coach Curation Impact (coaches only), disfavorites audit panel (with the Mode toggle and team-defaults inheritance disclosure).</li>
         <li><strong>Subscription</strong> — current tier, Start trial / Manage subscription button, recent invoices. See <a href="#subscription">Subscription</a> for the full pricing model.</li>
       </ul>
@@ -1309,6 +1314,15 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>Goals</h3>
       <p>Set or clear recurring targets for workouts/week, yards/week, and yards/month. Progress bars render in the stats panel of the History view — see <a href="#goals">Goals</a> for the full details.</p>
+
+      <h3>🎯 Race goals / PRs (SCY · SCM · LCM)</h3>
+      <p>Enter your goal and PR times per event (50–500 free, 100 back/breast/fly, 200 IM). Switch the <strong>SCY / SCM / LCM</strong> tabs to keep separate times per course — race-pace targets resolve against the pool mode you generate in (goal first, PR as fallback). These feed the 🏁 Race-Pace workouts so the splits are <em>your</em> numbers, not a generic pace. Setting a PR also drops a dated point into your <a href="#goals">Progress</a> per-event trend, and a faster logged result auto-promotes your PR.</p>
+
+      <h3 id="notifications">🔔 Browser notifications</h3>
+      <p>Opt in to push notifications on the browsers you use (per-device). Click <strong>Enable browser notifications</strong>, then <strong>Allow</strong> on your browser's permission prompt, and use <strong>Send test</strong> to confirm it works. You'll get a notification even when the SetForge tab is closed (for things like RSVP reminders and cancellation alerts as those roll out). Turn it off anytime with <strong>Disable on this browser</strong>. The toggle only appears in browsers that support push; it's not available to swimmers under 18.</p>
+
+      <h3 id="compliance">🛡 Compliance credentials (coaches)</h3>
+      <p>Coaches can record their own <strong>SafeSport certification</strong> (with expiry), <strong>background-check</strong> reference, and <strong>USA-Swimming Member ID</strong>. The app shows an amber <em>expiring</em> badge within 30 days and a red <em>expired</em> badge after — a self-reminder for MAAP/SafeSport. Stored privately; nothing is gated on expiry today.</p>
 
       <h3 id="favorites-panel">Favorites panel</h3>
       <p>Audits everything you've ★ favorited across all three tiers — bank labels, engine templates, and individual sets. Each row shows the item with a <strong>Remove</strong> button. Set rows show the reps×dist + a description preview pulled from the bank; orphaned set IDs (set was removed from the bank) show the raw ID with a "no longer in the bank" note — still removable so the entry doesn't linger.</p>
@@ -1352,6 +1366,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3 id="subscription">Subscription</h3>
       <p>SetForge is free for swimmers (Swimmer / Free tier). Coaches who want the coach-specific features — managed swimmers, groups, team curation, parent portal, Reports — pay a <strong>Coach</strong> tier subscription at <strong>$9.99/month</strong> with a <strong>14-day free trial</strong>. Card on file at trial start; no charge until the trial ends; cancel anytime from the same panel.</p>
       <p>There's also a <strong>Lesson</strong> tier at <strong>$4.99/month</strong> for private &amp; small-group instructors who don't need full club infrastructure. It unlocks the <a href="#lesson-tier">Lesson workout type, managed swimmers, lesson groups, per-swimmer equipment, and parent recap exports</a> — but not teams, multi-coach, curation, or Reports. Coach includes everything Lesson has. Subscribe from the same panel via the <strong>Subscribe to Lesson — $4.99/mo</strong> button.</p>
+      <p>Swimmers who want to chip in can become an optional <strong>Supporter</strong> at <strong>$2.99/month</strong>. This is <em>not</em> a paywall — <strong>nothing you use today is ever locked behind it</strong>; every workout feature stays free for swimmers, always. Supporter simply backs development and earns first access to upcoming <strong>community features</strong> (starting with social workout sharing). Think of it as icing, not cake. Available from the same panel when configured.</p>
 
       <h4>Compare plans</h4>
       <table>
@@ -1360,8 +1375,12 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
           <tr><td><strong>Price</strong></td><td>$0</td><td>$4.99/mo</td><td>$9.99/mo</td><td>—</td></tr>
           <tr><td>Workout generator (all types)</td><td>✓</td><td>✓</td><td>✓</td><td>Universal</td></tr>
           <tr><td>History, stats &amp; Run mode</td><td>✓</td><td>✓</td><td>✓</td><td>Universal</td></tr>
-          <tr><td>Goals &amp; Progress dashboard</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Goals, Progress &amp; per-event PR trend</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🏁 Race-Pace targets (SCY / SCM / LCM goals + PRs)</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🪧 Whiteboard print (big-font deck sheet)</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🔔 Browser notifications</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
           <tr><td>🎓 Lesson workout type</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🧒 Learn-to-Swim (youth content pack)</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
           <tr><td>Managed swimmers &amp; lesson groups</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
           <tr><td>Per-swimmer equipment &amp; parent recap</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
           <tr><td>Author lesson sets (leveled)</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
@@ -1370,6 +1389,9 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
           <tr><td>Team curation (fav/disfavor propagation)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
           <tr><td>Reports</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
           <tr><td>Practices, attendance &amp; coach notes</td><td>—</td><td>—</td><td>✓</td><td>Universal</td></tr>
+          <tr><td>Per-swimmer constraints (injury / equipment / caps)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🛡 Compliance credentials (SafeSport / MAAP)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Meet-anchored taper (suggested-phase apply)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
           <tr><td>Lane plans &amp; multi-lane generate</td><td>—</td><td>—</td><td>✓</td><td>Universal</td></tr>
           <tr><td>Free assistant seats (limited, for athlete-safety two-deep)</td><td>—</td><td>—</td><td>✓ up to 2</td><td>Web</td></tr>
         </tbody>
@@ -1379,6 +1401,10 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <div class="callout">
         <div class="callout-icon">🔜</div>
         <div class="callout-body"><strong>Program (coming soon)</strong> — for clubs &amp; teams with <strong>multiple coaches</strong>: everything in Coach, plus a roster shared across coaches, team communication, and org-wide reports. In development.</div>
+      </div>
+      <div class="callout tip">
+        <div class="callout-icon">💙</div>
+        <div class="callout-body"><strong>Supporter ($2.99/mo, optional)</strong> — a way for swimmers to support SetForge without unlocking anything (the swimmer experience is free forever). Its perk is early access to community features as they launch — social workout sharing first, and likely a members' Discord. Optional and cancel-anytime.</div>
       </div>
       <div class="callout tip">
         <div class="callout-icon">👥</div>
@@ -1397,7 +1423,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>If you've ever been charged, the most recent 5 invoices appear below the tier badge with amount, status, and date. Empty during trial since no payment has happened yet.</p>
 
       <h4>What you get</h4>
-      <p>The Coach tier unlocks all coach-only features documented elsewhere in this manual: managed swimmers + groups + team curation + parent portal + Reports + per-swimmer constraints + meet-anchored taper + coach Curation Impact + UGC team-share and public submission. The Free tier keeps everything a solo swimmer needs forever (workout generation, history, goals, the full bank + engine, multi-lane print, run-screen, favorites/disfavorites at the personal level) — that's a contractual commitment per <a href="/terms.html">Terms</a>, not marketing copy.</p>
+      <p>The Coach tier unlocks all coach-only features documented elsewhere in this manual: managed swimmers + groups + team curation + parent portal + Reports + per-swimmer constraints + meet-anchored taper + coach Curation Impact + UGC team-share and public submission. The Free tier keeps everything a solo swimmer needs forever (workout generation, history, goals, the full bank + engine, multi-lane print, the 🪧 whiteboard deck print, run-screen, favorites/disfavorites at the personal level, race-pace targets from your own goal/PR times across SCY/SCM/LCM, per-event PR progression, and browser notifications) — that's a contractual commitment per <a href="/terms.html">Terms</a>, not marketing copy. <strong>Core training is "cake," never gated; the optional Supporter tier only ever adds non-core "icing."</strong></p>
 
       <h4>Cancellation + refunds</h4>
       <p>Cancel anytime from <strong>Manage subscription</strong> → Customer Portal. Cancellation takes effect at the end of the current billing period (you keep coach access until then). For the refund policy on partial periods, see <a href="/terms.html#subscriptions-and-billing">Terms § Subscriptions and billing</a>.</p>
@@ -1738,6 +1764,9 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>1 · Lesson workout type</h3>
       <p>Pick the 🎓 <strong>Lesson</strong> type card to generate a short skill session: <strong>Warm-Up → Skill Focus → Send-off</strong> (no "Main Set"), <strong>800–1,200 yards</strong>. Content is drawn from the technique library, with the Skill Focus as the bulk of the session. The yardage slider locks to the lesson range automatically when you select the type.</p>
+
+      <h3>🧒 Learn-to-Swim (youth content)</h3>
+      <p>With the Lesson type selected, flip the <strong>🧒 Learn-to-Swim</strong> toggle to swap in a dedicated beginner pack: all <strong>25-based</strong> sets, <strong>deck-paced</strong> ("Coach starts each / on the whistle" rather than a fixed interval), and genuinely short — a few hundred yards. It includes stroke-survival drills (float &amp; glide, streamline push-offs, kick with board, catch-up) and <strong>DQ-avoidance</strong> work (legal breaststroke pullout + whip kick, butterfly two-hand touch, IM stroke order) — built for summer-league and learn-to-swim groups. Equipment requirements are ignored in this mode (kids aren't on pull buoys), and the session is capped short by design.</p>
 
       <h3>2 · My Groups</h3>
       <p>Open <strong>🔧 → My groups</strong> to create small-group lessons (e.g. "9:00 AM Sunday"). Create a group, then add your managed swimmers to it. A group is a lightweight, team-free roster — you don't need to set up a Team to use it. (For a 1-on-1 student, make a group with just that swimmer.)</p>
