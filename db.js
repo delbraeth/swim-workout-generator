@@ -8925,9 +8925,14 @@ export async function dbListUpcomingEventsForUser(userSub) {
   // the user has a swimmer membership in. Dedupe by team_id implicitly via
   // DISTINCT on the outer query.
   const rows = await pool.query(
-    "SELECT DISTINCT te.`id`, te.`team_id`, t.`name` AS team_name, te.`name`, te.`kind`, te.`date` " +
+    "SELECT DISTINCT te.`id`, te.`team_id`, t.`name` AS team_name, te.`name`, te.`kind`, te.`date`, " +
+    "       te.`status`, te.`status_note`, er.`status` AS my_rsvp " +
     "FROM `team_events` te " +
     "JOIN `teams` t ON t.`id` = te.`team_id` " +
+    // caller's own RSVP for the event (Slice B2). event_rsvp.swimmer_sub may be
+    // utf8mb3 vs the param's utf8mb4 — CONVERT both so the join is charset-safe.
+    "LEFT JOIN `event_rsvp` er ON er.`target_kind` = 'meet' AND er.`target_id` = te.`id` " +
+    "  AND CONVERT(er.`swimmer_sub` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
     "WHERE te.`date` >= CURRENT_DATE " +
     "  AND ( " +
     "    te.`team_id` IN (SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL) " +
@@ -8938,10 +8943,12 @@ export async function dbListUpcomingEventsForUser(userSub) {
     "    ) " +
     "  ) " +
     "ORDER BY te.`date` ASC LIMIT 20",
-    [userSub, userSub]
+    [userSub, userSub, userSub]
   );
   return rows.map(r => ({
     id: r.id, team_id: r.team_id, team_name: r.team_name,
     name: r.name, kind: r.kind || DEFAULT_EVENT_KIND, date: dateToYmd(r.date),
+    status: r.status || "scheduled", status_note: r.status_note || null,
+    my_rsvp: r.my_rsvp || null,
   }));
 }
