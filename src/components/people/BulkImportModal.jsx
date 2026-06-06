@@ -113,7 +113,7 @@ import { csvParseSwimmers, downloadTemplate, normalizeImportRow } from "../../li
                     <input type="file" accept=".csv,.tsv,.txt" onChange={onFile} style={{ display: "none" }} />
                   </label>
                   <button onClick={downloadTemplate}
-                    style={{ padding: "5px 11px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                    style={{ padding: "5px 11px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-primary)", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
                     📄 Download template
                   </button>
                 </div>
@@ -157,7 +157,7 @@ import { csvParseSwimmers, downloadTemplate, normalizeImportRow } from "../../li
                             <td style={{ padding: "5px 8px", color: "var(--color-text-dim)" }}>{row.idx + 1}</td>
                             <td style={{ padding: "5px 8px" }}>
                               {row.error
-                                ? <span style={{ color: "var(--color-destructive)" }}>✗</span>
+                                ? <span style={{ color: "var(--color-destructive-text)" }}>✗</span>
                                 : row.warning
                                   ? <span style={{ color: "#f59e0b" }}>⚠</span>
                                   : <span style={{ color: "var(--color-positive)" }}>✓</span>}

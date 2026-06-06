@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SetForge — User Manual</title>
+  <meta name="description" content="SetForge user manual — how to generate workouts, plan weeks, manage teams, and use coach tools." />
+  <link rel="canonical" href="https://setforge.io/manual.html" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -318,6 +320,7 @@
     <a href="#multi-lane-generate">Multi-lane generate</a>
     <a href="#parse-intent">Quick Input (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
+    <a href="#accessibility">Accessibility</a>
     <a href="#tips">Tips &amp; Tricks</a>
     <a href="#ios-app">iOS App</a>
 
@@ -2073,6 +2076,33 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         </tbody>
       </table>
       <p>The current page URL and your browser's user-agent string are attached automatically so admins can reproduce browser-specific issues. The submission shows up immediately in the admin Feedback tab with status <em>new</em>.</p>
+    </section>
+
+    <!-- ══ ACCESSIBILITY ══ -->
+    <section id="accessibility">
+      <h2>♿ Accessibility</h2>
+      <p>SetForge is built to be usable by everyone, and we audit the web app against
+        <strong>WCAG 2.1 AA</strong>. What's in place today:</p>
+      <ul>
+        <li><strong>Readable contrast</strong> — the dark theme's text and interactive colors are
+          tuned to meet AA contrast ratios (4.5:1 for body text, 3:1 for large text and controls).</li>
+        <li><strong>Keyboard navigation</strong> — the app is operable without a mouse, with a
+          visible focus indicator and a <em>Skip to main content</em> link for keyboard and
+          screen-reader users.</li>
+        <li><strong>Semantic structure</strong> — proper landmarks (banner, navigation, main,
+          footer), heading order, and labelled form controls so assistive technology can navigate.</li>
+        <li><strong>Scalable text</strong> — the layout reflows when you zoom the page or enlarge
+          your browser/OS text size.</li>
+      </ul>
+      <div class="callout">
+        <div class="callout-icon">🌐</div>
+        <div class="callout-body">Accessibility improvements land on the <strong>web app first</strong>;
+          the iOS app follows. Some areas are still being refined — screen-reader polish and a few
+          smaller touch targets are on the list.</div>
+      </div>
+      <p>Hit an accessibility barrier? Please tell us via <a href="#feedback">Send feedback</a>
+        (category <strong>🐛 Bug</strong>) with the page and what got in your way — accessibility
+        reports are prioritized.</p>
     </section>
 
     <!-- ══ TIPS ══ -->

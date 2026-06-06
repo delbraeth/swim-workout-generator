@@ -38,7 +38,7 @@
             {totalMembers > 0 && (
               <a href={`/api/teams/${teamId}/roster.csv`} download
                  title="Download roster as a Hy-Tek Meet Manager CSV"
-                 style={{ fontSize: 12, fontWeight: 700, color: "var(--color-primary)", textDecoration: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 10px", whiteSpace: "nowrap" }}>
+                 style={{ fontSize: 12, fontWeight: 700, color: "var(--color-primary-text)", textDecoration: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 10px", whiteSpace: "nowrap" }}>
                 ⬇ Roster CSV
               </a>
             )}
@@ -52,7 +52,7 @@
               <div key={section.group_id} style={{ marginBottom: 18 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: "2px solid var(--color-primary)", marginBottom: 8 }}>
                   <span style={{ color: "var(--color-text)", fontSize: 13, fontWeight: 700 }}>{section.group_name}</span>
-                  {section.pool_mode && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }}>{section.pool_mode}</span>}
+                  {section.pool_mode && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }}>{section.pool_mode}</span>}
                   <span style={{ color: "var(--color-text-muted)", fontSize: 11, marginLeft: "auto" }}>
                     {section.member_count} {section.member_count === 1 ? "swimmer" : "swimmers"}
                   </span>
@@ -68,7 +68,7 @@
                         <div style={{ color: "var(--color-text)", padding: "4px 8px", borderBottom: "1px solid var(--color-card)" }}>
                           {m.display_name || m.initials || "(no name)"}
                           {m.is_minor === true && <span title="Minor" style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px", borderRadius: 3, background: "rgba(245,158,11,0.15)", color: "var(--color-warn)", fontWeight: 700 }}>minor</span>}
-                          {m.is_coppa_protected === true && <span title="COPPA-protected (under 13)" style={{ marginLeft: 4, fontSize: 10, padding: "1px 5px", borderRadius: 3, background: "rgba(239,68,68,0.15)", color: "var(--color-destructive)", fontWeight: 700 }}>U13</span>}
+                          {m.is_coppa_protected === true && <span title="COPPA-protected (under 13)" style={{ marginLeft: 4, fontSize: 10, padding: "1px 5px", borderRadius: 3, background: "rgba(239,68,68,0.15)", color: "var(--color-destructive-text)", fontWeight: 700 }}>U13</span>}
                         </div>
                         <div style={{ color: "var(--color-text-muted)", padding: "4px 8px", borderBottom: "1px solid var(--color-card)", fontVariantNumeric: "tabular-nums" }}>
                           {m.age != null ? `${m.age}y` : "—"}

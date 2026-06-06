@@ -135,7 +135,7 @@ import { DOB_MAX_TODAY, DOB_MIN } from "../../lib/constants.js";
               {preview && (
                 <div style={{ padding: 10, background: "var(--color-card)", border: "1px solid var(--color-primary)", borderRadius: 6, marginBottom: 6 }}>
                   <div style={{ fontSize: 12, color: "#cbd5e1", marginBottom: 6 }}>
-                    Joining <strong style={{ color: "var(--color-text)" }}>{preview.group_name}</strong> as <strong style={{ color: "var(--color-primary)" }}>{preview.intended_role}</strong>.
+                    Joining <strong style={{ color: "var(--color-text)" }}>{preview.group_name}</strong> as <strong style={{ color: "var(--color-primary-text)" }}>{preview.intended_role}</strong>.
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button onClick={doRedeem} disabled={busy}

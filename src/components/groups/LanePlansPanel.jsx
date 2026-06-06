@@ -136,8 +136,8 @@ import { csrfHeaders } from "../../lib/api.js";
                 {isPrimary && (
                   <div style={{ display: "flex", gap: 4 }}>
                     {!p.is_default && <button onClick={() => setDefault(p.id)} style={{ padding: "2px 7px", background: "transparent", color: "var(--color-warn)", border: "1px solid var(--color-warn)", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>Set default</button>}
-                    <button onClick={() => startEdit(p)} style={{ padding: "2px 7px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>Edit</button>
-                    <button onClick={() => archivePlan(p.id, p.name)} style={{ padding: "2px 7px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>Archive</button>
+                    <button onClick={() => startEdit(p)} style={{ padding: "2px 7px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-primary)", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>Edit</button>
+                    <button onClick={() => archivePlan(p.id, p.name)} style={{ padding: "2px 7px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>Archive</button>
                   </div>
                 )}
               </div>
@@ -164,13 +164,13 @@ import { csrfHeaders } from "../../lib/api.js";
                     <input value={lane.target_pace_100 || ""} onChange={e => updateDraftLane(lIdx, { target_pace_100: e.target.value })} placeholder="pace e.g. 2:00" maxLength={8}
                       style={{ width: 80, padding: "4px 8px", fontSize: 11, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 3 }} />
                     <button onClick={() => removeLane(lIdx)} title="Remove lane"
-                      style={{ padding: "3px 8px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>×</button>
+                      style={{ padding: "3px 8px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>×</button>
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
                     {lane.members.map((m, mIdx) => (
                       <span key={mIdx} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 7px", background: "var(--color-bg)", border: "1px solid var(--color-border-strong)", borderRadius: 999, fontSize: 10, color: "#cbd5e1" }}>
                         {memberName(m.managed_id)}
-                        <button onClick={() => removeMemberFromLane(lIdx, mIdx)} style={{ background: "transparent", border: "none", color: "var(--color-destructive)", cursor: "pointer", padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
+                        <button onClick={() => removeMemberFromLane(lIdx, mIdx)} style={{ background: "transparent", border: "none", color: "var(--color-destructive-text)", cursor: "pointer", padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
                       </span>
                     ))}
                     {lane.members.length === 0 && <span style={{ fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>No swimmers yet</span>}

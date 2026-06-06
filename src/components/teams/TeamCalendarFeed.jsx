@@ -46,11 +46,11 @@ export function TeamCalendarFeed({ teamId, canManage = false }) {
   };
 
   const inputStyle = { flex: 1, minWidth: 180, padding: "6px 9px", fontSize: 12, fontFamily: "monospace", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 };
-  const btn = { fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary)", cursor: "pointer", whiteSpace: "nowrap" };
+  const btn = { fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary-text)", cursor: "pointer", whiteSpace: "nowrap" };
 
   return (
     <div style={{ marginBottom: 18 }}>
-      <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+      <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
         📆 Calendar feed
       </div>
       <p style={{ fontSize: 12, color: "var(--color-text-dim)", marginTop: 0, marginBottom: 8 }}>

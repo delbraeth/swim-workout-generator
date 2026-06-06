@@ -239,7 +239,7 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                             ◐ Mark partial
                           </button>
                           <button onClick={() => handleMarkMissed(a)}
-                            style={{ padding: "7px 12px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                            style={{ padding: "7px 12px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
                             ✕ Mark missed
                           </button>
                         </div>

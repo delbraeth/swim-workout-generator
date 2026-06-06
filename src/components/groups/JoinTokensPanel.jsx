@@ -135,7 +135,7 @@ import { csrfHeaders } from "../../lib/api.js";
                   </span>
                   {isPrimary && (
                     <button onClick={() => revoke(t.token)}
-                      style={{ padding: "2px 7px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>Revoke</button>
+                      style={{ padding: "2px 7px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>Revoke</button>
                   )}
                 </div>
               ))}

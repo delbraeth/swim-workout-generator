@@ -4530,7 +4530,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             )}
 
             {/* Workout type selector */}
-            <p className="screen-only" style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
+            <p className="screen-only" style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
               Select Workout Type
             </p>
             <div className="screen-only type-card-grid" data-tour="step-type-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
@@ -4576,7 +4576,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   young/beginner lesson uses just the coach's authored sets. */}
               {selectedType === "lesson" && (
                 <div style={{ marginBottom: 20, padding: "12px 14px", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10 }}>
-                  <div style={{ fontSize: 11, color: "var(--color-primary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Lesson content</div>
+                  <div style={{ fontSize: 11, color: "var(--color-primary-text)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Lesson content</div>
                   <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
                       <span style={{ color: "var(--color-text-muted)" }}>Level</span>
@@ -4683,7 +4683,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                         </button>
                         <div style={{
                           flexShrink: 0, padding: "8px 10px", borderRadius: 6,
-                          background: "#1e3a5f", color: "var(--color-primary)",
+                          background: "#1e3a5f", color: "var(--color-primary-text)",
                           fontSize: 12, fontWeight: 700,
                           display: "inline-flex", alignItems: "center", gap: 4, lineHeight: 1,
                         }}>
@@ -4832,7 +4832,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     })}
                   </div>
                   {tonightSelected.size > 0 && (
-                    <div style={{ fontSize: 11, color: "var(--color-primary)", marginTop: 8, fontWeight: 700 }}>
+                    <div style={{ fontSize: 11, color: "var(--color-primary-text)", marginTop: 8, fontWeight: 700 }}>
                       → {tonightSelected.size} constraint{tonightSelected.size === 1 ? "" : "s"} will apply to this Generate.
                     </div>
                   )}
@@ -4979,7 +4979,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                       }}
                       style={{
                         padding: "10px 16px", borderRadius: 8,
-                        border: "1px solid var(--color-primary)", background: "#1e3a5f", color: "var(--color-primary)",
+                        border: "1px solid var(--color-primary)", background: "#1e3a5f", color: "var(--color-primary-text)",
                         fontSize: 13, fontWeight: 700, cursor: "pointer",
                         display: "inline-flex", alignItems: "center", gap: 6,
                       }}
@@ -5054,7 +5054,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                         }}
                         style={{
                           padding: "10px 16px", borderRadius: 8,
-                          border: "1px solid var(--color-primary)", background: "rgba(59,130,246,0.15)", color: "var(--color-primary)",
+                          border: "1px solid var(--color-primary)", background: "rgba(59,130,246,0.15)", color: "var(--color-primary-text)",
                           fontSize: 13, fontWeight: 700, cursor: "pointer",
                           display: "inline-flex", alignItems: "center", gap: 6,
                         }}
@@ -5070,7 +5070,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   focusNoteDraft && (
                     <div className="screen-only card" style={{
                       marginBottom: 12, padding: "8px 12px",
-                      borderRadius: 8, fontSize: 13, color: "var(--color-primary)", fontStyle: "italic",
+                      borderRadius: 8, fontSize: 13, color: "var(--color-primary-text)", fontStyle: "italic",
                     }}>
                       🎯 Focus: {focusNoteDraft}
                     </div>
@@ -5541,7 +5541,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                 background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
                 padding: 22, maxWidth: 420, width: "100%",
               }}>
-                <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Schedule workout</div>
+                <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Schedule workout</div>
                 <div style={{ color: "var(--color-text)", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Pick a date</div>
                 <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
                   style={{ width: "100%", padding: "8px 10px", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, fontSize: 14 }} />

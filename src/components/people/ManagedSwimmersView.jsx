@@ -236,7 +236,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
                     <MinorPill swimmer={detail} />
                     {detail.parent_managed_flag && (
                       <span title="Coach has flagged this profile as parent-managed; claim blocked even if 13+"
-                        style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }}>parent-managed</span>
+                        style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }}>parent-managed</span>
                     )}
                   </div>
                 </div>
@@ -368,7 +368,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
                 {showArch ? "Hide archived" : "Show archived"}
               </button>
               <button onClick={() => setImporting(true)}
-                style={{ padding: "6px 14px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                style={{ padding: "6px 14px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-primary)", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                 📥 Import
               </button>
               <button onClick={() => setCreating(c => !c)}
@@ -432,7 +432,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
                         </div>
                         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                           {teamName && (
-                            <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }} title="Team affiliation">
+                            <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }} title="Team affiliation">
                               {teamName}
                             </span>
                           )}

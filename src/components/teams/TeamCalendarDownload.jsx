@@ -40,7 +40,7 @@ export function TeamCalendarDownload({ heading = "📆 Team calendar", teams: te
   const link = {
     fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 6,
     border: "1px solid var(--color-border)", background: "transparent",
-    color: "var(--color-primary)", cursor: "pointer", whiteSpace: "nowrap",
+    color: "var(--color-primary-text)", cursor: "pointer", whiteSpace: "nowrap",
     textDecoration: "none", display: "inline-block",
   };
 

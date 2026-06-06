@@ -11,7 +11,7 @@ import { equipMode } from "../../lib/engine.js";
         "off";
       return (
         <div style={{ marginBottom: 20 }}>
-          <p style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 8, marginTop: 0 }}>
+          <p style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 8, marginTop: 0 }}>
             Equipment Available
             <span style={{ color: "var(--color-text-dim)", textTransform: "none", letterSpacing: 0, fontWeight: 400, marginLeft: 8 }}>
               (tap to cycle: off → preferred → required)

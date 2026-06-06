@@ -46,7 +46,7 @@
             </button>
           </div>
           {err && (
-            <div style={{ padding: "10px 14px", borderRadius: 6, border: "1px solid var(--color-destructive)", color: "var(--color-destructive)", fontSize: 13 }}>
+            <div style={{ padding: "10px 14px", borderRadius: 6, border: "1px solid var(--color-destructive)", color: "var(--color-destructive-text)", fontSize: 13 }}>
               Error: {err}
             </div>
           )}

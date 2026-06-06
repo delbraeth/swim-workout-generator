@@ -102,7 +102,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                   {incomingBusy === t.team_id ? "Working…" : "Accept now"}
                 </button>
                 <button onClick={() => respondTransfer(t.team_id, "decline")} disabled={incomingBusy === t.team_id}
-                  style={{ padding: "6px 14px", background: "transparent", border: "1px solid var(--color-destructive)", color: "var(--color-destructive)", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: incomingBusy === t.team_id ? "not-allowed" : "pointer" }}>
+                  style={{ padding: "6px 14px", background: "transparent", border: "1px solid var(--color-destructive)", color: "var(--color-destructive-text)", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: incomingBusy === t.team_id ? "not-allowed" : "pointer" }}>
                   Decline
                 </button>
               </div>
@@ -524,7 +524,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                     )}
                   </h2>
                 )}
-                <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }}>
+                <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }}>
                   {TEAM_TYPE_LABELS[detail.team_type] || detail.team_type}
                 </span>
               </div>
@@ -587,8 +587,8 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                     {(() => {
                       // R-J: role pill colored by tier. Owner = purple,
                       // Admin = blue, Coach = slate.
-                      const colors = c.role === "owner" ? { bg: "#3b82f622", border: "var(--color-primary)", color: "var(--color-primary)" }
-                                  : c.role === "admin"  ? { bg: "#3b82f622", border: "var(--color-primary)", color: "var(--color-primary)" }
+                      const colors = c.role === "owner" ? { bg: "#3b82f622", border: "var(--color-primary)", color: "var(--color-primary-text)" }
+                                  : c.role === "admin"  ? { bg: "#3b82f622", border: "var(--color-primary)", color: "var(--color-primary-text)" }
                                   :                        { bg: "#33415522", border: "var(--color-border-strong)", color: "var(--color-text-muted)" };
                       return (
                         <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: colors.bg, border: `1px solid ${colors.border}`, color: colors.color, fontWeight: 700 }}>{c.role}</span>
@@ -602,7 +602,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                       {c.role === "coach" && (
                         <button onClick={() => handleRoleChange(c.coach_sub, "admin")}
                           title="Promote to admin (manage team coaches + archives)"
-                          style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--color-primary)", borderRadius: 6, color: "var(--color-primary)", fontSize: 11, cursor: "pointer" }}>
+                          style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--color-primary)", borderRadius: 6, color: "var(--color-primary-text)", fontSize: 11, cursor: "pointer" }}>
                           ↑ Admin
                         </button>
                       )}
@@ -614,7 +614,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                         </button>
                       )}
                       <button onClick={() => handleRemoveCoach(c.coach_sub)}
-                        style={{ padding: "3px 8px", background: "transparent", border: "1px solid #ef4444", borderRadius: 6, color: "var(--color-destructive)", fontSize: 11, cursor: "pointer" }}>
+                        style={{ padding: "3px 8px", background: "transparent", border: "1px solid #ef4444", borderRadius: 6, color: "var(--color-destructive-text)", fontSize: 11, cursor: "pointer" }}>
                         Remove
                       </button>
                     </div>
@@ -813,11 +813,11 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                                 </button>
                               )}
                               <button onClick={() => startEditEvent(ev)}
-                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-primary)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                                 Edit
                               </button>
                               <button onClick={() => handleDeleteEvent(ev.id)}
-                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                                 Delete
                               </button>
                             </div>
@@ -991,7 +991,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                       {t.archived && <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#64748b22", border: "1px solid #64748b", color: "var(--color-text-muted)" }}>archived</span>}
                     </span>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }}>{TEAM_TYPE_LABELS[t.team_type] || t.team_type}</span>
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }}>{TEAM_TYPE_LABELS[t.team_type] || t.team_type}</span>
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: t.role === "owner" ? "#3b82f622" : "#33415522", border: `1px solid ${t.role === "owner" ? "var(--color-primary)" : "var(--color-border-strong)"}`, color: t.role === "owner" ? "var(--color-primary)" : "var(--color-text-muted)", fontWeight: 700 }}>{t.role}</span>
                     </div>
                   </div>

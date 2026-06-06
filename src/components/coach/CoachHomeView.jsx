@@ -59,10 +59,10 @@
               border: "1px solid var(--color-primary)", background: "rgba(59,130,246,0.10)" }}>
             <span style={{ fontSize: 28 }}>➕</span>
             <span style={{ flex: 1 }}>
-              <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: "var(--color-primary)" }}>Generate a workout</span>
+              <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: "var(--color-primary-text)" }}>Generate a workout</span>
               <span style={{ display: "block", fontSize: 12, color: "var(--color-text-dim)" }}>Build a session — then assign it to a swimmer or group.</span>
             </span>
-            <span style={{ color: "var(--color-primary)", fontSize: 20 }}>→</span>
+            <span style={{ color: "var(--color-primary-text)", fontSize: 20 }}>→</span>
           </button>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>

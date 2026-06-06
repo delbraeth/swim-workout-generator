@@ -42,7 +42,7 @@ import { csrfHeaders } from "../../lib/api.js";
           {!open ? (
             <button onClick={() => { setOpen(true); setMsg(null); }}
               style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--color-primary)",
-                background: "transparent", color: "var(--color-primary)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                background: "transparent", color: "var(--color-primary-text)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
               ✉️ Send recap to parent
             </button>
           ) : (

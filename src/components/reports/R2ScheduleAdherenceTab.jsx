@@ -43,7 +43,7 @@
               </div>
               <div style={{ fontSize: 13, color: "#cbd5e1" }}>
                 <span style={{ color: "var(--color-positive)" }}>+{data.rosterTrend.added}</span> joined ·{" "}
-                <span style={{ color: "var(--color-destructive)" }}>−{data.rosterTrend.removed}</span> left
+                <span style={{ color: "var(--color-destructive-text)" }}>−{data.rosterTrend.removed}</span> left
               </div>
             </div>
           )}

@@ -184,7 +184,7 @@
               </div>
               {/* Header pills row */}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, fontSize: 11 }}>
-                <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(59,130,246,0.18)", color: "var(--color-primary)", fontWeight: 700 }}>🏊 Distance</span>
+                <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(59,130,246,0.18)", color: "var(--color-primary-text)", fontWeight: 700 }}>🏊 Distance</span>
                 <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(34,197,94,0.18)", color: "var(--color-positive)", fontWeight: 700 }}>3,200 yd · ~52 min</span>
                 <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(245,158,11,0.18)", color: "var(--color-warn)", fontWeight: 700 }}>🏊‍♂️ 3 lanes</span>
               </div>

@@ -72,13 +72,13 @@ import { csrfHeaders } from "../../lib/api.js";
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             padding: 22, maxWidth: 480, width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column",
           }}>
-            <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>
+            <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>
               {ctx?.completed_at ? "Edit attendance" : "Mark practice done"}
             </div>
             <div style={{ color: "var(--color-text)", fontSize: 15, marginBottom: 14 }}>
               {sw.scheduled_date} {ctx?.group_id ? `· group ${ctx.group_id}` : "· no group (solo)"}
             </div>
-            {err && <div style={{ color: "var(--color-destructive)", fontSize: 12, marginBottom: 10 }}>⚠ {err}</div>}
+            {err && <div style={{ color: "var(--color-destructive-text)", fontSize: 12, marginBottom: 10 }}>⚠ {err}</div>}
             {!ctx ? (
               <div style={{ color: "var(--color-text-dim)", fontSize: 13 }}>Loading roster…</div>
             ) : ctx.roster.length === 0 ? (

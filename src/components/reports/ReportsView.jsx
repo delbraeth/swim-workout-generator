@@ -119,7 +119,7 @@ import { ReportPrintView } from "./ReportPrintView.jsx";
                 {["programming-mix", "schedule-adherence", "curation-log", "program-recap"].includes(tab) && (
                   <button onClick={() => setPrintingData({ tab, data })}
                     title="Open a print-friendly view, then use your browser's print dialog to save as PDF"
-                    style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                     📄 Print / PDF
                   </button>
                 )}
@@ -160,7 +160,7 @@ import { ReportPrintView } from "./ReportPrintView.jsx";
 
           {/* Tab body */}
           {loading && <div style={{ color: "var(--color-text-dim)" }}>Loading…</div>}
-          {err && <div style={{ color: "var(--color-destructive)", padding: 12, background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>⚠ {err}</div>}
+          {err && <div style={{ color: "var(--color-destructive-text)", padding: 12, background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>⚠ {err}</div>}
           {!loading && !err && data && tab === "programming-mix"    && <R1ProgrammingMixTab data={data} />}
           {!loading && !err && data && tab === "schedule-adherence" && <R2ScheduleAdherenceTab data={data} hasGroup={!!groupId} />}
           {!loading && !err && data && tab === "curation-log"       && <R3CurationLogTab data={data} />}

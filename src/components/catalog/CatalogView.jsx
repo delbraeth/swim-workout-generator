@@ -236,7 +236,7 @@ import { FeedbackModal } from "../shell/FeedbackModal.jsx";
                       <span className="screen-only" style={{ color: "var(--color-text-dim)", fontSize: 12, width: 12 }}>{expanded ? "▾" : "▸"}</span>
                       <strong style={{ color: "var(--color-text)", fontSize: 14 }}>{labelText}</strong>
                       {opt._typeId && (
-                        <span style={{ background: "var(--color-border)", color: "var(--color-primary)", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
+                        <span style={{ background: "var(--color-border)", color: "var(--color-primary-text)", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
                           {opt._typeId}
                         </span>
                       )}

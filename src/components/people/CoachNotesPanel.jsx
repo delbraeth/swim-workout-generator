@@ -129,7 +129,7 @@ import { csrfHeaders } from "../../lib/api.js";
         const map = {
           private:       { bg: "rgba(100,116,139,0.18)", border: "var(--color-text-dim)", color: "var(--color-text-muted)" },
           group_coaches: { bg: "rgba(245,158,11,0.18)",  border: "var(--color-warn)", color: "var(--color-warn)" },
-          team_coaches:  { bg: "rgba(59,130,246,0.18)",  border: "var(--color-primary)", color: "var(--color-primary)" },
+          team_coaches:  { bg: "rgba(59,130,246,0.18)",  border: "var(--color-primary)", color: "var(--color-primary-text)" },
         };
         const s = map[vis] || map.private;
         return { padding: "2px 8px", borderRadius: 999, border: `1px solid ${s.border}`, background: s.bg, color: s.color, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" };
@@ -141,7 +141,7 @@ import { csrfHeaders } from "../../lib/api.js";
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <h4 style={{ color: "var(--color-text)", margin: 0, fontSize: 14 }}>Coach notes ({notes ? notes.length : "…"})</h4>
             {team && team.team_type === "high_school" && (
-              <span style={{ fontSize: 10, color: "var(--color-primary)", fontStyle: "italic" }}>High-school team — notes default to team-shared</span>
+              <span style={{ fontSize: 10, color: "var(--color-primary-text)", fontStyle: "italic" }}>High-school team — notes default to team-shared</span>
             )}
           </div>
 
@@ -232,7 +232,7 @@ import { csrfHeaders } from "../../lib/api.js";
                         <button onClick={() => startEdit(n)}
                           style={{ padding: "2px 8px", borderRadius: 5, border: "1px solid var(--color-border-strong)", background: "transparent", color: "var(--color-text-muted)", fontSize: 10, cursor: "pointer" }}>Edit</button>
                         <button onClick={() => deleteNote(n.id)}
-                          style={{ padding: "2px 8px", borderRadius: 5, border: "1px solid #ef4444", background: "transparent", color: "var(--color-destructive)", fontSize: 10, cursor: "pointer" }}>Delete</button>
+                          style={{ padding: "2px 8px", borderRadius: 5, border: "1px solid #ef4444", background: "transparent", color: "var(--color-destructive-text)", fontSize: 10, cursor: "pointer" }}>Delete</button>
                       </div>
                     )}
                   </>

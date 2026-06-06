@@ -86,7 +86,7 @@
           </div>
 
           {result && !result.ok && (
-            <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 6, border: "1px solid var(--color-destructive)", color: "var(--color-destructive)", fontSize: 13 }}>
+            <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 6, border: "1px solid var(--color-destructive)", color: "var(--color-destructive-text)", fontSize: 13 }}>
               Error: {result.data?.error || "unknown"}
             </div>
           )}

@@ -540,7 +540,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                       <span style={{ color: "var(--color-text)" }}>{fmtTime(me.last_login_at)}</span>
                       {appEffectiveMe?.is_admin && (<>
                         <span style={{ color: "var(--color-text-dim)" }}>Role:</span>
-                        <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>Admin</span>
+                        <span style={{ color: "var(--color-primary-text)", fontWeight: 700 }}>Admin</span>
                       </>)}
                     </div>
                     {/* R-F: join-group code redemption (visible to all
@@ -855,7 +855,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                                 style={{
                                   padding: "8px 16px", borderRadius: 6, border: "1px solid var(--color-primary)",
                                   background: "transparent",
-                                  color: "var(--color-primary)", fontSize: 13, fontWeight: 700,
+                                  color: "var(--color-primary-text)", fontSize: 13, fontWeight: 700,
                                   cursor: billingBusy ? "wait" : "pointer",
                                 }}>
                                 {billingBusy ? "Starting…" : "Subscribe to Lesson — $5/mo"}
@@ -1058,7 +1058,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                       and v1.1 surfaces attribution per the spec fork). */}
                   {teamDefaults.length > 0 && (
                     <div style={{ marginBottom: 14, padding: "10px 12px", background: "rgba(59,130,246,0.08)", border: "1px solid var(--color-primary)", borderRadius: 6 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary-text)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
                         👥 Team defaults you inherit
                       </div>
                       {teamDefaults.map(td => {
@@ -1216,7 +1216,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     Discord server for coaches and adult swimmers (13+). Feature requests, bug reports, coach-to-coach discussion.
                   </div>
                   <a href="https://discord.gg/N8BMxNbhf7" target="_blank" rel="noopener"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", color: "var(--color-primary)", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
                     💬 Join the SetForge Discord
                   </a>
                 </div>
@@ -1246,7 +1246,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                         URL.revokeObjectURL(url);
                       } catch (_) { alert("Couldn't generate the export. Please try again."); }
                     }}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                     ⬇ Export my data (JSON)
                   </button>
                 </div>

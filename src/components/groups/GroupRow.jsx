@@ -209,7 +209,7 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                         </span>
                         {detail.viewer_role && (
                           <button onClick={() => removeMember(m.id, m.display_name)}
-                            style={{ padding: "2px 8px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
+                            style={{ padding: "2px 8px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
                             Remove
                           </button>
                         )}
@@ -255,7 +255,7 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                         </span>
                         {isPrimary && c.role !== "primary" && (
                           <button onClick={() => removeCoach(c.coach_sub)}
-                            style={{ padding: "2px 8px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
+                            style={{ padding: "2px 8px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
                             Remove
                           </button>
                         )}
@@ -301,7 +301,7 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                           Roster visible to members: {detail.roster_visible_to_members ? "ON" : "OFF"}
                         </button>
                         <button onClick={archive}
-                          style={{ padding: "5px 11px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                          style={{ padding: "5px 11px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                           Archive group
                         </button>
                       </div>

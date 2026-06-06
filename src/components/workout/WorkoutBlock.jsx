@@ -338,7 +338,7 @@ import { SetRow } from "./SetRow.jsx";
                       rows.push(
                         <tr key={`round-${r}`}>
                           <td colSpan={5} style={{ padding: "6px 16px", background: "var(--color-card)", borderTop: r > 0 ? "1px solid var(--color-border)" : undefined }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-primary-text)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                               Round {r + 1}
                             </span>
                           </td>

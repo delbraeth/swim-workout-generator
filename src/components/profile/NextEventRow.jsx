@@ -38,7 +38,7 @@
             <div style={{ fontSize: 13, color: "var(--color-text)", fontWeight: 600 }}>🏁 Next event</div>
             {!editing && isSet && (
               <div style={{ fontSize: 11, color: "var(--color-text-dim)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>{value.name}</span>
+                <span style={{ color: "var(--color-primary-text)", fontWeight: 700 }}>{value.name}</span>
                 <span> · {value.date}</span>
                 {daysLabel && <span style={{ color: "var(--color-border-strong)" }}> · {daysLabel}</span>}
               </div>
@@ -90,7 +90,7 @@
           ) : (
             <button onClick={startEdit}
               style={{ padding: "4px 12px", borderRadius: 6, border: "1px dashed var(--color-border-strong)",
-                background: "transparent", color: "var(--color-primary)",
+                background: "transparent", color: "var(--color-primary-text)",
                 fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
               + Set an event
             </button>

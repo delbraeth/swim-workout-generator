@@ -128,7 +128,7 @@ import { UgcFormModal } from "./UgcFormModal.jsx";
                       ) : r.visibility === "team" ? (
                         <span title="Shared with teams you coach">👥 team</span>
                       ) : r.visibility === "public" ? (
-                        <span title="Approved by admin; visible to all SetForge coaches" style={{ color: "var(--color-primary)" }}>🌐 public</span>
+                        <span title="Approved by admin; visible to all SetForge coaches" style={{ color: "var(--color-primary-text)" }}>🌐 public</span>
                       ) : r.visibility === "pending" ? (
                         <span title="Submitted for admin review" style={{ color: "var(--color-warn)" }}>⏳ pending review</span>
                       ) : r.visibility === "rejected" ? (

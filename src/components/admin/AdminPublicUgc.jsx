@@ -64,7 +64,7 @@ import { API_BASE } from "../../lib/api.js";
                     <td style={{ padding: "6px 4px", color: "var(--color-muted)" }}>{fmtDate(r.approved_at)}</td>
                     <td style={{ padding: "6px 4px", textAlign: "right" }}>
                       <button onClick={() => setGraduating(r.id)}
-                        style={{ padding: "4px 10px", border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary)", borderRadius: 4, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                        style={{ padding: "4px 10px", border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary-text)", borderRadius: 4, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                         🎓 Graduate to JS
                       </button>
                     </td>

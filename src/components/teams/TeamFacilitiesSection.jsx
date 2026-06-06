@@ -113,7 +113,7 @@ import { FacilityMap } from "./FacilityMap.jsx";
       );
       return (
         <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 6 }}>
-          <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Practice facilities</div>
+          <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Practice facilities</div>
           {list === null ? (
             <div style={{ color: "var(--color-text-dim)", fontSize: 12 }}>Loading…</div>
           ) : list.length === 0 ? (
@@ -136,12 +136,12 @@ import { FacilityMap } from "./FacilityMap.jsx";
                 ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", background: "var(--color-bg)", borderRadius: 6 }}>
                   <span style={{ fontWeight: 700, color: "var(--color-text)", fontSize: 13 }}>{f.name}</span>
-                  {f.is_primary && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 4, padding: "1px 6px" }}>PRIMARY</span>}
+                  {f.is_primary && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary-text)", border: "1px solid var(--color-primary)", borderRadius: 4, padding: "1px 6px" }}>PRIMARY</span>}
                   {f.course && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>{courseLabel(f.course)}</span>}
                   {f.lanes != null && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>{f.lanes} lanes</span>}
                   {f.address && (f.address.city || f.address.line1) && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>· {[f.address.line1, f.address.city, f.address.region].filter(Boolean).join(", ")}</span>}
                   <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                    {mappable && <button onClick={() => toggleMap(f.id)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary)", cursor: "pointer" }}>{isOpen ? "Hide map" : "📍 Map"}</button>}
+                    {mappable && <button onClick={() => toggleMap(f.id)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary-text)", cursor: "pointer" }}>{isOpen ? "Hide map" : "📍 Map"}</button>}
                     {canWrite && <button onClick={() => startEdit(f)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Edit</button>}
                     {canWrite && !f.is_primary && <button onClick={() => makePrimary(f.id)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Make primary</button>}
                     {canWrite && <button onClick={() => archive(f.id, f.name)} disabled={busy} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Remove</button>}
@@ -163,7 +163,7 @@ import { FacilityMap } from "./FacilityMap.jsx";
               </div>
             </div>
           ) : (
-            <button onClick={() => setAdding(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Add facility</button>
+            <button onClick={() => setAdding(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary-text)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Add facility</button>
           ))}
           {msg && <div style={{ color: "var(--color-warn)", fontSize: 12, marginTop: 8 }}>{msg}</div>}
         </div>

@@ -626,7 +626,7 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                     {entry.estimatedMin && <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>~{entry.estimatedMin} min</span>}
                     {entry.multi_lane && Array.isArray(entry.multi_lane.lanes) && entry.multi_lane.lanes.length > 0 && (
                       <span title={`Generated for ${entry.multi_lane.lanes.length} lanes: ${entry.multi_lane.lanes.map(l => l.pace).join(" / ")}`}
-                        style={{ background: "rgba(59, 130, 246, 0.18)", color: "var(--color-primary)", border: "1px solid rgba(59, 130, 246, 0.45)", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
+                        style={{ background: "rgba(59, 130, 246, 0.18)", color: "var(--color-primary-text)", border: "1px solid rgba(59, 130, 246, 0.45)", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
                         🏊 {entry.multi_lane.lanes.length}-lane
                       </span>
                     )}
@@ -642,7 +642,7 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-                      style={{ padding: "4px 10px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-border)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                      style={{ padding: "4px 10px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-border)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                       {isExpanded ? "Hide" : "View"}
                     </button>
                     <button onClick={() => { setEditingId(entry.id); setEditingNotes(entry.notes || ""); }}
@@ -657,7 +657,7 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                     {entry.blocks && (
                       <button onClick={() => onRun(entry)}
                         title="Step through this workout section by section"
-                        style={{ padding: "4px 10px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-border)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                        style={{ padding: "4px 10px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-border)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                         ▶ Run
                       </button>
                     )}
@@ -681,7 +681,7 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                 )}
 
                 {entry.focusNote && (
-                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-primary)", fontWeight: 600 }}>
+                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-primary-text)", fontWeight: 600 }}>
                     🎯 {entry.focusNote}
                   </div>
                 )}

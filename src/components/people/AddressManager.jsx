@@ -61,7 +61,7 @@ import { API_BASE, csrfHeaders } from "../../lib/api.js";
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
               {data.addresses.map(a => (
                 <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", background: "var(--color-bg)", borderRadius: 6, fontSize: 13, color: "var(--color-text)" }}>
-                  <span style={{ flex: 1 }}>{addr(a) || "—"}{a.is_primary && data.addresses.length > 1 ? <span style={{ marginLeft: 6, fontSize: 10, color: "var(--color-primary)" }}>primary</span> : null}</span>
+                  <span style={{ flex: 1 }}>{addr(a) || "—"}{a.is_primary && data.addresses.length > 1 ? <span style={{ marginLeft: 6, fontSize: 10, color: "var(--color-primary-text)" }}>primary</span> : null}</span>
                   {data.can_write && <button onClick={() => remove(a.id)} disabled={busy} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", cursor: "pointer" }}>Remove</button>}
                 </div>
               ))}
@@ -81,7 +81,7 @@ import { API_BASE, csrfHeaders } from "../../lib/api.js";
               </div>
             </div>
           ) : (
-            <button onClick={() => setAdding(true)} style={{ padding: "5px 11px", borderRadius: 6, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary)", fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 8 }}>+ {data.addresses.length ? "Add another" : "Add address"}</button>
+            <button onClick={() => setAdding(true)} style={{ padding: "5px 11px", borderRadius: 6, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-primary-text)", fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 8 }}>+ {data.addresses.length ? "Add another" : "Add address"}</button>
           ))}
           {showConsent && (
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--color-text-dim)", marginTop: 4 }}>

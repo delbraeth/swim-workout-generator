@@ -34,23 +34,31 @@
   <meta name="color-scheme" content="dark" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet"
+  <!-- Fonts loaded non-render-blocking: media="print" + onload swap so the
+       stylesheet doesn't block first paint (display=swap already avoids FOIT). -->
+  <link rel="stylesheet" media="print" onload="this.media='all'"
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Inter+Tight:wght@600;700;800&display=swap" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <noscript><link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Inter+Tight:wght@600;700;800&display=swap" /></noscript>
+  <!-- React/ReactDOM deferred: non-render-blocking, and `defer` preserves order so
+       both globals are set before the deferred ES module bundle runs. -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <style>
     /* Setforge rebrand 2026-05-20 — Locked palette (REBRAND_SCOPE §3.1).
        Use var(--color-*) refs going forward; legacy literal hex stays in
        inline styles until the Phase 4 CSS refactor lands. */
     :root {
-      --color-primary:     #3b82f6;   /* blue   — generator + generic primary action */
+      --color-primary:     #2563eb;   /* blue-600 — button FILLS + borders; white text on it = 5.17:1 AA ✓ (was #3b82f6 = 3.68 fail) */
+      --color-primary-text:#60a5fa;   /* blue-400 — blue TEXT on dark; passes AA (≈7:1 on bg, 5.8:1 on card) where #2563eb/#3b82f6 fail */
       --color-warn:        #f59e0b;   /* amber  — coach actions, Mix pills, multi-pace */
       --color-positive:    #22c55e;   /* green  — completion, success, health states */
-      --color-destructive: #ef4444;   /* red    — delete, error, blocked */
+      --color-destructive: #ef4444;   /* red    — delete/error/blocked FILLS + borders */
+      --color-destructive-text:#f87171;/* red-400 — red TEXT on dark; passes AA (≈6.5:1 bg, 5.3:1 card) where #ef4444 as text fails on cards */
       --color-bg:          #0f172a;   /* slate-900 — page background */
       --color-card:        #1e293b;   /* slate-800 — card surfaces */
       --color-border:      #334155;   /* slate-700 — card/input borders */
-      --color-border-strong:#475569;  /* slate-600 — dividers */
+      --color-border-strong:#64748b;  /* slate-500 — input borders/dividers; 3.75:1 on bg for visible control boundaries (1.4.11), up from #475569 (2.36) */
       --color-text:        #e2e8f0;   /* slate-200 — main body text on dark bg */
       --color-text-muted:  #94a3b8;   /* slate-400 — secondary text */
       --color-text-dim:    #8b95a6;   /* lifted from slate-500 #64748b to pass WCAG AA 4.5:1 over --color-card (Phase 1 item 8, 2026-05-26) */
@@ -126,6 +134,8 @@
     }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn:focus-visible { outline: 2px solid var(--btn-color); outline-offset: 2px; }
+    /* Range slider had outline:none (no visible keyboard focus) — restore a focus ring (WCAG 2.4.7). */
+    input[type=range]:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 2px; }
 
     /* Size classes — pick one */
     .btn-sm { padding: 3px 10px; font-size: 11px; }
@@ -352,7 +362,7 @@
 
   <!-- SPA bundle (esbuild). The value placeholder below is a distinct token (not the
        window.__BUILD_ID__ property name) so _deploy.py's stamp can't clobber the property. -->
-  <script>window.__BUILD_ID__ = "5a49dbd-dirty · 2026-06-06 07:17 UTC · bundle bacd846815f6";</script>
+  <script>window.__BUILD_ID__ = "5a49dbd-dirty · 2026-06-06 07:51 UTC · bundle 12cbc698f1b9";</script>
   <!-- MapKit JS token (origin-scoped, client-public by design). The value
        placeholder __MAPKIT_TOKEN_VALUE__ is deliberately distinct from the property
        name so the substitution can't corrupt `window.__MAPKIT_TOKEN__`. Replaced at
@@ -362,6 +372,6 @@
   <!-- ESM module (code-split): app.js statically imports shared chunks + dynamically
        imports lazy route views from /assets/chunks/. Deferred, so the classic React
        CDN scripts above run first (window.React global is set before this executes). -->
-  <script type="module" src="/assets/app.js?v=bacd846815f6"></script>
+  <script type="module" src="/assets/app.js?v=12cbc698f1b9"></script>
 </body>
 </html>

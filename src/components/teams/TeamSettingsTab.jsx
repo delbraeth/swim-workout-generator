@@ -222,7 +222,7 @@ import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
                 {canWrite && !archived && (
                   <button onClick={() => removeCuration(kind, it.label)} disabled={busy}
                     title="Remove from team list"
-                    style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive)", fontSize: 11, cursor: busy ? "not-allowed" : "pointer" }}>
+                    style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive-text)", fontSize: 11, cursor: busy ? "not-allowed" : "pointer" }}>
                     ×
                   </button>
                 )}
@@ -263,7 +263,7 @@ import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
               (Hy-Tek) roster exports. Owner-only (matches the rename route). */}
           {viewerRole === "owner" && (
             <div style={{ marginBottom: 18 }}>
-              <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+              <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
                 🏷 Team code (meet-entry abbreviation)
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -289,7 +289,7 @@ import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
           </div>
 
           <div style={{ marginBottom: 18 }}>
-            <div style={{ color: "var(--color-destructive)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+            <div style={{ color: "var(--color-destructive-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
               👎 Team Disfavorites ({curation.disfavorites.length})
             </div>
             {renderCurationList("disfav", curation.disfavorites, "var(--color-destructive)")}
@@ -310,7 +310,7 @@ import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
                   </div>
                   {!archived && (
                     <button onClick={cancelTransfer} disabled={transferBusy}
-                      style={{ marginTop: 8, padding: "5px 12px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive)", fontSize: 12, fontWeight: 700, cursor: transferBusy ? "not-allowed" : "pointer" }}>
+                      style={{ marginTop: 8, padding: "5px 12px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive-text)", fontSize: 12, fontWeight: 700, cursor: transferBusy ? "not-allowed" : "pointer" }}>
                       {transferBusy ? "Working…" : "Cancel transfer"}
                     </button>
                   )}
@@ -346,7 +346,7 @@ import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
           )}
 
           <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 6 }}>
-            <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+            <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
               Team Defaults
             </div>
             <p style={{ color: "var(--color-text-dim)", fontSize: 11, margin: "0 0 12px", lineHeight: 1.5, fontStyle: "italic" }}>
