@@ -44,6 +44,10 @@ export const LESSON_SECTIONS = ["warmup", "main", "cooldown"];
 // while authored short sets enable genuinely short lessons.
 export const LESSON_MIN = 100;
 export const LESSON_MAX = 1200;
+// Youth / Learn-to-Swim sessions are short by nature — cap the budget so a
+// leftover high slider value doesn't bloat a kids' lesson into 1200yd of
+// repeated drills (eval 2026-06-06 #5 live finding).
+export const YOUTH_MAX = 700;
 
 // ── Youth / Learn-to-Swim content pack (eval 2026-06-06 #5) ──────────────────
 // A dedicated BEGINNER bank for the lesson type: all 25/50-based, generous rest
@@ -6611,6 +6615,17 @@ export function generateWorkout({
       // regardless of what the caller passes for includedSections.
       const isLesson = typeId === "lesson";
       if (isLesson) includedSections = LESSON_SECTIONS;
+      // Eval #5 — Learn-to-Swim guards so the youth swap is robust to leftover
+      // session state: keep the session short (YOUTH_MAX), gear-light (youth
+      // content uses no required equipment, so a stale "required" flag would
+      // empty the pool and fail generation), and bank-sourced (the youth bank
+      // is only consulted on the bank path — engine/mix would bypass it).
+      const _youth = isLesson && youthMode;
+      if (_youth) {
+        maxYards       = Math.min(maxYards || YOUTH_MAX, YOUTH_MAX);
+        equipment      = {};
+        sectionSources = null;
+      }
       // Section model A1 — per-section inclusion flags. With the default all-4
       // list every flag is true, so all downstream guards are inert.
       const _incl = {
@@ -7228,6 +7243,9 @@ export function regenerateSection({
       youthMode = false,              // Eval #5 — Learn-to-Swim youth bank swap (inert for non-lesson types).
     } = {}) {
       const _lessonOpts = { lessonMySetsOnly, lessonLevel, youthMode };   // Phase 5 / eval #5 — inert for non-lesson types
+      // Eval #5 — match generateWorkout's youth guards on the regenerate path:
+      // gear-light + bank-sourced so a regenerated youth section stays youth.
+      if (typeId === "lesson" && youthMode) { equipment = {}; sectionSource = "bank"; }
       // v1.8 — Resolve once for use below.
       const disfavorMultiplier = disfavorMode === "exclude" ? 0 : 0.25;
       // Phase 3 PSC slice 2/3 — same skip-in-multi-lane rule as generateWorkout.
