@@ -131,7 +131,7 @@ import {
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
   dbSetRsvp, dbGetMyRsvp, dbGetRsvpSummary, dbSetTeamEventStatus,
-  dbCreateOrLinkVenue, dbGetVenue, dbListVenues, dbGetWeatherCache, dbPutWeatherCache,
+  dbCreateOrLinkVenue, dbGetVenue, dbListVenues, dbArchiveVenue, dbGetWeatherCache, dbPutWeatherCache,
   dbIsSwimmerInTeam, dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
   dbListAssignmentsForSwimmer, dbListAssignmentsForGroup,
@@ -6004,6 +6004,17 @@ app.post("/api/venues", checkOrigin, requireAuth, requireCoach, requireCsrf, wri
     if (!r.ok) return res.status(400).json({ error: r.reason });
     const venue = await dbGetVenue(r.id);
     res.json({ ...r, venue });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Soft-archive a venue (admin-only — universal catalog, edits/removal moderated
+// per scope §2 #4). Events keep their venue_id; it drops from search + weather.
+app.delete("/api/venues/:id", checkOrigin, requireAuth, requireAdmin, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbArchiveVenue(req.params.id);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "venue.archive", ...reqMeta(req), details: { venue_id: req.params.id } });
+    res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

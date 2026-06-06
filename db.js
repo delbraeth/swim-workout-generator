@@ -5903,6 +5903,14 @@ export async function dbSetEventVenue(eventId, venueId) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// Soft-archive a venue (admin-only per scope §2 #4). Events referencing it keep
+// their venue_id but it drops out of the catalog/search and weather lookups.
+export async function dbArchiveVenue(venueId) {
+  if (!venueId) return { ok: false, reason: "no_id" };
+  const r = await pool.query("UPDATE `venues` SET `archived_at` = NOW() WHERE `id` = ? AND `archived_at` IS NULL", [String(venueId)]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 // ─── Weather forecast cache (one row per venue+day; TTL enforced by caller) ───
 export async function dbGetWeatherCache(venueId, day) {
   if (!venueId || !day) return null;
