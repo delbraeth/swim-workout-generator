@@ -56,7 +56,9 @@
               {row("config_source",   state.config_source,   true)}
               {row("has_secret_key",  state.has_secret_key,  state.has_secret_key)}
               {row("has_webhook",     state.has_webhook,     state.has_webhook)}
-              {row("has_price_id",    state.has_price_id,    state.has_price_id)}
+              {row("has_price_id",          state.has_price_id,          state.has_price_id)}
+              {row("has_price_id_lesson",   state.has_price_id_lesson,   state.has_price_id_lesson)}
+              {row("has_price_id_supporter", state.has_price_id_supporter, state.has_price_id_supporter)}
               {row("portal_return",   state.portal_return,   true)}
             </div>
           )}

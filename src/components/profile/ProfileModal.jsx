@@ -868,6 +868,53 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                               </button>
                             </div>
                           )}
+
+                          {/* Eval #7 — OPTIONAL supporter tier. Swimmers never pay
+                              to use SetForge; this is a pure "chip in" sub that
+                              unlocks NOTHING (free-for-swimmers stays intact). Only
+                              shown once the Stripe supporter price is configured. */}
+                          {billingStatus.has_price_id_supporter && (
+                            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
+                              <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10, lineHeight: 1.5 }}>
+                                Just a swimmer? <strong>You'll never pay to use SetForge</strong> — every workout feature you use
+                                today stays free, always. Becoming a <strong>Supporter</strong> (<strong>$2.99/month</strong>) is an
+                                optional way to back development, and it gets you first access to upcoming <strong>community
+                                features</strong> (starting with social workout sharing). 💙
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (billingBusy) return;
+                                  setBillingBusy(true); setBillingMsg(null);
+                                  try {
+                                    const r = await fetch("/api/billing/checkout", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                                      body: JSON.stringify({ tier: "supporter" }),
+                                    });
+                                    const d = await r.json().catch(() => ({}));
+                                    if (!r.ok) {
+                                      if (d.error === "billing_not_configured") setBillingMsg("Billing isn't live in this environment yet.");
+                                      else if (d.error === "no_price_id") setBillingMsg(d.message || "Supporter price not configured. Contact the operator.");
+                                      else setBillingMsg(`Couldn't start checkout: ${d.error || r.status}`);
+                                      setBillingBusy(false);
+                                      return;
+                                    }
+                                    window.location.href = d.url;
+                                  } catch (e) {
+                                    setBillingMsg(`Network error: ${e.message}`);
+                                    setBillingBusy(false);
+                                  }
+                                }}
+                                disabled={billingBusy}
+                                style={{
+                                  padding: "8px 16px", borderRadius: 6, border: "1px solid var(--color-border-strong)",
+                                  background: "transparent", color: "var(--color-text)", fontSize: 13, fontWeight: 700,
+                                  cursor: billingBusy ? "wait" : "pointer",
+                                }}>
+                                {billingBusy ? "Starting…" : "❤️ Support SetForge — $2.99/mo"}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
 
