@@ -129,6 +129,7 @@ import {
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
+  dbSetRsvp, dbGetMyRsvp, dbGetRsvpSummary, dbSetTeamEventStatus,
   dbIsSwimmerInTeam, dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
   dbListAssignmentsForSwimmer, dbListAssignmentsForGroup,
@@ -5858,6 +5859,72 @@ app.get("/api/teams/:teamId/events", requireAuth, async (req, res) => {
       if (!isMember) return res.status(403).json({ error: "no access to this team's events" });
     }
     res.json(await dbListTeamEvents(req.params.teamId));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ───── RSVP (Phase 5 #5 Slice B) ─────────────────────────────────────
+// Set an RSVP: self (swimmer_sub = caller) or coach-on-behalf (managed_id).
+app.put("/api/rsvp", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { target_kind, target_id, status, managed_id } = req.body || {};
+    if (!["meet", "practice"].includes(target_kind) || !target_id) return res.status(400).json({ error: "bad_target" });
+    let teamId = null;
+    if (target_kind === "meet") {
+      const ev = await dbGetTeamEvent(target_id);
+      if (!ev) return res.status(404).json({ error: "event not found" });
+      if (ev.status === "cancelled") return res.status(409).json({ error: "event_cancelled" });
+      teamId = ev.team_id;
+    } else {
+      return res.status(400).json({ error: "practice_rsvp_not_yet" });   // B2
+    }
+    if (managed_id) {
+      const role = teamId ? await dbGetTeamRole(teamId, req.userSub) : null;
+      const owns = await dbIsManagedSwimmerOwnedBy(managed_id, req.userSub).catch(() => false);
+      if (!role && !owns) return res.status(403).json({ error: "not authorized for this swimmer" });
+      const r = await dbSetRsvp({ targetKind: target_kind, targetId: target_id, managedId: Number(managed_id), status, respondedBySub: req.userSub });
+      return r.ok ? res.json(r) : res.status(400).json({ error: r.reason });
+    }
+    // self
+    const role = await dbGetTeamRole(teamId, req.userSub);
+    const canSee = role ? true : await dbIsSwimmerInTeam(req.userSub, teamId);
+    if (!canSee) return res.status(403).json({ error: "no access to this event" });
+    const r = await dbSetRsvp({ targetKind: target_kind, targetId: target_id, swimmerSub: req.userSub, status, respondedBySub: req.userSub });
+    return r.ok ? res.json(r) : res.status(400).json({ error: r.reason });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Coach view: RSVP tally + per-swimmer list for an event.
+app.get("/api/rsvp/:kind/:id", requireAuth, async (req, res) => {
+  try {
+    if (req.params.kind !== "meet") return res.status(400).json({ error: "unsupported_kind" });
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "event not found" });
+    const role = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team coach" });
+    res.json(await dbGetRsvpSummary(req.params.kind, req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Swimmer self: my RSVP status for an event.
+app.get("/api/me/rsvp/:kind/:id", requireAuth, async (req, res) => {
+  try {
+    const status = await dbGetMyRsvp({ targetKind: req.params.kind, targetId: req.params.id, swimmerSub: req.userSub });
+    res.json({ status });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Cancel / un-cancel an event (coach of the team). Freezes RSVP + shows CANCELLED.
+app.post("/api/events/:id/status", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "not found" });
+    const role = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team coach" });
+    const { status, note } = req.body || {};
+    const r = await dbSetTeamEventStatus(req.params.id, status, note);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team_event.status", ...reqMeta(req), details: { event_id: req.params.id, status, note: note || null } });
+    res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

@@ -63,6 +63,30 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
       const [anchorGroupsList, setAnchorGroupsList] = React.useState(null); // null while loading
       const [anchorTargetGroupId, setAnchorTargetGroupId] = React.useState("");
       const [anchorBusy, setAnchorBusy] = React.useState(false);
+      // RSVP (Phase 5 #5 Slice B): inline coach tally panel per event.
+      const [rsvpEventId, setRsvpEventId] = React.useState(null);
+      const [rsvpData, setRsvpData]       = React.useState(null); // null=loading
+
+      const openRsvp = React.useCallback(async (eventId) => {
+        if (rsvpEventId === eventId) { setRsvpEventId(null); return; }
+        setRsvpEventId(eventId); setRsvpData(null);
+        try {
+          const res = await fetch(`/api/rsvp/meet/${encodeURIComponent(eventId)}`, { cache: "no-store" });
+          setRsvpData(res.ok ? await res.json() : { tally: {}, list: [] });
+        } catch (_) { setRsvpData({ tally: {}, list: [] }); }
+      }, [rsvpEventId]);
+
+      const handleEventStatus = React.useCallback(async (ev, status) => {
+        let note = null;
+        if (status === "cancelled") { note = window.prompt("Reason (optional) — shown to swimmers:", ev.status_note || "") || null; }
+        try {
+          const res = await fetch(`/api/events/${encodeURIComponent(ev.id)}/status`, {
+            method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ status, note }),
+          });
+          if (res.ok && detail?.id) loadEvents(detail.id);
+        } catch (_) {}
+      }, [detail]);
       const [msg,         setMsg]         = React.useState(null);
       // Ownership transfers proposed TO this coach (accept/decline banner).
       const [incomingTransfers, setIncomingTransfers] = React.useState([]);
@@ -811,17 +835,32 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6, opacity: isPast ? 0.6 : 1 }}>
                           <div>
                             <span style={{ marginRight: 6 }} title={ev.kind || "meet"}>{eventKindEmoji(ev.kind)}</span>
-                            <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13 }}>{ev.name}</span>
+                            <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13, textDecoration: ev.status === "cancelled" ? "line-through" : "none" }}>{ev.name}</span>
                             <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}</span>
                             {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
+                            {ev.status === "cancelled" && <span title={ev.status_note || ""} style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,0.15)", color: "var(--color-destructive-text)", fontWeight: 700 }}>CANCELLED{ev.status_note ? ` — ${ev.status_note}` : ""}</span>}
                           </div>
                           {detail.viewer_role && (
                             <div style={{ display: "flex", gap: 6 }}>
+                              {(ev.kind || "meet") === "meet" && (
+                                <button onClick={() => openRsvp(ev.id)}
+                                  title="Expected attendance (RSVP tally)"
+                                  style={{ padding: "3px 9px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                  📋 RSVP
+                                </button>
+                              )}
                               {!isPast && (ev.kind || "meet") === "meet" && (
                                 <button onClick={() => openAnchorPicker(ev.id)}
                                   title="Set as training-phase anchor for a group (meets only)"
                                   style={{ padding: "3px 9px", background: "transparent", color: "var(--color-warn)", border: "1px solid var(--color-warn)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                                   🎯 Anchor
+                                </button>
+                              )}
+                              {!isPast && (
+                                <button onClick={() => handleEventStatus(ev, ev.status === "cancelled" ? "scheduled" : "cancelled")}
+                                  title={ev.status === "cancelled" ? "Restore this event" : "Cancel this event (freezes RSVP, shows CANCELLED)"}
+                                  style={{ padding: "3px 9px", background: "transparent", color: ev.status === "cancelled" ? "var(--color-positive)" : "var(--color-warn)", border: `1px solid ${ev.status === "cancelled" ? "var(--color-positive)" : "var(--color-warn)"}`, borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                  {ev.status === "cancelled" ? "Restore" : "Cancel"}
                                 </button>
                               )}
                               <button onClick={() => startEditEvent(ev)}
@@ -835,6 +874,31 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                             </div>
                           )}
                         </div>
+                        {rsvpEventId === ev.id && (
+                          <div style={{ marginTop: 6, padding: "10px 12px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6 }}>
+                            {rsvpData === null ? (
+                              <div style={{ fontSize: 12, color: "var(--color-text-dim)" }}>Loading RSVPs…</div>
+                            ) : (
+                              <>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)", marginBottom: 6 }}>
+                                  Expected attendance — ✅ {rsvpData.tally?.going || 0} going · 🤔 {rsvpData.tally?.maybe || 0} maybe · ❌ {rsvpData.tally?.out || 0} out
+                                </div>
+                                {(rsvpData.list || []).length === 0 ? (
+                                  <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>No responses yet.</div>
+                                ) : (
+                                  <div style={{ display: "grid", gap: 2 }}>
+                                    {rsvpData.list.map((p, i) => (
+                                      <div key={i} style={{ fontSize: 12, color: "var(--color-text-muted)", display: "flex", justifyContent: "space-between" }}>
+                                        <span>{p.name}</span>
+                                        <span>{p.status === "going" ? "✅ going" : p.status === "maybe" ? "🤔 maybe" : p.status === "out" ? "❌ out" : "—"}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
                         {isAnchoring && (
                           <div style={{ marginTop: 6, padding: "10px 12px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6 }}>
                             <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>

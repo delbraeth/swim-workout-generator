@@ -5636,7 +5636,8 @@ export async function dbUpdateTeamEvent(eventId, { name, date, kind } = {}) {
 export async function dbListTeamEvents(teamId) {
   if (!teamId) return [];
   const rows = await pool.query(
-    "SELECT `id`, `team_id`, `name`, `kind`, `date`, `created_by_coach_sub`, `created_at` " +
+    "SELECT `id`, `team_id`, `name`, `kind`, `date`, `status`, `status_note`, `rsvp_closes_at`, " +
+    "       `created_by_coach_sub`, `created_at` " +
     "FROM `team_events` WHERE `team_id` = ? ORDER BY `date` ASC",
     [teamId]
   );
@@ -5644,9 +5645,92 @@ export async function dbListTeamEvents(teamId) {
     id: r.id, team_id: r.team_id, name: r.name,
     kind: r.kind || DEFAULT_EVENT_KIND,
     date: dateToYmd(r.date),
+    status: r.status || "scheduled",
+    status_note: r.status_note || null,
+    rsvp_closes_at: dtToIso(r.rsvp_closes_at),
     created_by_coach_sub: r.created_by_coach_sub,
     created_at: dtToIso(r.created_at),
   }));
+}
+
+// ─── Event RSVP (Phase 5 #5 Slice B) ─────────────────────────────────────────
+// Forward-looking attendance intent, polymorphic across meets + practices.
+export const RSVP_STATUSES = ["going", "maybe", "out", "no_response"];
+const RSVP_TARGET_KINDS = ["meet", "practice"];
+
+function _rsvpOwner(swimmerSub, managedId) {
+  return managedId != null
+    ? { where: "`managed_id` = ?", val: managedId }
+    : { where: "`swimmer_sub` = ?", val: swimmerSub };
+}
+
+export async function dbSetRsvp({ targetKind, targetId, swimmerSub = null, managedId = null, status, respondedBySub = null }) {
+  if (!RSVP_TARGET_KINDS.includes(targetKind)) return { ok: false, reason: "bad_kind" };
+  if (!targetId) return { ok: false, reason: "no_target" };
+  if ((swimmerSub == null) === (managedId == null)) return { ok: false, reason: "bad_owner" };
+  if (!RSVP_STATUSES.includes(status)) return { ok: false, reason: "bad_status" };
+  const { where, val } = _rsvpOwner(swimmerSub, managedId);
+  const existing = await pool.query(
+    "SELECT `id` FROM `event_rsvp` WHERE `target_kind`=? AND `target_id`=? AND " + where + " LIMIT 1",
+    [targetKind, String(targetId), val]
+  );
+  if (existing[0]) {
+    await pool.query("UPDATE `event_rsvp` SET `status`=?, `responded_by_sub`=? WHERE `id`=?",
+      [status, respondedBySub, Number(existing[0].id)]);
+    return { ok: true, id: Number(existing[0].id), updated: true };
+  }
+  const r = await pool.query(
+    "INSERT INTO `event_rsvp` (`target_kind`,`target_id`,`swimmer_sub`,`managed_id`,`status`,`responded_by_sub`) VALUES (?,?,?,?,?,?)",
+    [targetKind, String(targetId), swimmerSub, managedId, status, respondedBySub]
+  );
+  return { ok: true, id: Number(r.insertId), created: true };
+}
+
+export async function dbGetMyRsvp({ targetKind, targetId, swimmerSub }) {
+  if (!targetKind || !targetId || !swimmerSub) return null;
+  const rows = await pool.query(
+    "SELECT `status` FROM `event_rsvp` WHERE `target_kind`=? AND `target_id`=? AND `swimmer_sub`=? LIMIT 1",
+    [targetKind, String(targetId), swimmerSub]
+  );
+  return rows[0]?.status || null;
+}
+
+// Coach view: tally + per-swimmer list (resolves names polymorphically).
+export async function dbGetRsvpSummary(targetKind, targetId) {
+  if (!RSVP_TARGET_KINDS.includes(targetKind) || !targetId) return { tally: {}, list: [] };
+  const rows = await pool.query(
+    "SELECT er.`status`, er.`swimmer_sub`, er.`managed_id`, " +
+    "  COALESCE(up.`first_name`, mp.`first_name`) AS first_name, " +
+    "  COALESCE(up.`last_name`, mp.`last_name`) AS last_name, " +
+    "  COALESCE(up.`preferred_name`, mp.`preferred_name`) AS preferred_name, " +
+    "  COALESCE(up.`initials`, mp.`initials`) AS initials " +
+    "FROM `event_rsvp` er " +
+    "LEFT JOIN `users` u ON u.`sub` COLLATE utf8mb4_unicode_ci = er.`swimmer_sub` COLLATE utf8mb4_unicode_ci " +
+    "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = er.`managed_id` " +
+    "LEFT JOIN `persons` up ON up.`id` = u.`person_id` " +
+    "LEFT JOIN `persons` mp ON mp.`id` = m.`person_id` " +
+    "WHERE er.`target_kind`=? AND er.`target_id`=?",
+    [targetKind, String(targetId)]
+  );
+  const tally = { going: 0, maybe: 0, out: 0, no_response: 0 };
+  const list = rows.map(r => {
+    if (tally[r.status] != null) tally[r.status]++;
+    return {
+      name: displayNameInline({ first_name: r.first_name, last_name: r.last_name, preferred_name: r.preferred_name }) || r.initials || "(swimmer)",
+      status: r.status,
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  return { tally, list };
+}
+
+export async function dbSetTeamEventStatus(eventId, status, note = null) {
+  if (!eventId) return { ok: false, reason: "no_id" };
+  if (!["scheduled", "cancelled", "postponed"].includes(status)) return { ok: false, reason: "bad_status" };
+  const r = await pool.query(
+    "UPDATE `team_events` SET `status`=?, `status_note`=? WHERE `id`=?",
+    [status, note ? String(note).slice(0, 280) : null, String(eventId)]
+  );
+  return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
 // ─── Export bridges (Phase 5 Slice A: team .ics feed + roster CSV) ───────────
