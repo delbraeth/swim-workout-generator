@@ -7760,7 +7760,9 @@ export async function dbGetTeamAttendanceLog(teamId, { startYmd, endYmd } = {}) 
     "  COALESCE(up.`preferred_name`, mp.`preferred_name`) AS preferred_name, " +
     "  COALESCE(up.`initials`, mp.`initials`) AS initials " +
     "FROM `practice_attendance` pa " +
-    "LEFT JOIN `users` u ON u.`sub` = pa.`swimmer_sub` " +
+    // swimmer_sub and users.sub were created with different collations; force an
+    // explicit common collation on both operands so the join doesn't error.
+    "LEFT JOIN `users` u ON u.`sub` COLLATE utf8mb4_unicode_ci = pa.`swimmer_sub` COLLATE utf8mb4_unicode_ci " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = pa.`managed_id` " +
     "LEFT JOIN `persons` up ON up.`id` = u.`person_id` " +
     "LEFT JOIN `persons` mp ON mp.`id` = m.`person_id` " +
