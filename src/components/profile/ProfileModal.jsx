@@ -10,6 +10,7 @@ import { EditableProfileField } from "./EditableProfileField.jsx";
 import { GoalRow } from "./GoalRow.jsx";
 import { JoinGroupSection } from "./JoinGroupSection.jsx";
 import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
+import { RaceGoalsPanel } from "./RaceGoalsPanel.jsx";
 import { useDialogA11y } from "../shell/useDialogA11y.js";
 import { LevelRow } from "./LevelRow.jsx";
 import { NextEventRow } from "./NextEventRow.jsx";
@@ -554,6 +555,8 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     {/* Team calendar — one-click .ics download for any team the user is in.
                         Data comes from /api/me/bootstrap (via App props) — no extra request. */}
                     <TeamCalendarDownload teams={Array.isArray(appTeamCalendars) ? appTeamCalendars : []} />
+                    {/* Race goals / PRs — anchor Race-Pace workout targets to your times. */}
+                    <RaceGoalsPanel endpoint="/api/me/event-times" />
                   </div>
                   {/* Setforge rebrand 2026-05-20 — Send feedback + Sign out
                       folded down from the top nav (REBRAND_SCOPE §8.1, §8.4). */}

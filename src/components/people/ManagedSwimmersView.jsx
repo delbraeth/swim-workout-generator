@@ -11,6 +11,7 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
 import { ManagedSwimmerForm } from "./ManagedSwimmerForm.jsx";
 import { ParentsPanel } from "./ParentsPanel.jsx";
 import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
+import { RaceGoalsPanel } from "../profile/RaceGoalsPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -308,6 +309,13 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
                 <SwimmerEquipmentPanel key={"eq-" + detail.id} managedId={detail.id}
                   swimmerName={detail.display_name} initialEquipment={detail.equipment_modes}
                   onSaved={() => loadDetail(detail.id)} />
+              </DetailSection>
+            )}
+
+            {/* Phase 5 #4 — race goals/PRs that anchor Race-Pace workout targets. */}
+            {!detail.archived && (
+              <DetailSection emoji="🎯" title="Race goals / PRs">
+                <RaceGoalsPanel key={"rg-" + detail.id} endpoint={`/api/managed-swimmers/${detail.id}/event-times`} />
               </DetailSection>
             )}
 

@@ -101,6 +101,7 @@
     } from "./lib/engine.js";
     import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
 import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
+import { RACE_EVENTS } from "./lib/raceEvents.js";
 import { extractMainLabel, formatPscRow, normalizeInitials, parsePaceMSS } from "./lib/format.js";
 import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYardsForType, parseIntent, rescaleBlocksForPace } from "./lib/workout-helpers.js";
 
@@ -1627,6 +1628,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // "" level = auto (use the target swimmer's level, else show all).
       const [lessonMySetsOnly, setLessonMySetsOnly] = useState(false);
       const [lessonLevelChoice, setLessonLevelChoice] = useState("");
+      // Phase 5 #4 — race-pace mode. When on, the MAIN set becomes race-pace reps
+      // for `raceEvent`, anchored to the target swimmer's goal→PR time at the
+      // current course. raceGoals/raceKindMap are loaded by an effect below.
+      const [racePace, setRacePace]           = useState(false);
+      const [raceEvent, setRaceEvent]         = useState("free_100");
+      const [raceUsrpt, setRaceUsrpt]         = useState(false);
+      const [raceGoals, setRaceGoals]         = useState({});   // { event: secs }
+      const [raceKindMap, setRaceKindMap]     = useState({});   // { event: 'goal'|'pr' }
       const includedSections = React.useMemo(() => {
         // Lesson tier (Phase 5) — fixed 3-section shape (Warm-Up / Skill Focus /
         // Send-off). "main" carries the relabeled Skill Focus; drill + kick are
@@ -2967,6 +2976,36 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           .catch(() => setGroupActiveConstraints({}));
       }, [generateForTarget?.id]);
 
+      // Phase 5 #4 — load race goal/PR times for the current target (self, or a
+      // managed individual) at the current course, resolved goal→PR per event.
+      // Group targets fall back to generic race-pace text (no single swimmer).
+      useEffect(() => {
+        if (!racePace) return;
+        let alive = true;
+        const tgt = generateForTarget;
+        const ep = (tgt && tgt.kind === "managed" && tgt.id)
+          ? `${API_BASE}/managed-swimmers/${encodeURIComponent(tgt.id)}/event-times`
+          : `${API_BASE}/me/event-times`;
+        fetch(ep, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(list => {
+            if (!alive) return;
+            const byEvent = {};
+            for (const r of (Array.isArray(list) ? list : [])) {
+              if (r.course !== poolMode) continue;
+              (byEvent[r.event] ||= {})[r.kind] = r.time_secs;
+            }
+            const goals = {}, kinds = {};
+            for (const ev of Object.keys(byEvent)) {
+              if (byEvent[ev].goal != null) { goals[ev] = byEvent[ev].goal; kinds[ev] = "goal"; }
+              else if (byEvent[ev].pr != null) { goals[ev] = byEvent[ev].pr; kinds[ev] = "pr"; }
+            }
+            setRaceGoals(goals); setRaceKindMap(kinds);
+          })
+          .catch(() => { if (alive) { setRaceGoals({}); setRaceKindMap({}); } });
+        return () => { alive = false; };
+      }, [racePace, generateForTarget?.id, generateForTarget?.kind, poolMode]);
+
       // Derived: flat list of (swimmerKey, constraint) pairs for the checklist.
       // swimmerKey is either users.sub (real swimmer) or ms_xxxx (managed).
       const tonightChecklistRows = useMemo(() => {
@@ -3061,6 +3100,13 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           userMin:        _isLessonGen ? LESSON_MIN : sliderMin,
           lessonMySetsOnly: _isLessonGen ? lessonMySetsOnly : false,
           lessonLevel:    _lessonLevel,
+          // Phase 5 #4 — race-pace MAIN (ignored unless racePace). raceGoals is the
+          // target's goal→PR map (loaded by effect); raceKind labels the chosen event.
+          racePace:       racePace && !_isLessonGen,
+          raceEvent,
+          usrpt:          raceUsrpt,
+          raceGoals,
+          raceKind:       raceKindMap[raceEvent] || "goal",
           pinnedBlocks:   pinned,
           recentLabels,
           recoveryMode,
@@ -3205,7 +3251,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -4442,6 +4488,36 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             {/* Recovery day · Mix bias · section include/skip (advanced). */}
             {advancedOpen && (
             <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
+              {/* Phase 5 #4 — Race Pace: build the MAIN as goal/PR-anchored reps. */}
+              {selectedType !== "lesson" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
+                <button onClick={() => setRacePace(v => !v)}
+                  title="Race Pace — the main set becomes goal-pace reps for the chosen event"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 999,
+                    border: `1px solid ${racePace ? "var(--color-warn)" : "var(--color-border)"}`,
+                    background: racePace ? "rgba(245,158,11,0.15)" : "transparent",
+                    color: racePace ? "#fcd34d" : "var(--color-text-dim)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  🏁 Race Pace {racePace ? "ON" : "OFF"}
+                </button>
+                {racePace && (
+                  <>
+                    <select value={raceEvent} onChange={e => setRaceEvent(e.target.value)}
+                      aria-label="Race event"
+                      style={{ padding: "5px 9px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                      {RACE_EVENTS.map(ev => <option key={ev.id} value={ev.id}>{ev.label}</option>)}
+                    </select>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--color-text-dim)" }}>
+                      <input type="checkbox" checked={raceUsrpt} onChange={e => setRaceUsrpt(e.target.checked)} /> USRPT
+                    </label>
+                    <span style={{ fontSize: 11, color: raceGoals[raceEvent] != null ? "var(--color-positive)" : "var(--color-text-dim)" }}>
+                      {raceGoals[raceEvent] != null
+                        ? `Target from ${raceKindMap[raceEvent] === "pr" ? "PR" : "goal"} time`
+                        : "No goal set — add one under Profile → Race goals for exact splits"}
+                    </span>
+                  </>
+                )}
+              </div>
+              )}
               {/* Easy day / Recovery day ON toggle + helper text */}
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button onClick={() => setRecoveryMode(v => !v)}
@@ -5669,7 +5745,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             color: "var(--color-border-strong)", fontSize: 11, fontFamily: "system-ui, -apple-system, sans-serif",
             borderTop: "1px solid var(--color-card)", marginTop: 40,
           }}>
-            © 2026 Competition Aquatics, LLC · All rights reserved.
+            <div>Created by Patrick Cassidy &amp; Veronica Cassidy (coach &amp; swimmer).</div>
+            <div style={{ marginTop: 4 }}>© 2026 Competition Aquatics, LLC · All rights reserved.</div>
           </footer>
         </div>
       );

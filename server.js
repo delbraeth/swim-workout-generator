@@ -105,6 +105,7 @@ import {
   dbListTeamFacilities, dbCreateTeamFacility, dbUpdateTeamFacility, dbArchiveTeamFacility,
   dbGetOrCreateTeamCalendarToken, dbRotateTeamCalendarToken, dbGetTeamByCalendarToken,
   dbTeamCalendarFeedData, dbTeamRosterForExport, dbListTeamCalendarsForUser,
+  dbListEventTimes, dbUpsertEventTime, dbDeleteEventTime, dbResolveRaceGoals,
   dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
@@ -953,9 +954,18 @@ app.post("/api/generate", requireAuth, writeLimiter, async (req, res) => {
     // CURATION — server-authoritative, rehydrated from the DB (own + coach union).
     const curation = (await dbGetGenerationContextForUser(req.userSub)) || {};
 
+    // Phase 5 #4 — race-pace (native/iOS path; web resolves goals client-side).
+    // Goals resolve goal→pr for the caller at the requested course (poolMode).
+    const racePace  = !!b.racePace;
+    const raceEvent = (typeof b.raceEvent === "string") ? b.raceEvent : "free_100";
+    const raceKind  = b.raceKind === "pr" ? "pr" : "goal";
+    const usrpt     = !!b.usrpt;
+    const raceGoals = racePace ? await dbResolveRaceGoals({ userSub: req.userSub, course: poolMode }) : {};
+
     const workout = engineGenerate({
       typeId, maxYards, poolMode, equipment, sectionBias, includedSections,
       recoveryMode, phase, userMin, sectionSources, lanesPaceSecs,
+      racePace, raceEvent, raceKind, usrpt, raceGoals,
       ...curation,
     });
 
@@ -5043,6 +5053,48 @@ app.get("/api/benchmarks", requireAuth, async (req, res) => {
     const kind  = req.query.kind || null;
     const limit = Math.min(200, Number(req.query.limit) || 50);
     res.json(await dbListBenchmarks(req.userSub, { kind, limit }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ── Race event goal/PR times (Phase 5 #4) ────────────────────────────
+// SELF — any authed swimmer manages their own goal/PR times.
+app.get("/api/me/event-times", requireAuth, async (req, res) => {
+  try { res.json(await dbListEventTimes({ userSub: req.userSub })); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.put("/api/me/event-times", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { event, course, kind, time_secs } = req.body || {};
+    const r = await dbUpsertEventTime({ userSub: req.userSub, event, course, kind, timeSecs: time_secs });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/me/event-times/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try { res.json(await dbDeleteEventTime(req.params.id, { userSub: req.userSub })); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// MANAGED swimmers — coach-owned (lesson access + per-resource owner check).
+app.get("/api/managed-swimmers/:id/event-times", requireAuth, requireLessonAccess, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    res.json(await dbListEventTimes({ managedId: Number(req.params.id) }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.put("/api/managed-swimmers/:id/event-times", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    const { event, course, kind, time_secs } = req.body || {};
+    const r = await dbUpsertEventTime({ managedId: Number(req.params.id), event, course, kind, timeSecs: time_secs });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/managed-swimmers/:id/event-times/:etid", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    res.json(await dbDeleteEventTime(req.params.etid, { managedId: Number(req.params.id) }));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

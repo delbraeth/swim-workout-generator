@@ -19,6 +19,7 @@ import { createPool } from "mariadb";
 import crypto          from "crypto";
 import { suggestedPhaseFromWeeksOut, weeksUntilEvent } from "./lib/season.js";
 import { EVENT_KIND_VALUES, DEFAULT_EVENT_KIND } from "./src/lib/eventKinds.js";
+import { RACE_EVENT_IDS, RACE_TIME_KINDS } from "./src/lib/raceEvents.js";
 
 // Parse the optional DB_CONFIG JSON blob; malformed JSON is ignored (falls back
 // to the individual vars) with a warning rather than crashing boot.
@@ -6954,6 +6955,76 @@ export async function dbDeleteBenchmark(id, callerSub) {
   if (cur[0].user_sub !== callerSub) return { ok: false, reason: "not_owner" };
   const r = await pool.query("DELETE FROM `benchmarks` WHERE `id` = ?", [Number(id)]);
   return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// ─── Race event goal/PR times (Phase 5 #4 — HS race-pace Slice B) ─────────────
+// Polymorphic owner: exactly one of userSub / managedId. One row per
+// owner+event+course+kind (enforced here, not via SQL UNIQUE — nullable poly key).
+function _eventTimeOwner(userSub, managedId) {
+  return managedId != null
+    ? { where: "`managed_id` = ?", val: managedId }
+    : { where: "`user_sub` = ?",   val: userSub };
+}
+
+export async function dbListEventTimes({ userSub = null, managedId = null } = {}) {
+  if (managedId == null && !userSub) return [];
+  const { where, val } = _eventTimeOwner(userSub, managedId);
+  const rows = await pool.query(
+    "SELECT `id`,`event`,`course`,`kind`,`time_secs`,`updated_at` " +
+    "FROM `swimmer_event_times` WHERE " + where + " ORDER BY `event` ASC, `kind` ASC",
+    [val]
+  );
+  return rows.map(r => ({
+    id: Number(r.id), event: r.event, course: r.course, kind: r.kind,
+    time_secs: Number(r.time_secs), updated_at: dtToIso(r.updated_at),
+  }));
+}
+
+export async function dbUpsertEventTime({ userSub = null, managedId = null, event, course = "25y", kind, timeSecs }) {
+  if (managedId == null && !userSub) return { ok: false, reason: "no_owner" };
+  if (!RACE_EVENT_IDS.includes(event)) return { ok: false, reason: "bad_event" };
+  if (!["25y", "25m", "50m"].includes(course)) return { ok: false, reason: "bad_course" };
+  if (!RACE_TIME_KINDS.includes(kind)) return { ok: false, reason: "bad_kind" };
+  const t = Number(timeSecs);
+  if (!Number.isFinite(t) || t <= 0 || t > 3600) return { ok: false, reason: "bad_time" };
+  const { where, val } = _eventTimeOwner(userSub, managedId);
+  const existing = await pool.query(
+    "SELECT `id` FROM `swimmer_event_times` WHERE " + where + " AND `event`=? AND `course`=? AND `kind`=? LIMIT 1",
+    [val, event, course, kind]
+  );
+  if (existing[0]) {
+    await pool.query("UPDATE `swimmer_event_times` SET `time_secs`=? WHERE `id`=?", [t, Number(existing[0].id)]);
+    return { ok: true, id: Number(existing[0].id), updated: true };
+  }
+  const r = await pool.query(
+    "INSERT INTO `swimmer_event_times` (`user_sub`,`managed_id`,`event`,`course`,`kind`,`time_secs`) VALUES (?,?,?,?,?,?)",
+    [userSub, managedId, event, course, kind, t]
+  );
+  return { ok: true, id: Number(r.insertId), created: true };
+}
+
+export async function dbDeleteEventTime(id, { userSub = null, managedId = null } = {}) {
+  if (!id) return { ok: false, reason: "no_id" };
+  const { where, val } = _eventTimeOwner(userSub, managedId);
+  const r = await pool.query("DELETE FROM `swimmer_event_times` WHERE `id`=? AND " + where, [Number(id), val]);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
+// Goal-first (then PR) target time per event for one course → { event: secs }.
+// Fed into the engine at generate time so raceAnchor sets resolve real targets.
+export async function dbResolveRaceGoals({ userSub = null, managedId = null, course = "25y" } = {}) {
+  if (managedId == null && !userSub) return {};
+  const all = await dbListEventTimes({ userSub, managedId });
+  const byEvent = {};
+  for (const r of all) {
+    if (r.course !== course) continue;
+    (byEvent[r.event] ||= {})[r.kind] = r.time_secs;
+  }
+  const out = {};
+  for (const ev of Object.keys(byEvent)) {
+    out[ev] = byEvent[ev].goal ?? byEvent[ev].pr ?? null;
+  }
+  return out;
 }
 
 // ── Scheduled workouts (I — Week-view planning, Phase 1) ─────────────
