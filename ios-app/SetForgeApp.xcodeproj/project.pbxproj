@@ -182,6 +182,7 @@
 				DEVELOPMENT_TEAM = 82ZA8JP99Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SetForge reads your swims from Apple Health to keep your training history in sync.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SetForge saves your completed swims to Apple Health.";
 				INFOPLIST_FILE = "Info-Debug.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -215,6 +216,7 @@
 				DEVELOPMENT_TEAM = 82ZA8JP99Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SetForge reads your swims from Apple Health to keep your training history in sync.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SetForge saves your completed swims to Apple Health.";
 				INFOPLIST_FILE = "Info-Release.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
