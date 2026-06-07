@@ -449,9 +449,14 @@ final class GenerateViewModel: ObservableObject {
 struct OkResponse: Decodable { let ok: Bool? }
 
 struct GenerateView: View {
+    /// B9 — when set (Siri/Shortcuts quick-generate), prefill the yardage and
+    /// auto-run a generate once types have loaded.
+    var autoYards: Double? = nil
+
     @StateObject private var model = GenerateViewModel()
     @State private var runningWorkout: Workout?
     @State private var showPaceRescale = false
+    @State private var didAutoRun = false
 
     var body: some View {
         ZStack {
@@ -494,7 +499,15 @@ struct GenerateView: View {
         .navigationTitle("Generate")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Brand.bg, for: .navigationBar)
-        .task { await model.loadTypes() }
+        .task {
+            await model.loadTypes()
+            // B9 — Siri/Shortcuts quick-generate: prefill yardage + auto-run once.
+            if let autoYards, !didAutoRun {
+                didAutoRun = true
+                model.maxYards = min(6000, max(1000, autoYards))
+                await model.generate()
+            }
+        }
         .task { await model.loadCoachTargets() }
         .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
         .sheet(isPresented: $showPaceRescale) {

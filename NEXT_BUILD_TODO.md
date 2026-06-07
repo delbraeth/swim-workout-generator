@@ -4,7 +4,18 @@ Build number is at **14** (in source; not yet archived — accumulates B6 + B8).
 **Build 12 shipped to TestFlight 2026-06-07** (B14 — HealthKit write).
 (Build 11: B1 race-pace + Learn-to-Swim, `ddd5f92`.)
 
-## 🟡 In source for build 14 — Wave 3 native (B8) + B6 flag gating
+## 🟡 In source for build 14 — Wave 3 native (B8, B9) + B6 flag gating
+
+### B9 — Voice / Siri quick-generate (Wave 3 "if-only-three")
+- **App Intents** (`Intents/`): `GenerateWorkoutIntent` (`openAppWhenRun`) +
+  `WorkoutLength` AppEnum (short ~1500 / medium ~3000 / long ~4500) + `SetForgeShortcuts`
+  provider with phrases ("Generate a SetForge workout", …). "Hey Siri" + Shortcuts-app ready.
+- **Routing**: intent stamps `QuickGenerate.shared.pendingYards`; `HomeView` observes it,
+  pushes `GenerateView(autoYards:)` via `navigationDestination`; GenerateView prefills the
+  slider + auto-runs one generate after `loadTypes()`. Opens app (needs session+server),
+  shows the result to run.
+- `swiftc -parse` clean. **TODO at archive:** Siri/App-Intents need no entitlement, but
+  verify the intent appears in Shortcuts on-device after first launch.
 
 ### B8 — Deck/present mode + AirPrint (Wave 3 "if-only-three")
 - **Present mode** (`Views/PresentModeView.swift`): full-screen, giant-type, pure

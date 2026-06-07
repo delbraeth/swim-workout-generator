@@ -43,6 +43,10 @@ struct HomeView: View {
     @State private var showPractices = false
     @State private var showPaywall = false
     @State private var runningWorkout: Workout?
+    // B9 — Siri/Shortcuts quick-generate routing.
+    @ObservedObject private var quick = QuickGenerate.shared
+    @State private var showQuickGenerate = false
+    @State private var quickYards: Int?
 
     // Wrapper so the profile sheet is driven by data, never presented empty.
     struct ProfileTarget: Identifiable {
@@ -74,6 +78,17 @@ struct HomeView: View {
             .sheet(isPresented: $showPractices) { PracticesView(showNotes: model.bootstrap?.flag("coach_notes") ?? true) }
             .sheet(isPresented: $showPaywall) { PaywallView() }
             .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
+            // B9 — push Generate prefilled + auto-run when Siri/Shortcuts fires.
+            .navigationDestination(isPresented: $showQuickGenerate) {
+                GenerateView(autoYards: quickYards.map { Double($0) })
+            }
+            .onChange(of: quick.pendingYards) {
+                if let y = quick.pendingYards {
+                    quickYards = y
+                    showQuickGenerate = true
+                    quick.pendingYards = nil
+                }
+            }
         }
         .task { await model.load() }
     }
