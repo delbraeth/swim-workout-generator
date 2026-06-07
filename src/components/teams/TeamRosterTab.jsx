@@ -28,7 +28,8 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
       );
     }
 
-    export function TeamRosterTab({ teamId }) {
+    export function TeamRosterTab({ teamId, featureFlags = null }) {
+      const ff = featureFlags || {};   // Phase 6: gate the per-swimmer constraints affordance
       const [data, setData] = React.useState(null);                            // null = loading
       const [msg,  setMsg]  = React.useState(null);
       const [constraintTarget, setConstraintTarget] = React.useState(null);     // {name, swimmerSub, managedId}
@@ -115,6 +116,7 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
                         <div style={{ color: "var(--color-text-muted)", padding: "4px 8px", borderBottom: "1px solid var(--color-card)" }}>
                           {m.gender || "—"}
                         </div>
+                        {ff.constraints !== false && (
                         <div style={{ padding: "2px 8px", borderBottom: "1px solid var(--color-card)" }}>
                           <button
                             onClick={() => setConstraintTarget({
@@ -127,6 +129,7 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
                             🚱 Limits
                           </button>
                         </div>
+                        )}
                       </React.Fragment>
                     ))}
                   </div>

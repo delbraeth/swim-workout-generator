@@ -9,7 +9,8 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function GroupRow({ group, coachPool, managedInTeam, onChanged }) {   // exported for src/components/teams/TeamsView.jsx
+    export function GroupRow({ group, coachPool, managedInTeam, onChanged, featureFlags = null }) {   // exported for src/components/teams/TeamsView.jsx
+      const ff = featureFlags || {};   // Phase 6: gate the lane-plans panel
       const [expanded, setExpanded] = React.useState(false);
       const [detail,   setDetail]   = React.useState(null);
       const [addMemberId, setAddMemberId] = React.useState("");
@@ -316,8 +317,8 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                     </div>
                   )}
 
-                  {/* Lane plans (R-E) — hidden for solo groups per #17 */}
-                  {(detail.members || []).length >= 2 && (
+                  {/* Lane plans (R-E) — hidden for solo groups per #17; Phase 6 lane_plans flag */}
+                  {ff.lane_plans !== false && (detail.members || []).length >= 2 && (
                     <LanePlansPanel groupId={group.id} members={detail.members || []} isPrimary={isPrimary} onChanged={onChanged} />
                   )}
 

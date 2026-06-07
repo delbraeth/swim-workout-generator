@@ -30,7 +30,8 @@ import { RaceGoalsPanel } from "../profile/RaceGoalsPanel.jsx";
       );
     }
 
-    export function ManagedSwimmersView({ mySub = null } = {}) {
+    export function ManagedSwimmersView({ mySub = null, featureFlags = null } = {}) {
+      const ff = featureFlags || {};   // Phase 6: gate constraints / coach-notes panels
       const [list,       setList]       = React.useState(null);
       const [showArch,   setShowArch]   = React.useState(false);
       const [selectedId, setSelectedId] = React.useState(null);
@@ -296,7 +297,7 @@ import { RaceGoalsPanel } from "../profile/RaceGoalsPanel.jsx";
             {/* Declutter (2026-06-04): the per-swimmer panels are now collapsible
                 sections (collapsed by default) so the detail screen is a tidy list,
                 not one long stacked wall. */}
-            {!detail.archived && (
+            {!detail.archived && ff.constraints !== false && (
               <DetailSection emoji="🚱" title="Constraints">
                 <ConstraintsPanel key={"con-" + detail.id} managedId={detail.id}
                   seedConstraints={bundle?.constraints} />
@@ -328,7 +329,7 @@ import { RaceGoalsPanel } from "../profile/RaceGoalsPanel.jsx";
             )}
 
             {/* R-H: coach notes journal for this managed profile */}
-            {!detail.archived && (
+            {!detail.archived && ff.coach_notes !== false && (
               <DetailSection emoji="🗒️" title="Coach notes">
                 <CoachNotesPanel
                   key={"cn-" + detail.id}

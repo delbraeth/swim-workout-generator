@@ -563,7 +563,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     <RaceGoalsPanel endpoint="/api/me/event-times" />
                     {/* MAAP / SafeSport (Phase 5 #3) — coaches record their own
                         compliance credentials (cert + expiry). Coach-only. */}
-                    {(appEffectiveMe ? appEffectiveMe.is_coach : appMe?.is_coach) && (
+                    {ff.compliance !== false && (appEffectiveMe ? appEffectiveMe.is_coach : appMe?.is_coach) && (
                       <CompliancePanel endpoint="/api/me/credentials" />
                     )}
                     {/* Web Push opt-in (notification infra). Self-hides unless

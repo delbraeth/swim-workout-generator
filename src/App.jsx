@@ -4313,7 +4313,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             {view === "admin"    && <AdminView me={me} onStartImpersonation={handleStartImpersonation} />}
             {view === "parent"   && <ParentDashboard me={me} />}
             {view === "teams"    && <TeamsView />}
-            {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} />}
+            {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} featureFlags={featureFlags} />}
             {view === "lesson-groups" && <LessonGroupsView />}
             {view === "coach-home" && <CoachHomeView me={effectiveMe} onNavigate={setView} onGenerate={() => setView("generator")} />}
             {view === "practices" && <PracticesView />}
@@ -4544,6 +4544,9 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                 )}
               </div>
               )}
+              {/* Phase 6 advanced_generate: recovery / mix / sections hide when the
+                  bundle is off. Race-pace (above) + Learn-to-Swim stay CORE (F1/F2). */}
+              {featureFlags?.advanced_generate !== false && (<>
               {/* Easy day / Recovery day ON toggle + helper text */}
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button onClick={() => setRecoveryMode(v => !v)}
@@ -4628,6 +4631,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   );
                 })}
               </div>
+              </>)}
             </div>
             )}
 
@@ -4733,7 +4737,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   picker filters options that fit ALL lane paces and the generate
                   flow auto-opens MultiPacePrintView. Prefills from the selected
                   lane plan when one is in play; otherwise the coach edits rows. */}
-              {effectiveMe?.is_coach && (
+              {effectiveMe?.is_coach && featureFlags?.lane_plans !== false && (
                 <MultiLaneControl
                   multiLaneMode={multiLaneMode}
                   setMultiLaneMode={setMultiLaneMode}
@@ -5151,7 +5155,9 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                       🖨 Print Workout
                     </button>
                     {/* Eval 2026-06-06 #2 — Whiteboard print: one big-font
-                        landscape page to post on deck / copy onto a whiteboard. */}
+                        landscape page to post on deck / copy onto a whiteboard.
+                        Phase 6: rides with the lane_plans bundle (board fix F3). */}
+                    {featureFlags?.lane_plans !== false && (
                     <button
                       onClick={() => setShowWhiteboard(true)}
                       style={{
@@ -5163,6 +5169,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                       title="One big-font landscape page sized to post on deck or copy onto a pool whiteboard (no swimmer names)">
                       🪧 Whiteboard
                     </button>
+                    )}
                     {/* N6 — Multi-pace export. Coach-only, group-only. Visible only
                         when generating for a group with ≥2 members (lane plans can't
                         exist for groups <2 per decision #17). */}

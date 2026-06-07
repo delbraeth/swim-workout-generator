@@ -760,6 +760,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                     <GroupRow key={g.id} group={g}
                       coachPool={coachPool || []}
                       managedInTeam={managedInTeam || []}
+                      featureFlags={detail.feature_flags}
                       onChanged={() => loadGroups(detail.id)} />
                   ))}
                 </div>
@@ -768,7 +769,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
             )}
 
             {activeTab === "roster" && (
-              <TeamRosterTab teamId={detail.id} />
+              <TeamRosterTab teamId={detail.id} featureFlags={detail.feature_flags} />
             )}
 
             {activeTab === "events" && detail.feature_flags?.events !== false && (

@@ -27,7 +27,7 @@ export const FEATURE_FLAGS = [
   { key: "lane_plans",       label: "Lane plans & whiteboard", desc: "Saved lane plans, multi-lane generate, the whiteboard/print view.",         default: true },  // F3
   { key: "coach_notes",      label: "Coach notes",           desc: "Per-swimmer coach notes.",                                                    default: true },
   { key: "compliance",       label: "Compliance credentials", desc: "SafeSport / background-check / USA-S cert tracking.",                        default: true },  // F5: force-ON if minors
-  { key: "advanced_generate", label: "Advanced generate options", desc: "Dryland, mix-bias, recovery, Bank/Engine/Mix source, equipment. (Race-pace & Learn-to-Swim always stay.)", default: true },
+  { key: "advanced_generate", label: "Advanced generate options", desc: "Recovery day, mix-bias, section skip/add (+ dryland & source later). Basic equipment, race-pace & Learn-to-Swim always stay.", default: true },
   { key: "community",        label: "Community",             desc: "Discord link + Supporter tier.",                                              default: true },
   { key: "notifications",    label: "Browser notifications", desc: "Web-push opt-in.",                                                            default: true },
 ];
