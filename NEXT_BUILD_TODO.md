@@ -4,7 +4,19 @@ Build number is at **14** (in source; not yet archived — accumulates B6 + B8).
 **Build 12 shipped to TestFlight 2026-06-07** (B14 — HealthKit write).
 (Build 11: B1 race-pace + Learn-to-Swim, `ddd5f92`.)
 
-## 🟡 In source for build 14 — Wave 3 native (B8, B9) + B6 flag gating
+## 🟡 In source for build 14 — Wave 3 native (B8, B9, B14b) + B6 flag gating
+
+### B14b — HealthKit READ / import Apple-Watch swims (Wave 3; partial-Watch substitute)
+- **No server change** — reuses `POST /api/log-workout`. Each Watch swim's id =
+  its HealthKit UUID with hyphens stripped (32 hex chars, fits the id column), so
+  the server's duplicate-id 409 IS the dedup; re-imports are counted "already in history".
+- `HealthKitManager`: `requestReadAuth()` (workouts + distanceSwimming), `readRecentSwims()`
+  (HKSampleQuery, .swimming, last 60d), `importRecentSwims(poolMode:)` → builds a minimal
+  1×distance "main" block (distance converted to the pool unit), POSTs each, tallies
+  imported/skipped/failed. `NSHealthShareUsageDescription` already in source (build 12).
+- **UI**: "Import Apple Watch swims" button on HistoryView (shown when HealthKit available)
+  + result alert; on success calls `onImported` → Home refreshes bootstrap.
+- Closes B14 (write shipped build 12 · read now). `swiftc -parse` clean.
 
 ### B9 — Voice / Siri quick-generate (Wave 3 "if-only-three")
 - **App Intents** (`Intents/`): `GenerateWorkoutIntent` (`openAppWhenRun`) +

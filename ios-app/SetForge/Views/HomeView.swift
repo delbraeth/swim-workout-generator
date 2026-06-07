@@ -72,7 +72,9 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showFeedback) { FeedbackView() }
             .sheet(isPresented: $showHistory) {
-                HistoryView(workouts: model.bootstrap?.workouts ?? [])
+                HistoryView(workouts: model.bootstrap?.workouts ?? [],
+                            poolMode: model.bootstrap?.poolMode,
+                            onImported: { Task { await model.load(force: true) } })
             }
             .sheet(isPresented: $showAssigned) { AssignedView() }
             .sheet(isPresented: $showPractices) { PracticesView(showNotes: model.bootstrap?.flag("coach_notes") ?? true) }
