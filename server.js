@@ -59,7 +59,7 @@ import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 import { PUSH_ACTIVE, pushConfigState, sendPushToUser } from "./lib/push.js";
 import { WEATHER_ACTIVE, weatherConfigState, getForecast, weatherSelfTest } from "./lib/weather.js";
-import { resolveTeamFlags } from "./src/lib/featureFlags.js";
+import { resolveTeamFlags, unionFlags } from "./src/lib/featureFlags.js";
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
 import { buildIcs } from "./lib/ics.js";
 import { toCsv } from "./lib/csv.js";
@@ -97,7 +97,7 @@ import {
   dbRevokeSession, dbRevokeSessionByPrefix, dbRevokeOthersByUser, dbListSessions,
   dbGetOrCreateCsrf, dbVerifyCsrf,
   dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
-  dbGetTeamFlagsRow, dbSetTeamFlags,
+  dbGetTeamFlagsRow, dbSetTeamFlags, dbListUserTeamsForFlags,
   dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach, dbListCoachesForPicker,
   dbUpdateTeamCoachRole, dbTransferGroupPrimary,
   dbProposeOwnershipTransfer, dbCancelOwnershipTransfer, dbAcceptOwnershipTransfer,
@@ -899,7 +899,19 @@ app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
     ]);
     if (!bootstrap || !bootstrap.me) return res.status(404).json({ error: "user not found" });
     const team_calendars = (teamCalendars || []).map(t => ({ team_id: t.team_id, team_name: t.team_name, url: calendarFeedUrl(req, t.token) }));
-    res.json({ ...bootstrap, team_calendars, billing: { status: billingStatus } });
+    // Phase 6: union visibility map across the user's teams (most-permissive — a
+    // surface shows if ANY of their teams enables it; no teams ⇒ all defaults on).
+    // Gates personal/nav surfaces; team-scoped surfaces use the team's own flags.
+    let feature_flags;
+    try {
+      const teams = await dbListUserTeamsForFlags(req.userSub);
+      const maps = await Promise.all(teams.map(async t => {
+        const row = await dbGetTeamFlagsRow(t.id).catch(() => null);
+        return resolveTeamFlags({ preset: row?.preset || null, overrides: row?.overrides || {}, hasMinors: t.team_type !== "masters" });
+      }));
+      feature_flags = unionFlags(maps);
+    } catch (e) { console.warn(`[bootstrap] feature-flag union failed: ${e.message}`); feature_flags = unionFlags([]); }
+    res.json({ ...bootstrap, team_calendars, feature_flags, billing: { status: billingStatus } });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

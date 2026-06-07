@@ -3005,6 +3005,21 @@ export async function dbGetTeamFlagsRow(teamId) {
   return { preset: rows[0].preset || null, overrides: overrides || {} };
 }
 
+// All non-archived teams a user belongs to (coach OR group member), with type —
+// inputs for the bootstrap union flag map (Phase 6 personal/nav gating).
+export async function dbListUserTeamsForFlags(userSub) {
+  if (!userSub) return [];
+  const rows = await pool.query(
+    "SELECT DISTINCT t.`id`, t.`team_type` FROM `teams` t " +
+    "WHERE t.`archived` = 0 AND ( " +
+    "  t.`id` IN (SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL) " +
+    "  OR t.`id` IN (SELECT g.`team_id` FROM `group_members` gm JOIN `groups` g ON g.`id` = gm.`group_id` " +
+    "    WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` IS NOT NULL) )",
+    [userSub, userSub]
+  );
+  return rows.map(r => ({ id: r.id, team_type: r.team_type }));
+}
+
 export async function dbSetTeamFlags(teamId, { preset = null, overrides = {} } = {}, updatedBy = null) {
   if (!teamId) return { ok: false, reason: "no_team" };
   const p = ["simple", "standard", "full"].includes(preset) ? preset : null;

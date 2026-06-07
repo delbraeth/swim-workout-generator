@@ -1727,6 +1727,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [authMode,      setAuthMode]      = useState(null); // "open" | "apple"
       const [authError,     setAuthError]     = useState(null);
       const [me,            setMe]            = useState(null); // /api/me payload (for is_admin gate, etc.)
+      const [featureFlags,  setFeatureFlags]  = useState(null); // Phase 6 union visibility map from bootstrap (null = all-on)
       // View-as: admin-only QA mode that temporarily overrides role flags
       // for UI gating purposes. Real `me` stays unchanged so API permission
       // checks (server-side) and the view-as switcher's own visibility
@@ -2020,6 +2021,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         if (!d || typeof d !== "object") return;
         // me
         if (d.me) setMe(d.me);
+        // Phase 6 union visibility map (nav/personal gating). null ⇒ all-on.
+        if (d.feature_flags) setFeatureFlags(d.feature_flags);
         // workouts (history) — merge with local cache like the original useEffect did
         if (Array.isArray(d.workouts)) {
           const merged = mergeById(loadLocalHistory(), d.workouts);
@@ -4176,7 +4179,11 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                               { id: "practices", emoji: "📋", label: "Practices",         group: "Programming", coachOnly: true },
                               { id: "my-sets",  emoji: "📝", label: "My Sets",            group: "Programming", coachOnly: false }, // Lesson tier — author lesson sets
                               { id: "catalog",   emoji: "📚", label: "Catalog",           group: "Programming", coachOnly: true },
-                              ].filter(item => effectiveMe?.is_coach || !item.coachOnly);
+                              ].filter(item => effectiveMe?.is_coach || !item.coachOnly)
+                               // Phase 6 visibility: hide Catalog/My-Sets when the
+                               // user's teams have those bundles off (union; null = on).
+                               .filter(item => !(item.id === "catalog" && featureFlags?.catalog === false)
+                                            && !(item.id === "my-sets" && featureFlags?.ugc === false));
                               let lastGroup = null;
                               return items.map(item => {
                                 const active = view === item.id;
