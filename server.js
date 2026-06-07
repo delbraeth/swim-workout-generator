@@ -3214,11 +3214,16 @@ app.post("/api/teams", checkOrigin, requireAuth, requireCoach, requireCsrf, writ
 // compliance force-ON for non-masters teams — F5). team must be a dbGetTeam row.
 async function teamFeatureFlags(team) {
   const row = await dbGetTeamFlagsRow(team.id).catch(() => null);
-  return resolveTeamFlags({
-    preset:    row?.preset || null,
-    overrides: row?.overrides || {},
-    hasMinors: team.team_type !== "masters",
-  });
+  // A5: no explicit config + a Lesson-tier owner → default to the Simple preset
+  // (the lesson/private coach gets the stripped-down app out of the box).
+  let preset = row?.preset || null;
+  if (!row && team.owner_coach_sub) {
+    const owner = await dbGetMe(team.owner_coach_sub).catch(() => null);
+    if (owner && owner.tier === "lesson") preset = "simple";
+  }
+  // A6: a declared "no minors" team lifts the F5 compliance force-on.
+  const hasMinors = team.team_type !== "masters" && !(row && row.no_minors);
+  return resolveTeamFlags({ preset, overrides: row?.overrides || {}, hasMinors });
 }
 
 // Team detail. Requires active membership of any role.
@@ -3245,6 +3250,7 @@ app.get("/api/teams/:id/feature-flags", requireAuth, async (req, res) => {
     res.json({
       preset: row?.preset || null,
       overrides: row?.overrides || {},
+      no_minors: !!(row && row.no_minors),
       resolved: await teamFeatureFlags(team),
       team_type: team.team_type,
       can_edit: role === "owner" || role === "admin",
@@ -3259,9 +3265,9 @@ app.put("/api/teams/:id/feature-flags", checkOrigin, requireAuth, requireCsrf, w
     if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "owner or admin required" });
     const team = await dbGetTeam(req.params.id);
     if (!team) return res.status(404).json({ error: "team not found" });
-    const { preset = null, overrides = {} } = req.body || {};
+    const { preset = null, overrides = {}, no_minors } = req.body || {};
     const clean = (overrides && typeof overrides === "object") ? overrides : {};
-    const r = await dbSetTeamFlags(req.params.id, { preset, overrides: clean }, req.userSub);
+    const r = await dbSetTeamFlags(req.params.id, { preset, overrides: clean, noMinors: (no_minors === undefined ? undefined : !!no_minors) }, req.userSub);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({ userSub: req.userSub, eventType: "team.feature_flags", ...reqMeta(req), details: { team_id: req.params.id, preset: preset || null } });
     res.json({ ok: true, resolved: await teamFeatureFlags(team) });

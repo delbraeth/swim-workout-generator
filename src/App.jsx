@@ -5363,6 +5363,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     onSnapshot={authenticated ? handleSnapshotBlock : null}
                     ugcSetIdMeta={ugcSetIdMeta}
                     sectionSource={sectionSources[block.section] || "bank"}
+                    advancedGenerate={featureFlags?.advanced_generate !== false}
                     onSectionSourceChange={(newSource) => {
                       setSectionSources(prev => {
                         const next = { ...prev, [block.section]: newSource };
@@ -5394,7 +5395,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   />
                 ))}
 
-                {/* Section model B2 — add a dryland block (before / after pool). */}
+                {/* Section model B2 — add a dryland block. Phase 6: advanced_generate bundle. */}
+                {featureFlags?.advanced_generate !== false && (
                 <div className="screen-only" style={{ marginTop: 12, marginBottom: 4 }}>
                   {!drylandPickerOpen ? (
                     <button onClick={() => setDrylandPickerOpen(true)}
@@ -5424,6 +5426,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Coach note (screen only — user opted not to include in print) */}
                 <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid var(--color-border)", color: "var(--color-text-muted)", fontSize: 13 }}>

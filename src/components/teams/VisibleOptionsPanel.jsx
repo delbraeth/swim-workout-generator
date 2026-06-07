@@ -27,16 +27,19 @@ export function VisibleOptionsPanel({ teamId, canWrite }) {
   }, [teamId]);
   React.useEffect(() => { load(); }, [load]);
 
-  const save = async (preset, overrides) => {
+  const save = async (preset, overrides, noMinors) => {
     setBusy(true); setMsg(null);
     try {
+      const body = { preset, overrides };
+      if (noMinors !== undefined) body.no_minors = noMinors;
       const r = await fetch(`/api/teams/${teamId}/feature-flags`, {
         method: "PUT", headers: { "Content-Type": "application/json", ...csrfHeaders() },
-        body: JSON.stringify({ preset, overrides }),
+        body: JSON.stringify(body),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
-      setState(s => ({ ...s, preset, overrides, resolved: j.resolved || s.resolved }));
+      setState(s => ({ ...s, preset, overrides, resolved: j.resolved || s.resolved,
+        no_minors: noMinors !== undefined ? noMinors : s.no_minors }));
     } catch (e) { setMsg(`Couldn't save: ${e.message}`); }
     setBusy(false);
   };
@@ -47,6 +50,7 @@ export function VisibleOptionsPanel({ teamId, canWrite }) {
     const overrides = { ...(state.overrides || {}), [key]: !cur };
     save(state.preset || null, overrides);
   };
+  const toggleNoMinors = () => save(state.preset || null, state.overrides || {}, !state.no_minors);
 
   if (state === null) return <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>Loading…</div>;
 
@@ -77,12 +81,31 @@ export function VisibleOptionsPanel({ teamId, canWrite }) {
         })}
       </div>
 
+      {/* A6 — adult team / no minors (non-masters teams only). Lifts the
+          compliance force-on so an all-adult club can drop youth compliance. */}
+      {minors && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 0 12px", borderBottom: "1px solid var(--color-border)", marginBottom: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: "var(--color-text)", fontWeight: 600 }}>Adult team (no minors)</div>
+            <div style={{ fontSize: 11, color: "var(--color-text-dim)" }}>Everyone here is 18+ — lets you turn off youth compliance.</div>
+          </div>
+          <button type="button" disabled={!canWrite || busy} onClick={toggleNoMinors}
+            style={{ flexShrink: 0, padding: "4px 12px", borderRadius: 12, fontSize: 11, fontWeight: 700,
+              cursor: canWrite ? "pointer" : "default",
+              border: `1px solid ${state.no_minors ? "var(--color-positive)" : "var(--color-border-strong)"}`,
+              background: state.no_minors ? "var(--color-positive)" : "transparent",
+              color: state.no_minors ? "var(--color-bg)" : "var(--color-text-muted)" }}>
+            {state.no_minors ? "Yes" : "No"}
+          </button>
+        </div>
+      )}
+
       {/* Per-bundle toggles */}
       <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-dim)", marginBottom: 6 }}>Fine-tune</div>
       <div style={{ display: "grid", gap: 2 }}>
         {FEATURE_FLAGS.map(f => {
           const on = !!state.resolved[f.key];
-          const locked = f.key === "compliance" && minors;       // F5: forced on for minor teams
+          const locked = f.key === "compliance" && minors && !state.no_minors;   // F5: forced on for minor teams (unless declared adults-only, A6)
           return (
             <div key={f.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
               <div style={{ minWidth: 0 }}>

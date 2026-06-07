@@ -2996,13 +2996,13 @@ export async function dbGetTeam(id) {
 export async function dbGetTeamFlagsRow(teamId) {
   if (!teamId) return null;
   const rows = await pool.query(
-    "SELECT `preset`, `overrides` FROM `team_feature_flags` WHERE `team_id` = ? AND `group_id` = '' LIMIT 1",
+    "SELECT `preset`, `overrides`, `no_minors` FROM `team_feature_flags` WHERE `team_id` = ? AND `group_id` = '' LIMIT 1",
     [teamId]
   );
   if (!rows[0]) return null;
   let overrides = rows[0].overrides;
   if (typeof overrides === "string") { try { overrides = JSON.parse(overrides); } catch (_) { overrides = {}; } }
-  return { preset: rows[0].preset || null, overrides: overrides || {} };
+  return { preset: rows[0].preset || null, overrides: overrides || {}, no_minors: !!rows[0].no_minors };
 }
 
 // All non-archived teams a user belongs to (coach OR group member), with type —
@@ -3020,14 +3020,23 @@ export async function dbListUserTeamsForFlags(userSub) {
   return rows.map(r => ({ id: r.id, team_type: r.team_type }));
 }
 
-export async function dbSetTeamFlags(teamId, { preset = null, overrides = {} } = {}, updatedBy = null) {
+export async function dbSetTeamFlags(teamId, { preset = null, overrides = {}, noMinors } = {}, updatedBy = null) {
   if (!teamId) return { ok: false, reason: "no_team" };
   const p = ["simple", "standard", "full"].includes(preset) ? preset : null;
-  await pool.query(
-    "INSERT INTO `team_feature_flags` (`team_id`, `group_id`, `preset`, `overrides`, `updated_by`) VALUES (?, '', ?, ?, ?) " +
-    "ON DUPLICATE KEY UPDATE `preset`=VALUES(`preset`), `overrides`=VALUES(`overrides`), `updated_by`=VALUES(`updated_by`)",
-    [teamId, p, JSON.stringify(overrides || {}), updatedBy]
-  );
+  // noMinors undefined → preserve the existing column; defined → write 0/1 (A6).
+  if (noMinors === undefined) {
+    await pool.query(
+      "INSERT INTO `team_feature_flags` (`team_id`, `group_id`, `preset`, `overrides`, `updated_by`) VALUES (?, '', ?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE `preset`=VALUES(`preset`), `overrides`=VALUES(`overrides`), `updated_by`=VALUES(`updated_by`)",
+      [teamId, p, JSON.stringify(overrides || {}), updatedBy]
+    );
+  } else {
+    await pool.query(
+      "INSERT INTO `team_feature_flags` (`team_id`, `group_id`, `preset`, `overrides`, `no_minors`, `updated_by`) VALUES (?, '', ?, ?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE `preset`=VALUES(`preset`), `overrides`=VALUES(`overrides`), `no_minors`=VALUES(`no_minors`), `updated_by`=VALUES(`updated_by`)",
+      [teamId, p, JSON.stringify(overrides || {}), noMinors ? 1 : 0, updatedBy]
+    );
+  }
   return { ok: true };
 }
 
