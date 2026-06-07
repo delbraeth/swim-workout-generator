@@ -16,6 +16,19 @@ final class GenerateViewModel: ObservableObject {
     @Published var bias: SectionBias = .balanced
     @Published var phase: TrainingPhase = .none
     @Published var recoveryMode = false
+    // Race-pace pack (Phase 5 #4): anchor the main set to a goal/PR time.
+    @Published var racePace = false
+    @Published var raceEvent = "free_100"
+    @Published var usrpt = false
+    // Learn-to-Swim (Eval #5): beginner youth bank; surfaced for the lesson type.
+    @Published var youthMode = false
+
+    /// Race-pace event taxonomy — mirrors `src/lib/raceEvents.js` RACE_EVENTS.
+    static let raceEvents: [(id: String, label: String)] = [
+        ("free_50", "50 Free"), ("free_100", "100 Free"), ("free_200", "200 Free"),
+        ("free_500", "500 Free"), ("back_100", "100 Back"), ("breast_100", "100 Breast"),
+        ("fly_100", "100 Fly"), ("im_200", "200 IM"),
+    ]
     /// Sections to include; `main` is always present and not removable. `kick`
     /// is opt-in (defaults OFF) — every other section defaults ON, mirroring the
     /// web SPA where kick is absent from the default includedSections.
@@ -129,16 +142,27 @@ final class GenerateViewModel: ObservableObject {
         let sections = WorkoutSectionKind.allCases
             .map(\.rawValue)
             .filter { includedSections.contains($0) || $0 == WorkoutSectionKind.main.rawValue }
+        // Lesson tier (Phase 5): the lesson type is a short 800–1200yd skill
+        // session. The slider runs 1000–6000, so clamp the sent value into the
+        // lesson band — the server forces the 3-section shape + low floor, and
+        // iOS sends no userMin, so this clamp is all that's needed to generate a
+        // valid lesson (mirrors the web clamp). Non-lesson types unchanged.
+        let isLesson = typeId == "lesson"
+        let reqMaxYards = isLesson ? min(1200, max(800, Int(maxYards))) : Int(maxYards)
         let req = GenerateRequest(
             typeId: typeId,
-            maxYards: Int(maxYards),
+            maxYards: reqMaxYards,
             poolMode: pool.rawValue,
             equipment: equipment,
             sectionBias: bias.rawValue,
             recoveryMode: recoveryMode,
             phase: phase == .none ? nil : phase.rawValue,
             includedSections: sections,
-            lanesPaceSecs: lanesPaceSecs
+            lanesPaceSecs: lanesPaceSecs,
+            racePace: racePace,
+            raceEvent: racePace ? raceEvent : nil,
+            usrpt: usrpt,
+            youthMode: isLesson ? youthMode : false
         )
         do {
             let resp = try await api.post("generate", body: req, as: GenerateResponse.self)
@@ -443,11 +467,13 @@ struct GenerateView: View {
                             generateForPicker
                             multiLaneEditor
                             typePicker
+                            learnToSwimToggle
                             yardageControl
                             coursePicker
                             biasPicker
                             phasePicker
                             recoveryToggle
+                            racePaceControl
                             sectionsPicker
                             equipmentPicker
                             generateButton
@@ -659,6 +685,58 @@ struct GenerateView: View {
             }
         }
         .tint(Brand.primary)
+        .padding(12)
+        .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Brand.border, lineWidth: 1))
+    }
+
+    /// 🧒 Learn-to-Swim — beginner youth bank. Only meaningful for the lesson
+    /// type, so it's surfaced contextually there (mirrors the web 🧒 toggle).
+    @ViewBuilder
+    private var learnToSwimToggle: some View {
+        if model.selectedTypeId == "lesson" {
+            Toggle(isOn: $model.youthMode) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("🧒 Learn-to-Swim").font(.subheadline.weight(.semibold)).foregroundStyle(Brand.text)
+                    Text("Beginner-friendly: short reps, deck-paced rest").font(.caption2).foregroundStyle(Brand.textDim)
+                }
+            }
+            .tint(Brand.primary)
+            .padding(12)
+            .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Brand.border, lineWidth: 1))
+        }
+    }
+
+    /// 🏁 Race pace — anchor the main set to the swimmer's goal/PR time for an
+    /// event (server resolves goals from the signed-in user). Event picker +
+    /// optional USRPT pacing reveal when the toggle is on.
+    private var racePaceControl: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $model.racePace) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("🏁 Race pace").font(.subheadline.weight(.semibold)).foregroundStyle(Brand.text)
+                    Text("Anchor the main set to your goal / PR time").font(.caption2).foregroundStyle(Brand.textDim)
+                }
+            }
+            .tint(Brand.primary)
+
+            if model.racePace {
+                Picker("Event", selection: $model.raceEvent) {
+                    ForEach(GenerateViewModel.raceEvents, id: \.id) { e in
+                        Text(e.label).tag(e.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Brand.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Toggle(isOn: $model.usrpt) {
+                    Text("USRPT pacing").font(.caption.weight(.semibold)).foregroundStyle(Brand.textMuted)
+                }
+                .tint(Brand.primary)
+            }
+        }
         .padding(12)
         .background(Brand.card, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Brand.border, lineWidth: 1))

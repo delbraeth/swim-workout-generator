@@ -132,11 +132,19 @@ struct GenerateRequest: Encodable {
     /// Multi-lane: per-lane pace in seconds/100. nil ⇒ single-pace (key omitted
     /// when encoded). The engine filters to options whose intervals fit all lanes.
     let lanesPaceSecs: [Int]?
+    /// Race-pace pack (Phase 5 #4): anchor the main set to the swimmer's goal/PR
+    /// time for `raceEvent`. raceEvent is sent only when racePace is on. usrpt
+    /// requests USRPT-style pacing. youthMode = the Learn-to-Swim beginner bank.
+    let racePace: Bool
+    let raceEvent: String?
+    let usrpt: Bool
+    let youthMode: Bool
 
     enum CodingKeys: String, CodingKey {
         case typeId, maxYards, poolMode, equipment, sectionBias
         case recoveryMode, phase, includedSections
         case lanesPaceSecs
+        case racePace, raceEvent, usrpt, youthMode
     }
 
     func encode(to encoder: Encoder) throws {
@@ -150,6 +158,10 @@ struct GenerateRequest: Encodable {
         try c.encodeIfPresent(phase, forKey: .phase)
         try c.encode(includedSections, forKey: .includedSections)
         try c.encodeIfPresent(lanesPaceSecs, forKey: .lanesPaceSecs)
+        try c.encode(racePace, forKey: .racePace)
+        try c.encodeIfPresent(raceEvent, forKey: .raceEvent)
+        try c.encode(usrpt, forKey: .usrpt)
+        try c.encode(youthMode, forKey: .youthMode)
     }
 }
 

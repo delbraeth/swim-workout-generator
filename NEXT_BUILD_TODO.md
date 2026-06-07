@@ -4,8 +4,19 @@ Build number is at **10**. **Build 10 LIVE on TestFlight 2026-06-04** (person-me
 Sections fix, commit a56b041 — Sign-out discoverability at large Dynamic Type). Next
 archive = bump to 11.
 
-No iOS changes are currently queued for build 11. Candidates when one is built: iOS
-swimmer-dashboard parity (Phase 5 #2), or whatever the next iOS feature is.
+**Queued for build 11 (uncommitted in `build-3` working tree, NOT yet archived):**
+- **B1 — race-pace + Learn-to-Swim in the iOS generator** (board's #1 iOS gap;
+  `GenerateView.swift` + `GenerateModels.swift`). `GenerateRequest` now sends
+  `racePace`/`raceEvent`/`usrpt`/`youthMode`; UI = 🏁 Race-pace control (toggle +
+  event picker + USRPT) and a contextual 🧒 Learn-to-Swim toggle (lesson type).
+  Server already accepts all four params. `swiftc -parse` clean; needs an Xcode
+  build to compile-verify. **Verify after build:** generate a race-pace set (pick an
+  event) + a lesson with Learn-to-Swim on; confirm the workout reflects them.
+
+**Broader iOS roadmap (sequenced):** `docs/IMPLEMENTATION_PLAN_2026-06-06.md` Workstream B —
+after B1: B2 run/log hardening, B3 generate-for, B4 lane-plan view, B5 coach-notes;
+then B-native (offline, deck/AirPrint, voice, HealthKit) + Phase-6 flag gating.
+Other prior candidate: swimmer-dashboard parity (Phase 5 #2).
 
 ## ✅ Shipped in build 9 (uploaded to TestFlight)
 Both items were committed on `build-3` and are now in a shipped build:
@@ -34,9 +45,9 @@ without it here). Confirmed login provider is independent of IAP (tested fine).
 
 ## To cut a future build (template)
 ```
-sed -i '' 's/CURRENT_PROJECT_VERSION = 9;/CURRENT_PROJECT_VERSION = 10;/g' \
+sed -i '' 's/CURRENT_PROJECT_VERSION = 10;/CURRENT_PROJECT_VERSION = 11;/g' \
   ios-app/SetForgeApp.xcodeproj/project.pbxproj
-git commit -am "iOS: bump build number to 10"
+git commit -am "iOS: bump build number to 11"
 git push origin build-3
 cd ios-app && xcodebuild -project SetForgeApp.xcodeproj -scheme SetForge \
   -configuration Release -destination 'generic/platform=iOS' \
