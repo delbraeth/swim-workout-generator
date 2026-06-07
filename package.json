@@ -9,7 +9,8 @@
     "build": "rm -rf public/assets/chunks && esbuild src/main.jsx --bundle --outdir=public/assets --entry-names=app --chunk-names=chunks/[name]-[hash] --splitting --format=esm --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --minify --target=es2019",
     "build:dev": "rm -rf public/assets/chunks && esbuild src/main.jsx --bundle --outdir=public/assets --entry-names=app --chunk-names=chunks/[name]-[hash] --splitting --format=esm --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --sourcemap --target=es2019",
     "smoke": "node tools/jsdom_smoke.mjs",
-    "freevars": "node tools/freevars.mjs"
+    "freevars": "node tools/freevars.mjs",
+    "checkserver": "esbuild server.js --bundle --platform=node --format=esm --packages=external --outfile=/dev/null --log-level=error"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
