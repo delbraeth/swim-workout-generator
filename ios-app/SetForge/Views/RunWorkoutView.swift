@@ -293,9 +293,11 @@ struct RunWorkoutView: View {
                 Button {
                     healthSaving = true
                     Task {
-                        let ok = await HealthKitManager.shared.requestAuth()
-                        let saved = ok && (await HealthKitManager.shared.saveSwim(
-                            distanceMeters: swimMeters, durationSecs: totalElapsed, poolLengthMeters: poolLenMeters))
+                        var saved = false
+                        if await HealthKitManager.shared.requestAuth() {
+                            saved = await HealthKitManager.shared.saveSwim(
+                                distanceMeters: swimMeters, durationSecs: totalElapsed, poolLengthMeters: poolLenMeters)
+                        }
                         healthSaved = saved
                         healthSaving = false
                     }
