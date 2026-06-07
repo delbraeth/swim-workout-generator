@@ -5852,13 +5852,13 @@ app.post("/api/teams/:teamId/events", checkOrigin, requireAuth, requireCsrf, wri
   try {
     const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date, kind, venue_id, start_time } = req.body || {};
-    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, kind, venueId: venue_id || null, startTime: start_time || null, createdByCoachSub: req.userSub });
+    const { name, date, kind, venue_id, start_time, group_id } = req.body || {};
+    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, kind, venueId: venue_id || null, startTime: start_time || null, groupId: group_id || null, createdByCoachSub: req.userSub });
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "team_event.create",
       ...reqMeta(req),
-      details:   { event_id: r.id, team_id: req.params.teamId, name, date, kind: kind || "meet", venue_id: venue_id || null },
+      details:   { event_id: r.id, team_id: req.params.teamId, name, date, kind: kind || "meet", venue_id: venue_id || null, group_id: group_id || null },
     });
     res.json(r);
   } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
@@ -5965,13 +5965,14 @@ app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter
     if (!ev) return res.status(404).json({ error: "not found" });
     const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date, kind, venue_id, start_time } = req.body || {};
+    const { name, date, kind, venue_id, start_time, group_id } = req.body || {};
     const patch = {};
     if (name !== undefined) patch.name = name;
     if (date !== undefined) patch.date = date;
     if (kind !== undefined) patch.kind = kind;
     if (venue_id !== undefined) patch.venueId = venue_id;
     if (start_time !== undefined) patch.startTime = start_time;
+    if (group_id !== undefined) patch.groupId = group_id;
     const r = await dbUpdateTeamEvent(req.params.id, patch);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({

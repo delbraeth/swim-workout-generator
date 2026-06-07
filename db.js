@@ -5578,7 +5578,7 @@ function _normEventTime(t) {
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
-export async function dbCreateTeamEvent({ teamId, name, date, kind = DEFAULT_EVENT_KIND, venueId = null, startTime = null, createdByCoachSub }) {
+export async function dbCreateTeamEvent({ teamId, name, date, kind = DEFAULT_EVENT_KIND, venueId = null, startTime = null, groupId = null, createdByCoachSub }) {
   if (!teamId) throw new Error("teamId required");
   if (!name || typeof name !== "string") throw new Error("name required");
   if (name.length > 120) throw new Error("name max 120 chars");
@@ -5588,9 +5588,9 @@ export async function dbCreateTeamEvent({ teamId, name, date, kind = DEFAULT_EVE
   if (st === undefined) throw new Error("start_time must be HH:MM");
   const id = genEventId();
   await pool.query(
-    "INSERT INTO `team_events` (`id`, `team_id`, `name`, `kind`, `date`, `venue_id`, `start_time`, `created_by_coach_sub`) " +
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    [id, teamId, name.trim(), k, date, venueId || null, st, createdByCoachSub || null]
+    "INSERT INTO `team_events` (`id`, `team_id`, `group_id`, `name`, `kind`, `date`, `venue_id`, `start_time`, `created_by_coach_sub`) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [id, teamId, groupId || null, name.trim(), k, date, venueId || null, st, createdByCoachSub || null]
   );
   return { ok: true, id };
 }
@@ -5644,7 +5644,7 @@ export async function dbDeleteTeamEvent(eventId) {
 
 // Update name / date on an existing event. team_id and created_by_coach_sub
 // are intentionally not editable — creator attribution is a tombstone.
-export async function dbUpdateTeamEvent(eventId, { name, date, kind, venueId, startTime } = {}) {
+export async function dbUpdateTeamEvent(eventId, { name, date, kind, venueId, startTime, groupId } = {}) {
   if (!eventId) return { ok: false, reason: "no_id" };
   const sets = [], vals = [];
   if (name !== undefined) {
@@ -5664,6 +5664,10 @@ export async function dbUpdateTeamEvent(eventId, { name, date, kind, venueId, st
     // null/"" clears the venue; a string sets it.
     sets.push("`venue_id` = ?"); vals.push(venueId || null);
   }
+  if (groupId !== undefined) {
+    // null/"" = whole team; a gr_xxx string targets one group.
+    sets.push("`group_id` = ?"); vals.push(groupId || null);
+  }
   if (startTime !== undefined) {
     const st = _normEventTime(startTime);
     if (st === undefined) return { ok: false, reason: "bad_time" };
@@ -5681,16 +5685,19 @@ export async function dbUpdateTeamEvent(eventId, { name, date, kind, venueId, st
 export async function dbListTeamEvents(teamId) {
   if (!teamId) return [];
   const rows = await pool.query(
-    "SELECT te.`id`, te.`team_id`, te.`name`, te.`kind`, te.`date`, te.`venue_id`, te.`start_time`, " +
+    "SELECT te.`id`, te.`team_id`, te.`group_id`, te.`name`, te.`kind`, te.`date`, te.`venue_id`, te.`start_time`, " +
     "       te.`status`, te.`status_note`, te.`rsvp_closes_at`, te.`created_by_coach_sub`, te.`created_at`, " +
     "       v.`name` AS venue_name, v.`latitude` AS venue_lat, v.`longitude` AS venue_lng, " +
-    "       v.`indoor_outdoor` AS venue_io, v.`timezone` AS venue_tz " +
+    "       v.`indoor_outdoor` AS venue_io, v.`timezone` AS venue_tz, g.`name` AS group_name " +
     "FROM `team_events` te LEFT JOIN `venues` v ON v.`id` = te.`venue_id` " +
+    "  LEFT JOIN `groups` g ON g.`id` = te.`group_id` " +
     "WHERE te.`team_id` = ? ORDER BY te.`date` ASC",
     [teamId]
   );
   return rows.map(r => ({
     id: r.id, team_id: r.team_id, name: r.name,
+    group_id: r.group_id || null,
+    group_name: r.group_name || null,
     kind: r.kind || DEFAULT_EVENT_KIND,
     date: dateToYmd(r.date),
     start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,
@@ -9174,12 +9181,14 @@ export async function dbListUpcomingEventsForUser(userSub) {
   // the user has a swimmer membership in. Dedupe by team_id implicitly via
   // DISTINCT on the outer query.
   const rows = await pool.query(
-    "SELECT DISTINCT te.`id`, te.`team_id`, t.`name` AS team_name, te.`name`, te.`kind`, te.`date`, " +
+    "SELECT DISTINCT te.`id`, te.`team_id`, te.`group_id`, t.`name` AS team_name, g.`name` AS group_name, " +
+    "       te.`name`, te.`kind`, te.`date`, " +
     "       te.`start_time`, te.`venue_id`, v.`name` AS venue_name, v.`latitude` AS venue_lat, " +
     "       v.`longitude` AS venue_lng, v.`indoor_outdoor` AS venue_io, v.`timezone` AS venue_tz, " +
     "       te.`status`, te.`status_note`, er.`status` AS my_rsvp " +
     "FROM `team_events` te " +
     "JOIN `teams` t ON t.`id` = te.`team_id` " +
+    "LEFT JOIN `groups` g ON g.`id` = te.`group_id` " +
     "LEFT JOIN `venues` v ON v.`id` = te.`venue_id` " +
     // caller's own RSVP for the event (Slice B2). event_rsvp.swimmer_sub may be
     // utf8mb3 vs the param's utf8mb4 — CONVERT both so the join is charset-safe.
@@ -9187,18 +9196,26 @@ export async function dbListUpcomingEventsForUser(userSub) {
     "  AND CONVERT(er.`swimmer_sub` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
     "WHERE te.`date` >= CURRENT_DATE " +
     "  AND ( " +
+    // Team coaches see every event on the team — group-targeted or not.
     "    te.`team_id` IN (SELECT `team_id` FROM `team_coaches` WHERE `coach_sub` = ? AND `removed_at` IS NULL) " +
-    "    OR te.`team_id` IN ( " +
-    "      SELECT g.`team_id` FROM `group_members` gm " +
-    "        JOIN `groups` g ON g.`id` = gm.`group_id` " +
-    "        WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g.`team_id` IS NOT NULL " +
-    "    ) " +
+    // Whole-team events (group_id NULL): visible to any member of any team group.
+    "    OR ( te.`group_id` IS NULL AND te.`team_id` IN ( " +
+    "      SELECT g2.`team_id` FROM `group_members` gm " +
+    "        JOIN `groups` g2 ON g2.`id` = gm.`group_id` " +
+    "        WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL AND g2.`team_id` IS NOT NULL " +
+    "    ) ) " +
+    // Group-targeted events: visible only to members of THAT group.
+    "    OR ( te.`group_id` IS NOT NULL AND te.`group_id` IN ( " +
+    "      SELECT gm.`group_id` FROM `group_members` gm " +
+    "        WHERE gm.`member_swimmer_sub` = ? AND gm.`left_at` IS NULL " +
+    "    ) ) " +
     "  ) " +
     "ORDER BY te.`date` ASC LIMIT 20",
-    [userSub, userSub, userSub]
+    [userSub, userSub, userSub, userSub]
   );
   return rows.map(r => ({
     id: r.id, team_id: r.team_id, team_name: r.team_name,
+    group_id: r.group_id || null, group_name: r.group_name || null,
     name: r.name, kind: r.kind || DEFAULT_EVENT_KIND, date: dateToYmd(r.date),
     start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,
     venue: _eventVenue(r),

@@ -56,12 +56,14 @@ import { WeatherChip } from "./WeatherChip.jsx";
       const [newEventKind,  setNewEventKind]  = React.useState("meet");
       const [newEventVenue, setNewEventVenue] = React.useState(null);          // { id, name, indoor_outdoor } | null
       const [newEventTime,  setNewEventTime]  = React.useState("");
+      const [newEventGroup, setNewEventGroup] = React.useState("");            // "" = whole team, else gr_xxx
       const [editingEventId, setEditingEventId] = React.useState(null);
       const [editEventName,  setEditEventName]  = React.useState("");
       const [editEventDate,  setEditEventDate]  = React.useState("");
       const [editEventKind,  setEditEventKind]  = React.useState("meet");
       const [editEventVenue, setEditEventVenue] = React.useState(null);
       const [editEventTime,  setEditEventTime]  = React.useState("");
+      const [editEventGroup, setEditEventGroup] = React.useState("");
       // Meet-anchored taper (MEET_ANCHORED_TAPER_SCOPE §3.6): inline picker
       // appears when coach clicks 🎯 on an event row. anchoringEventId = ev.id
       // while the picker is open. Groups list fetched on open.
@@ -413,11 +415,11 @@ import { WeatherChip } from "./WeatherChip.jsx";
           const res = await fetch(`/api/teams/${detail.id}/events`, {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate, kind: newEventKind, venue_id: newEventVenue?.id || null, start_time: newEventTime || null }),
+            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate, kind: newEventKind, venue_id: newEventVenue?.id || null, start_time: newEventTime || null, group_id: newEventGroup || null }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-          setNewEventName(""); setNewEventDate(""); setNewEventKind("meet"); setNewEventVenue(null); setNewEventTime(""); setCreatingEvent(false); setMsg(null);
+          setNewEventName(""); setNewEventDate(""); setNewEventKind("meet"); setNewEventVenue(null); setNewEventTime(""); setNewEventGroup(""); setCreatingEvent(false); setMsg(null);
           await loadEvents(detail.id);
         } catch (err) { setMsg(`Error creating event: ${err.message}`); }
       };
@@ -430,6 +432,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
         setEditEventKind(ev.kind || "meet");
         setEditEventVenue(ev.venue ? { id: ev.venue.id, name: ev.venue.name, indoor_outdoor: ev.venue.indoor_outdoor } : null);
         setEditEventTime(ev.start_time || "");
+        setEditEventGroup(ev.group_id || "");
         setMsg(null);
       };
       const cancelEditEvent = () => {
@@ -439,6 +442,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
         setEditEventKind("meet");
         setEditEventVenue(null);
         setEditEventTime("");
+        setEditEventGroup("");
       };
       const handleSaveEditEvent = async () => {
         if (!editEventName.trim()) { setMsg("Event name required"); return; }
@@ -447,7 +451,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
           const res = await fetch(`/api/events/${editingEventId}`, {
             method:  "PATCH",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate, kind: editEventKind, venue_id: editEventVenue?.id || null, start_time: editEventTime || null }),
+            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate, kind: editEventKind, venue_id: editEventVenue?.id || null, start_time: editEventTime || null, group_id: editEventGroup || null }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
@@ -808,6 +812,14 @@ import { WeatherChip } from "./WeatherChip.jsx";
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                     </div>
                   </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>For</label>
+                    <select value={newEventGroup} onChange={e => setNewEventGroup(e.target.value)}
+                      style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                      <option value="">Whole team</option>
+                      {(groups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                  </div>
                   <button onClick={handleCreateEvent}
                     style={{ padding: "6px 14px", background: "var(--color-warn)", color: "var(--color-bg)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                     Create event
@@ -846,6 +858,14 @@ import { WeatherChip } from "./WeatherChip.jsx";
                                 style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                             </div>
                           </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>For</label>
+                            <select value={editEventGroup} onChange={e => setEditEventGroup(e.target.value)}
+                              style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                              <option value="">Whole team</option>
+                              {(groups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                            </select>
+                          </div>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button onClick={handleSaveEditEvent}
                               style={{ padding: "5px 11px", background: "var(--color-positive)", color: "var(--color-bg)", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
@@ -863,6 +883,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                             <span style={{ marginRight: 6 }} title={ev.kind || "meet"}>{eventKindEmoji(ev.kind)}</span>
                             <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13, textDecoration: ev.status === "cancelled" ? "line-through" : "none" }}>{ev.name}</span>
                             <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}{ev.start_time ? ` · ${ev.start_time}` : ""}</span>
+                            {ev.group_id && <span title="Group-only event" style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 3, background: "var(--color-card)", border: "1px solid var(--color-border-strong)", color: "var(--color-text-muted)" }}>👥 {ev.group_name || "group"}</span>}
                             {ev.venue && <span style={{ marginLeft: 8, color: "var(--color-text-dim)", fontSize: 12 }}>{ev.venue.indoor_outdoor === "outdoor" ? "🌤" : "🏟"} {ev.venue.name}</span>}
                             {ev.venue && ev.venue.indoor_outdoor === "outdoor" && ev.status !== "cancelled" && !isPast && <WeatherChip eventId={ev.id} />}
                             {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
