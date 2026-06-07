@@ -3,6 +3,7 @@
 import { csrfHeaders } from "../../lib/api.js";
 import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
 import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
+import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -253,6 +254,9 @@ import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
               <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)" }}>(read-only — owner + admin can edit)</span>
             )}
           </h3>
+
+          {/* Phase 6 — Team Option Visibility: hide surfaces to simplify the app. */}
+          <VisibleOptionsPanel teamId={teamId} canWrite={canWrite} />
 
           {/* Team calendar feed — shareable live-subscribe .ics (team events +
               practices for the team's groups). Visible to any member; only

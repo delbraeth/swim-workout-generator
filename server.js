@@ -59,6 +59,7 @@ import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 import { PUSH_ACTIVE, pushConfigState, sendPushToUser } from "./lib/push.js";
 import { WEATHER_ACTIVE, weatherConfigState, getForecast, weatherSelfTest } from "./lib/weather.js";
+import { resolveTeamFlags } from "./src/lib/featureFlags.js";
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
 import { buildIcs } from "./lib/ics.js";
 import { toCsv } from "./lib/csv.js";
@@ -96,6 +97,7 @@ import {
   dbRevokeSession, dbRevokeSessionByPrefix, dbRevokeOthersByUser, dbListSessions,
   dbGetOrCreateCsrf, dbVerifyCsrf,
   dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
+  dbGetTeamFlagsRow, dbSetTeamFlags,
   dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach, dbListCoachesForPicker,
   dbUpdateTeamCoachRole, dbTransferGroupPrimary,
   dbProposeOwnershipTransfer, dbCancelOwnershipTransfer, dbAcceptOwnershipTransfer,
@@ -3196,6 +3198,17 @@ app.post("/api/teams", checkOrigin, requireAuth, requireCoach, requireCsrf, writ
   } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
 });
 
+// Resolve a team's effective Phase-6 visibility map (preset + overrides, with
+// compliance force-ON for non-masters teams — F5). team must be a dbGetTeam row.
+async function teamFeatureFlags(team) {
+  const row = await dbGetTeamFlagsRow(team.id).catch(() => null);
+  return resolveTeamFlags({
+    preset:    row?.preset || null,
+    overrides: row?.overrides || {},
+    hasMinors: team.team_type !== "masters",
+  });
+}
+
 // Team detail. Requires active membership of any role.
 app.get("/api/teams/:id", requireAuth, async (req, res) => {
   try {
@@ -3204,7 +3217,42 @@ app.get("/api/teams/:id", requireAuth, async (req, res) => {
     const team = await dbGetTeam(req.params.id);
     if (!team) return res.status(404).json({ error: "team not found" });
     const coaches = await dbListTeamCoaches(req.params.id);
-    res.json({ ...team, viewer_role: role, coaches });
+    res.json({ ...team, viewer_role: role, coaches, feature_flags: await teamFeatureFlags(team) });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Read the team's visibility config (raw preset+overrides + resolved map).
+// Any team member can read (so the client knows what to render); writes are owner/admin.
+app.get("/api/teams/:id/feature-flags", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const row = await dbGetTeamFlagsRow(team.id);
+    res.json({
+      preset: row?.preset || null,
+      overrides: row?.overrides || {},
+      resolved: await teamFeatureFlags(team),
+      team_type: team.team_type,
+      can_edit: role === "owner" || role === "admin",
+    });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Write the team's visibility config (owner/admin). Body: { preset?, overrides? }.
+app.put("/api/teams/:id/feature-flags", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "owner or admin required" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const { preset = null, overrides = {} } = req.body || {};
+    const clean = (overrides && typeof overrides === "object") ? overrides : {};
+    const r = await dbSetTeamFlags(req.params.id, { preset, overrides: clean }, req.userSub);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.feature_flags", ...reqMeta(req), details: { team_id: req.params.id, preset: preset || null } });
+    res.json({ ok: true, resolved: await teamFeatureFlags(team) });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -3226,7 +3274,7 @@ app.get("/api/teams/:id/detail", requireAuth, async (req, res) => {
       dbListGroupsForTeam(req.params.id, { includeArchived: false }),
       dbListTeamEvents(req.params.id),
     ]);
-    res.json({ team: { ...team, viewer_role: role, coaches }, groups, events });
+    res.json({ team: { ...team, viewer_role: role, coaches, feature_flags: await teamFeatureFlags(team) }, groups, events });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

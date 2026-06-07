@@ -2989,6 +2989,33 @@ export async function dbGetTeam(id) {
   };
 }
 
+// ─── Team feature flags (Phase 6 Team Option Visibility, mig 061) ────────────
+// Raw row only (preset + sparse overrides); resolution to an effective map lives
+// in src/lib/featureFlags.js (resolveTeamFlags), called server-side with the
+// team's minor status. group_id '' = team-level (v1; per-group reserved).
+export async function dbGetTeamFlagsRow(teamId) {
+  if (!teamId) return null;
+  const rows = await pool.query(
+    "SELECT `preset`, `overrides` FROM `team_feature_flags` WHERE `team_id` = ? AND `group_id` = '' LIMIT 1",
+    [teamId]
+  );
+  if (!rows[0]) return null;
+  let overrides = rows[0].overrides;
+  if (typeof overrides === "string") { try { overrides = JSON.parse(overrides); } catch (_) { overrides = {}; } }
+  return { preset: rows[0].preset || null, overrides: overrides || {} };
+}
+
+export async function dbSetTeamFlags(teamId, { preset = null, overrides = {} } = {}, updatedBy = null) {
+  if (!teamId) return { ok: false, reason: "no_team" };
+  const p = ["simple", "standard", "full"].includes(preset) ? preset : null;
+  await pool.query(
+    "INSERT INTO `team_feature_flags` (`team_id`, `group_id`, `preset`, `overrides`, `updated_by`) VALUES (?, '', ?, ?, ?) " +
+    "ON DUPLICATE KEY UPDATE `preset`=VALUES(`preset`), `overrides`=VALUES(`overrides`), `updated_by`=VALUES(`updated_by`)",
+    [teamId, p, JSON.stringify(overrides || {}), updatedBy]
+  );
+  return { ok: true };
+}
+
 export async function dbListTeamsForCoach(coachSub) {
   if (!coachSub) return [];
   // Active membership only (removed_at IS NULL). Sort: non-archived first, then newest.

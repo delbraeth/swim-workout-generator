@@ -592,7 +592,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                 { id: "roster",   label: "🏊 Roster",         count: 0 },
                 { id: "events",   label: "Events",            count: (events || []).length },
                 { id: "settings", label: "⚙ Settings",        count: 0 },
-              ].map(t => {
+              ].filter(t => !(t.id === "events" && detail.feature_flags && detail.feature_flags.events === false)).map(t => {
                 const active = activeTab === t.id;
                 return (
                   <button key={t.id} onClick={() => setActiveTab(t.id)}
@@ -771,7 +771,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
               <TeamRosterTab teamId={detail.id} />
             )}
 
-            {activeTab === "events" && (
+            {activeTab === "events" && detail.feature_flags?.events !== false && (
             <div style={{ background: "var(--color-card)", border: "1px solid var(--color-warn)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <h3 style={{ color: "var(--color-warn)", marginTop: 0, marginBottom: 0, fontSize: 15 }}>📅 Events ({(events || []).length})</h3>
