@@ -1,9 +1,23 @@
 # iOS build status + next steps
 
-Build number is at **13** (in source; not yet archived). **Build 12 shipped to TestFlight
-2026-06-07** (B14 — HealthKit write). (Build 11: B1 race-pace + Learn-to-Swim, `ddd5f92`.)
+Build number is at **14** (in source; not yet archived — accumulates B6 + B8).
+**Build 12 shipped to TestFlight 2026-06-07** (B14 — HealthKit write).
+(Build 11: B1 race-pace + Learn-to-Swim, `ddd5f92`.)
 
-## 🟡 In source for build 13 — B6 Phase-6 flag gating
+## 🟡 In source for build 14 — Wave 3 native (B8) + B6 flag gating
+
+### B8 — Deck/present mode + AirPrint (Wave 3 "if-only-three")
+- **Present mode** (`Views/PresentModeView.swift`): full-screen, giant-type, pure
+  black/white (natatorium-glare legibility), one block per swipeable page, idle
+  timer disabled so the screen never sleeps mid-set. AirPlay this to a deck TV.
+- **AirPrint** (`Util/WorkoutPrint.swift`): one-page HTML lane sheet → `UIPrint​Interaction​Controller`
+  (iPad presents from window-center rect; iPhone modal). No server round-trip.
+- **Entry points**: "Present" + "Print" buttons on `WorkoutCard` (generate result,
+  etc.) — read-only, available everywhere a workout renders.
+- New files auto-included via the project's `PBXFileSystemSynchronizedRootGroup`
+  (no pbxproj source edits). `swiftc -parse` clean.
+
+### B6 — Phase-6 flag gating
 - **Roll-call & coach-notes now respect team Visible-options flags.** `Bootstrap.swift`
   decodes the union `feature_flags` map (`featureFlags`, tolerant) + `flag(_:)` accessor
   (unset ⇒ ON, matching the web union default). Gated surfaces:
@@ -11,7 +25,8 @@ Build number is at **13** (in source; not yet archived). **Build 12 shipped to T
   - **Per-swimmer coach-notes button** (PracticeAttendanceSheet, threaded via
     `PracticesView(showNotes:)`) → hidden when `coach_notes` is off.
 - **`generate-for` stays CORE** (board correction) — never gated.
-- CURRENT_PROJECT_VERSION 12→13. `swiftc -parse` clean on all 4 changed files.
+
+CURRENT_PROJECT_VERSION 12→14 across both commits. `swiftc -parse` clean.
 
 ## ✅ Shipped in build 12 (TestFlight 2026-06-07) — B14 HealthKit write
 - **Write completed swims to Apple Health.** `HealthKitManager.swift` + "Save to Apple

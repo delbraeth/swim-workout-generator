@@ -31,6 +31,8 @@ struct WorkoutCard: View {
     var onStart: (() -> Void)? = nil
     /// When set, enables inline editing affordances on swim blocks/sets.
     var edit: WorkoutEditActions? = nil
+    /// B8 — deck/present + AirPrint affordances (read-only; safe everywhere).
+    @State private var presenting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -57,18 +59,37 @@ struct WorkoutCard: View {
                 }
             }
 
-            if let onStart, !workout.blocks.isEmpty {
-                Button(action: onStart) {
-                    Label("Start", systemImage: "play.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity).padding(.vertical, 6)
+            if !workout.blocks.isEmpty {
+                if let onStart {
+                    Button(action: onStart) {
+                        Label("Start", systemImage: "play.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent).tint(Brand.primary)
                 }
-                .buttonStyle(.borderedProminent).tint(Brand.primary)
+                // B8 — deck/present mode + AirPrint, the "beat a laptop on a wet
+                // deck" affordances. Always available (read-only).
+                HStack(spacing: 8) {
+                    Button { presenting = true } label: {
+                        Label("Present", systemImage: "tv")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 5)
+                    }
+                    .buttonStyle(.bordered).tint(Brand.primary)
+                    Button { WorkoutPrinter.present(workout) } label: {
+                        Label("Print", systemImage: "printer")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 5)
+                    }
+                    .buttonStyle(.bordered).tint(Brand.primary)
+                }
             }
         }
         .padding()
         .background(Brand.card, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Brand.border, lineWidth: 1))
+        .fullScreenCover(isPresented: $presenting) { PresentModeView(workout: workout) }
     }
 }
 
