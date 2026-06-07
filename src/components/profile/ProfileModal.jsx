@@ -22,8 +22,10 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites }) {
+    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags }) {
       const dialogRef = useDialogA11y(onClose);
+      // Phase 6 visibility (union across the user's teams; undefined ⇒ all-on).
+      const ff = appFeatureFlags || {};
       // Burst-mitigation B — seed ALL local state from App-level props.
       // /api/me/bootstrap returns everything ProfileModal needs (sessions +
       // team-defaults + billing-status added in B). loadAll's Promise.all is
@@ -567,7 +569,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     {/* Web Push opt-in (notification infra). Self-hides unless
                         VAPID is configured + browser supports it. Minors blocked
                         server-side at subscribe. */}
-                    {!(appEffectiveMe ? appEffectiveMe.is_minor : appMe?.is_minor) && (
+                    {ff.notifications !== false && !(appEffectiveMe ? appEffectiveMe.is_minor : appMe?.is_minor) && (
                       <PushNotificationsPanel />
                     )}
                   </div>
@@ -886,7 +888,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                               to use SetForge; this is a pure "chip in" sub that
                               unlocks NOTHING (free-for-swimmers stays intact). Only
                               shown once the Stripe supporter price is configured. */}
-                          {billingStatus.has_price_id_supporter && (
+                          {ff.community !== false && billingStatus.has_price_id_supporter && (
                             <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
                               <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10, lineHeight: 1.5 }}>
                                 Just a swimmer? <strong>You'll never pay to use SetForge</strong> — every workout feature you use
@@ -1273,7 +1275,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     for triage; minors' feedback stays in-app. The DOB
                     check happens server-side; UI surface is just the
                     invite link. */}
-                {tab === "account" && (
+                {tab === "account" && ff.community !== false && (
                 <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
                     Community

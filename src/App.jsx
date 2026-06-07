@@ -4180,10 +4180,12 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                               { id: "my-sets",  emoji: "📝", label: "My Sets",            group: "Programming", coachOnly: false }, // Lesson tier — author lesson sets
                               { id: "catalog",   emoji: "📚", label: "Catalog",           group: "Programming", coachOnly: true },
                               ].filter(item => effectiveMe?.is_coach || !item.coachOnly)
-                               // Phase 6 visibility: hide Catalog/My-Sets when the
+                               // Phase 6 visibility: hide coach-menu items when the
                                // user's teams have those bundles off (union; null = on).
+                               // Practices = scheduling+attendance → hide only if BOTH off.
                                .filter(item => !(item.id === "catalog" && featureFlags?.catalog === false)
-                                            && !(item.id === "my-sets" && featureFlags?.ugc === false));
+                                            && !(item.id === "my-sets" && featureFlags?.ugc === false)
+                                            && !(item.id === "practices" && featureFlags?.intent_planning === false && featureFlags?.attendance === false));
                               let lastGroup = null;
                               return items.map(item => {
                                 const active = view === item.id;
@@ -5619,6 +5621,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               appTeamDefaults={teamDefaults}
               appTeamCalendars={teamCalendars}
               appBillingStatus={billingStatus}
+              appFeatureFlags={featureFlags}
               appLevel={level}
               appNextEvent={nextEvent}
               appPhase={phase}
