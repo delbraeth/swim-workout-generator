@@ -7,8 +7,9 @@ import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function TeamSettingsTab({ teamId, viewerRole, archived }) {
+    export function TeamSettingsTab({ teamId, viewerRole, archived, featureFlags }) {
       const canWrite = viewerRole === "owner" || viewerRole === "admin";
+      const ff = featureFlags || {};   // Phase 6: gate the team-curation surface
       // fmtDate is defined inside several other components; keep this one
       // self-contained so we don't pull from a closure that won't exist.
       const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
@@ -285,6 +286,7 @@ import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
             </div>
           )}
 
+          {ff.curation !== false && (<>
           <div style={{ marginBottom: 18 }}>
             <div style={{ color: "var(--color-positive)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
               ⭐ Team Favorites ({curation.favorites.length})
@@ -298,6 +300,7 @@ import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
             </div>
             {renderCurationList("disfav", curation.disfavorites, "var(--color-destructive)")}
           </div>
+          </>)}
 
           <TeamFacilitiesSection teamId={teamId} canWrite={canWrite && !archived} />
 
@@ -349,6 +352,7 @@ import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
             </div>
           )}
 
+          {ff.curation !== false && (
           <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 6 }}>
             <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
               Team Defaults
@@ -422,6 +426,7 @@ import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
               Equipment defaults + apply-to-roster for non-pace fields land in v1.1.
             </div>
           </div>
+          )}
 
           {msg && <div style={{ color: msg.startsWith("✓") ? "var(--color-positive)" : "var(--color-warn)", fontSize: 12, marginTop: 12, padding: "8px 10px", background: msg.startsWith("✓") ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.12)", borderRadius: 5 }}>{msg}</div>}
         </div>

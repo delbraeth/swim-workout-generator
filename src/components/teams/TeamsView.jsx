@@ -991,6 +991,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                 teamId={detail.id}
                 viewerRole={detail.viewer_role}
                 archived={!!detail.archived}
+                featureFlags={detail.feature_flags}
               />
             )}
 

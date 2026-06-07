@@ -4400,7 +4400,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               />
             )}
             {view === "reports"  && (
-              <ReportsView isCoach={!!effectiveMe?.is_coach} isAdmin={!!effectiveMe?.is_admin} />
+              <ReportsView isCoach={!!effectiveMe?.is_coach} isAdmin={!!effectiveMe?.is_admin} reportsOn={featureFlags?.reports !== false} />
             )}
             {view === "progress" && (
               <ProgressDashboard onPaceUpdate={handlePaceChange} />

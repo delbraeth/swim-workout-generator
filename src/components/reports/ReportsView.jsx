@@ -12,11 +12,12 @@ import { ReportPrintView } from "./ReportPrintView.jsx";
 
     const { useState, useEffect } = React;
 
-    export function ReportsView({ isCoach = false, isAdmin = false }) {
-      // Non-coaches land on Program Recap (R4) — the only tab they can see.
-      // Coaches default to Programming Mix (R1) as before. Admin gets two
-      // extra tabs (R5 Platform Health, R6 Curation & Support).
-      const [tab, setTab] = React.useState(isCoach ? "programming-mix" : "program-recap");
+    export function ReportsView({ isCoach = false, isAdmin = false, reportsOn = true }) {
+      // Phase 6: when the `reports` bundle is off, hide coach analytics (R1–R3)
+      // but KEEP R4 Program Recap (CORE/swimmer-facing) + admin tabs.
+      const coachReports = isCoach && reportsOn;
+      // Non-coaches (and reports-off coaches) land on Program Recap (R4).
+      const [tab, setTab] = React.useState(coachReports ? "programming-mix" : "program-recap");
       const [range, setRange] = React.useState("month");
       const [groupId, setGroupId] = React.useState("");   // "" = all groups
       const [groups, setGroups] = React.useState([]);
@@ -52,7 +53,7 @@ import { ReportPrintView } from "./ReportPrintView.jsx";
       // Coach tabs gated to coaches; admin tabs gated to admins; Program
       // Recap is always visible.
       const tabs = [
-        ...(isCoach ? [
+        ...(coachReports ? [
           { id: "programming-mix",    label: "📈 Programming Mix" },
           { id: "schedule-adherence", label: "🗓 Schedule Adherence" },
           { id: "curation-log",       label: "🎚 Curation Log" },
