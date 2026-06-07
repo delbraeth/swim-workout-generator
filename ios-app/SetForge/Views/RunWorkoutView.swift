@@ -58,6 +58,9 @@ struct RunWorkoutView: View {
     @State private var lastDelta: Int?             // transient lap-split feedback
 
     @State private var audio = RunAudio()
+    // B14 (build 12): save the completed swim to Apple Health.
+    @State private var healthSaving = false
+    @State private var healthSaved = false
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var step: RunStep? { steps.indices.contains(stepIdx) ? steps[stepIdx] : nil }
@@ -97,7 +100,7 @@ struct RunWorkoutView: View {
     @ViewBuilder
     private var runUI: some View {
         if phase == .finished {
-            VStack(spacing: 16) { Spacer(); finishedCard; Spacer(); controls }.padding()
+            VStack(spacing: 16) { Spacer(); finishedCard; healthButton; Spacer(); controls }.padding()
         } else if landscape {
             landscapeRun
         } else {
@@ -260,6 +263,52 @@ struct RunWorkoutView: View {
         }
         .frame(maxWidth: .infinity).padding(28)
         .background(Brand.card, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    // MARK: - Apple Health (B14)
+
+    /// Total distance in meters (totalYards is yards for "..y" pools, else meters).
+    private var swimMeters: Double {
+        let amount = Double(workout.totalYards ?? 0)
+        guard amount > 0 else { return 0 }
+        let isYards = (workout.poolType ?? "").lowercased().contains("y")
+        return isYards ? amount * 0.9144 : amount
+    }
+    /// Pool/lap length in meters from poolType, or nil if unknown.
+    private var poolLenMeters: Double? {
+        let p = (workout.poolType ?? "").lowercased()
+        if p.contains("50") { return 50 }
+        if p.contains("25") && p.contains("m") { return 25 }
+        if p.contains("y") { return 22.86 }   // 25 yd
+        return nil
+    }
+
+    @ViewBuilder
+    private var healthButton: some View {
+        if HealthKitManager.shared.isAvailable && swimMeters > 0 {
+            if healthSaved {
+                Label("Saved to Apple Health", systemImage: "heart.fill")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(Brand.positive)
+            } else {
+                Button {
+                    healthSaving = true
+                    Task {
+                        let ok = await HealthKitManager.shared.requestAuth()
+                        let saved = ok && (await HealthKitManager.shared.saveSwim(
+                            distanceMeters: swimMeters, durationSecs: totalElapsed, poolLengthMeters: poolLenMeters))
+                        healthSaved = saved
+                        healthSaving = false
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if healthSaving { ProgressView().tint(Brand.positive) }
+                        Label("Save to Apple Health", systemImage: "heart")
+                    }
+                    .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 10)
+                }
+                .buttonStyle(.bordered).tint(Brand.positive).disabled(healthSaving)
+            }
+        }
     }
 
     @ViewBuilder

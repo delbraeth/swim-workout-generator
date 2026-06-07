@@ -1,19 +1,29 @@
 # iOS build status + next steps
 
-Build number is at **10**. **Build 10 LIVE on TestFlight 2026-06-04** (person-menu
-Sections fix, commit a56b041 — Sign-out discoverability at large Dynamic Type). Next
-archive = bump to 11.
+Build number is at **12** (bumped, NOT yet archived). **Build 11 shipped to TestFlight
+2026-06-07** (B1 — race-pace + Learn-to-Swim, commit `ddd5f92`).
 
-**Queued for build 11 (uncommitted in `build-3` working tree, NOT yet archived):**
+## ▶ QUEUED for build 12 — B14 HealthKit write (code committed, needs Xcode setup)
+- **B14 — write completed swims to Apple Health.** `HealthKitManager.swift` (new) +
+  a "Save to Apple Health" button on the run-finished card (`RunWorkoutView.swift`).
+  Writes an `HKWorkout(.swimming)` with distance (totalYards→meters) + duration
+  (run elapsed) + lap length. `swiftc -parse` clean.
+- **⚠ TWO Xcode steps REQUIRED before this works (can't be done from source):**
+  1. **Add the HealthKit capability** to the SetForge target (Signing & Capabilities → + → HealthKit).
+  2. **Add `NSHealthUpdateUsageDescription`** to Info.plist (e.g. "SetForge saves your
+     completed swims to Apple Health."). **Missing this string CRASHES on the auth prompt** —
+     Apple requires it. (Code is otherwise guarded: no capability ⇒ button silently no-ops.)
+- **Verify after build:** finish a run → tap "Save to Apple Health" → approve the prompt →
+  confirm the swim appears in the Health app (distance + duration). Decline path = no crash.
+
+## ✅ Shipped in build 11 (TestFlight 2026-06-07)
 - **B1 — race-pace + Learn-to-Swim in the iOS generator** (board's #1 iOS gap;
-  `GenerateView.swift` + `GenerateModels.swift`). `GenerateRequest` now sends
-  `racePace`/`raceEvent`/`usrpt`/`youthMode`; UI = 🏁 Race-pace control (toggle +
+  `GenerateView.swift` + `GenerateModels.swift`, commit `ddd5f92`). `GenerateRequest`
+  sends `racePace`/`raceEvent`/`usrpt`/`youthMode`; UI = 🏁 Race-pace control (toggle +
   event picker + USRPT) and a contextual 🧒 Learn-to-Swim toggle (lesson type).
-  Server already accepts all four params. `swiftc -parse` clean; needs an Xcode
-  build to compile-verify. **Verify after build:** generate a race-pace set (pick an
-  event) + a lesson with Learn-to-Swim on; confirm the workout reflects them.
+  Closes Wave 0 of `docs/IMPLEMENTATION_PLAN_2026-06-06.md`.
 
-**Broader iOS roadmap (sequenced):** `docs/IMPLEMENTATION_PLAN_2026-06-06.md` Workstream B —
+**Broader iOS roadmap (sequenced) — build 12+:** `docs/IMPLEMENTATION_PLAN_2026-06-06.md` Workstream B —
 after B1: B2 run/log hardening, B3 generate-for, B4 lane-plan view, B5 coach-notes;
 then B-native (offline, deck/AirPrint, voice, HealthKit) + Phase-6 flag gating.
 Other prior candidate: swimmer-dashboard parity (Phase 5 #2).
@@ -45,9 +55,9 @@ without it here). Confirmed login provider is independent of IAP (tested fine).
 
 ## To cut a future build (template)
 ```
-sed -i '' 's/CURRENT_PROJECT_VERSION = 10;/CURRENT_PROJECT_VERSION = 11;/g' \
+sed -i '' 's/CURRENT_PROJECT_VERSION = 12;/CURRENT_PROJECT_VERSION = 13;/g' \
   ios-app/SetForgeApp.xcodeproj/project.pbxproj
-git commit -am "iOS: bump build number to 11"
+git commit -am "iOS: bump build number to 13"
 git push origin build-3
 cd ios-app && xcodebuild -project SetForgeApp.xcodeproj -scheme SetForge \
   -configuration Release -destination 'generic/platform=iOS' \
