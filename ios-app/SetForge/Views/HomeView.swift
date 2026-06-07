@@ -71,7 +71,7 @@ struct HomeView: View {
                 HistoryView(workouts: model.bootstrap?.workouts ?? [])
             }
             .sheet(isPresented: $showAssigned) { AssignedView() }
-            .sheet(isPresented: $showPractices) { PracticesView() }
+            .sheet(isPresented: $showPractices) { PracticesView(showNotes: model.bootstrap?.flag("coach_notes") ?? true) }
             .sheet(isPresented: $showPaywall) { PaywallView() }
             .fullScreenCover(item: $runningWorkout) { RunWorkoutView(workout: $0) }
         }
@@ -148,7 +148,9 @@ struct HomeView: View {
                     } label: {
                         Label("Assigned to me", systemImage: "tray.and.arrow.down")
                     }
-                    if model.bootstrap?.me?.coaches == true {
+                    // Practices = roll-call/attendance. Phase 6: hidden when a team
+                    // turns the `attendance` bundle off (generate-for stays CORE).
+                    if model.bootstrap?.me?.coaches == true && (model.bootstrap?.flag("attendance") ?? true) {
                         Button {
                             showPractices = true
                         } label: {

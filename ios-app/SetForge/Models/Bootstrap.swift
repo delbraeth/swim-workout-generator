@@ -24,6 +24,9 @@ struct Bootstrap: Decodable {
     let settings: [String: AnyCodable]?
     /// Team/meet event anchors for the swimmer's groups (one per anchored group).
     let groupAnchors: [GroupAnchor]?
+    /// Phase 6 union visibility map (most-permissive across the user's teams).
+    /// nil ⇒ everything on. Use `flag(_:)` to read with the all-on default.
+    let featureFlags: [String: Bool]?
 
     enum CodingKeys: String, CodingKey {
         case me, workouts, favorites, disfavorites, goals, sessions, billing, settings
@@ -33,6 +36,7 @@ struct Bootstrap: Decodable {
         case effectiveDisfavorites = "effectiveDisfavorites"
         case pendingInvites = "pendingInvites"
         case groupAnchors
+        case featureFlags = "feature_flags"
     }
 
     /// Per-section tolerant decode (matches the SPA's `applyBootstrap`): an
@@ -124,6 +128,11 @@ extension Bootstrap {
               let name = obj["name"]?.stringValue, !name.isEmpty else { return nil }
         return NextEvent(name: name, date: obj["date"]?.stringValue)
     }
+
+    /// Phase 6 visibility read with the all-on default: an unset flag (nil map
+    /// or missing key) is treated as ON, matching the web union semantics and
+    /// keeping the app fully functional when the server omits feature_flags.
+    func flag(_ key: String) -> Bool { featureFlags?[key] ?? true }
 
     /// Anchors with a valid future-or-current countdown, nearest first.
     var upcomingAnchors: [GroupAnchor] {

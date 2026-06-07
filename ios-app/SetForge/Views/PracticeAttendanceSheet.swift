@@ -86,6 +86,8 @@ final class AttendanceViewModel: ObservableObject {
 
 struct PracticeAttendanceSheet: View {
     let practice: ScheduledWorkoutSummary
+    /// Phase 6 `coach_notes` bundle — hides the per-swimmer notes button when off.
+    var showNotes: Bool = true
     let onSaved: () -> Void
 
     @StateObject private var model = AttendanceViewModel()
@@ -222,14 +224,17 @@ struct PracticeAttendanceSheet: View {
             .buttonStyle(.plain)
 
             // Coach notes for this swimmer (private/group/team-visible).
-            Button {
-                notesTarget = NotesTarget(member: member)
-            } label: {
-                Image(systemName: "note.text")
-                    .font(.body)
-                    .foregroundStyle(Brand.textMuted)
+            // Phase 6: hidden when the team turns the `coach_notes` bundle off.
+            if showNotes {
+                Button {
+                    notesTarget = NotesTarget(member: member)
+                } label: {
+                    Image(systemName: "note.text")
+                        .font(.body)
+                        .foregroundStyle(Brand.textMuted)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

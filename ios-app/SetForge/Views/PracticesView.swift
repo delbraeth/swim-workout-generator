@@ -52,6 +52,10 @@ final class PracticesViewModel: ObservableObject {
 }
 
 struct PracticesView: View {
+    /// Phase 6: whether the team shows the coach-notes affordance (`coach_notes`
+    /// bundle). Threaded down to the attendance roster. Defaults on.
+    var showNotes: Bool = true
+
     @StateObject private var model = PracticesViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var selected: ScheduledWorkoutSummary?
@@ -72,7 +76,7 @@ struct PracticesView: View {
             }
             .task { await model.load() }
             .sheet(item: $selected) { practice in
-                PracticeAttendanceSheet(practice: practice) {
+                PracticeAttendanceSheet(practice: practice, showNotes: showNotes) {
                     Task { await model.load() }
                 }
             }

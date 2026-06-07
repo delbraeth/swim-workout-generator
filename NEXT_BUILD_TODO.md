@@ -1,20 +1,28 @@
 # iOS build status + next steps
 
-Build number is at **12** (bumped, NOT yet archived). **Build 11 shipped to TestFlight
-2026-06-07** (B1 — race-pace + Learn-to-Swim, commit `ddd5f92`).
+Build number is at **13** (in source; not yet archived). **Build 12 shipped to TestFlight
+2026-06-07** (B14 — HealthKit write). (Build 11: B1 race-pace + Learn-to-Swim, `ddd5f92`.)
 
-## ▶ QUEUED for build 12 — B14 HealthKit write (code committed, needs Xcode setup)
-- **B14 — write completed swims to Apple Health.** `HealthKitManager.swift` (new) +
-  a "Save to Apple Health" button on the run-finished card (`RunWorkoutView.swift`).
-  Writes an `HKWorkout(.swimming)` with distance (totalYards→meters) + duration
-  (run elapsed) + lap length. `swiftc -parse` clean.
-- **⚠ TWO Xcode steps REQUIRED before this works (can't be done from source):**
-  1. **Add the HealthKit capability** to the SetForge target (Signing & Capabilities → + → HealthKit).
-  2. **Add `NSHealthUpdateUsageDescription`** to Info.plist (e.g. "SetForge saves your
-     completed swims to Apple Health."). **Missing this string CRASHES on the auth prompt** —
-     Apple requires it. (Code is otherwise guarded: no capability ⇒ button silently no-ops.)
-- **Verify after build:** finish a run → tap "Save to Apple Health" → approve the prompt →
-  confirm the swim appears in the Health app (distance + duration). Decline path = no crash.
+## 🟡 In source for build 13 — B6 Phase-6 flag gating
+- **Roll-call & coach-notes now respect team Visible-options flags.** `Bootstrap.swift`
+  decodes the union `feature_flags` map (`featureFlags`, tolerant) + `flag(_:)` accessor
+  (unset ⇒ ON, matching the web union default). Gated surfaces:
+  - **Practices menu item** (HomeView) → hidden when `attendance` is off.
+  - **Per-swimmer coach-notes button** (PracticeAttendanceSheet, threaded via
+    `PracticesView(showNotes:)`) → hidden when `coach_notes` is off.
+- **`generate-for` stays CORE** (board correction) — never gated.
+- CURRENT_PROJECT_VERSION 12→13. `swiftc -parse` clean on all 4 changed files.
+
+## ✅ Shipped in build 12 (TestFlight 2026-06-07) — B14 HealthKit write
+- **Write completed swims to Apple Health.** `HealthKitManager.swift` + "Save to Apple
+  Health" button on the run-finished card (`RunWorkoutView.swift`): an `HKWorkout(.swimming)`
+  with distance (totalYards→meters) + duration (run elapsed) + lap length.
+  Commits `461ef03` (feature) → `9858186` (await-autoclosure fix).
+- **HealthKit setup landed in source** (`f6bc525` + `24bc365`): `com.apple.developer.healthkit`
+  entitlement + `NSHealthUpdateUsageDescription` + `NSHealthShareUsageDescription` (both
+  build configs). App ID HealthKit-enabled in the portal during the build.
+- **Deferred (B14 read half):** auto-import Apple Watch–tracked swims (the partial Watch
+  substitute) — share-usage string already in place for when it's built.
 
 ## ✅ Shipped in build 11 (TestFlight 2026-06-07)
 - **B1 — race-pace + Learn-to-Swim in the iOS generator** (board's #1 iOS gap;
