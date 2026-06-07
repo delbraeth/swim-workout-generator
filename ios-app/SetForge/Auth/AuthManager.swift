@@ -107,6 +107,7 @@ final class AuthManager: ObservableObject {
         token = nil
         api.setBearer(nil)
         KeychainStore.delete()
+        BootstrapCache.clear()   // B7 — no user history left on a signed-out device
     }
 
     /// Invoked by APIClient on any 401 — the token is dead.

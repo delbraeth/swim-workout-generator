@@ -12,22 +12,41 @@ final class HomeViewModel: ObservableObject {
 
     @Published var phase: Phase = .idle
     @Published var bootstrap: Bootstrap?
+    /// B7 — true when the shown data came from the offline cache, not the network.
+    @Published var isOffline = false
 
     private let api: APIClient
     init(api: APIClient = .shared) { self.api = api }
 
     func load(force: Bool = false) async {
         if case .loaded = phase, !force { return }
-        phase = .loading
+        // Only show the spinner on a cold start; a failed refresh shouldn't blank
+        // the screen when we already have (cached or live) data on display.
+        if bootstrap == nil { phase = .loading }
         do {
-            let data = try await api.get("me/bootstrap", as: Bootstrap.self)
-            bootstrap = data
+            let data = try await api.getData("me/bootstrap")
+            bootstrap = try JSONDecoder().decode(Bootstrap.self, from: data)
+            BootstrapCache.save(data)                 // refresh the offline copy
+            isOffline = false
             phase = .loaded
-        } catch let err as APIError {
-            // 401 is handled by AuthManager (it bounces to sign-in); show the rest.
-            phase = .failed(err.errorDescription ?? "Something went wrong.")
+        } catch APIError.unauthorized {
+            // AuthManager bounces to sign-in and clears the cache; don't fall back.
+            phase = .failed("Your session expired. Please sign in again.")
         } catch {
-            phase = .failed(error.localizedDescription)
+            // Network / decode failure → fall back to the cached payload so the
+            // app stays usable offline (view + run saved workouts).
+            if let cached = BootstrapCache.load(),
+               let decoded = try? JSONDecoder().decode(Bootstrap.self, from: cached) {
+                bootstrap = decoded
+                isOffline = true
+                phase = .loaded
+            } else if bootstrap != nil {
+                // Already showing data; keep it, just mark the refresh as offline.
+                isOffline = true
+            } else {
+                let msg = (error as? APIError)?.errorDescription ?? error.localizedDescription
+                phase = .failed(msg)
+            }
         }
     }
 }
@@ -110,6 +129,18 @@ struct HomeView: View {
     private var loaded: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if model.isOffline {
+                    HStack(spacing: 8) {
+                        Image(systemName: "wifi.slash")
+                        Text("Offline — showing saved workouts. Pull to refresh.")
+                            .font(.caption.weight(.medium))
+                        Spacer()
+                    }
+                    .foregroundStyle(Brand.warn)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Brand.warn.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                }
                 GreetingCard(me: model.bootstrap?.me,
                              poolMode: model.bootstrap?.poolMode,
                              nextEvent: model.bootstrap?.nextEvent,

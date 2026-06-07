@@ -58,6 +58,51 @@ final class APIClient {
         try await request(path, method: "GET", body: Optional<Empty>.none, query: query, as: type)
     }
 
+    /// Raw GET returning the response body bytes. Used by the offline cache (B7)
+    /// so we can persist the exact bytes we also decode — avoids re-encoding a
+    /// Decodable-only payload. Same Bearer auth + 429 backoff as `request`.
+    func getData(_ path: String) async throws -> Data {
+        let slash = CharacterSet(charactersIn: "/")
+        let url = AppConfig.baseURL
+            .appendingPathComponent(AppConfig.apiPath.trimmingCharacters(in: slash))
+            .appendingPathComponent(path.trimmingCharacters(in: slash))
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        if let token = currentBearer() {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        var attempt = 0
+        while true {
+            let (data, response): (Data, URLResponse)
+            do {
+                (data, response) = try await session.data(for: req)
+            } catch {
+                throw APIError.transport(error.localizedDescription)
+            }
+            guard let http = response as? HTTPURLResponse else {
+                throw APIError.transport("No HTTP response")
+            }
+            switch http.statusCode {
+            case 200...299:
+                return data
+            case 401:
+                onUnauthorized()
+                throw APIError.unauthorized
+            case 429:
+                attempt += 1
+                if attempt > maxRetries { throw APIError.rateLimited }
+                let delay = Self.backoffDelay(attempt: attempt, response: http)
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                continue
+            default:
+                throw APIError.server(status: http.statusCode,
+                                      message: Self.errorMessage(from: data))
+            }
+        }
+    }
+
     @discardableResult
     func post<Body: Encodable, T: Decodable>(_ path: String, body: Body, as type: T.Type) async throws -> T {
         try await request(path, method: "POST", body: body, as: type)

@@ -4,7 +4,20 @@ Build number is at **14** (in source; not yet archived — accumulates B6 + B8).
 **Build 12 shipped to TestFlight 2026-06-07** (B14 — HealthKit write).
 (Build 11: B1 race-pace + Learn-to-Swim, `ddd5f92`.)
 
-## 🟡 In source for build 14 — Wave 3 native (B8, B9, B14b) + B6 flag gating
+## 🟡 In source for build 14 — Wave 3 native (B7, B8, B9, B14b) + B6 flag gating
+
+### B7 — Offline cache MVP (Wave 3 "highest-leverage", scoped)
+- **What it does**: persists the last successful `me/bootstrap` payload to
+  Application Support (`BootstrapCache`, raw bytes, `.completeFileProtection`).
+  On a failed/offline load, falls back to the cached payload so Home + recent /
+  assigned workouts + history stay viewable — and **run mode already works
+  offline** (it's local). Offline banner on Home; pull-to-refresh re-syncs.
+- `APIClient.getData()` (raw GET, same auth + 429 backoff) feeds both decode +
+  cache. `clearToken()` calls `BootstrapCache.clear()` → no history on a signed-out device.
+- **NOT included**: on-device *generate* (needs a full Swift port of the JS engine
+  — large, deferred) and queued run-logging (the app has no run-log write path;
+  generated workouts are already saved at generate time, which itself needs the
+  server). This MVP delivers the offline *read + run* resilience. `swiftc -parse` clean.
 
 ### B14b — HealthKit READ / import Apple-Watch swims (Wave 3; partial-Watch substitute)
 - **No server change** — reuses `POST /api/log-workout`. Each Watch swim's id =
