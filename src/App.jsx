@@ -154,8 +154,39 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
     if (typeof window !== "undefined" && window.fetch && !window.__sfImpersonationFetchWrapped) {
       const _origFetch = window.fetch.bind(window);
       const _sfSleep = ms => new Promise(r => setTimeout(r, ms));
-      const _SF_MAX_429_RETRIES = 4;
-      window.fetch = async function(input, init) {
+      // Retry budget: ONE retry, capped backoff. Hyperlift's platform 429 is a
+      // PER-MINUTE cap (30/min). Retrying inside that same minute can't recover
+      // and just MULTIPLIES load — the old 4-retry loop turned every app-load
+      // burst into a self-sustaining cascade (the 2026-06-08 "three pages of
+      // 429s": four reads × 5 attempts each, repeating minute over minute). One
+      // short retry keeps resilience to a genuine micro-burst without amplifying
+      // a sustained overage. Retry-After is honored but capped so a server-sent
+      // "60s" can't strand requests trickling for minutes.
+      const _SF_MAX_429_RETRIES = 1;
+      const _SF_MAX_BACKOFF_MS  = 2000;
+      // In-flight GET de-dup: opening a team/swimmer fans out 5–8 reads and some
+      // components mount twice, firing IDENTICAL GETs concurrently (the doubled
+      // /detail, /coaches, /managed-swimmers, /me seen in console). Share one
+      // in-flight request per (impersonation, url) and hand each caller a clone
+      // of the response. The entry clears as soon as the request settles, so it
+      // only ever collapses genuinely concurrent duplicates — never stale data.
+      const _sfInflight = new Map();
+
+      async function _sfFetchWithRetry(input, init) {
+        let attempt = 0;
+        while (true) {
+          const res = await _origFetch(input, init);
+          if (res.status !== 429 || attempt >= _SF_MAX_429_RETRIES) return res;
+          const ra = parseFloat(res.headers.get("retry-after"));
+          const backoff = Number.isFinite(ra)
+            ? Math.min(ra * 1000, _SF_MAX_BACKOFF_MS)
+            : Math.min(_SF_MAX_BACKOFF_MS, 200 * Math.pow(2, attempt));
+          await _sfSleep(backoff + Math.random() * 150);
+          attempt++;
+        }
+      }
+
+      window.fetch = function(input, init) {
         const isReq = typeof Request !== "undefined" && input instanceof Request;
         const url = typeof input === "string" ? input : (input && input.url) || "";
         if (impersonation.active && impersonation.active.target_sub && url.startsWith("/api/")) {
@@ -168,15 +199,22 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           merged.set("X-Impersonate-Sub", impersonation.active.target_sub);
           init.headers = merged;
         }
-        let attempt = 0;
-        while (true) {
-          const res = await _origFetch(input, init);
-          if (res.status !== 429 || attempt >= _SF_MAX_429_RETRIES) return res;
-          const ra = parseFloat(res.headers.get("retry-after"));
-          const backoff = Number.isFinite(ra) ? ra * 1000 : Math.min(2000, 200 * Math.pow(2, attempt));
-          await _sfSleep(backoff + Math.random() * 150);
-          attempt++;
+        // De-dup only idempotent /api GETs with no body and no caller abort
+        // signal (sharing one request across callers would break per-caller
+        // aborts). Everything else just goes through the retry wrapper.
+        const method   = ((init && init.method) || (isReq && input.method) || "GET").toUpperCase();
+        const hasSignal = (init && init.signal) || (isReq && input.signal);
+        if (method !== "GET" || !url.startsWith("/api/") || hasSignal) {
+          return _sfFetchWithRetry(input, init);
         }
+        const key = (impersonation.active && impersonation.active.target_sub || "") + "|" + url;
+        const existing = _sfInflight.get(key);
+        if (existing) return existing.then(r => r.clone());
+        const p = _sfFetchWithRetry(input, init);
+        _sfInflight.set(key, p);
+        // Clear on settle (success OR failure) so the next user action re-fetches.
+        p.then(() => {}, () => {}).then(() => _sfInflight.delete(key));
+        return p.then(r => r.clone());
       };
       window.__sfImpersonationFetchWrapped = true;
     }
