@@ -46,6 +46,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
       // (filtered to team) for the member-add picker inside each group.
       const [groups,        setGroups]        = React.useState(null);             // null = unloaded
       const [events,        setEvents]        = React.useState(null);
+      const [eventWx,       setEventWx]       = React.useState({});                // batched event weather (429-avoidance)
       const [managedInTeam, setManagedInTeam] = React.useState(null);
       const [creatingGroup, setCreatingGroup] = React.useState(false);
       const [newGroupName,  setNewGroupName]  = React.useState("");
@@ -153,14 +154,26 @@ import { WeatherChip } from "./WeatherChip.jsx";
           setGroups(await res.json());
         } catch (err) { setGroups([]); }
       }, []);
+      // Batch the forecast for all outdoor events in ONE call (vs one fetch per
+      // WeatherChip on the events list). 429-avoidance (rate-limit review 2026-06-08).
+      const loadEventWx = React.useCallback(async (evs) => {
+        const outdoor = (evs || []).filter(e => e.status !== "cancelled" && e.venue && e.venue.indoor_outdoor === "outdoor").map(e => e.id);
+        if (!outdoor.length) { setEventWx({}); return; }
+        try {
+          const wr = await fetch(`/api/events/weather?ids=${outdoor.map(encodeURIComponent).join(",")}`, { cache: "no-store" });
+          if (wr.ok) setEventWx(await wr.json());
+        } catch (_) {}
+      }, []);
       const loadEvents = React.useCallback(async (teamId) => {
         if (!teamId) { setEvents(null); return; }
         try {
           const res = await fetch(`/api/teams/${teamId}/events`, { cache: "no-store" });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          setEvents(await res.json());
+          const arr = await res.json();
+          setEvents(arr);
+          loadEventWx(arr);
         } catch (err) { setEvents([]); }
-      }, []);
+      }, [loadEventWx]);
       const loadManagedInTeam = React.useCallback(async (teamId) => {
         if (!teamId) { setManagedInTeam(null); return; }
         try {
@@ -210,12 +223,14 @@ import { WeatherChip } from "./WeatherChip.jsx";
           setDetail(d.team);
           setRenameVal(d.team.name);
           setGroups(Array.isArray(d.groups) ? d.groups : []);
-          setEvents(Array.isArray(d.events) ? d.events : []);
+          const evs = Array.isArray(d.events) ? d.events : [];
+          setEvents(evs);
+          loadEventWx(evs);
         } catch (err) {
           setMsg(`Error loading team: ${err.message}`);
           setGroups([]); setEvents([]);
         }
-      }, []);
+      }, [loadEventWx]);
 
       React.useEffect(() => { loadList(); }, [loadList]);
       React.useEffect(() => {
@@ -926,7 +941,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                             {ev.group_id && <span title="Group-only event" style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 3, background: "var(--color-card)", border: "1px solid var(--color-border-strong)", color: "var(--color-text-muted)" }}>👥 {ev.group_name || "group"}</span>}
                             {ev.series_id && <span title="Part of a recurring series" style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 3, background: "var(--color-card)", border: "1px solid var(--color-border-strong)", color: "var(--color-text-muted)" }}>🔁 series</span>}
                             {ev.venue && <span style={{ marginLeft: 8, color: "var(--color-text-dim)", fontSize: 12 }}>{ev.venue.indoor_outdoor === "outdoor" ? "🌤" : "🏟"} {ev.venue.name}</span>}
-                            {ev.venue && ev.venue.indoor_outdoor === "outdoor" && ev.status !== "cancelled" && !isPast && <WeatherChip eventId={ev.id} />}
+                            {ev.venue && ev.venue.indoor_outdoor === "outdoor" && ev.status !== "cancelled" && !isPast && <WeatherChip eventId={ev.id} wx={eventWx[ev.id] ?? null} />}
                             {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
                             {ev.status === "cancelled" && <span title={ev.status_note || ""} style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,0.15)", color: "var(--color-destructive-text)", fontWeight: 700 }}>CANCELLED{ev.status_note ? ` — ${ev.status_note}` : ""}</span>}
                           </div>

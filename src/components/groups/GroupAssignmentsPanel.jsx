@@ -5,8 +5,8 @@ import { COMPLETION_LABELS } from "../../lib/constants.js";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function GroupAssignmentsPanel({ groupId, isGroupCoach }) {
-      const [list, setList] = React.useState(null);
+    export function GroupAssignmentsPanel({ groupId, isGroupCoach, seed }) {
+      const [list, setList] = React.useState(seed ?? null);   // seed from GroupRow composite
       const [err,  setErr]  = React.useState(null);
 
       const load = React.useCallback(async () => {
@@ -16,7 +16,7 @@ import { COMPLETION_LABELS } from "../../lib/constants.js";
           setList(await res.json());
         } catch (e) { setErr(e.message); setList([]); }
       }, [groupId]);
-      React.useEffect(() => { if (isGroupCoach) load(); }, [isGroupCoach, load]);
+      React.useEffect(() => { if (isGroupCoach && seed === undefined) load(); }, [isGroupCoach, load]);   // eslint-disable-line react-hooks/exhaustive-deps
 
       const markState = async (assignmentId, state) => {
         try {

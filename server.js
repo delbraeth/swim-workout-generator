@@ -4332,6 +4332,28 @@ app.get("/api/groups/:id", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// Composite for the GroupRow expand: everything the row + its three child panels
+// (lane plans, join tokens, assignments) need, in ONE call instead of ~4 — the
+// worst client fan-out (a coach expanding several groups multiplies it). The
+// bundled lists use the same default options the panels' own fetches use, so the
+// client can seed them directly. 429-avoidance (rate-limit review 2026-06-08).
+app.get("/api/groups/:id/detail", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerGroupRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a group coach" });
+    const group = await dbGetGroup(req.params.id);
+    if (!group) return res.status(404).json({ error: "not found" });
+    const [coaches, members, lane_plans, join_tokens, assignments] = await Promise.all([
+      dbListGroupCoaches(req.params.id),
+      dbListGroupMembers(req.params.id),
+      dbListGroupLanePlans(req.params.id, { includeArchived: false }),
+      dbListGroupJoinTokens(req.params.id, { includeRedeemed: false, includeExpired: false }),
+      dbListAssignmentsForGroup(req.params.id, { state: null }),
+    ]);
+    res.json({ ...group, viewer_role: role, coaches, members, lane_plans, join_tokens, assignments });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // Update group (name, pool_mode_default, roster_visible_to_members). Primary only in v1.
 app.patch("/api/groups/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
@@ -6259,31 +6281,56 @@ app.post("/api/admin/venue-edits/:id/review", checkOrigin, requireAuth, requireA
 // Outdoor-venue forecast for an event. Visible to anyone who can see the event.
 // Returns { weather: null, reason } when not applicable (indoor / no coords /
 // not configured / outside horizon) — never an error, so the event still renders.
+// Shared core: resolve one event's forecast for a user (access-checked, cached).
+// Returns { weather, reason?, cached? } — weather is null when N/A. Used by the
+// single route AND the batch route below.
+async function eventWeatherForUser(eventId, userSub) {
+  const ev = await dbGetTeamEvent(eventId);
+  if (!ev) return { weather: null, reason: "not_found", _status: 404 };
+  const role = await dbGetTeamRole(ev.team_id, userSub);
+  if (!role) {
+    const isMember = await dbIsSwimmerInTeam(userSub, ev.team_id);
+    if (!isMember) return { weather: null, reason: "no_access", _status: 403 };
+  }
+  const v = ev.venue;
+  if (!v || v.latitude == null || v.longitude == null) return { weather: null, reason: "no_venue_coords" };
+  if (v.indoor_outdoor !== "outdoor") return { weather: null, reason: "not_outdoor" };
+  if (!WEATHER_ACTIVE) return { weather: null, reason: "not_configured" };
+  // Cache per (venue, day); refresh hourly within 24h of the event, else 6-hourly.
+  const cached = await dbGetWeatherCache(v.id, ev.date);
+  const hrsToEvent = (new Date(`${ev.date}T12:00:00Z`).getTime() - Date.now()) / 3600000;
+  const ttlMs = (hrsToEvent <= 24 ? 1 : 6) * 3600000;
+  if (cached && cached.payload && (Date.now() - cached.fetched_ms) < ttlMs) {
+    return { weather: cached.payload, cached: true };
+  }
+  const fc = await getForecast({ lat: v.latitude, lng: v.longitude, tz: v.timezone || "UTC", dayYmd: ev.date, startTime: ev.start_time || null });
+  if (!fc) return { weather: cached?.payload || null, reason: "no_forecast", cached: !!cached?.payload };
+  await dbPutWeatherCache(v.id, ev.date, fc);
+  return { weather: fc, cached: false };
+}
+
 app.get("/api/events/:id/weather", requireAuth, async (req, res) => {
   try {
-    const ev = await dbGetTeamEvent(req.params.id);
-    if (!ev) return res.status(404).json({ error: "not found" });
-    const role = await dbGetTeamRole(ev.team_id, req.userSub);
-    if (!role) {
-      const isMember = await dbIsSwimmerInTeam(req.userSub, ev.team_id);
-      if (!isMember) return res.status(403).json({ error: "no access to this event" });
-    }
-    const v = ev.venue;
-    if (!v || v.latitude == null || v.longitude == null) return res.json({ weather: null, reason: "no_venue_coords" });
-    if (v.indoor_outdoor !== "outdoor") return res.json({ weather: null, reason: "not_outdoor" });
-    if (!WEATHER_ACTIVE) return res.json({ weather: null, reason: "not_configured" });
+    const r = await eventWeatherForUser(req.params.id, req.userSub);
+    if (r._status === 404) return res.status(404).json({ error: "not found" });
+    if (r._status === 403) return res.status(403).json({ error: "no access to this event" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
 
-    // Cache per (venue, day); refresh hourly within 24h of the event, else 6-hourly.
-    const cached = await dbGetWeatherCache(v.id, ev.date);
-    const hrsToEvent = (new Date(`${ev.date}T12:00:00Z`).getTime() - Date.now()) / 3600000;
-    const ttlMs = (hrsToEvent <= 24 ? 1 : 6) * 3600000;
-    if (cached && cached.payload && (Date.now() - cached.fetched_ms) < ttlMs) {
-      return res.json({ weather: cached.payload, cached: true });
+// Batch weather for a list of events in ONE call — collapses the per-row
+// WeatherChip fan-out on the events/RSVP lists. Returns { <id>: weatherPayload|null }
+// (inaccessible / indoor / no-coords events come back null). 429-avoidance.
+app.get("/api/events/weather", requireAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.ids || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 40);
+    const out = {};
+    // Sequential to reuse the per-(venue,day) cache and avoid a WeatherKit burst.
+    for (const id of ids) {
+      try { out[id] = (await eventWeatherForUser(id, req.userSub)).weather || null; }
+      catch (_) { out[id] = null; }
     }
-    const fc = await getForecast({ lat: v.latitude, lng: v.longitude, tz: v.timezone || "UTC", dayYmd: ev.date, startTime: ev.start_time || null });
-    if (!fc) return res.json({ weather: cached?.payload || null, reason: "no_forecast", cached: !!cached?.payload });
-    await dbPutWeatherCache(v.id, ev.date, fc);
-    res.json({ weather: fc, cached: false });
+    res.json(out);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

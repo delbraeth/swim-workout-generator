@@ -15,13 +15,25 @@ const OPTS = [
 export function RsvpEventsPanel() {
   const [events, setEvents] = React.useState(null);
   const [practices, setPractices] = React.useState(null);   // C2
+  const [wxMap, setWxMap] = React.useState({});             // batched event weather
   const [busyId, setBusyId] = React.useState(null);
   const [msg, setMsg] = React.useState(null);      // events card
   const [pmsg, setPmsg] = React.useState(null);    // practices card
 
   const load = React.useCallback(async () => {
-    try { const r = await fetch("/api/events/upcoming", { cache: "no-store" }); setEvents(r.ok ? await r.json() : []); }
-    catch (_) { setEvents([]); }
+    try {
+      const r = await fetch("/api/events/upcoming", { cache: "no-store" });
+      const evs = r.ok ? await r.json() : [];
+      setEvents(evs);
+      // Batch the forecast for all outdoor events in ONE call (vs one fetch per chip).
+      const outdoor = evs.filter(e => e.status !== "cancelled" && e.venue && e.venue.indoor_outdoor === "outdoor").map(e => e.id);
+      if (outdoor.length) {
+        try {
+          const wr = await fetch(`/api/events/weather?ids=${outdoor.map(encodeURIComponent).join(",")}`, { cache: "no-store" });
+          if (wr.ok) setWxMap(await wr.json());
+        } catch (_) {}
+      }
+    } catch (_) { setEvents([]); }
     try { const r = await fetch("/api/me/practices/upcoming", { cache: "no-store" }); setPractices(r.ok ? await r.json() : []); }
     catch (_) { setPractices([]); }
   }, []);
@@ -114,7 +126,7 @@ export function RsvpEventsPanel() {
                   <span style={{ marginRight: 6 }}>{eventKindEmoji(ev.kind)}</span>
                   <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 14, textDecoration: cancelled ? "line-through" : "none" }}>{ev.name}</span>
                   {ev.venue && <span style={{ marginLeft: 8, color: "var(--color-text-dim)", fontSize: 12 }}>{ev.venue.indoor_outdoor === "outdoor" ? "🌤" : "🏟"} {ev.venue.name}</span>}
-                  {ev.venue && ev.venue.indoor_outdoor === "outdoor" && !cancelled && <WeatherChip eventId={ev.id} />}
+                  {ev.venue && ev.venue.indoor_outdoor === "outdoor" && !cancelled && <WeatherChip eventId={ev.id} wx={wxMap[ev.id] ?? null} />}
                   {cancelled && <span title={ev.status_note || ""} style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,0.15)", color: "var(--color-destructive-text)", fontWeight: 700 }}>CANCELLED{ev.status_note ? ` — ${ev.status_note}` : ""}</span>}
                 </div>
                 <span style={muted}>{ev.team_name ? `${ev.team_name} · ` : ""}{ev.date}{ev.start_time ? ` · ${ev.start_time}` : ""}</span>

@@ -4,8 +4,8 @@ import { csrfHeaders } from "../../lib/api.js";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function LanePlansPanel({ groupId, members, isPrimary, onChanged }) {
-      const [plans,      setPlans]      = React.useState(null);
+    export function LanePlansPanel({ groupId, members, isPrimary, onChanged, seed }) {
+      const [plans,      setPlans]      = React.useState(seed ?? null);         // seed from GroupRow composite
       const [editingId,  setEditingId]  = React.useState(null);                 // plan id being edited, or "new"
       const [draft,      setDraft]      = React.useState(null);                 // { name, is_default, plan_data }
       const [err,        setErr]        = React.useState(null);
@@ -17,7 +17,9 @@ import { csrfHeaders } from "../../lib/api.js";
           setPlans(await res.json());
         } catch (e) { setErr(e.message); setPlans([]); }
       }, [groupId]);
-      React.useEffect(() => { load(); }, [load]);
+      // Skip the mount fetch when seeded (the composite already supplied it);
+      // mutation handlers below still call load() to refresh.
+      React.useEffect(() => { if (seed === undefined) load(); }, [load]);   // eslint-disable-line react-hooks/exhaustive-deps
 
       const startNew = () => {
         setEditingId("new");

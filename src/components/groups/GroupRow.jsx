@@ -18,10 +18,12 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
       const [addCoachSub, setAddCoachSub] = React.useState("");
       const [err, setErr] = React.useState(null);
 
+      // One composite call on expand (group + coaches + members + lane_plans +
+      // join_tokens + assignments) instead of ~4 — the child panels seed from it.
       const load = React.useCallback(async () => {
         if (!group?.id) return;
         try {
-          const res = await fetch(`/api/groups/${group.id}`, { cache: "no-store" });
+          const res = await fetch(`/api/groups/${group.id}/detail`, { cache: "no-store" });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           setDetail(await res.json());
           setErr(null);
@@ -317,18 +319,19 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                     </div>
                   )}
 
-                  {/* Lane plans (R-E) — hidden for solo groups per #17; Phase 6 lane_plans flag */}
+                  {/* Lane plans (R-E) — hidden for solo groups per #17; Phase 6 lane_plans flag.
+                      seed from the composite so the panel doesn't re-fetch on mount. */}
                   {ff.lane_plans !== false && (detail.members || []).length >= 2 && (
-                    <LanePlansPanel groupId={group.id} members={detail.members || []} isPrimary={isPrimary} onChanged={onChanged} />
+                    <LanePlansPanel groupId={group.id} members={detail.members || []} isPrimary={isPrimary} onChanged={onChanged} seed={detail.lane_plans} />
                   )}
 
                   {/* Join tokens (R-F) — coach-side invite-code panel */}
                   {!group.archived && (
-                    <JoinTokensPanel groupId={group.id} isPrimary={isPrimary} isGroupCoach={!!detail.viewer_role} />
+                    <JoinTokensPanel groupId={group.id} isPrimary={isPrimary} isGroupCoach={!!detail.viewer_role} seed={detail.join_tokens} />
                   )}
 
                   {/* Coach-mark-on-behalf (R-G, Flow N) — recent assignments */}
-                  <GroupAssignmentsPanel groupId={group.id} isGroupCoach={!!detail.viewer_role} />
+                  <GroupAssignmentsPanel groupId={group.id} isGroupCoach={!!detail.viewer_role} seed={detail.assignments} />
                 </>
               )}
             </div>

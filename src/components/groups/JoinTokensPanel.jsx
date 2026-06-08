@@ -4,8 +4,8 @@ import { csrfHeaders } from "../../lib/api.js";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function JoinTokensPanel({ groupId, isPrimary, isGroupCoach }) {
-      const [tokens, setTokens]      = React.useState(null);
+    export function JoinTokensPanel({ groupId, isPrimary, isGroupCoach, seed }) {
+      const [tokens, setTokens]      = React.useState(seed ?? null);   // seed from GroupRow composite
       const [issuing, setIssuing]    = React.useState(false);
       const [issueRole, setIssueRole] = React.useState("primary");
       const [latestIssued, setLatestIssued] = React.useState(null);              // {token, expires_at, intended_role}
@@ -19,7 +19,7 @@ import { csrfHeaders } from "../../lib/api.js";
           setTokens(await res.json());
         } catch (e) { setErr(e.message); setTokens([]); }
       }, [groupId]);
-      React.useEffect(() => { if (isGroupCoach) load(); }, [isGroupCoach, load]);
+      React.useEffect(() => { if (isGroupCoach && seed === undefined) load(); }, [isGroupCoach, load]);   // eslint-disable-line react-hooks/exhaustive-deps
 
       const issue = async () => {
         try {
