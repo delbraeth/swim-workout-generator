@@ -5663,16 +5663,28 @@ function _computeOccurrenceDates(startYmd, rec = {}) {
   let count = rec.count != null ? Math.max(1, Math.min(MAX, Number(rec.count) || 1)) : null;
   const until = (rec.until && /^\d{4}-\d{2}-\d{2}$/.test(rec.until)) ? rec.until : null;
   if (!count && !until) count = 1;
+  const anchor = new Date(startYmd + "T00:00:00Z");
+  const aDay = anchor.getUTCDate();
   const out = [];
-  const d = new Date(startYmd + "T00:00:00Z");
   for (let i = 0; i < MAX; i++) {
+    let d;
+    if (freq === "monthly") {
+      // Add whole months from the anchor and clamp the day to the target month's
+      // length, so "monthly on the 31st" lands on the 28th/30th, not overflowing
+      // into the next month (the setUTCMonth foot-gun).
+      const m = anchor.getUTCMonth() + i * interval;
+      const y = anchor.getUTCFullYear() + Math.floor(m / 12);
+      const mm = ((m % 12) + 12) % 12;
+      const lastDay = new Date(Date.UTC(y, mm + 1, 0)).getUTCDate();
+      d = new Date(Date.UTC(y, mm, Math.min(aDay, lastDay)));
+    } else {
+      d = new Date(anchor.getTime());
+      d.setUTCDate(d.getUTCDate() + (freq === "daily" ? 1 : 7) * interval * i);
+    }
     const ymd = d.toISOString().slice(0, 10);
     if (until && ymd > until) break;
     out.push(ymd);
     if (count && out.length >= count) break;
-    if (freq === "daily")       d.setUTCDate(d.getUTCDate() + interval);
-    else if (freq === "weekly") d.setUTCDate(d.getUTCDate() + 7 * interval);
-    else                        d.setUTCMonth(d.getUTCMonth() + interval);
   }
   return out;
 }
@@ -5929,6 +5941,18 @@ export async function dbMarkNotifiedOnce(kind, targetId, userSub) {
     [kind, String(targetId), userSub]
   );
   return Number(r.affectedRows || 0) > 0;
+}
+
+// Release a once-marker when the send it was reserving FAILED, so the next cron
+// tick retries instead of the marker permanently suppressing the notice.
+export async function dbUnmarkNotifiedOnce(kind, targetId, userSub) {
+  if (!kind || !targetId || !userSub) return;
+  try {
+    await pool.query(
+      "DELETE FROM `notifications_sent` WHERE `kind`=? AND `target_id`=? AND `user_sub`=?",
+      [kind, String(targetId), userSub]
+    );
+  } catch (_) { /* best-effort; a stuck marker only costs one missed retry */ }
 }
 
 // Upcoming OUTDOOR team events with coords, within `withinHours` (for the

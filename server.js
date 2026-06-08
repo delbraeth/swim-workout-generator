@@ -5922,6 +5922,12 @@ app.post("/api/teams/:teamId/events", checkOrigin, requireAuth, requireCsrf, wri
     const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
     const { name, date, kind, venue_id, start_time, group_id, recurrence } = req.body || {};
+    // Security: a group target must belong to THIS team (else a coach could aim an
+    // event at another team's group, leaking it into that team's swimmers' feeds).
+    if (group_id) {
+      const grp = await dbGetGroup(group_id);
+      if (!grp || grp.team_id !== req.params.teamId || grp.archived) return res.status(400).json({ error: "group_not_in_team" });
+    }
     const base = { teamId: req.params.teamId, name, date, kind, venueId: venue_id || null, startTime: start_time || null, groupId: group_id || null, createdByCoachSub: req.userSub };
     // C5 — a recurrence ({ freq, interval?, count?|until? }) materializes a series.
     const r = (recurrence && recurrence.freq)
@@ -5974,9 +5980,12 @@ app.put("/api/rsvp", checkOrigin, requireAuth, requireCsrf, writeLimiter, async 
       practiceGroupId = ctx.groupId;
     }
     if (managed_id) {
-      const role = teamId ? await dbGetTeamRole(teamId, req.userSub) : null;
+      // Security: RSVP-on-behalf requires OWNING the managed swimmer — matching every
+      // other managed-swimmer write (dbIsManagedSwimmerOwnedBy). A bare team role is
+      // NOT enough; otherwise any team coach could write RSVP rows for arbitrary
+      // managed ids (incl. swimmers on other teams), polluting the tally.
       const owns = await dbIsManagedSwimmerOwnedBy(managed_id, req.userSub).catch(() => false);
-      if (!role && !owns) return res.status(403).json({ error: "not authorized for this swimmer" });
+      if (!owns) return res.status(403).json({ error: "not authorized for this swimmer" });
       const r = await dbSetRsvp({ targetKind: target_kind, targetId: target_id, managedId: Number(managed_id), status, respondedBySub: req.userSub });
       return r.ok ? res.json(r) : res.status(400).json({ error: r.reason });
     }
@@ -6066,6 +6075,11 @@ app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter
     const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
     const { name, date, kind, venue_id, start_time, group_id } = req.body || {};
+    // Security: re-targeting to a group must keep it within the event's own team.
+    if (group_id) {
+      const grp = await dbGetGroup(group_id);
+      if (!grp || grp.team_id !== ev.team_id || grp.archived) return res.status(400).json({ error: "group_not_in_team" });
+    }
     const patch = {};
     if (name !== undefined) patch.name = name;
     if (date !== undefined) patch.date = date;

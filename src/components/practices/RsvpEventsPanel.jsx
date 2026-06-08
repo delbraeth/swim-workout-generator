@@ -16,7 +16,8 @@ export function RsvpEventsPanel() {
   const [events, setEvents] = React.useState(null);
   const [practices, setPractices] = React.useState(null);   // C2
   const [busyId, setBusyId] = React.useState(null);
-  const [msg, setMsg] = React.useState(null);
+  const [msg, setMsg] = React.useState(null);      // events card
+  const [pmsg, setPmsg] = React.useState(null);    // practices card
 
   const load = React.useCallback(async () => {
     try { const r = await fetch("/api/events/upcoming", { cache: "no-store" }); setEvents(r.ok ? await r.json() : []); }
@@ -46,7 +47,7 @@ export function RsvpEventsPanel() {
 
   // C2 — RSVP to a practice (scheduled_workout). Same control, different target.
   const setPracticeRsvp = async (p, status) => {
-    setBusyId(`p${p.id}`); setMsg(null);
+    setBusyId(`p${p.id}`); setPmsg(null);
     try {
       const r = await fetch("/api/rsvp", {
         method: "PUT", headers: { "Content-Type": "application/json", ...csrfHeaders() },
@@ -55,7 +56,7 @@ export function RsvpEventsPanel() {
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
       setPractices(list => list.map(x => x.id === p.id ? { ...x, my_rsvp: status } : x));
-    } catch (e) { setMsg(`Couldn't save: ${e.message}`); }
+    } catch (e) { setPmsg(`Couldn't save: ${e.message}`); }
     setBusyId(null);
   };
 
@@ -97,7 +98,7 @@ export function RsvpEventsPanel() {
             );
           })}
         </div>
-        {msg && <div style={{ color: "var(--color-warn)", fontSize: 12, marginTop: 8 }}>{msg}</div>}
+        {pmsg && <div style={{ color: "var(--color-warn)", fontSize: 12, marginTop: 8 }}>{pmsg}</div>}
       </div>
     )}
     {!noEvents && (
