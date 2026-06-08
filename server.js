@@ -921,7 +921,20 @@ app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
       }));
       feature_flags = unionFlags(maps);
     } catch (e) { console.warn(`[bootstrap] feature-flag union failed: ${e.message}`); feature_flags = unionFlags([]); }
-    res.json({ ...bootstrap, team_calendars, feature_flags, billing: { status: billingStatus } });
+    // Coach-home count badges, folded in so CoachHomeView needs zero mount fetches
+    // (it previously fetched /api/managed-swimmers + /api/lesson-groups just to count).
+    // Only computed for coach / lesson-access users — skipped for plain swimmers/parents.
+    let coach_counts = null;
+    if (bootstrap.me && (bootstrap.me.is_coach || bootstrap.me.can_lesson)) {
+      try {
+        const [swimmers, groups] = await Promise.all([
+          dbListManagedSwimmersForCoach(req.userSub, { includeArchived: false }).catch(() => []),
+          dbListGroupsForCoach(req.userSub, {}).catch(() => []),
+        ]);
+        coach_counts = { swimmers: swimmers.length, groups: groups.filter(g => g.team_id == null).length };
+      } catch (_) { coach_counts = null; }
+    }
+    res.json({ ...bootstrap, team_calendars, feature_flags, coach_counts, billing: { status: billingStatus } });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

@@ -4,14 +4,16 @@
 // home, so the generator stays focused on generating. Reached from the nav; not
 // the forced default landing. React is a runtime global.
 
-    export function CoachHomeView({ me = null, onNavigate = () => {}, onGenerate = () => {} }) {
+    export function CoachHomeView({ me = null, counts: countsProp = null, onNavigate = () => {}, onGenerate = () => {} }) {
       const isCoach   = !!me?.is_coach;
       const canLesson = !!(me?.can_lesson || me?.is_coach);
-      const [counts, setCounts] = React.useState({ swimmers: null, groups: null });
+      const [counts, setCounts] = React.useState(countsProp || { swimmers: null, groups: null });
 
       React.useEffect(() => {
+        // Seeded from bootstrap (coach_counts) → no fetch. Fall back to fetching
+        // only if the prop wasn't supplied (standalone use).
+        if (countsProp) { setCounts(countsProp); return; }
         let alive = true;
-        // Best-effort counts — cards still render if a fetch fails.
         (async () => {
           try {
             const r = await fetch("/api/managed-swimmers", { cache: "no-store" });
@@ -25,7 +27,7 @@
           } catch (_) {}
         })();
         return () => { alive = false; };
-      }, []);
+      }, [countsProp]);
 
       // Cards. `coachOnly` ones only show for full coaches; the rest for any
       // lesson-access user. `count` keys read from the fetched counts.

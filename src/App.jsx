@@ -1755,6 +1755,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [authError,     setAuthError]     = useState(null);
       const [me,            setMe]            = useState(null); // /api/me payload (for is_admin gate, etc.)
       const [featureFlags,  setFeatureFlags]  = useState(null); // Phase 6 union visibility map from bootstrap (null = all-on)
+      const [coachCounts,   setCoachCounts]   = useState(null); // {swimmers, groups} from bootstrap → CoachHomeView badges (no extra fetch)
       // View-as: admin-only QA mode that temporarily overrides role flags
       // for UI gating purposes. Real `me` stays unchanged so API permission
       // checks (server-side) and the view-as switcher's own visibility
@@ -2050,6 +2051,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         if (d.me) { setMe(d.me); setHistoryOwner(d.me.sub); }   // stamp the cache owner BEFORE loadLocalHistory below
         // Phase 6 union visibility map (nav/personal gating). null ⇒ all-on.
         if (d.feature_flags) setFeatureFlags(d.feature_flags);
+        if (d.coach_counts) setCoachCounts(d.coach_counts);
         // workouts (history) — merge with local cache like the original useEffect did
         if (Array.isArray(d.workouts)) {
           const merged = mergeById(loadLocalHistory(), d.workouts);
@@ -4342,7 +4344,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             {view === "teams"    && <TeamsView />}
             {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} featureFlags={featureFlags} />}
             {view === "lesson-groups" && <LessonGroupsView />}
-            {view === "coach-home" && <CoachHomeView me={effectiveMe} onNavigate={setView} onGenerate={() => setView("generator")} />}
+            {view === "coach-home" && <CoachHomeView me={effectiveMe} counts={coachCounts} onNavigate={setView} onGenerate={() => setView("generator")} />}
             {view === "practices" && <PracticesView />}
             {view === "week"     && (
               <WeekView
