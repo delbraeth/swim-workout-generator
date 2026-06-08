@@ -60,6 +60,7 @@ struct Bootstrap: Decodable {
         billing               = try? c.decodeIfPresent(Billing.self, forKey: .billing)
         settings              = try? c.decodeIfPresent([String: AnyCodable].self, forKey: .settings)
         groupAnchors          = try? c.decodeIfPresent([GroupAnchor].self, forKey: .groupAnchors)
+        featureFlags          = try? c.decodeIfPresent([String: Bool].self, forKey: .featureFlags)
     }
 }
 
