@@ -585,6 +585,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     )}
                     {authMode === "apple" && (
                       <a href="/api/auth/signout" title="Sign out"
+                        onClick={() => { try { localStorage.removeItem("swim_history_v1"); localStorage.removeItem("swim_user_initials"); } catch (_) {} }}
                         style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, textDecoration: "none" }}>
                         🚪 Sign out
                       </a>

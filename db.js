@@ -299,7 +299,11 @@ export async function dbGetWorkout(id) {
 export async function dbPatchWorkout(id, patch, userSub) {
   const cur = await pool.query("SELECT `user_sub` FROM `workouts` WHERE `id` = ?", [id]);
   if (cur.length === 0) return { ok: false, status: 404, reason: "not found" };
-  if (userSub && cur[0].user_sub && cur[0].user_sub !== userSub)
+  // Ownership: reject any mismatch, INCLUDING a NULL-owner row vs an authed caller
+  // (the old `&& cur[0].user_sub` short-circuit skipped the check for NULL rows,
+  // making any future NULL-owner import globally writable). null===null still allows
+  // open-mode editing of legacy ownerless rows.
+  if (cur[0].user_sub !== userSub)
     return { ok: false, status: 403, reason: "not authorized" };
 
   const map = {
@@ -331,7 +335,7 @@ export async function dbPatchWorkout(id, patch, userSub) {
 export async function dbDeleteWorkout(id, userSub) {
   const cur = await pool.query("SELECT * FROM `workouts` WHERE `id` = ?", [id]);
   if (cur.length === 0) return { ok: false, status: 404, reason: "not found" };
-  if (userSub && cur[0].user_sub && cur[0].user_sub !== userSub)
+  if (cur[0].user_sub !== userSub)   // reject mismatch incl. NULL-owner vs authed caller
     return { ok: false, status: 403, reason: "not authorized" };
   await pool.query("DELETE FROM `workouts` WHERE `id` = ?", [id]);
   return { ok: true, removed: rowToWorkoutEntry(cur[0]) };
@@ -894,6 +898,38 @@ export async function dbHasLessonAccess(sub) {
   return rows.length > 0;
 }
 
+// ── Apple IAP appAccountToken (mig 066) — binds a StoreKit purchase to ONE user ──
+// The per-user UUID the iOS app passes as Product.PurchaseOption.appAccountToken;
+// Apple bakes it into the signed transaction, and /verify asserts it matches so a
+// signed receipt can't be replayed to grant tiers to other accounts.
+export async function dbGetOrCreateAppleAppAccountToken(sub) {
+  if (!sub) return null;
+  const rows = await pool.query("SELECT `apple_app_account_token` AS t FROM `users` WHERE `sub` = ?", [sub]);
+  if (!rows[0]) return null;
+  if (rows[0].t) return rows[0].t;
+  const uuid = crypto.randomUUID();
+  await pool.query(
+    "UPDATE `users` SET `apple_app_account_token` = ? WHERE `sub` = ? AND (`apple_app_account_token` IS NULL OR `apple_app_account_token` = '')",
+    [uuid, sub]
+  );
+  const after = await pool.query("SELECT `apple_app_account_token` AS t FROM `users` WHERE `sub` = ?", [sub]);
+  return (after[0] && after[0].t) || uuid;
+}
+export async function dbGetAppleAppAccountToken(sub) {
+  if (!sub) return null;
+  const rows = await pool.query("SELECT `apple_app_account_token` AS t FROM `users` WHERE `sub` = ?", [sub]);
+  return (rows[0] && rows[0].t) || null;
+}
+// Which user (if any) already owns this Apple originalTransactionId.
+export async function dbUserOwningOriginalTxn(originalTransactionId) {
+  if (!originalTransactionId) return null;
+  const rows = await pool.query(
+    "SELECT `sub` FROM `users` WHERE `apple_original_transaction_id` = ? LIMIT 1",
+    [String(originalTransactionId)]
+  );
+  return (rows[0] && rows[0].sub) || null;
+}
+
 export async function dbListCoachesForPicker(excludeSub) {
   // Identity: name/initials come from persons (JOIN via person_id); sorted
   // by persons.last_name, first_name. Legacy users columns dropped in 044.
@@ -1324,7 +1360,8 @@ export async function dbAdminListAuditEvents({ limit = 500, offset = 0, eventTyp
   }
   if (userSub)   { where.push("`user_sub` = ?");   args.push(userSub); }
   const wh = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  args.push(Number(limit), Number(offset));
+  // Clamp limit/offset — a non-numeric value would bind as NaN → `LIMIT NaN` syntax error/500.
+  args.push(Math.min(Math.max(1, Number(limit) || 100), 1000), Math.max(0, Number(offset) || 0));
   const rows = await pool.query(
     `SELECT id, user_sub, event_type, ip, user_agent, details, created_at, impersonator_sub
        FROM audit_events ${wh}
@@ -4339,7 +4376,7 @@ export async function dbGetWeeklyDigestPayloadForSwimmer({ managedId = null, swi
   // week. Upcoming window is then weekStart+7d → weekStart+14d.
   const ws = String(weekStart);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ws)) return null;
-  const start = new Date(ws + "T00:00:00");
+  const start = new Date(ws + "T00:00:00Z");   // parse in UTC to match the setUTCDate/toISOString below (east-of-UTC off-by-one otherwise)
   const endOfWeek = new Date(start);  endOfWeek.setUTCDate(endOfWeek.getUTCDate() + 7);
   const endOfNext = new Date(start);  endOfNext.setUTCDate(endOfNext.getUTCDate() + 14);
   const wsStr   = ws;
@@ -5433,6 +5470,18 @@ export async function dbAddGroupCoach(groupId, coachSub, role = "assistant") {
   const u = userRows[0];
   if (u.is_disabled) return { ok: false, reason: "user_disabled" };
   if (!(u.is_coach || u.is_admin)) return { ok: false, reason: "user_not_coach" };
+  // Security: for a TEAM-owned group, the assistant must be an active coach ON that
+  // team — otherwise a group primary could grant an off-team (rival-club) coach full
+  // access to the group. Mirrors dbTransferGroupPrimary's team check.
+  const grp = await dbGetGroup(groupId);
+  if (!grp) return { ok: false, reason: "group_not_found" };
+  if (grp.team_id) {
+    const onTeam = await pool.query(
+      "SELECT 1 FROM `team_coaches` WHERE `team_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
+      [grp.team_id, coachSub]
+    );
+    if (onTeam.length === 0) return { ok: false, reason: "coach_not_on_team" };
+  }
   const existing = await pool.query(
     "SELECT `role`, `removed_at` FROM `group_coaches` WHERE `group_id` = ? AND `coach_sub` = ?",
     [groupId, coachSub]
@@ -5849,32 +5898,21 @@ export async function dbListTeamEvents(teamId) {
 export const RSVP_STATUSES = ["going", "maybe", "out", "no_response"];
 const RSVP_TARGET_KINDS = ["meet", "practice"];
 
-function _rsvpOwner(swimmerSub, managedId) {
-  return managedId != null
-    ? { where: "`managed_id` = ?", val: managedId }
-    : { where: "`swimmer_sub` = ?", val: swimmerSub };
-}
-
 export async function dbSetRsvp({ targetKind, targetId, swimmerSub = null, managedId = null, status, respondedBySub = null }) {
   if (!RSVP_TARGET_KINDS.includes(targetKind)) return { ok: false, reason: "bad_kind" };
   if (!targetId) return { ok: false, reason: "no_target" };
   if ((swimmerSub == null) === (managedId == null)) return { ok: false, reason: "bad_owner" };
   if (!RSVP_STATUSES.includes(status)) return { ok: false, reason: "bad_status" };
-  const { where, val } = _rsvpOwner(swimmerSub, managedId);
-  const existing = await pool.query(
-    "SELECT `id` FROM `event_rsvp` WHERE `target_kind`=? AND `target_id`=? AND " + where + " LIMIT 1",
-    [targetKind, String(targetId), val]
-  );
-  if (existing[0]) {
-    await pool.query("UPDATE `event_rsvp` SET `status`=?, `responded_by_sub`=? WHERE `id`=?",
-      [status, respondedBySub, Number(existing[0].id)]);
-    return { ok: true, id: Number(existing[0].id), updated: true };
-  }
+  // Atomic upsert keyed on the (target_kind, target_id, swimmer_sub) / (…, managed_id)
+  // UNIQUE indexes (mig 065). Replaces the old check-then-insert, which raced two
+  // near-simultaneous requests (double-tap/retry) into duplicate rows.
   const r = await pool.query(
-    "INSERT INTO `event_rsvp` (`target_kind`,`target_id`,`swimmer_sub`,`managed_id`,`status`,`responded_by_sub`) VALUES (?,?,?,?,?,?)",
+    "INSERT INTO `event_rsvp` (`target_kind`,`target_id`,`swimmer_sub`,`managed_id`,`status`,`responded_by_sub`) VALUES (?,?,?,?,?,?) " +
+    "ON DUPLICATE KEY UPDATE `status`=VALUES(`status`), `responded_by_sub`=VALUES(`responded_by_sub`)",
     [targetKind, String(targetId), swimmerSub, managedId, status, respondedBySub]
   );
-  return { ok: true, id: Number(r.insertId), created: true };
+  // affectedRows: 1 = inserted, 2 = updated existing (MySQL/MariaDB convention).
+  return { ok: true, created: Number(r.affectedRows) === 1 };
 }
 
 export async function dbGetMyRsvp({ targetKind, targetId, swimmerSub }) {
@@ -7240,6 +7278,37 @@ export async function dbRedeemClaimToken(token, swimmerSub) {
       return { ok: false, reason: "group_membership_repoint_failed", error: e.message };
     }
 
+    // ── Step 7b: repoint attendance + RSVP history (else these orphan when the
+    //    managed row is deleted, losing pre-claim attendance from R2/digests and
+    //    managed-era RSVPs from coach summaries). Delete any managed row that would
+    //    collide with an existing swimmer row for the same target first (keeps the
+    //    swimmer's own), then repoint the rest. Same transaction. ──────────────
+    try {
+      await conn.query(
+        "DELETE pa FROM `practice_attendance` pa " +
+        "JOIN `practice_attendance` ex ON ex.`scheduled_workout_id` = pa.`scheduled_workout_id` AND ex.`swimmer_sub` = ? " +
+        "WHERE pa.`managed_id` = ?",
+        [swimmerSub, t.managed_id]
+      );
+      await conn.query(
+        "UPDATE `practice_attendance` SET `swimmer_sub` = ?, `managed_id` = NULL WHERE `managed_id` = ?",
+        [swimmerSub, t.managed_id]
+      );
+      await conn.query(
+        "DELETE er FROM `event_rsvp` er " +
+        "JOIN `event_rsvp` ex ON ex.`target_kind` = er.`target_kind` AND ex.`target_id` = er.`target_id` AND ex.`swimmer_sub` = ? " +
+        "WHERE er.`managed_id` = ?",
+        [swimmerSub, t.managed_id]
+      );
+      await conn.query(
+        "UPDATE `event_rsvp` SET `swimmer_sub` = ?, `managed_id` = NULL WHERE `managed_id` = ?",
+        [swimmerSub, t.managed_id]
+      );
+    } catch (e) {
+      await conn.rollback();
+      return { ok: false, reason: "attendance_rsvp_repoint_failed", error: e.message };
+    }
+
     // ── Step 8: delete the managed row ─────────────────────────────────
     await conn.query("DELETE FROM `coach_managed_swimmers` WHERE `id` = ?", [t.managed_id]);
 
@@ -8103,17 +8172,31 @@ export async function dbCompleteScheduledWorkout({ scheduledId, callerSub, compl
     [Number(scheduledId)]
   );
   if (!cur[0]) return { ok: false, reason: "schedule_not_found" };
+  // Group association (intent_params/payload JSON). Used for both the coach-path
+  // authz AND the attendance-roster guard below.
+  const groupId = extractScheduledWorkoutGroupId(cur[0]);
   if (cur[0].user_sub !== callerSub) {
-    // Try the looser group-coach path. cur[0] carries raw JSON-string columns
-    // (this is a bare SELECT, not dbGetScheduledWorkout) — the shared helper
-    // handles that.
-    const groupId = extractScheduledWorkoutGroupId(cur[0]);
     if (!groupId) return { ok: false, reason: "not_owner" };
     const gc = await pool.query(
       "SELECT 1 FROM `group_coaches` WHERE `group_id` = ? AND `coach_sub` = ? AND `removed_at` IS NULL LIMIT 1",
       [groupId, callerSub]
     );
     if (!gc[0]) return { ok: false, reason: "not_owner_not_coach" };
+  }
+  // Security: attendance may only be recorded for swimmers on THIS practice's group
+  // roster — otherwise an authorized coach could tag swimmers off any team (managed_id
+  // is an enumerable BIGINT). Build the roster once (incl. since-left members so
+  // backfilling a past practice still works); off-roster rows are skipped below.
+  const rosterSubs = new Set(), rosterManaged = new Set();
+  if (groupId) {
+    const mem = await pool.query(
+      "SELECT `member_swimmer_sub`, `member_managed_id` FROM `group_members` WHERE `group_id` = ?",
+      [groupId]
+    );
+    for (const m of mem) {
+      if (m.member_swimmer_sub) rosterSubs.add(String(m.member_swimmer_sub));
+      if (m.member_managed_id != null) rosterManaged.add(Number(m.member_managed_id));
+    }
   }
   // completedAt defaults to NOW if not provided. Allow backdating to any
   // past datetime — server doesn't bound this; route layer can clamp.
@@ -8133,6 +8216,9 @@ export async function dbCompleteScheduledWorkout({ scheduledId, callerSub, compl
     for (const a of attendance) {
       if (!a || (a.swimmer_sub == null && a.managed_id == null)) continue;
       if (a.swimmer_sub != null && a.managed_id != null) continue;  // XOR
+      // Off-roster target → skip (IDOR guard). Empty roster (no group) rejects all.
+      if (a.swimmer_sub != null && !rosterSubs.has(String(a.swimmer_sub))) continue;
+      if (a.managed_id != null && !rosterManaged.has(Number(a.managed_id))) continue;
       const present = a.present !== false;  // default true
       const notes   = a.notes && String(a.notes).length <= 500 ? String(a.notes) : null;
       if (a.swimmer_sub) {
@@ -8465,7 +8551,10 @@ export async function dbGetPlatformHealth({ startYmd, endYmd, teamId = null } = 
   // 1. Active coaches: distinct coach subs who generated a workout within
   //    7 / 14 / 30 days. Joins workouts to team_coaches to filter to actual
   //    coaches (not all users). Optional team filter narrows.
-  const teamJoin = teamId ? "JOIN `team_coaches` tc ON tc.`coach_sub` = w.`user_sub` AND tc.`team_id` = ? AND tc.`removed_at` IS NULL " : "JOIN `team_coaches` tc ON tc.`coach_sub` = w.`user_sub` AND tc.`removed_at` IS NULL ";
+  // COLLATE: team_coaches.coach_sub is utf8mb4_general_ci while workouts.user_sub is
+  // utf8mb4_unicode_ci — a bare `=` throws "Illegal mix of collations" (hit in prod
+  // before; fixed elsewhere in this file). Pin the join collation.
+  const teamJoin = teamId ? "JOIN `team_coaches` tc ON tc.`coach_sub` COLLATE utf8mb4_unicode_ci = w.`user_sub` AND tc.`team_id` = ? AND tc.`removed_at` IS NULL " : "JOIN `team_coaches` tc ON tc.`coach_sub` COLLATE utf8mb4_unicode_ci = w.`user_sub` AND tc.`removed_at` IS NULL ";
   const teamArg = teamId ? [teamId] : [];
   const activeCoaches = {};
   for (const days of [7, 14, 30]) {
@@ -8480,7 +8569,7 @@ export async function dbGetPlatformHealth({ startYmd, endYmd, teamId = null } = 
   const wRows = await pool.query(
     `SELECT w.\`date_completed\`, COALESCE(tc.\`team_id\`, '__none__') AS team_id, COUNT(*) AS n ` +
     `FROM \`workouts\` w ` +
-    `LEFT JOIN \`team_coaches\` tc ON tc.\`coach_sub\` = w.\`user_sub\` AND tc.\`removed_at\` IS NULL ` +
+    `LEFT JOIN \`team_coaches\` tc ON tc.\`coach_sub\` COLLATE utf8mb4_unicode_ci = w.\`user_sub\` AND tc.\`removed_at\` IS NULL ` +
     `WHERE w.\`date_completed\` BETWEEN ? AND ? ` +
     (teamId ? `AND tc.\`team_id\` = ? ` : ``) +
     `GROUP BY w.\`date_completed\`, tc.\`team_id\``,

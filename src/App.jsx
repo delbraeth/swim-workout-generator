@@ -156,10 +156,17 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const _sfSleep = ms => new Promise(r => setTimeout(r, ms));
       const _SF_MAX_429_RETRIES = 4;
       window.fetch = async function(input, init) {
+        const isReq = typeof Request !== "undefined" && input instanceof Request;
         const url = typeof input === "string" ? input : (input && input.url) || "";
         if (impersonation.active && impersonation.active.target_sub && url.startsWith("/api/")) {
           init = init || {};
-          init.headers = { ...(init.headers || {}), "X-Impersonate-Sub": impersonation.active.target_sub };
+          // Merge onto the caller's existing headers via Headers — a plain
+          // {...init.headers} would DROP a Request object's own headers
+          // (per the Fetch spec, init.headers overrides Request headers).
+          const base = isReq && init.headers == null ? input.headers : (init.headers || {});
+          const merged = new Headers(base);
+          merged.set("X-Impersonate-Sub", impersonation.active.target_sub);
+          init.headers = merged;
         }
         let attempt = 0;
         while (true) {
@@ -185,12 +192,32 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
     const HISTORY_LOCAL_KEY = "swim_history_v1";
     const USER_INITIALS_KEY = "swim_user_initials";
 
+    // Owner of the locally-cached history (the current user's sub). Set once when
+    // `me` loads (applyBootstrap). The cache is stamped with this so a DIFFERENT
+    // user on a SHARED browser never merges/sees the prior user's history — on a
+    // mismatch the cache is dropped rather than merged. (Security: cross-user leak.)
+    let _sfHistoryOwner = null;
+    function setHistoryOwner(sub) { _sfHistoryOwner = sub || null; }
+    function clearLocalHistory() {
+      try { localStorage.removeItem(HISTORY_LOCAL_KEY); localStorage.removeItem(USER_INITIALS_KEY); } catch (_) {}
+    }
     function loadLocalHistory() {
-      try { const raw = localStorage.getItem(HISTORY_LOCAL_KEY); return raw ? JSON.parse(raw) : []; }
-      catch (_) { return []; }
+      try {
+        const raw = localStorage.getItem(HISTORY_LOCAL_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.entries)) {
+          // Stamped format: only return the cache if it belongs to the current user.
+          if (_sfHistoryOwner && parsed.owner && parsed.owner !== _sfHistoryOwner) { clearLocalHistory(); return []; }
+          return parsed.entries;
+        }
+        // Legacy bare-array (pre-fix) — owner unknown, so drop it rather than risk a leak.
+        clearLocalHistory();
+        return [];
+      } catch (_) { return []; }
     }
     function saveLocalHistory(entries) {
-      try { localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify(entries)); } catch (_) {}
+      try { localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify({ owner: _sfHistoryOwner, entries })); } catch (_) {}
     }
     // Merge two entry lists by id (b wins on conflict), then sort newest-first by dateCompleted.
     function mergeById(a, b) {
@@ -2020,7 +2047,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const applyBootstrap = useCallback((d) => {
         if (!d || typeof d !== "object") return;
         // me
-        if (d.me) setMe(d.me);
+        if (d.me) { setMe(d.me); setHistoryOwner(d.me.sub); }   // stamp the cache owner BEFORE loadLocalHistory below
         // Phase 6 union visibility map (nav/personal gating). null ⇒ all-on.
         if (d.feature_flags) setFeatureFlags(d.feature_flags);
         // workouts (history) — merge with local cache like the original useEffect did

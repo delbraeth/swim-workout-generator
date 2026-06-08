@@ -88,6 +88,7 @@ import {
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   isMinor, postFeedbackToDiscord,
   dbIsUser, dbIsAdmin, dbIsCoach, dbHasLessonAccess, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe, dbGetBootstrapForUser,
+  dbGetOrCreateAppleAppAccountToken, dbGetAppleAppAccountToken,
   dbGetUserSubByProvider, dbLinkOAuthProvider, dbFindUserByVerifiedEmail,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbExportAccount,
@@ -441,6 +442,12 @@ async function requireAuth(req, res, next) {
       const valid = await dbValidateImpersonationHeader(sub, impersonateHeader);
       if (!valid) {
         return res.status(401).json({ error: "impersonation_session_invalid", reason: "no active session matches the X-Impersonate-Sub header — start a new session" });
+      }
+      // Security: privilege is otherwise checked only at session START, so a
+      // mid-session admin/support revocation (account left enabled) would keep
+      // honoring the header for up to 30 min. Re-verify on every request.
+      if (!(await dbIsAdmin(sub) || await dbIsSupportRole(sub))) {
+        return res.status(401).json({ error: "impersonation_not_privileged", reason: "your admin/support access was revoked — impersonation ended" });
       }
       req.impersonatorSub = sub;       // the real admin
       req.userSub         = impersonateHeader; // the target (rewritten)
@@ -3013,6 +3020,23 @@ app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res
     if (!jws || typeof jws !== "string") return res.status(400).json({ error: "signedTransaction required" });
     const v = await verifyTransaction(jws);
     if (v.skipped || v.error) return res.status(v.error === "not_activated" ? 503 : 400).json(v);
+    // Security (Critical): bind the transaction to THIS user. The app passes a
+    // per-user appAccountToken at purchase that Apple bakes into the receipt; if a
+    // token is present it MUST match the caller's stored one — otherwise this is a
+    // signed receipt being replayed onto another account. (Legacy receipts with no
+    // token fall through to the originalTransactionId cross-user check below.)
+    if (v.appAccountToken) {
+      const myToken = await dbGetAppleAppAccountToken(req.userSub);
+      if (!myToken || String(v.appAccountToken).toLowerCase() !== String(myToken).toLowerCase()) {
+        dbAuditEvent({ userSub: req.userSub, eventType: "billing.apple.token_mismatch", ...reqMeta(req),
+          details: { original_txn_id: v.originalTransactionId || null } });
+        return res.status(403).json({ error: "transaction_not_yours" });
+      }
+    }
+    // Capture cross-channel state BEFORE applying — applyVerifiedTransaction
+    // overwrites tier_source to apple_iap_*, after which checkCrossChannel would
+    // see apple===apple and always report blocked:false (dead double-pay warning).
+    const xc = await checkCrossChannel(req.userSub, "apple");
     const result = await applyVerifiedTransaction({
       userSub:               req.userSub,
       productId:             v.productId,
@@ -3020,12 +3044,16 @@ app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res
       expiresDate:           v.expiresDate,
       revoked:               v.revoked,
     });
+    // A receipt whose originalTransactionId already belongs to another account.
+    if (result && result.error === "txn_belongs_to_another_user") {
+      dbAuditEvent({ userSub: req.userSub, eventType: "billing.apple.txn_reuse", ...reqMeta(req),
+        details: { original_txn_id: v.originalTransactionId || null } });
+      return res.status(403).json({ error: "transaction_not_yours" });
+    }
     // Double-pay note: if the user ALSO has an active Stripe sub, Apple has
     // already charged them — we still grant the tier (never take their money
     // and deny access) but flag it so we (and they) can cancel the redundant
-    // Stripe sub. The iOS paywall itself should pre-block this via the
-    // pre-purchase check below; this is the belt-and-suspenders server log.
-    const xc = await checkCrossChannel(req.userSub, "apple");
+    // Stripe sub.
     if (xc.blocked) {
       dbAuditEvent({
         userSub:   req.userSub,
@@ -3040,6 +3068,16 @@ app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res
     console.error("[billing/apple/verify]", err.message);
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// The per-user appAccountToken (UUID) the iOS app must pass into the StoreKit
+// purchase so the resulting receipt is bound to THIS account. Stable per user.
+app.get("/api/billing/apple/account-token", requireAuth, async (req, res) => {
+  try {
+    const token = await dbGetOrCreateAppleAppAccountToken(req.userSub);
+    if (!token) return res.status(404).json({ error: "user_not_found" });
+    res.json({ token });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // App Store Server Notifications V2 — Apple POSTs a signed payload on
@@ -3071,25 +3109,11 @@ app.post("/api/billing/apple/notify", express.raw({ type: "application/json" }),
       return res.status(400).json({ error: result.error });
     }
 
-    // Idempotency: the notificationUUID is only known post-verify, so we record
-    // AFTER processing (mirrors the intent of the Stripe webhook dedupe, keyed
-    // on Apple's UUID). INSERT IGNORE-style: if we've already processed this
-    // UUID, this is a retry — ack without re-applying.
-    const uuid = result?.notificationUUID;
-    if (uuid) {
-      try {
-        await pool.query(
-          "INSERT INTO `apple_iap_events` (`notification_uuid`, `notification_type`, `subtype`, `original_txn_id`, `processed_status`, `payload_json`) " +
-          "VALUES (?, ?, ?, ?, 'processed', ?)",
-          [uuid, result.handled || result.notificationType || "unknown", result.subtype || null,
-           result.original_txn_id || null, JSON.stringify(result).slice(0, 16777215)]
-        );
-      } catch (dupErr) {
-        if (dupErr.code === "ER_DUP_ENTRY" || /duplicate/i.test(dupErr.message || "")) {
-          return res.status(200).json({ ok: true, deduped: true, notification_uuid: uuid });
-        }
-        throw dupErr;
-      }
+    // Idempotency is now handled INSIDE processNotification: it reserves the
+    // notificationUUID (INSERT IGNORE) BEFORE applying the grant/revoke, so an Apple
+    // retry can't re-run the side effect. A retry comes back as result.deduped.
+    if (result?.deduped) {
+      return res.status(200).json({ ok: true, deduped: true, notification_uuid: result.notificationUUID });
     }
     res.status(200).json({ ok: true, result });
   } catch (err) {
@@ -4973,10 +4997,13 @@ app.delete("/api/claim-tokens/:token", checkOrigin, requireAuth, requireCsrf, wr
 // Preview a claim token (lets the swimmer see who/what they're about to
 // claim BEFORE committing). Token itself is the secret; any authed user
 // can look it up.
-app.get("/api/claim-tokens/:token/preview", requireAuth, async (req, res) => {
+app.get("/api/claim-tokens/:token/preview", requireAuth, feedLimiter, async (req, res) => {
   try {
     const tok = await dbGetClaimToken(req.params.token);
     if (!tok) return res.status(404).json({ error: "invalid_token" });
+    // Privacy: a redeemed/expired token must NOT keep serving the (minor) swimmer's
+    // name + coach name to anyone who ever held the link. Generic 410, no PII.
+    if (tok.is_redeemed || tok.is_expired) return res.status(410).json({ error: "token_no_longer_valid" });
     res.json({
       managed_id:   tok.managed_id,
       managed_name: tok.managed_name,
@@ -5260,6 +5287,18 @@ app.delete("/api/me/credentials/:system", checkOrigin, requireAuth, requireCsrf,
 app.get("/api/push/config", requireAuth, async (req, res) => {
   res.json(pushConfigState());
 });
+// Security (SSRF): the push endpoint is later POSTed to by the server (push/test
+// + cron sweeps). It must be an HTTPS URL on a known push-service host — never an
+// internal/metadata address or http://. Allowlist the real Web-Push providers.
+function isAllowedPushEndpoint(endpoint) {
+  let u;
+  try { u = new URL(String(endpoint)); } catch (_) { return false; }
+  if (u.protocol !== "https:") return false;
+  const host = u.hostname.toLowerCase();
+  const allow = [".push.apple.com", "fcm.googleapis.com", ".notify.windows.com",
+                 "updates.push.services.mozilla.com", ".push.services.mozilla.com"];
+  return allow.some(s => s.startsWith(".") ? host.endsWith(s) : host === s);
+}
 app.post("/api/push/subscribe", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
     if (!PUSH_ACTIVE) return res.status(503).json({ error: "push_not_configured" });
@@ -5269,6 +5308,7 @@ app.post("/api/push/subscribe", checkOrigin, requireAuth, requireCsrf, writeLimi
     const endpoint = s.endpoint;
     const p256dh = s.keys?.p256dh, auth = s.keys?.auth;
     if (!endpoint || !p256dh || !auth) return res.status(400).json({ error: "bad_subscription" });
+    if (!isAllowedPushEndpoint(endpoint)) return res.status(400).json({ error: "bad_endpoint" });
     const r = await dbAddPushSubscription({
       userSub: req.userSub, endpoint, p256dh, auth,
       platform: "web", userAgent: (req.get("user-agent") || "").slice(0, 255),
@@ -5788,10 +5828,11 @@ app.delete("/api/join-tokens/:token", checkOrigin, requireAuth, requireCsrf, wri
 // Pre-redeem preview: swimmer can look up a token they were given to see
 // which group they're about to join, without committing. Open to any auth'd
 // user (the token itself is the secret).
-app.get("/api/join-tokens/:token/preview", requireAuth, async (req, res) => {
+app.get("/api/join-tokens/:token/preview", requireAuth, feedLimiter, async (req, res) => {
   try {
     const tok = await dbGetGroupJoinToken(req.params.token);
     if (!tok) return res.status(404).json({ error: "invalid_token" });
+    if (tok.is_redeemed || tok.is_expired) return res.status(410).json({ error: "token_no_longer_valid" });
     res.json({
       group_id:      tok.group_id,
       group_name:    tok.group_name,
