@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// Process-lifetime cache so re-opening Generate doesn't re-fetch the STATIC
+/// workout-type catalog (and the rarely-changing coach-targets) on every open —
+/// the model is an @StateObject recreated per open, so its own isEmpty guard
+/// can't dedupe across opens. Cleared on Home pull-to-refresh so roster/catalog
+/// changes are picked up. (429-avoidance — rate-limit review 2026-06-08.)
+@MainActor
+enum GenerateCache {
+    static var types: [WorkoutType]?
+    static var coachTargets: [CoachTarget]?
+    static func clear() { types = nil; coachTargets = nil }
+}
+
 /// The workout generator. Loads the type catalog, collects form inputs, calls
 /// `POST /api/generate` (the engine runs server-side — same `generateWorkout` as
 /// the web SPA), and renders the result with the shared `WorkoutCard`. Curation
@@ -110,11 +122,17 @@ final class GenerateViewModel: ObservableObject {
     init(api: APIClient = .shared) { self.api = api }
 
     func loadTypes() async {
+        if let cached = GenerateCache.types {            // process-lifetime cache hit → no fetch
+            types = cached
+            if selectedTypeId == nil { selectedTypeId = types.first?.id }
+            return
+        }
         guard types.isEmpty else { return }
         loadingTypes = true; typesError = nil
         do {
             let resp = try await api.get("workout-types", as: WorkoutTypesResponse.self)
             types = resp.types
+            GenerateCache.types = resp.types            // static engine data — cache for the session
             if selectedTypeId == nil { selectedTypeId = types.first?.id }
         } catch let err as APIError {
             typesError = err.errorDescription ?? "Couldn't load workout types."
@@ -127,9 +145,11 @@ final class GenerateViewModel: ObservableObject {
     /// Load assignable targets. Silent on failure (403 for non-coaches, etc.) —
     /// an empty list simply hides the "Generate for" picker.
     func loadCoachTargets() async {
+        if let cached = GenerateCache.coachTargets { coachTargets = cached; return }  // cache hit → no fetch
         guard coachTargets.isEmpty else { return }
         if let targets = try? await api.get("picker/coach-targets", as: [CoachTarget].self) {
             coachTargets = targets
+            GenerateCache.coachTargets = targets        // refreshed on Home pull-to-refresh
         }
     }
 

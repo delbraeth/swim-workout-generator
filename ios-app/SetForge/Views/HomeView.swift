@@ -179,7 +179,7 @@ struct HomeView: View {
             .padding()
             .readableWidth()
         }
-        .refreshable { await model.load(force: true) }
+        .refreshable { GenerateCache.clear(); await model.load(force: true) }   // pull-to-refresh also re-fetches the Generate caches
     }
 
     @ToolbarContentBuilder

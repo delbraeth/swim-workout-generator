@@ -42,25 +42,13 @@ final class AuthManager: ObservableObject {
         }
         token = stored
         api.setBearer(stored)
-        // Cheap validity check; on 401 the client calls handleUnauthorized().
-        do {
-            let status = try await api.get("auth/status", as: AuthStatus.self)
-            state = status.authenticated == false ? .signedOut : .signedIn
-            if state == .signedOut { clearToken() }
-        } catch APIError.unauthorized {
-            state = .signedOut            // 401 also fires onUnauthorized → clearToken()
-        } catch APIError.transport {
-            // Offline — keep the stored token; cached bootstrap renders, next call re-checks.
-            state = .signedIn
-        } catch APIError.server(let status, _) where status >= 500 {
-            // Transient backend (e.g. 503 DB-down) — don't bounce a real session.
-            state = .signedIn
-        } catch {
-            // Non-401 4xx, decode failure, or anything else: do NOT trust the stored
-            // token (a revoked token returning a non-401 must not keep showing cached PII).
-            clearToken()
-            state = .signedOut
-        }
+        // Optimistically signed-in — no separate auth/status probe. The very next
+        // call (HomeView's me/bootstrap) is behind requireAuth and 401s on a dead
+        // token, firing api.onUnauthorized → clearToken() → signed out. Drops a
+        // redundant cold-start round-trip (429-avoidance). A revoked token returning
+        // a non-401 falls through to the offline-cache path until it 401s, same as
+        // any mid-session revocation.
+        state = .signedIn
     }
 
     /// Exchange an Apple identity token for a SetForge session token.

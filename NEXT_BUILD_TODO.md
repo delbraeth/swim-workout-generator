@@ -1,6 +1,12 @@
 # iOS build status + next steps
 
-**Build 14 SHIPPED to TestFlight 2026-06-08.** Next archive = bump to **15**.
+**Build 15 in source (2026-06-08)** — 429-avoidance iOS: process-lifetime cache for
+the STATIC workout-types + coach-targets (`GenerateCache`, cleared on Home
+pull-to-refresh) so re-opening Generate fetches 0 (was 2/open); dropped the
+redundant launch `auth/status` probe (me/bootstrap's 401 is the validator).
+`swiftc -wmo` clean. CURRENT_PROJECT_VERSION 14→15.
+
+**Build 14 SHIPPED to TestFlight 2026-06-08.** (Next archive = 15.)
 Build 14 carries: B6 flag-gating, B7 offline cache, B8 deck/print, B9 Siri,
 B14b HealthKit import, the critical `Bootstrap.featureFlags` build-unbreak, and
 the security-audit iOS fixes (StoreKit appAccountToken binding, AuthManager
