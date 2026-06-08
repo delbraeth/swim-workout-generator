@@ -7559,6 +7559,26 @@ export function optionFitsAllLanes(option, lanesPaceSecs, minRest = 5, maxRestRa
 
 export const TEMPLATE_BASELINE_PACE_SECS = 120;
 
+// Stroke pace factors — non-free strokes are slower at the same effort, so a
+// stroke-blind (free-baseline) send-off leaves breast/fly/IM with too little
+// (often negative) rest. Mirrors the factors inferSetZone uses for zone
+// classification. Applied to the swim-time estimate in templateComputeInterval.
+// free = 1.0 keeps every free/distance/sprint/endurance/mixed template
+// byte-identical; only genuinely non-free strokes change.
+export const STROKE_PACE_FACTOR = {
+      free: 1.0, back: 1.09, fly: 1.05, breast: 1.18, im: 1.13, IM: 1.13, choice: 1.18,
+    };
+export function templateStrokeFactor(stroke) {
+      return STROKE_PACE_FACTOR[stroke] ?? 1.0;
+    }
+// Multi-stroke blocks that share ONE send-off (round-robin, IM order, drill
+// rotations) size to the SLOWEST stroke present so every rep is makeable.
+export function templateSlowestStroke(strokes) {
+      const list = Array.isArray(strokes) ? strokes.filter(Boolean) : [];
+      if (!list.length) return "free";
+      return list.reduce((a, b) => (templateStrokeFactor(b) > templateStrokeFactor(a) ? b : a), list[0]);
+    }
+
 export const TEMPLATE_CANONICAL_DISTS = [25, 50, 75, 100, 150, 200, 300, 400, 500];
 
 export const TEMPLATE_REST_BY_EFFORT = {
@@ -7571,9 +7591,9 @@ export const TEMPLATE_REST_BY_EFFORT = {
       sprint:    60,  // full recovery between sprints
     };
 
-export function templateComputeInterval(distYd, effortKey) {
+export function templateComputeInterval(distYd, effortKey, stroke = "free") {
       const restSecs = TEMPLATE_REST_BY_EFFORT[effortKey] ?? 15;
-      const swimSecs = (distYd / 100) * TEMPLATE_BASELINE_PACE_SECS;
+      const swimSecs = (distYd / 100) * TEMPLATE_BASELINE_PACE_SECS * templateStrokeFactor(stroke);
       const total = Math.max(30, Math.round((swimSecs + restSecs) / 5) * 5);
       return formatIntervalSecs(total);
     }
@@ -7674,7 +7694,7 @@ export const TEMPLATE_DEFINITIONS = {
             ["moderate aerobic", "easy/moderate", "aerobic pace (RPE 6/10)", "steady aerobic"],
             rand,
           );
-          const interval = templateComputeInterval(shape.dist, "aerobic");
+          const interval = templateComputeInterval(shape.dist, "aerobic", stroke);
           const totalYards = shape.total;
           const slots = { stroke, repDist: shape.dist, repCount: shape.reps, effortPhrase };
           return {
@@ -7708,7 +7728,7 @@ export const TEMPLATE_DEFINITIONS = {
           // Descend works best with 4-8 reps. No strong preference for
           // longer/shorter — coaches descend equally happily 4×200 or 8×50.
           const shape = templatePickRepShape(distChoices, budgetYd, 4, 8, "any", rand);
-          const interval = templateComputeInterval(shape.dist, "strong");
+          const interval = templateComputeInterval(shape.dist, "strong", stroke);
           const totalYards = shape.total;
           const slots = { stroke, repDist: shape.dist, repCount: shape.reps };
           return {
@@ -7767,8 +7787,8 @@ export const TEMPLATE_DEFINITIONS = {
           const recoveryTarget = Math.max(50, Math.min(300, budgetYd - hardTotal));
           const recoveryDist = TEMPLATE_CANONICAL_DISTS.reduce((best, d) =>
             Math.abs(d - recoveryTarget) < Math.abs(best - recoveryTarget) ? d : best, 100);
-          const hardInterval = templateComputeInterval(hardDist, effort.key);
-          const recoveryInterval = templateComputeInterval(recoveryDist, "easy");
+          const hardInterval = templateComputeInterval(hardDist, effort.key, stroke);
+          const recoveryInterval = templateComputeInterval(recoveryDist, "easy", stroke);
           const totalYards = hardTotal + recoveryDist;
           const slots = { stroke, hardDist, hardReps, recoveryDist,
                           effortKey: effort.key, effortPhrase: effort.phrase, effortAdj: effort.adj };
@@ -7829,8 +7849,8 @@ export const TEMPLATE_DEFINITIONS = {
           );
           const finisherEffortKey = primaryEffort.key === "racePace" ? "sprint" : "racePace";
           const finisherPhrase = finisherEffortKey === "sprint" ? "ALL OUT — empty the tank" : "race pace — close fast";
-          const primaryInterval = templateComputeInterval(primaryShape.dist, primaryEffort.key);
-          const finisherInterval = templateComputeInterval(finisherShape.dist, finisherEffortKey);
+          const primaryInterval = templateComputeInterval(primaryShape.dist, primaryEffort.key, stroke);
+          const finisherInterval = templateComputeInterval(finisherShape.dist, finisherEffortKey, stroke);
           const totalYards = primaryShape.total + finisherShape.total;
           const slots = { stroke, primaryDist: primaryShape.dist, finisherDist: finisherShape.dist,
                           primaryAdj: primaryEffort.adj };
@@ -7873,7 +7893,7 @@ export const TEMPLATE_DEFINITIONS = {
           // Wider rep range (1-8) so per-stroke budget can be hit exactly
           // even when divisor produces awkward residuals.
           const shape = templatePickRepShape(distChoices, perStrokeBudget, 1, 8, "any", rand);
-          const interval = templateComputeInterval(shape.dist, "strong");
+          const interval = templateComputeInterval(shape.dist, "strong", templateSlowestStroke(strokes));
           const sets = strokes.map(s => ({
             reps: shape.reps, dist: shape.dist,
             desc: `${templateStrokeLabel(s)} — moderate to strong, smooth`,
@@ -7923,15 +7943,15 @@ export const TEMPLATE_DEFINITIONS = {
             sets: [
               { reps: 1, dist: easyDist,
                 desc: `${templateStrokeLabel(stroke)} — easy warm-into`,
-                interval: templateComputeInterval(easyDist, "easy"),
+                interval: templateComputeInterval(easyDist, "easy", stroke),
                 focus: "Settle into stroke before the main block" },
               { reps: hardShape.reps, dist: hardShape.dist,
                 desc: `${templateStrokeLabel(stroke)} — ${hardEffort.phrase}`,
-                interval: templateComputeInterval(hardShape.dist, hardEffort.key),
+                interval: templateComputeInterval(hardShape.dist, hardEffort.key, stroke),
                 focus: `Sustain ${hardEffort.adj.toLowerCase()} across all ${hardShape.reps}` },
               { reps: 1, dist: easyDist,
                 desc: "Easy choice — cool flush",
-                interval: templateComputeInterval(easyDist, "easy"),
+                interval: templateComputeInterval(easyDist, "easy", stroke),
                 focus: "Active recovery to close" },
             ],
           };
@@ -7964,7 +7984,7 @@ export const TEMPLATE_DEFINITIONS = {
               best = { rounds, shape, total, pctOff };
             }
           }
-          const interval = templateComputeInterval(best.shape.dist, "strong");
+          const interval = templateComputeInterval(best.shape.dist, "strong", stroke);
           const sets = [];
           for (let i = 0; i < best.rounds; i++) {
             sets.push({
@@ -8082,7 +8102,7 @@ export const TEMPLATE_DEFINITIONS = {
           const baseReps = Math.floor(best.totalReps / drills.length);
           const remainderReps = best.totalReps - baseReps * drills.length;
           const repsPerDrill = drills.map((_, i) => baseReps + (i < remainderReps ? 1 : 0));
-          const interval = templateComputeInterval(best.dist, "easy");
+          const interval = templateComputeInterval(best.dist, "easy", templateSlowestStroke(drills.map(d => d[0])));
           const sets = drills.map(([s, drillDesc], i) => ({
             reps: repsPerDrill[i], dist: best.dist,
             desc: drillDesc,
@@ -8125,7 +8145,7 @@ export const TEMPLATE_DEFINITIONS = {
              "locomotive — increase pace each segment of the rep"],
             rand,
           );
-          const interval = templateComputeInterval(shape.dist, "strong");
+          const interval = templateComputeInterval(shape.dist, "strong", stroke);
           return {
             label: this.labelTemplate({ stroke, dist: shape.dist }, shape.total),
             totalYards: shape.total,
@@ -8155,7 +8175,7 @@ export const TEMPLATE_DEFINITIONS = {
           const stroke = templateDefaultStroke(typeKey);
           const distChoices = templateRepDistChoices(typeKey, section);
           const shape = templatePickRepShape(distChoices, budgetYd, 4, 10, "any", rand);
-          const interval = templateComputeInterval(shape.dist, "threshold");
+          const interval = templateComputeInterval(shape.dist, "threshold", stroke);
           return {
             label: this.labelTemplate({ stroke, dist: shape.dist }, shape.total),
             totalYards: shape.total,
@@ -8210,14 +8230,14 @@ export const TEMPLATE_DEFINITIONS = {
             sets.push({
               reps: 1, dist: best.eventDist,
               desc: `${templateStrokeLabel(stroke)} — race pace, Event ${i + 1}`,
-              interval: templateComputeInterval(best.eventDist, "racePace"),
+              interval: templateComputeInterval(best.eventDist, "racePace", stroke),
               focus: "Race-pace simulation — hit your goal split",
             });
             if (i < best.count - 1) {
               sets.push({
                 reps: 1, dist: best.recoveryDist,
                 desc: "Easy choice — between events",
-                interval: templateComputeInterval(best.recoveryDist, "easy"),
+                interval: templateComputeInterval(best.recoveryDist, "easy", stroke),
                 focus: "Recover before the next event",
               });
             }
@@ -8299,7 +8319,7 @@ export const TEMPLATE_DEFINITIONS = {
               desc: atPeak
                 ? `${templateStrokeLabel(stroke)} — peak rung, push hard`
                 : `${templateStrokeLabel(stroke)} — ${i < ascLen ? "build up" : "descend down"} the pyramid`,
-              interval: templateComputeInterval(d, "strong"),
+              interval: templateComputeInterval(d, "strong", stroke),
               focus: atPeak ? "Apex — hardest rung" : "Maintain form and pace control",
             };
           });
@@ -8379,7 +8399,7 @@ export const TEMPLATE_DEFINITIONS = {
             sets: [{
               reps: shape.reps, dist: shape.dist,
               desc: `${templateStrokeLabel(stroke)} — build from easy to moderate across each rep`,
-              interval: templateComputeInterval(shape.dist, "aerobic"),
+              interval: templateComputeInterval(shape.dist, "aerobic", stroke),
               focus: "Progressive warm-up — finish each rep stronger than you started",
             }],
           };
@@ -8422,7 +8442,7 @@ export const TEMPLATE_DEFINITIONS = {
           const baseReps = Math.floor(best.totalReps / strokes.length);
           const remainderReps = best.totalReps - baseReps * strokes.length;
           const repsPerStroke = strokes.map((_, i) => baseReps + (i < remainderReps ? 1 : 0));
-          const interval = templateComputeInterval(best.dist, "easy");
+          const interval = templateComputeInterval(best.dist, "easy", templateSlowestStroke(strokes));
           const sets = strokes.map((s, i) => ({
             reps: repsPerStroke[i], dist: best.dist,
             desc: `${templateStrokeLabel(s)} — easy, focus on stroke quality`,
