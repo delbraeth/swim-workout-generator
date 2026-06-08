@@ -3755,14 +3755,13 @@ export async function dbApplyTeamDefaultToRoster({ teamId, field }) {
   );
   let updated = 0;
   for (const r of swimmerRows) {
-    // Use existing user_settings update path. pace_base lives in
-    // user_settings (pace column); update directly via UPSERT.
-    const upd = await pool.query(
-      "INSERT INTO `user_settings` (`user_sub`, `pace`) VALUES (?, ?) " +
-      "ON DUPLICATE KEY UPDATE `pace` = VALUES(`pace`)",
-      [r.sub, pace]
-    );
-    if (upd.affectedRows > 0) updated++;
+    // Base pace MUST land in settings.pace_input — the field the generator
+    // reads (dbGetSettings → client paceInput → auto-applied on generate at
+    // handleGenerate). The old write targeted user_settings.pace, a column
+    // NOTHING reads, so a coach-assigned base pace never reached the
+    // generator and swimmers generated at the 2:00 baseline. (Fix 2026-06-08.)
+    await dbUpsertSettings(r.sub, { paceInput: pace });
+    updated++;
   }
   return { ok: true, field, value: pace, count: updated };
 }
