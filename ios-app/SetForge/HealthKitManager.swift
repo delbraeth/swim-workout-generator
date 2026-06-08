@@ -155,7 +155,10 @@ final class HealthKitManager {
     /// "main" swim block of 1×distance. Distance is converted into the user's
     /// pool unit (yards for SCY, meters otherwise).
     private static func logEntry(for swim: ImportedSwim, poolMode: String) -> ImportedSwimEntry {
-        let isYards = poolMode == "25y"
+        // Any yards course ("25y", legacy "yds", "SCY") → convert m→yd; meters
+        // courses ("25m"/"50m"/"SCM"/"LCM") keep meters. Matches RunWorkoutView's
+        // contains("y") check — the exact "25y" match missed the legacy "yds" value.
+        let isYards = poolMode.lowercased().contains("y")
         let dist = Int((isYards ? swim.distanceMeters * 1.0936133 : swim.distanceMeters).rounded())
         let mins = swim.durationSecs / 60, secs = swim.durationSecs % 60
         let timeStr = String(format: "%d:%02d", mins, secs)

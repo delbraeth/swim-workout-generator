@@ -16,8 +16,11 @@ enum KeychainStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            // Available after first unlock; survives relaunch, not backed up off-device.
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            // WhenUnlocked (not AfterFirstUnlock): the bearer token is readable ONLY
+            // while the device is unlocked, shrinking the window for forensic/backup
+            // extraction. All token use is foreground (no background/locked API calls),
+            // so this doesn't break anything. ThisDeviceOnly = never synced/backed up.
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
         SecItemAdd(query as CFDictionary, nil)
     }

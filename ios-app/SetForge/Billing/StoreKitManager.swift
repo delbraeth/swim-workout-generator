@@ -69,7 +69,14 @@ final class StoreKitManager: ObservableObject {
             return false
         }
         do {
-            let result = try await product.purchase()
+            // Bind this purchase to the signed-in account: the server issues a
+            // per-user appAccountToken (UUID) which Apple embeds in the receipt, and
+            // /verify asserts it matches — so a receipt can't be replayed onto another
+            // account. Best-effort: if the token fetch fails, the server's
+            // originalTransactionId cross-user guard is the backstop.
+            var options: Set<Product.PurchaseOption> = []
+            if let token = await fetchAppAccountToken() { options.insert(.appAccountToken(token)) }
+            let result = try await product.purchase(options: options)
             switch result {
             case .success(let verification):
                 await pushTransactionToServer(jwsString(from: verification))
@@ -118,6 +125,16 @@ final class StoreKitManager: ObservableObject {
     deinit { txListener?.cancel() }
 
     // MARK: - Server round-trip
+
+    /// Fetch this account's per-user appAccountToken (UUID) to bind the purchase.
+    /// Returns nil on any failure (purchase proceeds; server has a backstop guard).
+    private func fetchAppAccountToken() async -> UUID? {
+        struct TokenResp: Decodable { let token: String }
+        do {
+            let r = try await api.get("billing/apple/account-token", as: TokenResp.self)
+            return UUID(uuidString: r.token)
+        } catch { return nil }
+    }
 
     /// POST the signed transaction JWS to the server, which verifies it with
     /// Apple and grants/revokes the tier. Server is authoritative.

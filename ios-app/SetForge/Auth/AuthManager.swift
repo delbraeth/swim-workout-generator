@@ -48,11 +48,18 @@ final class AuthManager: ObservableObject {
             state = status.authenticated == false ? .signedOut : .signedIn
             if state == .signedOut { clearToken() }
         } catch APIError.unauthorized {
-            state = .signedOut
-        } catch {
-            // Network hiccup — assume the stored token is still good; the next
-            // real call will re-check. Better than bouncing a user offline.
+            state = .signedOut            // 401 also fires onUnauthorized → clearToken()
+        } catch APIError.transport {
+            // Offline — keep the stored token; cached bootstrap renders, next call re-checks.
             state = .signedIn
+        } catch APIError.server(let status, _) where status >= 500 {
+            // Transient backend (e.g. 503 DB-down) — don't bounce a real session.
+            state = .signedIn
+        } catch {
+            // Non-401 4xx, decode failure, or anything else: do NOT trust the stored
+            // token (a revoked token returning a non-401 must not keep showing cached PII).
+            clearToken()
+            state = .signedOut
         }
     }
 
