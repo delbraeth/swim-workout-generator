@@ -132,6 +132,7 @@ import {
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
+  dbCreateTeamEventSeries, dbDeleteTeamEventSeries,
   dbSetRsvp, dbGetMyRsvp, dbGetRsvpSummary, dbSetTeamEventStatus,
   dbGetPracticeContext, dbListUpcomingPracticesForUser,
   dbCreateOrLinkVenue, dbGetVenue, dbListVenues, dbArchiveVenue, dbGetWeatherCache, dbPutWeatherCache,
@@ -5920,13 +5921,17 @@ app.post("/api/teams/:teamId/events", checkOrigin, requireAuth, requireCsrf, wri
   try {
     const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date, kind, venue_id, start_time, group_id } = req.body || {};
-    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, kind, venueId: venue_id || null, startTime: start_time || null, groupId: group_id || null, createdByCoachSub: req.userSub });
+    const { name, date, kind, venue_id, start_time, group_id, recurrence } = req.body || {};
+    const base = { teamId: req.params.teamId, name, date, kind, venueId: venue_id || null, startTime: start_time || null, groupId: group_id || null, createdByCoachSub: req.userSub };
+    // C5 — a recurrence ({ freq, interval?, count?|until? }) materializes a series.
+    const r = (recurrence && recurrence.freq)
+      ? await dbCreateTeamEventSeries(base, recurrence)
+      : await dbCreateTeamEvent(base);
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "team_event.create",
       ...reqMeta(req),
-      details:   { event_id: r.id, team_id: req.params.teamId, name, date, kind: kind || "meet", venue_id: venue_id || null, group_id: group_id || null },
+      details:   { event_id: r.id, team_id: req.params.teamId, name, date, kind: kind || "meet", venue_id: venue_id || null, group_id: group_id || null, series_id: r.series_id || null, count: r.count || 1 },
     });
     res.json(r);
   } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
@@ -6093,6 +6098,27 @@ app.delete("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimite
       eventType: "team_event.delete",
       ...reqMeta(req),
       details:   { event_id: req.params.id, team_id: ev.team_id },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// C5 — delete a recurring series. ?scope=future (default) deletes this occurrence
+// and all later ones; ?scope=all deletes the whole series. Coach-only.
+app.delete("/api/events/:id/series", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "not found" });
+    const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!callerRole) return res.status(403).json({ error: "not a team coach" });
+    if (!ev.series_id) return res.status(400).json({ error: "not_a_series" });
+    const scope = req.query.scope === "all" ? "all" : "future";
+    const r = await dbDeleteTeamEventSeries(ev.series_id, { fromDate: scope === "future" ? ev.date : null });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team_event.delete_series",
+      ...reqMeta(req),
+      details:   { event_id: req.params.id, series_id: ev.series_id, team_id: ev.team_id, scope, affected: r.affected },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }

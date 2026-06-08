@@ -5646,11 +5646,80 @@ export async function dbCreateTeamEvent({ teamId, name, date, kind = DEFAULT_EVE
   return { ok: true, id };
 }
 
+// ── C5 — Event recurrence (materialized occurrences, mig 064) ───────────────
+function genSeriesId() {
+  const n = crypto.randomBytes(4).readUInt32BE(0);
+  return "sr_" + n.toString(36).padStart(6, "0").slice(-6);
+}
+
+// Expand a recurrence into concrete YYYY-MM-DD dates (first = startYmd). Bounded
+// hard at 52 occurrences. freq: daily|weekly|monthly; interval ≥1; stop at
+// `count` rows or once past `until` (whichever comes first).
+function _computeOccurrenceDates(startYmd, rec = {}) {
+  const MAX = 52;
+  const freq = ["daily", "weekly", "monthly"].includes(rec.freq) ? rec.freq : null;
+  if (!freq) return [startYmd];
+  const interval = Math.max(1, Math.min(12, Number(rec.interval) || 1));
+  let count = rec.count != null ? Math.max(1, Math.min(MAX, Number(rec.count) || 1)) : null;
+  const until = (rec.until && /^\d{4}-\d{2}-\d{2}$/.test(rec.until)) ? rec.until : null;
+  if (!count && !until) count = 1;
+  const out = [];
+  const d = new Date(startYmd + "T00:00:00Z");
+  for (let i = 0; i < MAX; i++) {
+    const ymd = d.toISOString().slice(0, 10);
+    if (until && ymd > until) break;
+    out.push(ymd);
+    if (count && out.length >= count) break;
+    if (freq === "daily")       d.setUTCDate(d.getUTCDate() + interval);
+    else if (freq === "weekly") d.setUTCDate(d.getUTCDate() + 7 * interval);
+    else                        d.setUTCMonth(d.getUTCMonth() + interval);
+  }
+  return out;
+}
+
+// Create a recurring event as N materialized occurrences sharing a series_id.
+// No recurrence → delegates to dbCreateTeamEvent (single, series_id NULL).
+export async function dbCreateTeamEventSeries(base, recurrence = null) {
+  if (!recurrence || !recurrence.freq) return dbCreateTeamEvent(base);
+  const { teamId, name, date, kind = DEFAULT_EVENT_KIND, venueId = null, startTime = null, groupId = null, createdByCoachSub } = base;
+  if (!teamId) throw new Error("teamId required");
+  if (!name || typeof name !== "string") throw new Error("name required");
+  if (name.length > 120) throw new Error("name max 120 chars");
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error("date must be YYYY-MM-DD");
+  const k = EVENT_KIND_VALUES.includes(kind) ? kind : DEFAULT_EVENT_KIND;
+  const st = _normEventTime(startTime);
+  if (st === undefined) throw new Error("start_time must be HH:MM");
+  const dates = _computeOccurrenceDates(date, recurrence);
+  if (dates.length === 0) throw new Error("recurrence produced no dates");
+  const seriesId = genSeriesId();
+  let firstId = null;
+  for (const d of dates) {
+    const id = genEventId();
+    if (firstId === null) firstId = id;
+    await pool.query(
+      "INSERT INTO `team_events` (`id`, `team_id`, `group_id`, `series_id`, `name`, `kind`, `date`, `venue_id`, `start_time`, `created_by_coach_sub`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [id, teamId, groupId || null, seriesId, name.trim(), k, d, venueId || null, st, createdByCoachSub || null]
+    );
+  }
+  return { ok: true, id: firstId, series_id: seriesId, count: dates.length };
+}
+
+// Delete a series' occurrences. fromDate set → only that date forward ("this and
+// future"); omitted → the whole series.
+export async function dbDeleteTeamEventSeries(seriesId, { fromDate = null } = {}) {
+  if (!seriesId) return { ok: false, reason: "no_series" };
+  let sql = "DELETE FROM `team_events` WHERE `series_id` = ?"; const vals = [seriesId];
+  if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) { sql += " AND `date` >= ?"; vals.push(fromDate); }
+  const r = await pool.query(sql, vals);
+  return { ok: true, affected: Number(r.affectedRows || 0) };
+}
+
 export async function dbGetTeamEvent(eventId) {
   if (!eventId) return null;
   const rows = await pool.query(
     "SELECT te.`id`, te.`team_id`, te.`name`, te.`kind`, te.`date`, te.`venue_id`, te.`start_time`, " +
-    "       te.`status`, te.`status_note`, te.`created_by_coach_sub`, te.`created_at`, " +
+    "       te.`status`, te.`status_note`, te.`series_id`, te.`created_by_coach_sub`, te.`created_at`, " +
     "       v.`name` AS venue_name, v.`latitude` AS venue_lat, v.`longitude` AS venue_lng, " +
     "       v.`indoor_outdoor` AS venue_io, v.`timezone` AS venue_tz " +
     "FROM `team_events` te LEFT JOIN `venues` v ON v.`id` = te.`venue_id` " +
@@ -5668,6 +5737,7 @@ export async function dbGetTeamEvent(eventId) {
     start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,
     status:     r.status || "scheduled",
     status_note: r.status_note || null,
+    series_id:  r.series_id || null,
     venue:     _eventVenue(r),
     created_by_coach_sub: r.created_by_coach_sub,
     created_at: dtToIso(r.created_at),
@@ -5736,7 +5806,7 @@ export async function dbUpdateTeamEvent(eventId, { name, date, kind, venueId, st
 export async function dbListTeamEvents(teamId) {
   if (!teamId) return [];
   const rows = await pool.query(
-    "SELECT te.`id`, te.`team_id`, te.`group_id`, te.`name`, te.`kind`, te.`date`, te.`venue_id`, te.`start_time`, " +
+    "SELECT te.`id`, te.`team_id`, te.`group_id`, te.`series_id`, te.`name`, te.`kind`, te.`date`, te.`venue_id`, te.`start_time`, " +
     "       te.`status`, te.`status_note`, te.`rsvp_closes_at`, te.`created_by_coach_sub`, te.`created_at`, " +
     "       v.`name` AS venue_name, v.`latitude` AS venue_lat, v.`longitude` AS venue_lng, " +
     "       v.`indoor_outdoor` AS venue_io, v.`timezone` AS venue_tz, g.`name` AS group_name " +
@@ -5749,6 +5819,7 @@ export async function dbListTeamEvents(teamId) {
     id: r.id, team_id: r.team_id, name: r.name,
     group_id: r.group_id || null,
     group_name: r.group_name || null,
+    series_id: r.series_id || null,
     kind: r.kind || DEFAULT_EVENT_KIND,
     date: dateToYmd(r.date),
     start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,

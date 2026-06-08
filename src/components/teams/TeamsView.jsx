@@ -57,6 +57,8 @@ import { WeatherChip } from "./WeatherChip.jsx";
       const [newEventVenue, setNewEventVenue] = React.useState(null);          // { id, name, indoor_outdoor } | null
       const [newEventTime,  setNewEventTime]  = React.useState("");
       const [newEventGroup, setNewEventGroup] = React.useState("");            // "" = whole team, else gr_xxx
+      const [newEventRepeat, setNewEventRepeat] = React.useState("none");       // C5: none|daily|weekly|monthly
+      const [newEventCount,  setNewEventCount]  = React.useState(8);            // C5: occurrence count when repeating
       const [editingEventId, setEditingEventId] = React.useState(null);
       const [editEventName,  setEditEventName]  = React.useState("");
       const [editEventDate,  setEditEventDate]  = React.useState("");
@@ -412,14 +414,17 @@ import { WeatherChip } from "./WeatherChip.jsx";
         if (!newEventName.trim()) { setMsg("Event name required"); return; }
         if (!newEventDate)        { setMsg("Event date required"); return; }
         try {
+          const recurrence = newEventRepeat !== "none"
+            ? { freq: newEventRepeat, count: Math.max(1, Math.min(52, Number(newEventCount) || 1)) }
+            : null;
           const res = await fetch(`/api/teams/${detail.id}/events`, {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate, kind: newEventKind, venue_id: newEventVenue?.id || null, start_time: newEventTime || null, group_id: newEventGroup || null }),
+            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate, kind: newEventKind, venue_id: newEventVenue?.id || null, start_time: newEventTime || null, group_id: newEventGroup || null, recurrence }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-          setNewEventName(""); setNewEventDate(""); setNewEventKind("meet"); setNewEventVenue(null); setNewEventTime(""); setNewEventGroup(""); setCreatingEvent(false); setMsg(null);
+          setNewEventName(""); setNewEventDate(""); setNewEventKind("meet"); setNewEventVenue(null); setNewEventTime(""); setNewEventGroup(""); setNewEventRepeat("none"); setNewEventCount(8); setCreatingEvent(false); setMsg(null);
           await loadEvents(detail.id);
         } catch (err) { setMsg(`Error creating event: ${err.message}`); }
       };
@@ -473,6 +478,20 @@ import { WeatherChip } from "./WeatherChip.jsx";
             const j = await res.json().catch(() => ({}));
             throw new Error(j.error || `HTTP ${res.status}`);
           }
+          await loadEvents(detail.id);
+        } catch (err) { setMsg(`Error: ${err.message}`); }
+      };
+
+      // C5: delete this occurrence + all later ones in its series.
+      const handleDeleteSeries = async (eventId) => {
+        if (!window.confirm("Delete this and all later occurrences in the series?")) return;
+        try {
+          const res = await fetch(`/api/events/${eventId}/series?scope=future`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
           await loadEvents(detail.id);
         } catch (err) { setMsg(`Error: ${err.message}`); }
       };
@@ -821,9 +840,29 @@ import { WeatherChip } from "./WeatherChip.jsx";
                       {(groups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
                   </div>
+                  {/* C5 — repeat (materializes a series of occurrences). */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                    <div>
+                      <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Repeat</label>
+                      <select value={newEventRepeat} onChange={e => setNewEventRepeat(e.target.value)}
+                        style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                        <option value="none">Doesn’t repeat</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    {newEventRepeat !== "none" && (
+                      <div>
+                        <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Occurrences (max 52)</label>
+                        <input type="number" min={1} max={52} value={newEventCount} onChange={e => setNewEventCount(e.target.value)}
+                          style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                      </div>
+                    )}
+                  </div>
                   <button onClick={handleCreateEvent}
                     style={{ padding: "6px 14px", background: "var(--color-warn)", color: "var(--color-bg)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                    Create event
+                    {newEventRepeat !== "none" ? `Create ${Math.max(1, Math.min(52, Number(newEventCount) || 1))} events` : "Create event"}
                   </button>
                 </div>
               )}
@@ -885,6 +924,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                             <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13, textDecoration: ev.status === "cancelled" ? "line-through" : "none" }}>{ev.name}</span>
                             <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}{ev.start_time ? ` · ${ev.start_time}` : ""}</span>
                             {ev.group_id && <span title="Group-only event" style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 3, background: "var(--color-card)", border: "1px solid var(--color-border-strong)", color: "var(--color-text-muted)" }}>👥 {ev.group_name || "group"}</span>}
+                            {ev.series_id && <span title="Part of a recurring series" style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 3, background: "var(--color-card)", border: "1px solid var(--color-border-strong)", color: "var(--color-text-muted)" }}>🔁 series</span>}
                             {ev.venue && <span style={{ marginLeft: 8, color: "var(--color-text-dim)", fontSize: 12 }}>{ev.venue.indoor_outdoor === "outdoor" ? "🌤" : "🏟"} {ev.venue.name}</span>}
                             {ev.venue && ev.venue.indoor_outdoor === "outdoor" && ev.status !== "cancelled" && !isPast && <WeatherChip eventId={ev.id} />}
                             {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
@@ -921,6 +961,13 @@ import { WeatherChip } from "./WeatherChip.jsx";
                                 style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                                 Delete
                               </button>
+                              {ev.series_id && (
+                                <button onClick={() => handleDeleteSeries(ev.id)}
+                                  title="Delete this and all later occurrences in the series"
+                                  style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                  Delete series
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
