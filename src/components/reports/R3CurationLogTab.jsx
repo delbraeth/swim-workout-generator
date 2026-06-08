@@ -14,7 +14,7 @@ import { setIdToName } from "../../lib/format.js";
       const Section = ({ favs, dis, fmtItem }) => (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div style={list}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-primary)", marginBottom: 6 }}>★ Favorites ({favs.length})</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-primary-text)", marginBottom: 6 }}>★ Favorites ({favs.length})</div>
             {favs.length === 0 ? <div style={empty}>none in range</div> : (
               <div>{favs.map((f, i) => <div key={i} style={{ padding: "3px 0", borderBottom: "1px solid var(--color-bg)" }}>{fmtItem(f)}</div>)}</div>
             )}

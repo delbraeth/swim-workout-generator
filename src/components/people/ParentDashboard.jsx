@@ -2,6 +2,7 @@
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
 import { Stat } from "../Stat.jsx";
+import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
 import { AddressManager } from "./AddressManager.jsx";
 import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
 
@@ -100,6 +101,8 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
               ({swimmers.length} {swimmers.length === 1 ? "swimmer" : "swimmers"})
             </span>
           </h2>
+
+          <TeamCalendarDownload teams={Array.isArray(thisWeek?.team_calendars) ? thisWeek.team_calendars : []} />
 
           {/* Swimmer selector */}
           {swimmers.length > 1 && (

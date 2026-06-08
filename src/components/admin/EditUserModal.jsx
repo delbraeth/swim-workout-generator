@@ -1,10 +1,12 @@
 // src/components/admin/EditUserModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components are imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 
     const { useState } = React;
 
     export function EditUserModal({ user, onClose, onSaved }) {
+      const dialogRef = useDialogA11y(onClose);
       const [initials,    setInitials]    = React.useState(user.initials     || "");
       const [displayName, setDisplayName] = React.useState(user.display_name || "");
       const [email,       setEmail]       = React.useState(user.email        || "");
@@ -28,7 +30,7 @@ import { csrfHeaders } from "../../lib/api.js";
 
       return (
         <div className="modal-overlay" style={{ padding: 16 }} onClick={onClose}>
-          <div onClick={e => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Edit user" onClick={e => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             maxWidth: 480, width: "100%", color: "#cbd5e1",
           }}>

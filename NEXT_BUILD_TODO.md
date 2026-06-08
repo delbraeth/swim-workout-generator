@@ -1,10 +1,17 @@
 # iOS build status + next steps
 
-Build number is at **14** (in source; not yet archived — accumulates B6 + B8).
-**Build 12 shipped to TestFlight 2026-06-07** (B14 — HealthKit write).
-(Build 11: B1 race-pace + Learn-to-Swim, `ddd5f92`.)
+**Build 14 SHIPPED to TestFlight 2026-06-08.** Next archive = bump to **15**.
+Build 14 carries: B6 flag-gating, B7 offline cache, B8 deck/print, B9 Siri,
+B14b HealthKit import, the critical `Bootstrap.featureFlags` build-unbreak, and
+the security-audit iOS fixes (StoreKit appAccountToken binding, AuthManager
+non-401 handling, Keychain WhenUnlocked, HealthKit "yds" unit).
+(Build 12: B14 HealthKit write · Build 11: B1 race-pace + Learn-to-Swim.)
 
-## 🟡 In source for build 14 — Wave 3 native (B7, B8, B9, B14b) + B6 flag gating
+**Verify on-device when convenient:** one Sandbox purchase to exercise the new
+IAP appAccountToken binding end-to-end; Siri "Generate a SetForge workout" shows
+in Shortcuts; HealthKit import prompt on first use.
+
+## ✅ Shipped in build 14 (TestFlight 2026-06-08) — Wave 3 native (B7, B8, B9, B14b) + B6 flag gating
 
 ### B7 — Offline cache MVP (Wave 3 "highest-leverage", scoped)
 - **What it does**: persists the last successful `me/bootstrap` payload to

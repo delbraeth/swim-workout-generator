@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SetForge — User Manual</title>
+  <meta name="description" content="SetForge user manual — how to generate workouts, plan weeks, manage teams, and use coach tools." />
+  <link rel="canonical" href="https://setforge.io/manual.html" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -303,6 +305,8 @@
     <div class="nav-section">Settings</div>
     <a href="#user-settings">Your Settings</a>
     <a href="#account">Profile (Account / Curation / Subscription)</a>
+    <a href="#notifications">🔔 Browser notifications</a>
+    <a href="#compliance">🛡 Compliance credentials (coaches)</a>
     <a href="#admin">Admin (admins only)</a>
     <a href="#teams">Teams (coaches)</a>
     <a href="#swimmers">Managed Swimmers (coaches)</a>
@@ -312,9 +316,13 @@
     <a href="#coach-fanout">Coach: Planning for a Group</a>
     <a href="#coach-propagation">Coach group propagation</a>
     <a href="#reports">Reports</a>
+    <a href="#team-events">Team events &amp; meets</a>
+    <a href="#export-roster">Export: roster CSV</a>
+    <a href="#export-calendar">Export: team calendar</a>
     <a href="#multi-lane-generate">Multi-lane generate</a>
     <a href="#parse-intent">Quick Input (coach shorthand)</a>
     <a href="#feedback">Sending Feedback</a>
+    <a href="#accessibility">Accessibility</a>
     <a href="#tips">Tips &amp; Tricks</a>
     <a href="#ios-app">iOS App</a>
 
@@ -1246,6 +1254,9 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <div class="callout-icon">💡</div>
         <div class="callout-body"><strong>Printing from history.</strong> Tap 🖨 Print on any history entry to load that workout and print it directly.</div>
       </div>
+
+      <h3>🪧 Whiteboard print</h3>
+      <p>Next to Print Workout is <strong>🪧 Whiteboard</strong> — a single <strong>big-font, landscape</strong> page sized to post on the pool deck or copy onto a whiteboard. It strips everything to large type (section headers with yardage, each set on its own line with the interval right-aligned) and includes <strong>no swimmer names</strong>, so it's safe to tape up where everyone can read it from across the deck. One page, readable from ~6 feet.</p>
     </section>
 
     <!-- ══ USER SETTINGS ══ -->
@@ -1270,7 +1281,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h2>Profile (Account / Curation / Subscription)</h2>
       <p>Click the <strong>👤</strong> button in the top-right of the header to open the Profile modal. It's organized into three tabs at the top:</p>
       <ul>
-        <li><strong>Account</strong> — identity (name, email, initials, gender, member-since), workout stats, goals, Community (Discord), admin View-as switcher, active sessions.</li>
+        <li><strong>Account</strong> — identity (name, email, initials, gender, member-since), workout stats, goals, race goals/PRs, 🔔 browser notifications, Community (Discord), admin View-as switcher, active sessions.</li>
         <li><strong>Curation</strong> — active constraints (if any), favorites audit panel, coach Curation Impact (coaches only), disfavorites audit panel (with the Mode toggle and team-defaults inheritance disclosure).</li>
         <li><strong>Subscription</strong> — current tier, Start trial / Manage subscription button, recent invoices. See <a href="#subscription">Subscription</a> for the full pricing model.</li>
       </ul>
@@ -1303,6 +1314,15 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>Goals</h3>
       <p>Set or clear recurring targets for workouts/week, yards/week, and yards/month. Progress bars render in the stats panel of the History view — see <a href="#goals">Goals</a> for the full details.</p>
+
+      <h3>🎯 Race goals / PRs (SCY · SCM · LCM)</h3>
+      <p>Enter your goal and PR times per event (50–500 free, 100 back/breast/fly, 200 IM). Switch the <strong>SCY / SCM / LCM</strong> tabs to keep separate times per course — race-pace targets resolve against the pool mode you generate in (goal first, PR as fallback). These feed the 🏁 Race-Pace workouts so the splits are <em>your</em> numbers, not a generic pace. Setting a PR also drops a dated point into your <a href="#goals">Progress</a> per-event trend, and a faster logged result auto-promotes your PR.</p>
+
+      <h3 id="notifications">🔔 Browser notifications</h3>
+      <p>Opt in to push notifications on the browsers you use (per-device). Click <strong>Enable browser notifications</strong>, then <strong>Allow</strong> on your browser's permission prompt, and use <strong>Send test</strong> to confirm it works. You'll get a notification even when the SetForge tab is closed. Active alerts: <strong>📣 RSVP reminders</strong> (one nudge for an event or practice you haven't responded to), <strong>⚠️ cancellations</strong> (when a coach cancels an event you said you'd attend), and <strong>⚡/🥵 outdoor-weather advisories</strong>. Turn it off anytime with <strong>Disable on this browser</strong>. The toggle only appears in browsers that support push; it's not available to swimmers under 18.</p>
+
+      <h3 id="compliance">🛡 Compliance credentials (coaches)</h3>
+      <p>Coaches can record their own <strong>SafeSport certification</strong> (with expiry), <strong>background-check</strong> reference, and <strong>USA-Swimming Member ID</strong>. The app shows an amber <em>expiring</em> badge within 30 days and a red <em>expired</em> badge after — a self-reminder for MAAP/SafeSport. Stored privately; nothing is gated on expiry today.</p>
 
       <h3 id="favorites-panel">Favorites panel</h3>
       <p>Audits everything you've ★ favorited across all three tiers — bank labels, engine templates, and individual sets. Each row shows the item with a <strong>Remove</strong> button. Set rows show the reps×dist + a description preview pulled from the bank; orphaned set IDs (set was removed from the bank) show the raw ID with a "no longer in the bank" note — still removable so the entry doesn't linger.</p>
@@ -1346,6 +1366,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3 id="subscription">Subscription</h3>
       <p>SetForge is free for swimmers (Swimmer / Free tier). Coaches who want the coach-specific features — managed swimmers, groups, team curation, parent portal, Reports — pay a <strong>Coach</strong> tier subscription at <strong>$9.99/month</strong> with a <strong>14-day free trial</strong>. Card on file at trial start; no charge until the trial ends; cancel anytime from the same panel.</p>
       <p>There's also a <strong>Lesson</strong> tier at <strong>$4.99/month</strong> for private &amp; small-group instructors who don't need full club infrastructure. It unlocks the <a href="#lesson-tier">Lesson workout type, managed swimmers, lesson groups, per-swimmer equipment, and parent recap exports</a> — but not teams, multi-coach, curation, or Reports. Coach includes everything Lesson has. Subscribe from the same panel via the <strong>Subscribe to Lesson — $4.99/mo</strong> button.</p>
+      <p>Swimmers who want to chip in can become an optional <strong>Supporter</strong> at <strong>$2.99/month</strong>. This is <em>not</em> a paywall — <strong>nothing you use today is ever locked behind it</strong>; every workout feature stays free for swimmers, always. Supporter simply backs development and earns first access to upcoming <strong>community features</strong> (starting with social workout sharing). Think of it as icing, not cake. Available from the same panel when configured.</p>
 
       <h4>Compare plans</h4>
       <table>
@@ -1354,8 +1375,12 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
           <tr><td><strong>Price</strong></td><td>$0</td><td>$4.99/mo</td><td>$9.99/mo</td><td>—</td></tr>
           <tr><td>Workout generator (all types)</td><td>✓</td><td>✓</td><td>✓</td><td>Universal</td></tr>
           <tr><td>History, stats &amp; Run mode</td><td>✓</td><td>✓</td><td>✓</td><td>Universal</td></tr>
-          <tr><td>Goals &amp; Progress dashboard</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Goals, Progress &amp; per-event PR trend</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🏁 Race-Pace targets (SCY / SCM / LCM goals + PRs)</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🪧 Whiteboard print (big-font deck sheet)</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🔔 Browser notifications</td><td>✓</td><td>✓</td><td>✓</td><td>Web</td></tr>
           <tr><td>🎓 Lesson workout type</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🧒 Learn-to-Swim (youth content pack)</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
           <tr><td>Managed swimmers &amp; lesson groups</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
           <tr><td>Per-swimmer equipment &amp; parent recap</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
           <tr><td>Author lesson sets (leveled)</td><td>—</td><td>✓</td><td>✓</td><td>Web</td></tr>
@@ -1364,6 +1389,9 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
           <tr><td>Team curation (fav/disfavor propagation)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
           <tr><td>Reports</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
           <tr><td>Practices, attendance &amp; coach notes</td><td>—</td><td>—</td><td>✓</td><td>Universal</td></tr>
+          <tr><td>Per-swimmer constraints (injury / equipment / caps)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
+          <tr><td>🛡 Compliance credentials (SafeSport / MAAP)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
+          <tr><td>Meet-anchored taper (suggested-phase apply)</td><td>—</td><td>—</td><td>✓</td><td>Web</td></tr>
           <tr><td>Lane plans &amp; multi-lane generate</td><td>—</td><td>—</td><td>✓</td><td>Universal</td></tr>
           <tr><td>Free assistant seats (limited, for athlete-safety two-deep)</td><td>—</td><td>—</td><td>✓ up to 2</td><td>Web</td></tr>
         </tbody>
@@ -1373,6 +1401,10 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <div class="callout">
         <div class="callout-icon">🔜</div>
         <div class="callout-body"><strong>Program (coming soon)</strong> — for clubs &amp; teams with <strong>multiple coaches</strong>: everything in Coach, plus a roster shared across coaches, team communication, and org-wide reports. In development.</div>
+      </div>
+      <div class="callout tip">
+        <div class="callout-icon">💙</div>
+        <div class="callout-body"><strong>Supporter ($2.99/mo, optional)</strong> — a way for swimmers to support SetForge without unlocking anything (the swimmer experience is free forever). Its perk is early access to community features as they launch — social workout sharing first, and likely a members' Discord. Optional and cancel-anytime.</div>
       </div>
       <div class="callout tip">
         <div class="callout-icon">👥</div>
@@ -1391,7 +1423,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>If you've ever been charged, the most recent 5 invoices appear below the tier badge with amount, status, and date. Empty during trial since no payment has happened yet.</p>
 
       <h4>What you get</h4>
-      <p>The Coach tier unlocks all coach-only features documented elsewhere in this manual: managed swimmers + groups + team curation + parent portal + Reports + per-swimmer constraints + meet-anchored taper + coach Curation Impact + UGC team-share and public submission. The Free tier keeps everything a solo swimmer needs forever (workout generation, history, goals, the full bank + engine, multi-lane print, run-screen, favorites/disfavorites at the personal level) — that's a contractual commitment per <a href="/terms.html">Terms</a>, not marketing copy.</p>
+      <p>The Coach tier unlocks all coach-only features documented elsewhere in this manual: managed swimmers + groups + team curation + parent portal + Reports + per-swimmer constraints + meet-anchored taper + coach Curation Impact + UGC team-share and public submission. The Free tier keeps everything a solo swimmer needs forever (workout generation, history, goals, the full bank + engine, multi-lane print, the 🪧 whiteboard deck print, run-screen, favorites/disfavorites at the personal level, race-pace targets from your own goal/PR times across SCY/SCM/LCM, per-event PR progression, and browser notifications) — that's a contractual commitment per <a href="/terms.html">Terms</a>, not marketing copy. <strong>Core training is "cake," never gated; the optional Supporter tier only ever adds non-core "icing."</strong></p>
 
       <h4>Cancellation + refunds</h4>
       <p>Cancel anytime from <strong>Manage subscription</strong> → Customer Portal. Cancellation takes effect at the end of the current billing period (you keep coach access until then). For the refund policy on partial periods, see <a href="/terms.html#subscriptions-and-billing">Terms § Subscriptions and billing</a>.</p>
@@ -1428,6 +1460,9 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>Admin note</strong> — internal textarea. Type and click <strong>Save note</strong>. The submitter never sees this.</li>
         <li><strong>Reviewer footer</strong> — once a status transition happens, the row gains a "Last touched by INI · time" line at the bottom.</li>
       </ul>
+
+      <h3>Venue edits</h3>
+      <p>The moderation queue for coach-proposed venue corrections (see <a href="#visible-options">Venues</a> on the Teams side). Filter by <strong>Pending</strong> (default), <strong>Approved</strong>, or <strong>Rejected</strong>. Each card shows the venue, who proposed it, an optional note, and a <strong>before → after</strong> diff of the changed fields (name, indoor/outdoor, course, timezone, coordinates). <strong>✓ Approve &amp; apply</strong> writes the change to the shared catalog; <strong>✕ Reject</strong> discards it. Every decision is recorded in the audit log.</p>
 
       <h3>Audit log</h3>
       <p>Most-recent 200 security-relevant events in reverse chronological order. Each row shows the timestamp, event type, user prefix, IP, and a snippet of the details JSON. Filters:</p>
@@ -1538,8 +1573,28 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       </ul>
 
       <h3>Team events (decision #38)</h3>
-      <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. v1 captures just name + date.</p>
+      <p>Below the Groups section, <strong>📅 Events</strong> (amber) is a team-level calendar of upcoming events (meets, championships, training trips, etc.). Any team coach can add or delete events. Each event has a name, type, date, optional <strong>start time</strong>, an optional <strong>venue</strong>, and an optional <strong>group</strong> target (whole team, or just one squad).</p>
       <p>Upcoming events surface on the main app via the pool-mode selector row: a <strong>📅 amber pill</strong> showing the most-imminent event across all teams you're in (as either a coach or a group member). Renders alongside your personal <strong>🏁 next-event</strong> pill — both coexist; team events take the leading position.</p>
+      <p><strong>🔁 Recurring events.</strong> When creating an event, set <strong>Repeat</strong> to Daily / Weekly / Monthly and a number of occurrences (max 52). SetForge materializes each occurrence as its own event — so RSVP, weather, the calendar feed, reminders and per-date edits all work normally on each one. Recurring occurrences carry a <strong>🔁 series</strong> badge; use <strong>Delete series</strong> on any occurrence to remove that date and all later ones in one step (plain <em>Delete</em> still removes just the one).</p>
+
+      <h3>RSVP (expected attendance)</h3>
+      <p>Swimmers see upcoming team events <em>and group practices</em> on their <strong>📥 Assigned to me</strong> home with a <strong>✅ Going / 🤔 Maybe / ❌ Out</strong> control; their choice saves instantly. Coaches see a per-event <strong>📋 RSVP</strong> tally (going/maybe/out) plus the per-swimmer list. Cancelling an event (Cancel/Restore on the event row) freezes RSVP and shows a struck-through <strong>CANCELLED</strong> badge everywhere — events never silently disappear. RSVP is forward-looking <em>intent</em>, separate from after-the-fact roll-call attendance.</p>
+      <p><strong>Practice RSVP.</strong> Group practices you've scheduled within the next few weeks appear to their group's swimmers in a <strong>🏊 Upcoming practices · RSVP</strong> section, with the same going/maybe/out control. Access is group-scoped — only members of the practice's group (and the team's coaches) can respond.</p>
+
+      <h3>Event reminders &amp; push alerts</h3>
+      <p>If you've enabled <a href="#notifications">browser notifications</a>, SetForge sends a small set of automatic pushes around events and practices:</p>
+      <ul>
+        <li><strong>📣 RSVP reminder</strong> — anyone in the audience who hasn't responded to an upcoming event or practice gets one nudge as it approaches (you're reminded once per event, never repeatedly).</li>
+        <li><strong>⚠️ Cancellation</strong> — when a coach cancels an event, everyone who RSVP'd Going/Maybe is pushed immediately.</li>
+        <li><strong>⚡/🥵 Weather advisory</strong> — for outdoor venues, a lightning or heat advisory in the forecast pushes the going/maybe list once.</li>
+      </ul>
+
+      <h3>Venues &amp; outdoor-pool weather</h3>
+      <p>When creating or editing an event, pick a <strong>venue</strong> from the shared catalog or add a new one (name + address + indoor/outdoor). Venues are a <em>universal</em> catalog — one team's home pool is another's away meet, so a venue is created once and reused; addresses are geocoded in your browser via Apple Maps. For an <strong>outdoor</strong> venue, events within the ~10-day forecast window show a small <strong>weather chip</strong> (condition emoji · temperature) on both the coach event row and the swimmer's RSVP list, with <strong>⚡ lightning</strong> and <strong>🥵 heat</strong> advisories when relevant. Indoor / venue-less events never show weather. Forecasts come from Apple WeatherKit and are cached so a busy meet doesn't hammer the API.</p>
+      <p><strong>Suggesting a correction.</strong> Because the catalog is shared, you can't silently edit a venue another team relies on. With a venue selected, click <strong>Suggest a correction</strong> to propose a fix (name, indoor/outdoor, course) with an optional note. It goes to a moderation queue; an admin reviews and either applies it to the catalog or rejects it. (Admins manage these on <em>Admin → Venue edits</em>.)</p>
+
+      <h3 id="visible-options">👁 Visible options (team owner)</h3>
+      <p>In <strong>Team → Settings</strong>, the <strong>Visible options</strong> panel (owner/admin only) lets you hide app surfaces your team doesn't use, to keep things simple. Start from a <strong>preset</strong> — <em>Simple</em> (just generate → run → log), <em>Standard</em> (coach tools on; reports, curation &amp; lane plans off), or <em>Full</em> (everything) — then fine-tune individual toggles (events, attendance/roll-call, reports, catalog, lane plans, coach notes, and more). The swimmer <strong>core training loop is never gated</strong> — generate, run, log, race-pace/PRs/goals/progress, and Assigned-to-me are always available. For teams with minors, <strong>youth compliance stays on</strong> (you can lift it only by marking the team adults-only). Changes affect what swimmers — and optionally coaches — see across both the web and iOS apps.</p>
 
       <h3>Transferring team ownership</h3>
       <p>A team has one <strong>owner</strong>. To hand the team off — say you're leaving the club — open <strong>Team → Settings → Ownership</strong> (owner-only). Pick an existing <strong>admin</strong> as the new owner and tap <strong>Transfer →</strong>. (No admins yet? Promote a coach to admin first on the <em>Members &amp; Coaches</em> tab.)</p>
@@ -1732,6 +1787,9 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>1 · Lesson workout type</h3>
       <p>Pick the 🎓 <strong>Lesson</strong> type card to generate a short skill session: <strong>Warm-Up → Skill Focus → Send-off</strong> (no "Main Set"), <strong>800–1,200 yards</strong>. Content is drawn from the technique library, with the Skill Focus as the bulk of the session. The yardage slider locks to the lesson range automatically when you select the type.</p>
+
+      <h3>🧒 Learn-to-Swim (youth content)</h3>
+      <p>With the Lesson type selected, flip the <strong>🧒 Learn-to-Swim</strong> toggle to swap in a dedicated beginner pack: all <strong>25-based</strong> sets, <strong>deck-paced</strong> ("Coach starts each / on the whistle" rather than a fixed interval), and genuinely short — a few hundred yards. It includes stroke-survival drills (float &amp; glide, streamline push-offs, kick with board, catch-up) and <strong>DQ-avoidance</strong> work (legal breaststroke pullout + whip kick, butterfly two-hand touch, IM stroke order) — built for summer-league and learn-to-swim groups. Equipment requirements are ignored in this mode (kids aren't on pull buoys), and the session is capped short by design.</p>
 
       <h3>2 · My Groups</h3>
       <p>Open <strong>🔧 → My groups</strong> to create small-group lessons (e.g. "9:00 AM Sunday"). Create a group, then add your managed swimmers to it. A group is a lightweight, team-free roster — you don't need to set up a Team to use it. (For a 1-on-1 student, make a group with just that swimmer.)</p>
@@ -1934,6 +1992,58 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       </ul>
     </section>
 
+    <!-- ══ TEAM EVENTS ══ -->
+    <section id="team-events">
+      <h2>📆 Team events &amp; meets</h2>
+      <p>From a team's <strong>Events</strong> tab, any team coach can add dated events — meets, picture day, banquets, parent meetings, fundraisers, travel, socials. Each event has a <strong>type</strong>, and the type drives an icon so the schedule reads at a glance.</p>
+      <h3>Event types</h3>
+      <ul>
+        <li>🏊 Meet · 📸 Picture day · 🍽️ Team meal / banquet · 📋 Team meeting · 💰 Fundraiser · ✈️ Travel · 🎉 Social · 📌 Other.</li>
+        <li>Pick the type in the create/edit form; the icon shows next to the event in the list and in the exported calendar.</li>
+      </ul>
+      <h3>Meets drive the taper</h3>
+      <div class="callout">
+        <div class="callout-icon">🎯</div>
+        <div class="callout-body"><strong>Only meets can be taper anchors.</strong> The <strong>🎯 Anchor</strong> button appears only on <em>meet</em>-type events. Anchoring a meet to a group sets that group's <a href="#training-phase">Training Phase</a> suggestion from how many weeks out the meet is. A banquet or meeting can never accidentally become a taper anchor.</div>
+      </div>
+    </section>
+
+    <!-- ══ EXPORT: ROSTER CSV ══ -->
+    <section id="export-roster">
+      <h2>⬇ Export: roster CSV (meet entry)</h2>
+      <p>From a team's <strong>Roster</strong> tab, the <strong>⬇ Roster CSV</strong> button downloads your active roster in <strong>Hy-Tek Meet Manager</strong> import format — ready to load into meet-entry software. Any team coach can export.</p>
+      <h3>What's in the file</h3>
+      <ul>
+        <li>Columns, in order: <strong>Swimming ID, Date of Birth, First Name, Last Name, Gender, Team Name, Preferred Name</strong>.</li>
+        <li><strong>Team Name</strong> uses your <strong>team code</strong> (the abbreviation set in Team → Settings), falling back to the full team name if no code is set. Set a code like <code>RIV</code> first so the file is meet-ready.</li>
+        <li><strong>Gender</strong> is spelled out as <code>MALE</code> / <code>FEMALE</code>; non-binary / prefer-not-to-say is left blank for you to fill in. <strong>Date of Birth</strong> is formatted <code>MM/DD/YYYY</code>.</li>
+        <li>Source is the team's roster (the swimmers in the team's groups), one row per athlete.</li>
+      </ul>
+      <div class="callout">
+        <div class="callout-icon">🔒</div>
+        <div class="callout-body">The roster CSV contains athlete personal details (DOB, registration ID), so it is <strong>coach-only</strong> — it is never exposed to swimmers or parents.</div>
+      </div>
+    </section>
+
+    <!-- ══ EXPORT: TEAM CALENDAR ══ -->
+    <section id="export-calendar">
+      <h2>📆 Export: team calendar (subscribe / download)</h2>
+      <p>Every team has a calendar feed covering its <strong>events</strong> plus the <strong>practices scheduled for its groups</strong>. It comes in two forms.</p>
+      <h3>Coaches — live-subscribe link</h3>
+      <ul>
+        <li>In Team → <strong>Settings</strong> → <strong>📆 Calendar feed</strong>, copy the link and share it. Added as a <em>subscription</em> in Apple/Google Calendar, it updates automatically as your schedule changes.</li>
+        <li><strong>Regenerate</strong> rotates the link if it's ever shared too widely. We warn you before you do — rotating immediately breaks the old link, and everyone who subscribed stops getting updates until you re-share the new one. Rotation is coach-only.</li>
+      </ul>
+      <h3>Parents &amp; swimmers — one-click download</h3>
+      <ul>
+        <li>In the <strong>parent view</strong> and on a swimmer's <strong>Profile</strong>, a <strong>📆 Team calendar</strong> card offers a one-click <strong>⬇ Download .ics</strong> for each of their teams — opens straight in any calendar app.</li>
+      </ul>
+      <div class="callout">
+        <div class="callout-icon">🛡</div>
+        <div class="callout-body"><strong>Safe to share with families.</strong> The calendar carries event and practice titles, dates, and the facility — but <strong>no swimmer names, birthdates, or contact details</strong>. Sharing a schedule never means sharing the kids. This keeps the feed aligned with athlete-safety (MAAP) practices, and parent access supports the transparency MAAP expects.</div>
+      </div>
+    </section>
+
     <!-- ══ MULTI-LANE GENERATE ══ -->
     <section id="multi-lane-generate">
       <h2>Multi-lane generate (coach access)</h2>
@@ -2020,6 +2130,33 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>The current page URL and your browser's user-agent string are attached automatically so admins can reproduce browser-specific issues. The submission shows up immediately in the admin Feedback tab with status <em>new</em>.</p>
     </section>
 
+    <!-- ══ ACCESSIBILITY ══ -->
+    <section id="accessibility">
+      <h2>♿ Accessibility</h2>
+      <p>SetForge is built to be usable by everyone, and we audit the web app against
+        <strong>WCAG 2.1 AA</strong>. What's in place today:</p>
+      <ul>
+        <li><strong>Readable contrast</strong> — the dark theme's text and interactive colors are
+          tuned to meet AA contrast ratios (4.5:1 for body text, 3:1 for large text and controls).</li>
+        <li><strong>Keyboard navigation</strong> — the app is operable without a mouse, with a
+          visible focus indicator and a <em>Skip to main content</em> link for keyboard and
+          screen-reader users.</li>
+        <li><strong>Semantic structure</strong> — proper landmarks (banner, navigation, main,
+          footer), heading order, and labelled form controls so assistive technology can navigate.</li>
+        <li><strong>Scalable text</strong> — the layout reflows when you zoom the page or enlarge
+          your browser/OS text size.</li>
+      </ul>
+      <div class="callout">
+        <div class="callout-icon">🌐</div>
+        <div class="callout-body">Accessibility improvements land on the <strong>web app first</strong>;
+          the iOS app follows. Some areas are still being refined — screen-reader polish and a few
+          smaller touch targets are on the list.</div>
+      </div>
+      <p>Hit an accessibility barrier? Please tell us via <a href="#feedback">Send feedback</a>
+        (category <strong>🐛 Bug</strong>) with the page and what got in your way — accessibility
+        reports are prioritized.</p>
+    </section>
+
     <!-- ══ TIPS ══ -->
     <section id="tips">
       <h2>Tips &amp; Tricks</h2>
@@ -2073,6 +2210,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h3>Generating a workout</h3>
       <p>Tap <strong>Generate workout</strong> for the full builder: workout type, yardage, pool mode, target pace, training phase, emphasis, and equipment. A <strong>Sections</strong> row lets you toggle sections — including the opt-in <a href="#sections">kick set</a> (off by default, same as the web) — and there's a <strong>Recovery day</strong> switch. You can <strong>add or remove a dryland block</strong> (before/after the pool portion) from the same presets as the web.</p>
+      <p>The iOS builder also has the <strong>🏁 race-pace</strong> control (toggle + event picker + USRPT option) that anchors the main set to a goal time, and — when the Lesson type is selected — a <strong>🧒 Learn-to-Swim</strong> toggle for youth/teaching content. Both mirror the web (see <a href="#yardage-pace">Pace Input</a> and the Lesson tier).</p>
 
       <h3>Editing a generated workout</h3>
       <p>The iOS app has the same inline editing tools as the web result card. On each set you can:</p>
@@ -2085,7 +2223,19 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Tap a <strong>dryland exercise</strong> to open an explainer sheet describing what it is and how to do it (the app ships the same 49 explainers as the web hover tooltips — see <a href="#sections">Workout Sections → Dryland</a>). Saving writes the workout to your shared history, edits and all.</p>
 
       <h3>Run mode</h3>
-      <p>Open any workout and tap <strong>🏊 Start Workout</strong> for a full-screen run view: a pace clock, set/rep progress ("Set 2 of 6", "Rep 3 of 8"), <strong>Lap</strong> logging, a rest timer between sets with <strong>Skip rest</strong>, and audio cues. It mirrors the web <a href="#run-mode">Run Mode</a>.</p>
+      <p>Open any workout and tap <strong>🏊 Start Workout</strong> for a full-screen run view: a pace clock, set/rep progress ("Set 2 of 6", "Rep 3 of 8"), <strong>Lap</strong> logging, a rest timer between sets with <strong>Skip rest</strong>, and audio cues. It mirrors the web <a href="#run-mode">Run Mode</a>. When you finish, tap <strong>Save to Apple Health</strong> to write the swim (distance + duration) to Apple Health as a pool-swim workout — closing your activity rings.</p>
+
+      <h3>Deck mode &amp; AirPrint</h3>
+      <p>On any workout, <strong>Present</strong> opens a full-screen, giant-type, high-contrast view designed to be read across a wet pool deck (or AirPlayed to a deck TV) — one block per swipe, and the screen won't sleep mid-set. <strong>Print</strong> sends a clean one-page lane sheet to any AirPrint printer on the pool's network. Neither needs a connection beyond the printer.</p>
+
+      <h3>Hey Siri — quick generate</h3>
+      <p>Say <em>"Generate a SetForge workout"</em> (or add the action in the Shortcuts app) to jump straight into the app and auto-build a set. You can ask for a <em>short</em>, <em>medium</em>, or <em>long</em> workout and Siri passes the length through.</p>
+
+      <h3>Import Apple Watch swims</h3>
+      <p>If you track pool swims on an Apple Watch, open <strong>All workouts</strong> and tap <strong>Import Apple Watch swims</strong> to pull recent wrist-tracked swims into your SetForge history (you'll be asked to grant Health read access the first time). Already-imported swims are skipped, so you can run it as often as you like.</p>
+
+      <h3>Works offline</h3>
+      <p>The app caches your last load, so on flaky pool Wi-Fi you can still open the app, view your recent / assigned workouts and history, and run them — an <em>Offline</em> banner appears and a pull-to-refresh re-syncs once you're back online. (Generating a new workout still needs a connection.)</p>
 
       <h3>Profile</h3>
       <p>Edit profile lets you update your name, gender, class year, and USA Swimming ID. Deeper account management (curation panels, subscription, goals) lives on the website — see <a href="#account">Profile (Account / Curation / Subscription)</a>.</p>
@@ -2098,6 +2248,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>Coach notes</strong> — add notes on roster swimmers with a visibility level (mirrors the web coach notes).</li>
         <li><strong>Practices</strong> — the person menu's Practices screen lists this week's scheduled practices; tap one to take attendance (everyone present by default, mark absences, see "N of M present"). This is the same roll-call as the web <a href="#practices-screen">Practices screen</a> / <a href="#week-view">Mark practice done</a>, scoped to the current week on iOS.</li>
       </ul>
+      <p>Roll-call and coach-notes respect the team's <a href="#visible-options">Visible options</a> — if an owner turns the attendance or coach-notes bundle off, those surfaces hide on iOS too. (Generate-for is always available.)</p>
 
       <h3>Assigned to me</h3>
       <p>Swimmers see <strong>Assigned to me</strong> in the person menu — the workouts your coach has assigned to you, the app-side equivalent of the web <strong>📥 Assigned to me</strong> view.</p>
@@ -2192,7 +2343,8 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
   <a href="/" style="color: #3b82f6; margin-right: 14px;">← Back to the app</a>
   <a href="/privacy.html" style="color: #3b82f6; margin-right: 14px;">Privacy</a>
   <a href="/terms.html" style="color: #3b82f6;">Terms</a>
-  <div style="margin-top: 10px;">© 2026 Competition Aquatics, LLC · All rights reserved.</div>
+  <div style="margin-top: 10px;">Created by Patrick Cassidy &amp; Veronica Cassidy (coach &amp; swimmer).</div>
+  <div style="margin-top: 4px;">© 2026 Competition Aquatics, LLC · All rights reserved.</div>
 </footer>
 
 </body>

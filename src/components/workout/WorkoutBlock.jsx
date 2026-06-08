@@ -8,7 +8,7 @@ import { SetRow } from "./SetRow.jsx";
 
     const { useState, useMemo } = React;
 
-    export function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, isEngineFavorited, onToggleEngineFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange, favoriteSets, disfavorSets, onCycleSetStatus, isCoach = false, onSnapshot = null, ugcSetIdMeta = null }) {
+    export function WorkoutBlock({ block, equipment, onRegenerate, regenError, blockIdx, openSwapKey, onToggleSwap, onApplySwap, editIntervalKey, editIntervalDraft, setEditIntervalDraft, editIntervalError, onStartEditInterval, onCommitInterval, onClearInterval, onCancelInterval, editDescKey, editDescDraft, setEditDescDraft, onStartEditDesc, onCommitDesc, onCancelDesc, isFavorited, onToggleFavorite, isDisfavorited, onToggleDisfavorite, isEngineDisfavorited, onToggleEngineDisfavor, isEngineFavorited, onToggleEngineFavorite, onRoundRestChange, unit = "yds", isPinned, onTogglePin, recentMainLabels, poolMode = "25y", sectionSource = "bank", onSectionSourceChange, advancedGenerate = true, favoriteSets, disfavorSets, onCycleSetStatus, isCoach = false, onSnapshot = null, ugcSetIdMeta = null }) {
       // UGC Phase C/D — derive whether this block was sourced from a UGC
       // overlay option, and which variant of the badge to show.
       // Look up the first matching set's metadata (all sets in an overlay
@@ -125,7 +125,7 @@ import { SetRow } from "./SetRow.jsx";
               {/* S3 — per-section Bank | Engine | Mix toggle. Triggers a
                   regen of this section under the chosen source. Disabled
                   when section is pinned (pin wins). */}
-              {onSectionSourceChange && !isPinned && (
+              {onSectionSourceChange && !isPinned && advancedGenerate && (
                 <div className="screen-only" style={{ display: "inline-flex", gap: 2, borderRadius: 6, background: btnBg, padding: 2, border: `1px solid ${btnBorder}` }}>
                   {["bank", "engine", "mix"].map(opt => {
                     const active = sectionSource === opt;
@@ -338,7 +338,7 @@ import { SetRow } from "./SetRow.jsx";
                       rows.push(
                         <tr key={`round-${r}`}>
                           <td colSpan={5} style={{ padding: "6px 16px", background: "var(--color-card)", borderTop: r > 0 ? "1px solid var(--color-border)" : undefined }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-primary-text)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                               Round {r + 1}
                             </span>
                           </td>

@@ -67,7 +67,7 @@ import { COMPLETION_LABELS } from "../../lib/constants.js";
                     <div style={{ display: "flex", gap: 3 }}>
                       {a.completion_state !== "complete" && <button onClick={() => markState(a.id, "complete")} title="Mark complete" style={{ padding: "2px 7px", background: "transparent", color: "var(--color-positive)", border: "1px solid #22c55e", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>✓</button>}
                       {a.completion_state !== "partial"  && <button onClick={() => markState(a.id, "partial")}  title="Mark partial"  style={{ padding: "2px 7px", background: "transparent", color: "var(--color-warn)", border: "1px solid var(--color-warn)", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>◐</button>}
-                      {a.completion_state !== "missed"   && <button onClick={() => markState(a.id, "missed")}   title="Mark missed"   style={{ padding: "2px 7px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>✕</button>}
+                      {a.completion_state !== "missed"   && <button onClick={() => markState(a.id, "missed")}   title="Mark missed"   style={{ padding: "2px 7px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>✕</button>}
                     </div>
                   </div>
                 );

@@ -1,9 +1,12 @@
 // src/components/teams/TeamsView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
+import { EVENT_KINDS, eventKindEmoji } from "../../lib/eventKinds.js";
 import { GroupRow } from "../groups/GroupRow.jsx";
 import { TeamRosterTab } from "./TeamRosterTab.jsx";
 import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
+import { VenuePicker } from "./VenuePicker.jsx";
+import { WeatherChip } from "./WeatherChip.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -50,9 +53,19 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
       const [creatingEvent, setCreatingEvent] = React.useState(false);
       const [newEventName,  setNewEventName]  = React.useState("");
       const [newEventDate,  setNewEventDate]  = React.useState("");
+      const [newEventKind,  setNewEventKind]  = React.useState("meet");
+      const [newEventVenue, setNewEventVenue] = React.useState(null);          // { id, name, indoor_outdoor } | null
+      const [newEventTime,  setNewEventTime]  = React.useState("");
+      const [newEventGroup, setNewEventGroup] = React.useState("");            // "" = whole team, else gr_xxx
+      const [newEventRepeat, setNewEventRepeat] = React.useState("none");       // C5: none|daily|weekly|monthly
+      const [newEventCount,  setNewEventCount]  = React.useState(8);            // C5: occurrence count when repeating
       const [editingEventId, setEditingEventId] = React.useState(null);
       const [editEventName,  setEditEventName]  = React.useState("");
       const [editEventDate,  setEditEventDate]  = React.useState("");
+      const [editEventKind,  setEditEventKind]  = React.useState("meet");
+      const [editEventVenue, setEditEventVenue] = React.useState(null);
+      const [editEventTime,  setEditEventTime]  = React.useState("");
+      const [editEventGroup, setEditEventGroup] = React.useState("");
       // Meet-anchored taper (MEET_ANCHORED_TAPER_SCOPE §3.6): inline picker
       // appears when coach clicks 🎯 on an event row. anchoringEventId = ev.id
       // while the picker is open. Groups list fetched on open.
@@ -60,6 +73,30 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
       const [anchorGroupsList, setAnchorGroupsList] = React.useState(null); // null while loading
       const [anchorTargetGroupId, setAnchorTargetGroupId] = React.useState("");
       const [anchorBusy, setAnchorBusy] = React.useState(false);
+      // RSVP (Phase 5 #5 Slice B): inline coach tally panel per event.
+      const [rsvpEventId, setRsvpEventId] = React.useState(null);
+      const [rsvpData, setRsvpData]       = React.useState(null); // null=loading
+
+      const openRsvp = React.useCallback(async (eventId) => {
+        if (rsvpEventId === eventId) { setRsvpEventId(null); return; }
+        setRsvpEventId(eventId); setRsvpData(null);
+        try {
+          const res = await fetch(`/api/rsvp/meet/${encodeURIComponent(eventId)}`, { cache: "no-store" });
+          setRsvpData(res.ok ? await res.json() : { tally: {}, list: [] });
+        } catch (_) { setRsvpData({ tally: {}, list: [] }); }
+      }, [rsvpEventId]);
+
+      const handleEventStatus = React.useCallback(async (ev, status) => {
+        let note = null;
+        if (status === "cancelled") { note = window.prompt("Reason (optional) — shown to swimmers:", ev.status_note || "") || null; }
+        try {
+          const res = await fetch(`/api/events/${encodeURIComponent(ev.id)}/status`, {
+            method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ status, note }),
+          });
+          if (res.ok && detail?.id) loadEvents(detail.id);
+        } catch (_) {}
+      }, [detail]);
       const [msg,         setMsg]         = React.useState(null);
       // Ownership transfers proposed TO this coach (accept/decline banner).
       const [incomingTransfers, setIncomingTransfers] = React.useState([]);
@@ -99,7 +136,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                   {incomingBusy === t.team_id ? "Working…" : "Accept now"}
                 </button>
                 <button onClick={() => respondTransfer(t.team_id, "decline")} disabled={incomingBusy === t.team_id}
-                  style={{ padding: "6px 14px", background: "transparent", border: "1px solid var(--color-destructive)", color: "var(--color-destructive)", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: incomingBusy === t.team_id ? "not-allowed" : "pointer" }}>
+                  style={{ padding: "6px 14px", background: "transparent", border: "1px solid var(--color-destructive)", color: "var(--color-destructive-text)", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: incomingBusy === t.team_id ? "not-allowed" : "pointer" }}>
                   Decline
                 </button>
               </div>
@@ -377,14 +414,17 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
         if (!newEventName.trim()) { setMsg("Event name required"); return; }
         if (!newEventDate)        { setMsg("Event date required"); return; }
         try {
+          const recurrence = newEventRepeat !== "none"
+            ? { freq: newEventRepeat, count: Math.max(1, Math.min(52, Number(newEventCount) || 1)) }
+            : null;
           const res = await fetch(`/api/teams/${detail.id}/events`, {
             method:  "POST",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate }),
+            body:    JSON.stringify({ name: newEventName.trim(), date: newEventDate, kind: newEventKind, venue_id: newEventVenue?.id || null, start_time: newEventTime || null, group_id: newEventGroup || null, recurrence }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-          setNewEventName(""); setNewEventDate(""); setCreatingEvent(false); setMsg(null);
+          setNewEventName(""); setNewEventDate(""); setNewEventKind("meet"); setNewEventVenue(null); setNewEventTime(""); setNewEventGroup(""); setNewEventRepeat("none"); setNewEventCount(8); setCreatingEvent(false); setMsg(null);
           await loadEvents(detail.id);
         } catch (err) { setMsg(`Error creating event: ${err.message}`); }
       };
@@ -394,12 +434,20 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
         setEditingEventId(ev.id);
         setEditEventName(ev.name);
         setEditEventDate(ev.date);
+        setEditEventKind(ev.kind || "meet");
+        setEditEventVenue(ev.venue ? { id: ev.venue.id, name: ev.venue.name, indoor_outdoor: ev.venue.indoor_outdoor } : null);
+        setEditEventTime(ev.start_time || "");
+        setEditEventGroup(ev.group_id || "");
         setMsg(null);
       };
       const cancelEditEvent = () => {
         setEditingEventId(null);
         setEditEventName("");
         setEditEventDate("");
+        setEditEventKind("meet");
+        setEditEventVenue(null);
+        setEditEventTime("");
+        setEditEventGroup("");
       };
       const handleSaveEditEvent = async () => {
         if (!editEventName.trim()) { setMsg("Event name required"); return; }
@@ -408,7 +456,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
           const res = await fetch(`/api/events/${editingEventId}`, {
             method:  "PATCH",
             headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate }),
+            body:    JSON.stringify({ name: editEventName.trim(), date: editEventDate, kind: editEventKind, venue_id: editEventVenue?.id || null, start_time: editEventTime || null, group_id: editEventGroup || null }),
           });
           const j = await res.json();
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
@@ -430,6 +478,20 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
             const j = await res.json().catch(() => ({}));
             throw new Error(j.error || `HTTP ${res.status}`);
           }
+          await loadEvents(detail.id);
+        } catch (err) { setMsg(`Error: ${err.message}`); }
+      };
+
+      // C5: delete this occurrence + all later ones in its series.
+      const handleDeleteSeries = async (eventId) => {
+        if (!window.confirm("Delete this and all later occurrences in the series?")) return;
+        try {
+          const res = await fetch(`/api/events/${eventId}/series?scope=future`, {
+            method:  "DELETE",
+            headers: { ...csrfHeaders() },
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
           await loadEvents(detail.id);
         } catch (err) { setMsg(`Error: ${err.message}`); }
       };
@@ -519,7 +581,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                     )}
                   </h2>
                 )}
-                <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }}>
+                <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }}>
                   {TEAM_TYPE_LABELS[detail.team_type] || detail.team_type}
                 </span>
               </div>
@@ -549,7 +611,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                 { id: "roster",   label: "🏊 Roster",         count: 0 },
                 { id: "events",   label: "Events",            count: (events || []).length },
                 { id: "settings", label: "⚙ Settings",        count: 0 },
-              ].map(t => {
+              ].filter(t => !(t.id === "events" && detail.feature_flags && detail.feature_flags.events === false)).map(t => {
                 const active = activeTab === t.id;
                 return (
                   <button key={t.id} onClick={() => setActiveTab(t.id)}
@@ -582,12 +644,24 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                     {(() => {
                       // R-J: role pill colored by tier. Owner = purple,
                       // Admin = blue, Coach = slate.
-                      const colors = c.role === "owner" ? { bg: "#3b82f622", border: "var(--color-primary)", color: "var(--color-primary)" }
-                                  : c.role === "admin"  ? { bg: "#3b82f622", border: "var(--color-primary)", color: "var(--color-primary)" }
+                      const colors = c.role === "owner" ? { bg: "#3b82f622", border: "var(--color-primary)", color: "var(--color-primary-text)" }
+                                  : c.role === "admin"  ? { bg: "#3b82f622", border: "var(--color-primary)", color: "var(--color-primary-text)" }
                                   :                        { bg: "#33415522", border: "var(--color-border-strong)", color: "var(--color-text-muted)" };
                       return (
                         <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: colors.bg, border: `1px solid ${colors.border}`, color: colors.color, fontWeight: 700 }}>{c.role}</span>
                       );
+                    })()}
+                    {(() => {
+                      // MAAP cert rollup (eval 2026-06-06 #3): SafeSport status badge.
+                      let label, col;
+                      if (!c.safesport_on) { label = "no SafeSport"; col = "var(--color-text-dim)"; }
+                      else if (c.safesport_expires) {
+                        const days = Math.round((new Date(c.safesport_expires + "T00:00:00") - new Date().setHours(0,0,0,0)) / 86400000);
+                        if (days < 0)       { label = "SafeSport expired"; col = "var(--color-destructive-text)"; }
+                        else if (days <= 30){ label = `SafeSport ${days}d`; col = "var(--color-warn)"; }
+                        else                { label = "SafeSport ✓"; col = "var(--color-positive)"; }
+                      } else { label = "SafeSport ✓"; col = "var(--color-positive)"; }
+                      return <span title="SafeSport certification status" style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 4, border: `1px solid ${col}`, color: col, fontWeight: 700 }}>🛡 {label}</span>;
                     })()}
                     <div style={{ fontSize: 10, color: "var(--color-text-dim)", fontFamily: "monospace", marginTop: 2 }}>{c.coach_sub}</div>
                   </div>
@@ -597,7 +671,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                       {c.role === "coach" && (
                         <button onClick={() => handleRoleChange(c.coach_sub, "admin")}
                           title="Promote to admin (manage team coaches + archives)"
-                          style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--color-primary)", borderRadius: 6, color: "var(--color-primary)", fontSize: 11, cursor: "pointer" }}>
+                          style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--color-primary)", borderRadius: 6, color: "var(--color-primary-text)", fontSize: 11, cursor: "pointer" }}>
                           ↑ Admin
                         </button>
                       )}
@@ -609,7 +683,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                         </button>
                       )}
                       <button onClick={() => handleRemoveCoach(c.coach_sub)}
-                        style={{ padding: "3px 8px", background: "transparent", border: "1px solid #ef4444", borderRadius: 6, color: "var(--color-destructive)", fontSize: 11, cursor: "pointer" }}>
+                        style={{ padding: "3px 8px", background: "transparent", border: "1px solid #ef4444", borderRadius: 6, color: "var(--color-destructive-text)", fontSize: 11, cursor: "pointer" }}>
                         Remove
                       </button>
                     </div>
@@ -705,6 +779,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                     <GroupRow key={g.id} group={g}
                       coachPool={coachPool || []}
                       managedInTeam={managedInTeam || []}
+                      featureFlags={detail.feature_flags}
                       onChanged={() => loadGroups(detail.id)} />
                   ))}
                 </div>
@@ -713,10 +788,10 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
             )}
 
             {activeTab === "roster" && (
-              <TeamRosterTab teamId={detail.id} />
+              <TeamRosterTab teamId={detail.id} featureFlags={detail.feature_flags} />
             )}
 
-            {activeTab === "events" && (
+            {activeTab === "events" && detail.feature_flags?.events !== false && (
             <div style={{ background: "var(--color-card)", border: "1px solid var(--color-warn)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <h3 style={{ color: "var(--color-warn)", marginTop: 0, marginBottom: 0, fontSize: 15 }}>📅 Events ({(events || []).length})</h3>
@@ -729,7 +804,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
               </div>
               {creatingEvent && (
                 <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6, padding: 10, marginBottom: 10 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
                     <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Event name</label>
                       <input value={newEventName} onChange={e => setNewEventName(e.target.value)}
@@ -737,14 +812,57 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                     </div>
                     <div>
+                      <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Type</label>
+                      <select value={newEventKind} onChange={e => setNewEventKind(e.target.value)}
+                        style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                        {EVENT_KINDS.map(k => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Date</label>
                       <input type="date" value={newEventDate} onChange={e => setNewEventDate(e.target.value)}
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                     </div>
                   </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8, alignItems: "start" }}>
+                    <VenuePicker value={newEventVenue} onChange={setNewEventVenue} />
+                    <div>
+                      <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Start time (optional)</label>
+                      <input type="time" value={newEventTime} onChange={e => setNewEventTime(e.target.value)}
+                        style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>For</label>
+                    <select value={newEventGroup} onChange={e => setNewEventGroup(e.target.value)}
+                      style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                      <option value="">Whole team</option>
+                      {(groups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                  </div>
+                  {/* C5 — repeat (materializes a series of occurrences). */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                    <div>
+                      <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Repeat</label>
+                      <select value={newEventRepeat} onChange={e => setNewEventRepeat(e.target.value)}
+                        style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                        <option value="none">Doesn’t repeat</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    {newEventRepeat !== "none" && (
+                      <div>
+                        <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Occurrences (max 52)</label>
+                        <input type="number" min={1} max={52} value={newEventCount} onChange={e => setNewEventCount(e.target.value)}
+                          style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                      </div>
+                    )}
+                  </div>
                   <button onClick={handleCreateEvent}
                     style={{ padding: "6px 14px", background: "var(--color-warn)", color: "var(--color-bg)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                    Create event
+                    {newEventRepeat !== "none" ? `Create ${Math.max(1, Math.min(52, Number(newEventCount) || 1))} events` : "Create event"}
                   </button>
                 </div>
               )}
@@ -760,13 +878,33 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                     if (isEditing) {
                       return (
                         <div key={ev.id} style={{ padding: "8px 10px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6 }}>
-                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
                             <input value={editEventName} onChange={e => setEditEventName(e.target.value)} placeholder="Event name"
                               onKeyDown={e => { if (e.key === "Enter") handleSaveEditEvent(); if (e.key === "Escape") cancelEditEvent(); }}
                               autoFocus
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                            <select value={editEventKind} onChange={e => setEditEventKind(e.target.value)}
+                              style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                              {EVENT_KINDS.map(k => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}
+                            </select>
                             <input type="date" value={editEventDate} onChange={e => setEditEventDate(e.target.value)}
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8, alignItems: "start" }}>
+                            <VenuePicker value={editEventVenue} onChange={setEditEventVenue} />
+                            <div>
+                              <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Start time</label>
+                              <input type="time" value={editEventTime} onChange={e => setEditEventTime(e.target.value)}
+                                style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>For</label>
+                            <select value={editEventGroup} onChange={e => setEditEventGroup(e.target.value)}
+                              style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                              <option value="">Whole team</option>
+                              {(groups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                            </select>
                           </div>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button onClick={handleSaveEditEvent}
@@ -782,30 +920,82 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                       <div key={ev.id}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6, opacity: isPast ? 0.6 : 1 }}>
                           <div>
-                            <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13 }}>{ev.name}</span>
-                            <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}</span>
+                            <span style={{ marginRight: 6 }} title={ev.kind || "meet"}>{eventKindEmoji(ev.kind)}</span>
+                            <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13, textDecoration: ev.status === "cancelled" ? "line-through" : "none" }}>{ev.name}</span>
+                            <span style={{ marginLeft: 10, color: "var(--color-text-muted)", fontSize: 12 }}>{ev.date}{ev.start_time ? ` · ${ev.start_time}` : ""}</span>
+                            {ev.group_id && <span title="Group-only event" style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 3, background: "var(--color-card)", border: "1px solid var(--color-border-strong)", color: "var(--color-text-muted)" }}>👥 {ev.group_name || "group"}</span>}
+                            {ev.series_id && <span title="Part of a recurring series" style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 3, background: "var(--color-card)", border: "1px solid var(--color-border-strong)", color: "var(--color-text-muted)" }}>🔁 series</span>}
+                            {ev.venue && <span style={{ marginLeft: 8, color: "var(--color-text-dim)", fontSize: 12 }}>{ev.venue.indoor_outdoor === "outdoor" ? "🌤" : "🏟"} {ev.venue.name}</span>}
+                            {ev.venue && ev.venue.indoor_outdoor === "outdoor" && ev.status !== "cancelled" && !isPast && <WeatherChip eventId={ev.id} />}
                             {isPast && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>(past)</span>}
+                            {ev.status === "cancelled" && <span title={ev.status_note || ""} style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,0.15)", color: "var(--color-destructive-text)", fontWeight: 700 }}>CANCELLED{ev.status_note ? ` — ${ev.status_note}` : ""}</span>}
                           </div>
                           {detail.viewer_role && (
                             <div style={{ display: "flex", gap: 6 }}>
-                              {!isPast && (
+                              {(ev.kind || "meet") === "meet" && (
+                                <button onClick={() => openRsvp(ev.id)}
+                                  title="Expected attendance (RSVP tally)"
+                                  style={{ padding: "3px 9px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                  📋 RSVP
+                                </button>
+                              )}
+                              {!isPast && (ev.kind || "meet") === "meet" && (
                                 <button onClick={() => openAnchorPicker(ev.id)}
-                                  title="Set as training-phase anchor for a group"
+                                  title="Set as training-phase anchor for a group (meets only)"
                                   style={{ padding: "3px 9px", background: "transparent", color: "var(--color-warn)", border: "1px solid var(--color-warn)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                                   🎯 Anchor
                                 </button>
                               )}
+                              {!isPast && (
+                                <button onClick={() => handleEventStatus(ev, ev.status === "cancelled" ? "scheduled" : "cancelled")}
+                                  title={ev.status === "cancelled" ? "Restore this event" : "Cancel this event (freezes RSVP, shows CANCELLED)"}
+                                  style={{ padding: "3px 9px", background: "transparent", color: ev.status === "cancelled" ? "var(--color-positive)" : "var(--color-warn)", border: `1px solid ${ev.status === "cancelled" ? "var(--color-positive)" : "var(--color-warn)"}`, borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                  {ev.status === "cancelled" ? "Restore" : "Cancel"}
+                                </button>
+                              )}
                               <button onClick={() => startEditEvent(ev)}
-                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-primary)", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                                 Edit
                               </button>
                               <button onClick={() => handleDeleteEvent(ev.id)}
-                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                                 Delete
                               </button>
+                              {ev.series_id && (
+                                <button onClick={() => handleDeleteSeries(ev.id)}
+                                  title="Delete this and all later occurrences in the series"
+                                  style={{ padding: "3px 9px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                                  Delete series
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
+                        {rsvpEventId === ev.id && (
+                          <div style={{ marginTop: 6, padding: "10px 12px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6 }}>
+                            {rsvpData === null ? (
+                              <div style={{ fontSize: 12, color: "var(--color-text-dim)" }}>Loading RSVPs…</div>
+                            ) : (
+                              <>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)", marginBottom: 6 }}>
+                                  Expected attendance — ✅ {rsvpData.tally?.going || 0} going · 🤔 {rsvpData.tally?.maybe || 0} maybe · ❌ {rsvpData.tally?.out || 0} out
+                                </div>
+                                {(rsvpData.list || []).length === 0 ? (
+                                  <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>No responses yet.</div>
+                                ) : (
+                                  <div style={{ display: "grid", gap: 2 }}>
+                                    {rsvpData.list.map((p, i) => (
+                                      <div key={i} style={{ fontSize: 12, color: "var(--color-text-muted)", display: "flex", justifyContent: "space-between" }}>
+                                        <span>{p.name}</span>
+                                        <span>{p.status === "going" ? "✅ going" : p.status === "maybe" ? "🤔 maybe" : p.status === "out" ? "❌ out" : "—"}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
                         {isAnchoring && (
                           <div style={{ marginTop: 6, padding: "10px 12px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6 }}>
                             <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>
@@ -849,6 +1039,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                 teamId={detail.id}
                 viewerRole={detail.viewer_role}
                 archived={!!detail.archived}
+                featureFlags={detail.feature_flags}
               />
             )}
 
@@ -974,7 +1165,7 @@ import { TeamSettingsTab } from "./TeamSettingsTab.jsx";
                       {t.archived && <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#64748b22", border: "1px solid #64748b", color: "var(--color-text-muted)" }}>archived</span>}
                     </span>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }}>{TEAM_TYPE_LABELS[t.team_type] || t.team_type}</span>
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }}>{TEAM_TYPE_LABELS[t.team_type] || t.team_type}</span>
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: t.role === "owner" ? "#3b82f622" : "#33415522", border: `1px solid ${t.role === "owner" ? "var(--color-primary)" : "var(--color-border-strong)"}`, color: t.role === "owner" ? "var(--color-primary)" : "var(--color-text-muted)", fontWeight: 700 }}>{t.role}</span>
                     </div>
                   </div>

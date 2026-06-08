@@ -9,6 +9,11 @@ import { BenchmarksSection } from "./BenchmarksSection.jsx";
 import { EditableProfileField } from "./EditableProfileField.jsx";
 import { GoalRow } from "./GoalRow.jsx";
 import { JoinGroupSection } from "./JoinGroupSection.jsx";
+import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
+import { RaceGoalsPanel } from "./RaceGoalsPanel.jsx";
+import { CompliancePanel } from "./CompliancePanel.jsx";
+import { PushNotificationsPanel } from "./PushNotificationsPanel.jsx";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 import { LevelRow } from "./LevelRow.jsx";
 import { NextEventRow } from "./NextEventRow.jsx";
 import { PhaseRow } from "./PhaseRow.jsx";
@@ -17,7 +22,10 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites }) {
+    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags }) {
+      const dialogRef = useDialogA11y(onClose);
+      // Phase 6 visibility (union across the user's teams; undefined ⇒ all-on).
+      const ff = appFeatureFlags || {};
       // Burst-mitigation B — seed ALL local state from App-level props.
       // /api/me/bootstrap returns everything ProfileModal needs (sessions +
       // team-defaults + billing-status added in B). loadAll's Promise.all is
@@ -383,13 +391,14 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
       return (
         <div className="modal-overlay" style={{ padding: 16 }} onClick={onClose}>
-          <div onClick={e => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="profile-modal-title"
+            onClick={e => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             maxWidth: 560, width: "100%", maxHeight: "85vh", overflowY: "auto",
             color: "#cbd5e1",
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text)" }}>👤 Profile</div>
+              <div id="profile-modal-title" style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text)" }}>👤 Profile</div>
               <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", color: "var(--color-text-muted)", fontSize: 20, cursor: "pointer", padding: 4 }}>✕</button>
             </div>
 
@@ -539,7 +548,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                       <span style={{ color: "var(--color-text)" }}>{fmtTime(me.last_login_at)}</span>
                       {appEffectiveMe?.is_admin && (<>
                         <span style={{ color: "var(--color-text-dim)" }}>Role:</span>
-                        <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>Admin</span>
+                        <span style={{ color: "var(--color-primary-text)", fontWeight: 700 }}>Admin</span>
                       </>)}
                     </div>
                     {/* R-F: join-group code redemption (visible to all
@@ -547,6 +556,22 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     <JoinGroupSection me={me} setMe={setMe} onJoined={() => { if (onProfileChange) onProfileChange(); }} />
                     {/* R-I: claim a managed profile a coach created for you */}
                     <ClaimManagedSection me={me} setMe={setMe} onClaimed={() => { if (onProfileChange) onProfileChange(); }} />
+                    {/* Team calendar — one-click .ics download for any team the user is in.
+                        Data comes from /api/me/bootstrap (via App props) — no extra request. */}
+                    <TeamCalendarDownload teams={Array.isArray(appTeamCalendars) ? appTeamCalendars : []} />
+                    {/* Race goals / PRs — anchor Race-Pace workout targets to your times. */}
+                    <RaceGoalsPanel endpoint="/api/me/event-times" />
+                    {/* MAAP / SafeSport (Phase 5 #3) — coaches record their own
+                        compliance credentials (cert + expiry). Coach-only. */}
+                    {ff.compliance !== false && (appEffectiveMe ? appEffectiveMe.is_coach : appMe?.is_coach) && (
+                      <CompliancePanel endpoint="/api/me/credentials" />
+                    )}
+                    {/* Web Push opt-in (notification infra). Self-hides unless
+                        VAPID is configured + browser supports it. Minors blocked
+                        server-side at subscribe. */}
+                    {ff.notifications !== false && !(appEffectiveMe ? appEffectiveMe.is_minor : appMe?.is_minor) && (
+                      <PushNotificationsPanel />
+                    )}
                   </div>
                   {/* Setforge rebrand 2026-05-20 — Send feedback + Sign out
                       folded down from the top nav (REBRAND_SCOPE §8.1, §8.4). */}
@@ -560,6 +585,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     )}
                     {authMode === "apple" && (
                       <a href="/api/auth/signout" title="Sign out"
+                        onClick={() => { try { localStorage.removeItem("swim_history_v1"); localStorage.removeItem("swim_user_initials"); } catch (_) {} }}
                         style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-muted)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, textDecoration: "none" }}>
                         🚪 Sign out
                       </a>
@@ -851,10 +877,57 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                                 style={{
                                   padding: "8px 16px", borderRadius: 6, border: "1px solid var(--color-primary)",
                                   background: "transparent",
-                                  color: "var(--color-primary)", fontSize: 13, fontWeight: 700,
+                                  color: "var(--color-primary-text)", fontSize: 13, fontWeight: 700,
                                   cursor: billingBusy ? "wait" : "pointer",
                                 }}>
                                 {billingBusy ? "Starting…" : "Subscribe to Lesson — $5/mo"}
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Eval #7 — OPTIONAL supporter tier. Swimmers never pay
+                              to use SetForge; this is a pure "chip in" sub that
+                              unlocks NOTHING (free-for-swimmers stays intact). Only
+                              shown once the Stripe supporter price is configured. */}
+                          {ff.community !== false && billingStatus.has_price_id_supporter && (
+                            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
+                              <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10, lineHeight: 1.5 }}>
+                                Just a swimmer? <strong>You'll never pay to use SetForge</strong> — every workout feature you use
+                                today stays free, always. Becoming a <strong>Supporter</strong> (<strong>$2.99/month</strong>) is an
+                                optional way to back development, and it gets you first access to upcoming <strong>community
+                                features</strong> (starting with social workout sharing). 💙
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (billingBusy) return;
+                                  setBillingBusy(true); setBillingMsg(null);
+                                  try {
+                                    const r = await fetch("/api/billing/checkout", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+                                      body: JSON.stringify({ tier: "supporter" }),
+                                    });
+                                    const d = await r.json().catch(() => ({}));
+                                    if (!r.ok) {
+                                      if (d.error === "billing_not_configured") setBillingMsg("Billing isn't live in this environment yet.");
+                                      else if (d.error === "no_price_id") setBillingMsg(d.message || "Supporter price not configured. Contact the operator.");
+                                      else setBillingMsg(`Couldn't start checkout: ${d.error || r.status}`);
+                                      setBillingBusy(false);
+                                      return;
+                                    }
+                                    window.location.href = d.url;
+                                  } catch (e) {
+                                    setBillingMsg(`Network error: ${e.message}`);
+                                    setBillingBusy(false);
+                                  }
+                                }}
+                                disabled={billingBusy}
+                                style={{
+                                  padding: "8px 16px", borderRadius: 6, border: "1px solid var(--color-border-strong)",
+                                  background: "transparent", color: "var(--color-text)", fontSize: 13, fontWeight: 700,
+                                  cursor: billingBusy ? "wait" : "pointer",
+                                }}>
+                                {billingBusy ? "Starting…" : "❤️ Support SetForge — $2.99/mo"}
                               </button>
                             </div>
                           )}
@@ -1054,7 +1127,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                       and v1.1 surfaces attribution per the spec fork). */}
                   {teamDefaults.length > 0 && (
                     <div style={{ marginBottom: 14, padding: "10px 12px", background: "rgba(59,130,246,0.08)", border: "1px solid var(--color-primary)", borderRadius: 6 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary-text)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
                         👥 Team defaults you inherit
                       </div>
                       {teamDefaults.map(td => {
@@ -1203,7 +1276,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     for triage; minors' feedback stays in-app. The DOB
                     check happens server-side; UI surface is just the
                     invite link. */}
-                {tab === "account" && (
+                {tab === "account" && ff.community !== false && (
                 <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
                     Community
@@ -1212,7 +1285,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     Discord server for coaches and adult swimmers (13+). Feature requests, bug reports, coach-to-coach discussion.
                   </div>
                   <a href="https://discord.gg/N8BMxNbhf7" target="_blank" rel="noopener"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", color: "var(--color-primary)", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
                     💬 Join the SetForge Discord
                   </a>
                 </div>
@@ -1242,7 +1315,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                         URL.revokeObjectURL(url);
                       } catch (_) { alert("Couldn't generate the export. Please try again."); }
                     }}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                     ⬇ Export my data (JSON)
                   </button>
                 </div>

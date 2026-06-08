@@ -21,7 +21,7 @@
                 onBlur={commit}
                 onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
                 style={{ width: 52, fontSize: 12, fontFamily: "monospace", padding: "2px 6px", borderRadius: 4,
-                         border: "1px solid var(--color-primary)", background: "var(--color-bg)", color: "var(--color-primary)", outline: "none" }} />
+                         border: "1px solid var(--color-primary)", background: "var(--color-bg)", color: "var(--color-primary-text)", outline: "none" }} />
               <span style={{ fontSize: 11, color: "var(--color-text-dim)", marginLeft: 6 }}>sec</span>
             </td>
           </tr>

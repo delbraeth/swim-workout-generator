@@ -7,20 +7,27 @@ import { ConstraintFormModal } from "./ConstraintFormModal.jsx";
 
     const { useState, useCallback, useEffect, useRef } = React;
 
-    export function ConstraintsPanel({ managedId, seedConstraints = null }) {
+    // Polymorphic target: pass EITHER managedId (managed swimmer) OR swimmerSub
+    // (real logged-in swimmer). Eval 2026-06-06 #4 — the server/db/authz layer
+    // was already polymorphic; this extends the UI to reach real swimmers too.
+    export function ConstraintsPanel({ managedId = null, swimmerSub = null, seedConstraints = null }) {
       const [rows, setRows] = React.useState(Array.isArray(seedConstraints) ? seedConstraints : null);
       const [err,  setErr]  = React.useState(null);
       const [modalOpen, setModalOpen] = React.useState(false);
       const [editRow,   setEditRow]   = React.useState(null);  // prefill row for Edit
 
+      const targetQuery = swimmerSub
+        ? `swimmer_sub=${encodeURIComponent(swimmerSub)}`
+        : `managed_id=${encodeURIComponent(managedId)}`;
+
       const load = React.useCallback(async () => {
         try {
-          const res = await fetch(`/api/swimmer-constraints?managed_id=${encodeURIComponent(managedId)}`, { cache: "no-store" });
+          const res = await fetch(`/api/swimmer-constraints?${targetQuery}`, { cache: "no-store" });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const j = await res.json();
           setRows(Array.isArray(j.constraints) ? j.constraints : []);
         } catch (e) { setErr(e.message); setRows([]); }
-      }, [managedId]);
+      }, [targetQuery]);
       // Seeded from the composite detail fetch — skip the initial load; still
       // refetch after add/edit/remove. Ref guards only the first run.
       const skipInitial = React.useRef(Array.isArray(seedConstraints));
@@ -96,6 +103,7 @@ import { ConstraintFormModal } from "./ConstraintFormModal.jsx";
           <ConstraintFormModal
             open={modalOpen}
             managedId={managedId}
+            swimmerSub={swimmerSub}
             prefill={editRow}
             onClose={() => { setModalOpen(false); setEditRow(null); }}
             onSaved={() => { load(); }}

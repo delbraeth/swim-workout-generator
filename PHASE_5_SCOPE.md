@@ -62,6 +62,25 @@ it's the funnel)? iOS parity (the app already has Home + history; dashboard woul
 new screen). Overlap with item 4 (PR store) — build the PR/event store once and share.
 
 ## 3. MAAP / SafeSport compliance pack
+**⏳ FOUNDATIONS BUILT 2026-06-06 (Slice A + B; migration 055).** Decisions locked
+2026-06-06: coach-level gating; cert = warn-now/gate-later; two-deep = soft-warn-allow.
+- ✅ **Slice A — credentials UI:** `person_external_ids` + `expires_at` (mig 055); coach
+  records SafeSport cert + expiry, background-check, USA-S ID in ProfileModal
+  (`CompliancePanel`); expiring/expired warning badges; **display+warn only, nothing gated.**
+- ✅ **Slice B — team-type posture:** Masters groups skip the DOB gate at join.
+- ✅ **Slice C — two-deep soft-warning** (2026-06-06): non-blocking ⚠ banner in GroupRow when a
+  group with any under-18 member has <2 active coaches (decision: soft-warn-allow). Client-only.
+- ✅ **Slice F — team cert rollup** (2026-06-06): SafeSport ✓/expiring/expired badge per coach on
+  the team Coaches list (`dbListTeamCoaches` joins `person_external_ids`).
+- ✅ **Slice D — parent-CC on minor notes** (2026-06-06): a coach note about a minor CCs the
+  guardian(s) via email (`coach-note-guardian` template; reuses guardians + email + minor gate);
+  best-effort, never blocks note creation.
+- ✅ **Slice E — exports** (2026-06-06): `GET /api/teams/:id/roster-anon.csv` (initials/age/gender,
+  no names/DOB/contact) + `GET /api/teams/:id/attendance.csv` (present/absent log, default 90d;
+  `dbGetTeamAttendanceLog`), buttons on the Roster tab. (CSV, not PDF — equally usable as a safety
+  log and far cheaper than a print overlay.)
+- ⬜ **Still deferred:** SafeSport-expiry **gating** toggle (decision = warn-now/gate-later, so the
+  data + badges exist but nothing is enforced yet).
 **Trigger:** a Club-team pilot that needs to put SetForge in front of minors' parents
 (coach eval Club persona: hard "no" until this ships).
 **What:** the compliance posture a year-round club requires. Per coach eval top-5
@@ -113,11 +132,12 @@ early slice, the calendar/venue/weather/RSVP system as the heavy body.)**
 weather/RSVP demand; OR a Team Manager / board secretary needs roster/schedule export (team
 eval: data portability was a top-5 concern of 4/5 personas).
 
-**Slice A — one-way export (cheap; deps met TODAY, can ship before Slice B):**
-Explicitly export-only, NOT integrations.
-- **Schedule `.ics`** — a read-only calendar feed of a group's scheduled practices + team
-  events, subscribable in Apple/Google Calendar. Runs on today's `scheduled_workouts` +
-  `team_events`; gets richer (times, venues) once Slice B lands.
+**Slice A — one-way export (✅ SHIPPED):** mig 051 (`team_calendar_feed` token) +
+`lib/ics.js` (`buildIcs`) + `TeamCalendarFeed`/`TeamCalendarDownload`. Export-only, NOT integrations.
+- **Schedule `.ics`** — ✅ a read-only, tokenized calendar feed of a group's scheduled practices +
+  team events, subscribable in Apple/Google Calendar. Currently all-day VEVENTs (date only).
+  `lib/ics.js` already supports `LOCATION` + could add `DTSTART` time — a small future enrichment
+  now that Slice B added `team_events.venue_id`/`start_time` (the export route would just pass them).
 - **Roster CSV** — active roster as a meet-entry-friendly file with an "expiring 30/60/90"
   filter. Pairs with **MAAP (#3)** — if MAAP ships first this can live there instead.
   - **Canonical target = Hy-Tek Meet Manager CSV roster import** (resolves the
@@ -186,6 +206,23 @@ composition; push sequencing; `.ics` static-download vs tokenized live-subscribe
 (CSV canonical column set is **resolved** — Hy-Tek Meet Manager format, captured above;
 open sub-question: how to emit X/prefer-not-to-say gender, which Hy-Tek doesn't define.)
 
+**✅ Event `kind` tag pulled forward 2026-06-05.**
+**✅ Slice B RSVP shipped 2026-06-06** (B1 backend+cancellation, B2 swimmer self-RSVP UI).
+**✅ Slice B venues + WeatherKit weather shipped 2026-06-06 (web)** — universal `venues`
+catalog (vn_xxx, dedup-on-create), `team_events.venue_id`/`start_time`, `weather_cache`,
+`lib/weather.js` (WeatherKit REST, ES256, inert-until-configured), `VenuePicker` +
+`WeatherChip`. Migration 058. **✅ WeatherKit ACTIVATED in prod 2026-06-06** (selftest 200, live
+forecast verified). **✅ Slice A (.ics schedule export) already shipped** — mig 051 + `lib/ics.js` +
+`TeamCalendarFeed`/`TeamCalendarDownload`. **Still deferred:** practice RSVP/weather, group-level
+events, recurrence, venue field-edit moderation (archive route exists), and ALL push/notify (needs
+push wiring) + iOS parity. See `MEET_SCHEDULE_WEATHER_SCOPE.md`.
+`team_events.kind` ENUM (migration 052: meet/picture_day/team_meal/team_meeting/fundraiser/
+travel/social/other, DEFAULT 'meet'). Single source of truth `src/lib/eventKinds.js` (values +
+labels + emoji), imported by server + client. Wired through create/edit/list/get; event form has
+a Type dropdown; list + `.ics` feed show per-kind emoji. **Anchor/taper guard enforced** (§3.3.1/
+§8 #10): only `kind='meet'` is anchor-eligible — UI hides 🎯 for non-meets, anchor-set route
+rejects non-meet (400). Still deferred from Slice B: venues, time-of-day, weather, RSVP, pills.
+
 ---
 
 ## Recommended ordering (when Phase 5 opens)
@@ -195,6 +232,22 @@ the one a real user pulls forward, not this order for its own sake:
    item most likely to matter without a specific pilot, since it addresses the retention leak.
 2. **Export bridges — CSV/.ics** (S, deps met now) — quick win for any team pilot; this is
    **Slice A of item #5** and can ship long before the calendar body.
+   **✅ BUILT 2026-06-05.** Decisions taken at build: (a) **.ics = per-TEAM live-subscribe
+   tokenized feed** (reworked from per-coach the same day — more shareable with families).
+   `teams.calendar_feed_token` (migration 051; migration 049's per-user column was dropped). Public
+   `GET /calendar/:token.ics` (token IS authz; `feedLimiter` IP-keyed) resolves the team; contents =
+   team events + practices scheduled for the team's groups (−60d…+365d window), all-day VEVENTs
+   (`lib/ics.js`). Practice→team link: scheduled rows carry `group_id` in their JSON
+   (`intent_params`/`payload`, or `.assignment_target.group_id`); we pull scheduled rows for all the
+   team's coaches and keep those whose group_id ∈ the team's groups (dedup by id). Manage via
+   `GET /api/teams/:id/calendar-token` (any member) + `POST .../rotate` (owner/admin); UI =
+   `TeamCalendarFeed` in TeamSettingsTab. (b) **Roster CSV = Hy-Tek MM format** (`lib/csv.js`), `GET /api/teams/:id/roster.csv`
+   (any team coach), source = **group membership** (matches the roster tab, polymorphic managed/user,
+   deduped by person), UI = ⬇ button in TeamRosterTab. Gender M→MALE/F→FEMALE, **X/PNTS→blank**;
+   DOB **MM/DD/YYYY** (Hy-Tek format ASSUMED — verify with a sample MM import). Team Name col uses
+   the new `teams.team_code` abbreviation (migration 050, VARCHAR(6), owner-set in Team Settings),
+   falling back to the full team `name` when unset. **Still deferred:** TeamUnify format +
+   the consume-direction question; richer .ics once Slice B adds event times/venues.
 3. **Lesson tier** (M, deps met) — when the pricing downgrade pressure is real.
 4. **HS race-pace pack** (M→L) — template pack first, PR engine second; pairs with #2's PR store.
 5. **MAAP pack** (L, scope session first) — heaviest; only for a club pilot that needs it.

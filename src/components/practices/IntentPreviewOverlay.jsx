@@ -134,7 +134,7 @@ import { makeEntryId } from "../../lib/workout-helpers.js";
               <button onClick={onClose} disabled={busy}
                 className="btn btn-lg btn-outlined btn-neutral">Cancel</button>
               <button onClick={() => onRegenerate(w)} disabled={busy}
-                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>↻ Regenerate</button>
+                style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary-text)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>↻ Regenerate</button>
               <button onClick={handleSave} disabled={busy}
                 title={scheduledRow.intent_params?.group_id ? "Commit this workout and assign to the group, without entering Run mode" : "Commit this workout to the schedule, without entering Run mode"}
                 style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid var(--color-warn)", background: "transparent", color: "var(--color-warn)", fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>

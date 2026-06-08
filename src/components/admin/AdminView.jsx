@@ -9,6 +9,7 @@ import { AdminBillingConfig } from "./AdminBillingConfig.jsx";
 import { AdminVendorKit } from "./AdminVendorKit.jsx";
 import { AdminAudit } from "./AdminAudit.jsx";
 import { AdminInvites } from "./AdminInvites.jsx";
+import { AdminVenueEdits } from "./AdminVenueEdits.jsx";
 
     const { useState } = React;
 
@@ -35,6 +36,7 @@ import { AdminInvites } from "./AdminInvites.jsx";
             <button onClick={() => setTab("email")}      style={tabStyle(tab === "email")}>Email test</button>
             <button onClick={() => setTab("billing")}    style={tabStyle(tab === "billing")}>Billing config</button>
             <button onClick={() => setTab("vendor-kit")} style={tabStyle(tab === "vendor-kit")}>Vendor kit</button>
+            <button onClick={() => setTab("venue-edits")} style={tabStyle(tab === "venue-edits")}>Venue edits</button>
             <button onClick={() => setTab("audit")}      style={tabStyle(tab === "audit")}>Audit log</button>
           </div>
           {tab === "users"       && <AdminUsers me={me} onStartImpersonation={onStartImpersonation} />}
@@ -45,6 +47,7 @@ import { AdminInvites } from "./AdminInvites.jsx";
           {tab === "email"       && <AdminEmailTest />}
           {tab === "billing"     && <AdminBillingConfig />}
           {tab === "vendor-kit"  && <AdminVendorKit />}
+          {tab === "venue-edits" && <AdminVenueEdits />}
           {tab === "audit"       && <AdminAudit />}
         </div>
       );

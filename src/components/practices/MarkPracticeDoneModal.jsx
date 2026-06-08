@@ -1,10 +1,12 @@
 // src/components/practices/MarkPracticeDoneModal.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 
     const { useState, useEffect } = React;
 
     export function MarkPracticeDoneModal({ sw, onClose, onSaved }) {
+      const dialogRef = useDialogA11y(onClose);
       const [ctx, setCtx] = React.useState(null);    // { roster, attendance, group_id, completed_at, ... }
       const [absent, setAbsent] = React.useState(() => new Set()); // keys of swimmers marked absent
       const [busy, setBusy] = React.useState(false);
@@ -68,17 +70,17 @@ import { csrfHeaders } from "../../lib/api.js";
 
       return (
         <div onClick={onClose} className="modal-overlay" style={{ padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Mark practice done" onClick={e => e.stopPropagation()} style={{
             background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
             padding: 22, maxWidth: 480, width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column",
           }}>
-            <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>
+            <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>
               {ctx?.completed_at ? "Edit attendance" : "Mark practice done"}
             </div>
             <div style={{ color: "var(--color-text)", fontSize: 15, marginBottom: 14 }}>
               {sw.scheduled_date} {ctx?.group_id ? `· group ${ctx.group_id}` : "· no group (solo)"}
             </div>
-            {err && <div style={{ color: "var(--color-destructive)", fontSize: 12, marginBottom: 10 }}>⚠ {err}</div>}
+            {err && <div style={{ color: "var(--color-destructive-text)", fontSize: 12, marginBottom: 10 }}>⚠ {err}</div>}
             {!ctx ? (
               <div style={{ color: "var(--color-text-dim)", fontSize: 13 }}>Loading roster…</div>
             ) : ctx.roster.length === 0 ? (

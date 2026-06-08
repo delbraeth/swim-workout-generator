@@ -81,6 +81,7 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
                   type="text"
                   value={paceInput}
                   data-tour="step-pace-input"
+                  aria-label={`Pace per 100 ${unit} (minutes:seconds)`}
                   onChange={e => { setActivePreset(null); onPaceChange && onPaceChange(e.target.value); }}
                   placeholder="M:SS"
                   style={{ width: 52, fontFamily: "monospace", fontSize: 13, padding: "4px 7px", borderRadius: 6,
@@ -111,6 +112,7 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
                             borderRadius: 3 }} />
             </div>
             <input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={SLIDER_STEP} value={value}
+              aria-label="Target yardage" aria-valuetext={`${value} ${unit}`}
               onChange={e => { setActivePreset(null); onChange(Number(e.target.value)); }}
               style={{ position: "absolute", top: -4, left: 0, width: "100%", opacity: 0, height: 14, cursor: "pointer", margin: 0 }} />
           </div>
@@ -128,7 +130,7 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
                     onBlur={() => commitBound(boundKey, boundDraft)}
                     onKeyDown={e => { if (e.key === "Enter") commitBound(boundKey, boundDraft); if (e.key === "Escape") { setEditingBound(null); setBoundDraft(""); } }}
                     style={{ width: 52, fontSize: 10, fontFamily: "monospace", padding: "1px 4px", borderRadius: 4,
-                             border: "1px solid var(--color-primary)", background: "var(--color-bg)", color: "var(--color-primary)", outline: "none" }} />
+                             border: "1px solid var(--color-primary)", background: "var(--color-bg)", color: "var(--color-primary-text)", outline: "none" }} />
                 );
               }
               return (
@@ -153,7 +155,7 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
                 <span style={{ color: "#fca5a5", fontSize: 12, fontWeight: 600 }}>
                   This workout type needs at least {typeMin.toLocaleString()} {unit}.
                 </span>
-                <span style={{ color: "var(--color-destructive)", fontSize: 12 }}> Raise the max or choose a different type.</span>
+                <span style={{ color: "var(--color-destructive-text)", fontSize: 12 }}> Raise the max or choose a different type.</span>
               </div>
             </div>
           ) : typeMin !== null ? (

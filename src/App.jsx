@@ -14,6 +14,7 @@
     import { MultiLaneControl } from "./components/multipace/MultiLaneControl.jsx";
     import { MultiPaceModal } from "./components/multipace/MultiPaceModal.jsx";
     import { MultiPacePrintView } from "./components/multipace/MultiPacePrintView.jsx";
+    import { WhiteboardPrintView } from "./components/multipace/WhiteboardPrintView.jsx";
     import { SaveToHistoryForm } from "./components/history/SaveToHistoryForm.jsx";
     const HistoryView = React.lazy(() => import("./components/history/HistoryView.jsx").then(m => ({ default: m.HistoryView })));
     const CatalogView = React.lazy(() => import("./components/catalog/CatalogView.jsx").then(m => ({ default: m.CatalogView })));
@@ -101,6 +102,7 @@
     } from "./lib/engine.js";
     import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
 import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
+import { RACE_EVENTS } from "./lib/raceEvents.js";
 import { extractMainLabel, formatPscRow, normalizeInitials, parsePaceMSS } from "./lib/format.js";
 import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYardsForType, parseIntent, rescaleBlocksForPace } from "./lib/workout-helpers.js";
 
@@ -154,10 +156,17 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const _sfSleep = ms => new Promise(r => setTimeout(r, ms));
       const _SF_MAX_429_RETRIES = 4;
       window.fetch = async function(input, init) {
+        const isReq = typeof Request !== "undefined" && input instanceof Request;
         const url = typeof input === "string" ? input : (input && input.url) || "";
         if (impersonation.active && impersonation.active.target_sub && url.startsWith("/api/")) {
           init = init || {};
-          init.headers = { ...(init.headers || {}), "X-Impersonate-Sub": impersonation.active.target_sub };
+          // Merge onto the caller's existing headers via Headers — a plain
+          // {...init.headers} would DROP a Request object's own headers
+          // (per the Fetch spec, init.headers overrides Request headers).
+          const base = isReq && init.headers == null ? input.headers : (init.headers || {});
+          const merged = new Headers(base);
+          merged.set("X-Impersonate-Sub", impersonation.active.target_sub);
+          init.headers = merged;
         }
         let attempt = 0;
         while (true) {
@@ -183,12 +192,32 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
     const HISTORY_LOCAL_KEY = "swim_history_v1";
     const USER_INITIALS_KEY = "swim_user_initials";
 
+    // Owner of the locally-cached history (the current user's sub). Set once when
+    // `me` loads (applyBootstrap). The cache is stamped with this so a DIFFERENT
+    // user on a SHARED browser never merges/sees the prior user's history — on a
+    // mismatch the cache is dropped rather than merged. (Security: cross-user leak.)
+    let _sfHistoryOwner = null;
+    function setHistoryOwner(sub) { _sfHistoryOwner = sub || null; }
+    function clearLocalHistory() {
+      try { localStorage.removeItem(HISTORY_LOCAL_KEY); localStorage.removeItem(USER_INITIALS_KEY); } catch (_) {}
+    }
     function loadLocalHistory() {
-      try { const raw = localStorage.getItem(HISTORY_LOCAL_KEY); return raw ? JSON.parse(raw) : []; }
-      catch (_) { return []; }
+      try {
+        const raw = localStorage.getItem(HISTORY_LOCAL_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.entries)) {
+          // Stamped format: only return the cache if it belongs to the current user.
+          if (_sfHistoryOwner && parsed.owner && parsed.owner !== _sfHistoryOwner) { clearLocalHistory(); return []; }
+          return parsed.entries;
+        }
+        // Legacy bare-array (pre-fix) — owner unknown, so drop it rather than risk a leak.
+        clearLocalHistory();
+        return [];
+      } catch (_) { return []; }
     }
     function saveLocalHistory(entries) {
-      try { localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify(entries)); } catch (_) {}
+      try { localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify({ owner: _sfHistoryOwner, entries })); } catch (_) {}
     }
     // Merge two entry lists by id (b wins on conflict), then sort newest-first by dateCompleted.
     function mergeById(a, b) {
@@ -1590,6 +1619,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // ProfileModal-open doesn't need their three GETs anymore.
       const [sessions, setSessions]               = useState([]);   // auth/sessions
       const [teamDefaults, setTeamDefaults]       = useState([]);   // team-defaults inherited
+      const [teamCalendars, setTeamCalendars]     = useState([]);   // team .ics feed links (from bootstrap)
       const [pendingInvites, setPendingInvites]   = useState([]);   // parent invites awaiting accept
       const [billingStatus, setBillingStatus]     = useState(null); // { tier, ... } | null
       const [audioCues, setAudioCues]             = useState(true); // W1: rest-timer beeps default ON
@@ -1626,6 +1656,15 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // "" level = auto (use the target swimmer's level, else show all).
       const [lessonMySetsOnly, setLessonMySetsOnly] = useState(false);
       const [lessonLevelChoice, setLessonLevelChoice] = useState("");
+      const [lessonYouth, setLessonYouth] = useState(false);   // Eval #5 — Learn-to-Swim youth bank
+      // Phase 5 #4 — race-pace mode. When on, the MAIN set becomes race-pace reps
+      // for `raceEvent`, anchored to the target swimmer's goal→PR time at the
+      // current course. raceGoals/raceKindMap are loaded by an effect below.
+      const [racePace, setRacePace]           = useState(false);
+      const [raceEvent, setRaceEvent]         = useState("free_100");
+      const [raceUsrpt, setRaceUsrpt]         = useState(false);
+      const [raceGoals, setRaceGoals]         = useState({});   // { event: secs }
+      const [raceKindMap, setRaceKindMap]     = useState({});   // { event: 'goal'|'pr' }
       const includedSections = React.useMemo(() => {
         // Lesson tier (Phase 5) — fixed 3-section shape (Warm-Up / Skill Focus /
         // Send-off). "main" carries the relabeled Skill Focus; drill + kick are
@@ -1708,12 +1747,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // is non-null while the print overlay is mounted ({lanes, mode}).
       const [showMultiPace,   setShowMultiPace]   = useState(false);
       const [multiPaceLanes,  setMultiPaceLanes]  = useState(null);
+      const [showWhiteboard,  setShowWhiteboard]  = useState(false);
       const [copyFlash,       setCopyFlash]       = useState(false);
       // Auth state: null = checking, false = not signed in, true = signed in
       const [authenticated, setAuthenticated] = useState(null);
       const [authMode,      setAuthMode]      = useState(null); // "open" | "apple"
       const [authError,     setAuthError]     = useState(null);
       const [me,            setMe]            = useState(null); // /api/me payload (for is_admin gate, etc.)
+      const [featureFlags,  setFeatureFlags]  = useState(null); // Phase 6 union visibility map from bootstrap (null = all-on)
       // View-as: admin-only QA mode that temporarily overrides role flags
       // for UI gating purposes. Real `me` stays unchanged so API permission
       // checks (server-side) and the view-as switcher's own visibility
@@ -2006,7 +2047,9 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const applyBootstrap = useCallback((d) => {
         if (!d || typeof d !== "object") return;
         // me
-        if (d.me) setMe(d.me);
+        if (d.me) { setMe(d.me); setHistoryOwner(d.me.sub); }   // stamp the cache owner BEFORE loadLocalHistory below
+        // Phase 6 union visibility map (nav/personal gating). null ⇒ all-on.
+        if (d.feature_flags) setFeatureFlags(d.feature_flags);
         // workouts (history) — merge with local cache like the original useEffect did
         if (Array.isArray(d.workouts)) {
           const merged = mergeById(loadLocalHistory(), d.workouts);
@@ -2046,6 +2089,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         // seed from props instead of fetching on open.
         if (Array.isArray(d.sessions))     setSessions(d.sessions);
         if (Array.isArray(d.teamDefaults)) setTeamDefaults(d.teamDefaults);
+        if (Array.isArray(d.team_calendars)) setTeamCalendars(d.team_calendars);
         if (Array.isArray(d.pendingInvites)) setPendingInvites(d.pendingInvites);
         if (d.billing && d.billing.status) setBillingStatus(d.billing.status);
         // Settings — applied through the shared applySettings helper so
@@ -2901,6 +2945,10 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // generateForPlanId is "" = no plan (stored paces) or plan id.
       const [lanePlansForTarget, setLanePlansForTarget] = useState([]);
       const [generateForPlanId,  setGenerateForPlanId]  = useState("");
+      // Meet-anchored taper (eval 2026-06-06): opt-in, per-session apply of the
+      // selected group's anchor suggested_phase for THIS generation. Reset on
+      // target change so a stale toggle can't leak across groups.
+      const [applySuggestedPhase, setApplySuggestedPhase] = useState(false);
       useEffect(() => {
         // Lesson tier (Phase 5) — generate-for picker is available to lesson access
         // too (managed swimmers); the route gates with requireLessonAccess.
@@ -2943,9 +2991,17 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         const isLessonGroup = t.team_id == null;
         return (isLessonType === isLessonGroup) ? t : null;
       }, [generateForId, coachTargets, selectedType]);
+      // Reset the opt-in suggested-phase toggle whenever the target changes.
+      useEffect(() => { setApplySuggestedPhase(false); }, [generateForId]);
       // Effective phase: group's current_phase overrides the user's personal
-      // phase when generating for a group (decision #39).
-      const effectivePhase = generateForTarget?.current_phase || phase;
+      // phase when generating for a group (decision #39). Meet-anchored taper
+      // (eval 2026-06-06): if the coach opts in, the active anchor's
+      // suggested_phase takes precedence for THIS generation only — turning the
+      // taper from advisory (badge) into something that actually drives Generate.
+      const effectivePhase =
+        (applySuggestedPhase && generateForTarget?.suggested_phase)
+        || generateForTarget?.current_phase
+        || phase;
 
       // Phase 3 PSC slice 3 — per-practice checklist data fetch.
       // When Generate target switches to a group, fetch its active constraints
@@ -2964,6 +3020,36 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           .then(map => { if (map && typeof map === "object") setGroupActiveConstraints(map); else setGroupActiveConstraints({}); })
           .catch(() => setGroupActiveConstraints({}));
       }, [generateForTarget?.id]);
+
+      // Phase 5 #4 — load race goal/PR times for the current target (self, or a
+      // managed individual) at the current course, resolved goal→PR per event.
+      // Group targets fall back to generic race-pace text (no single swimmer).
+      useEffect(() => {
+        if (!racePace) return;
+        let alive = true;
+        const tgt = generateForTarget;
+        const ep = (tgt && tgt.kind === "managed" && tgt.id)
+          ? `${API_BASE}/managed-swimmers/${encodeURIComponent(tgt.id)}/event-times`
+          : `${API_BASE}/me/event-times`;
+        fetch(ep, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : [])
+          .then(list => {
+            if (!alive) return;
+            const byEvent = {};
+            for (const r of (Array.isArray(list) ? list : [])) {
+              if (r.course !== poolMode) continue;
+              (byEvent[r.event] ||= {})[r.kind] = r.time_secs;
+            }
+            const goals = {}, kinds = {};
+            for (const ev of Object.keys(byEvent)) {
+              if (byEvent[ev].goal != null) { goals[ev] = byEvent[ev].goal; kinds[ev] = "goal"; }
+              else if (byEvent[ev].pr != null) { goals[ev] = byEvent[ev].pr; kinds[ev] = "pr"; }
+            }
+            setRaceGoals(goals); setRaceKindMap(kinds);
+          })
+          .catch(() => { if (alive) { setRaceGoals({}); setRaceKindMap({}); } });
+        return () => { alive = false; };
+      }, [racePace, generateForTarget?.id, generateForTarget?.kind, poolMode]);
 
       // Derived: flat list of (swimmerKey, constraint) pairs for the checklist.
       // swimmerKey is either users.sub (real swimmer) or ms_xxxx (managed).
@@ -3059,6 +3145,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           userMin:        _isLessonGen ? LESSON_MIN : sliderMin,
           lessonMySetsOnly: _isLessonGen ? lessonMySetsOnly : false,
           lessonLevel:    _lessonLevel,
+          youthMode:      _isLessonGen ? lessonYouth : false,   // Eval #5 — Learn-to-Swim youth bank
+          // Phase 5 #4 — race-pace MAIN (ignored unless racePace). raceGoals is the
+          // target's goal→PR map (loaded by effect); raceKind labels the chosen event.
+          racePace:       racePace && !_isLessonGen,
+          raceEvent,
+          usrpt:          raceUsrpt,
+          raceGoals,
+          raceKind:       raceKindMap[raceEvent] || "goal",
           pinnedBlocks:   pinned,
           recentLabels,
           recoveryMode,
@@ -3203,7 +3297,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, lessonYouth, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -3233,6 +3327,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           userMin:      _isLessonRegen ? LESSON_MIN : sliderMin,
           lessonMySetsOnly: _isLessonRegen ? lessonMySetsOnly : false,
           lessonLevel:  _isLessonRegen ? (lessonLevelChoice || generateForTarget?.lesson_level || null) : null,
+          youthMode:    _isLessonRegen ? lessonYouth : false,   // Eval #5 — Learn-to-Swim youth bank
           recentLabels,
           recoveryMode: isRecovery,
           phase,
@@ -3334,7 +3429,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, favoriteSets, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, lessonMySetsOnly, lessonLevelChoice, generateForTarget]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, favoriteSets, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, lessonMySetsOnly, lessonLevelChoice, lessonYouth, generateForTarget]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
@@ -4111,7 +4206,13 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                               { id: "practices", emoji: "📋", label: "Practices",         group: "Programming", coachOnly: true },
                               { id: "my-sets",  emoji: "📝", label: "My Sets",            group: "Programming", coachOnly: false }, // Lesson tier — author lesson sets
                               { id: "catalog",   emoji: "📚", label: "Catalog",           group: "Programming", coachOnly: true },
-                              ].filter(item => effectiveMe?.is_coach || !item.coachOnly);
+                              ].filter(item => effectiveMe?.is_coach || !item.coachOnly)
+                               // Phase 6 visibility: hide coach-menu items when the
+                               // user's teams have those bundles off (union; null = on).
+                               // Practices = scheduling+attendance → hide only if BOTH off.
+                               .filter(item => !(item.id === "catalog" && featureFlags?.catalog === false)
+                                            && !(item.id === "my-sets" && featureFlags?.ugc === false)
+                                            && !(item.id === "practices" && featureFlags?.intent_planning === false && featureFlags?.attendance === false));
                               let lastGroup = null;
                               return items.map(item => {
                                 const active = view === item.id;
@@ -4239,7 +4340,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             {view === "admin"    && <AdminView me={me} onStartImpersonation={handleStartImpersonation} />}
             {view === "parent"   && <ParentDashboard me={me} />}
             {view === "teams"    && <TeamsView />}
-            {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} />}
+            {view === "swimmers" && <ManagedSwimmersView mySub={me?.sub} featureFlags={featureFlags} />}
             {view === "lesson-groups" && <LessonGroupsView />}
             {view === "coach-home" && <CoachHomeView me={effectiveMe} onNavigate={setView} onGenerate={() => setView("generator")} />}
             {view === "practices" && <PracticesView />}
@@ -4326,7 +4427,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               />
             )}
             {view === "reports"  && (
-              <ReportsView isCoach={!!effectiveMe?.is_coach} isAdmin={!!effectiveMe?.is_admin} />
+              <ReportsView isCoach={!!effectiveMe?.is_coach} isAdmin={!!effectiveMe?.is_admin} reportsOn={featureFlags?.reports !== false} />
             )}
             {view === "progress" && (
               <ProgressDashboard onPaceUpdate={handlePaceChange} />
@@ -4440,6 +4541,39 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             {/* Recovery day · Mix bias · section include/skip (advanced). */}
             {advancedOpen && (
             <div className="screen-only" style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
+              {/* Phase 5 #4 — Race Pace: build the MAIN as goal/PR-anchored reps. */}
+              {selectedType !== "lesson" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
+                <button onClick={() => setRacePace(v => !v)}
+                  title="Race Pace — the main set becomes goal-pace reps for the chosen event"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 999,
+                    border: `1px solid ${racePace ? "var(--color-warn)" : "var(--color-border)"}`,
+                    background: racePace ? "rgba(245,158,11,0.15)" : "transparent",
+                    color: racePace ? "#fcd34d" : "var(--color-text-dim)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  🏁 Race Pace {racePace ? "ON" : "OFF"}
+                </button>
+                {racePace && (
+                  <>
+                    <select value={raceEvent} onChange={e => setRaceEvent(e.target.value)}
+                      aria-label="Race event"
+                      style={{ padding: "5px 9px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+                      {RACE_EVENTS.map(ev => <option key={ev.id} value={ev.id}>{ev.label}</option>)}
+                    </select>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--color-text-dim)" }}>
+                      <input type="checkbox" checked={raceUsrpt} onChange={e => setRaceUsrpt(e.target.checked)} /> USRPT
+                    </label>
+                    <span style={{ fontSize: 11, color: raceGoals[raceEvent] != null ? "var(--color-positive)" : "var(--color-text-dim)" }}>
+                      {raceGoals[raceEvent] != null
+                        ? `Target from ${raceKindMap[raceEvent] === "pr" ? "PR" : "goal"} time`
+                        : "No goal set — add one under Profile → Race goals for exact splits"}
+                    </span>
+                  </>
+                )}
+              </div>
+              )}
+              {/* Phase 6 advanced_generate: recovery / mix / sections hide when the
+                  bundle is off. Race-pace (above) + Learn-to-Swim stay CORE (F1/F2). */}
+              {featureFlags?.advanced_generate !== false && (<>
               {/* Easy day / Recovery day ON toggle + helper text */}
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button onClick={() => setRecoveryMode(v => !v)}
@@ -4524,11 +4658,12 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   );
                 })}
               </div>
+              </>)}
             </div>
             )}
 
             {/* Workout type selector */}
-            <p className="screen-only" style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
+            <p className="screen-only" style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12, marginTop: 0 }}>
               Select Workout Type
             </p>
             <div className="screen-only type-card-grid" data-tour="step-type-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
@@ -4574,7 +4709,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   young/beginner lesson uses just the coach's authored sets. */}
               {selectedType === "lesson" && (
                 <div style={{ marginBottom: 20, padding: "12px 14px", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10 }}>
-                  <div style={{ fontSize: 11, color: "var(--color-primary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Lesson content</div>
+                  <div style={{ fontSize: 11, color: "var(--color-primary-text)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Lesson content</div>
+                  {/* Eval #5 — Learn-to-Swim: swap in the beginner youth bank
+                      (25-based, deck-paced "on the whistle", stroke-survival +
+                      DQ-avoidance drills) so genuinely short kids' lessons work. */}
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", marginBottom: 8 }}>
+                    <input type="checkbox" checked={lessonYouth} onChange={e => setLessonYouth(e.target.checked)} />
+                    <span>🧒 <strong>Learn-to-Swim</strong> — beginner 25s, deck-paced, stroke-survival + DQ drills</span>
+                  </label>
                   <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
                       <span style={{ color: "var(--color-text-muted)" }}>Level</span>
@@ -4595,6 +4737,26 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     Author lesson content under <strong>🔧 → My Sets</strong> (tag type <em>Lesson</em> + a level).
                     "Use my sets only" excludes the built-in adult/technique content — best for young or beginner swimmers.
                   </p>
+                  {/* Empty-state guard: "my sets only" needs authored content per
+                      lesson section (in the current pool). Warn precisely which are
+                      missing so generation doesn't just silently fail. */}
+                  {lessonMySetsOnly && (() => {
+                    const k = poolMode === "25m" ? "_SCM" : poolMode === "50m" ? "_50M" : "";
+                    const ov = ugcOverlay || {};
+                    const drills  = ((ov["DRILL_OPTIONS" + k] || {}).lesson) || [];
+                    const warmups = ov["WARMUP_OPTIONS" + k] || [];
+                    const cools   = ov["COOLDOWN_OPTIONS" + k] || [];
+                    const missing = [];
+                    if (!warmups.length) missing.push("Warm-Up");
+                    if (!drills.length)  missing.push("Skill Focus");
+                    if (!cools.length)   missing.push("Send-off");
+                    if (!missing.length) return null;
+                    return (
+                      <div style={{ marginTop: 8, padding: "8px 12px", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, fontSize: 12, color: "#fca5a5", lineHeight: 1.5 }}>
+                        ⚠️ <strong>No lesson sets for {missing.join(" / ")}</strong> in this pool ({poolMode}). With “Use my sets only” on, generation can’t fill {missing.length === 1 ? "that section" : "those sections"} — author <em>Lesson</em>-tagged sets under 🔧 → My Sets, or uncheck to use built-in content.
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -4602,7 +4764,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   picker filters options that fit ALL lane paces and the generate
                   flow auto-opens MultiPacePrintView. Prefills from the selected
                   lane plan when one is in play; otherwise the coach edits rows. */}
-              {effectiveMe?.is_coach && (
+              {effectiveMe?.is_coach && featureFlags?.lane_plans !== false && (
                 <MultiLaneControl
                   multiLaneMode={multiLaneMode}
                   setMultiLaneMode={setMultiLaneMode}
@@ -4661,7 +4823,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                         </button>
                         <div style={{
                           flexShrink: 0, padding: "8px 10px", borderRadius: 6,
-                          background: "#1e3a5f", color: "var(--color-primary)",
+                          background: "#1e3a5f", color: "var(--color-primary-text)",
                           fontSize: 12, fontWeight: 700,
                           display: "inline-flex", alignItems: "center", gap: 4, lineHeight: 1,
                         }}>
@@ -4756,8 +4918,24 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                             })()
                           : <>Workout will save to <strong>your history</strong> and fan out as <strong>{generateForTarget.member_count} assignment{generateForTarget.member_count === 1 ? "" : "s"}</strong> to {generateForTarget.name}'s members.</>
                         }
-                        {generateForTarget.current_phase && <span> Phase override: <strong>{generateForTarget.current_phase}</strong>.</span>}
+                        {generateForTarget.current_phase && <span> Phase override: <strong>{effectivePhase}</strong>{applySuggestedPhase && generateForTarget.suggested_phase ? " (from meet anchor)" : ""}.</span>}
                       </div>
+                    )}
+                    {/* Meet-anchored taper (eval 2026-06-06): when the group's
+                        active anchor suggests a different phase than the stored
+                        one, offer a one-tap opt-in to apply it for this
+                        generation (advisory → drives Generate). */}
+                    {generateForTarget && generateForTarget.suggested_phase
+                      && generateForTarget.suggested_phase !== generateForTarget.current_phase && (
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11, color: "var(--color-text-muted)", cursor: "pointer", lineHeight: 1.4 }}>
+                        <input type="checkbox" checked={applySuggestedPhase}
+                          onChange={e => setApplySuggestedPhase(e.target.checked)} />
+                        <span>
+                          🎯 {generateForTarget.anchor_event_name || "Meet"}
+                          {generateForTarget.anchor_weeks_out != null && <> in <strong>{generateForTarget.anchor_weeks_out} wk{generateForTarget.anchor_weeks_out === 1 ? "" : "s"}</strong></>}
+                          {" "}suggests <strong>{generateForTarget.suggested_phase}</strong> phase — apply for this workout
+                        </span>
+                      </label>
                     )}
                   </div>
                 );
@@ -4810,7 +4988,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     })}
                   </div>
                   {tonightSelected.size > 0 && (
-                    <div style={{ fontSize: 11, color: "var(--color-primary)", marginTop: 8, fontWeight: 700 }}>
+                    <div style={{ fontSize: 11, color: "var(--color-primary-text)", marginTop: 8, fontWeight: 700 }}>
                       → {tonightSelected.size} constraint{tonightSelected.size === 1 ? "" : "s"} will apply to this Generate.
                     </div>
                   )}
@@ -4957,7 +5135,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                       }}
                       style={{
                         padding: "10px 16px", borderRadius: 8,
-                        border: "1px solid var(--color-primary)", background: "#1e3a5f", color: "var(--color-primary)",
+                        border: "1px solid var(--color-primary)", background: "#1e3a5f", color: "var(--color-primary-text)",
                         fontSize: 13, fontWeight: 700, cursor: "pointer",
                         display: "inline-flex", alignItems: "center", gap: 6,
                       }}
@@ -5003,6 +5181,22 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                       title="Print a clean B&W 8.5×11 version of this workout">
                       🖨 Print Workout
                     </button>
+                    {/* Eval 2026-06-06 #2 — Whiteboard print: one big-font
+                        landscape page to post on deck / copy onto a whiteboard.
+                        Phase 6: rides with the lane_plans bundle (board fix F3). */}
+                    {featureFlags?.lane_plans !== false && (
+                    <button
+                      onClick={() => setShowWhiteboard(true)}
+                      style={{
+                        padding: "10px 16px", borderRadius: 8,
+                        border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)",
+                        fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                      }}
+                      title="One big-font landscape page sized to post on deck or copy onto a pool whiteboard (no swimmer names)">
+                      🪧 Whiteboard
+                    </button>
+                    )}
                     {/* N6 — Multi-pace export. Coach-only, group-only. Visible only
                         when generating for a group with ≥2 members (lane plans can't
                         exist for groups <2 per decision #17). */}
@@ -5032,7 +5226,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                         }}
                         style={{
                           padding: "10px 16px", borderRadius: 8,
-                          border: "1px solid var(--color-primary)", background: "rgba(59,130,246,0.15)", color: "var(--color-primary)",
+                          border: "1px solid var(--color-primary)", background: "rgba(59,130,246,0.15)", color: "var(--color-primary-text)",
                           fontSize: 13, fontWeight: 700, cursor: "pointer",
                           display: "inline-flex", alignItems: "center", gap: 6,
                         }}
@@ -5048,7 +5242,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   focusNoteDraft && (
                     <div className="screen-only card" style={{
                       marginBottom: 12, padding: "8px 12px",
-                      borderRadius: 8, fontSize: 13, color: "var(--color-primary)", fontStyle: "italic",
+                      borderRadius: 8, fontSize: 13, color: "var(--color-primary-text)", fontStyle: "italic",
                     }}>
                       🎯 Focus: {focusNoteDraft}
                     </div>
@@ -5196,6 +5390,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     onSnapshot={authenticated ? handleSnapshotBlock : null}
                     ugcSetIdMeta={ugcSetIdMeta}
                     sectionSource={sectionSources[block.section] || "bank"}
+                    advancedGenerate={featureFlags?.advanced_generate !== false}
                     onSectionSourceChange={(newSource) => {
                       setSectionSources(prev => {
                         const next = { ...prev, [block.section]: newSource };
@@ -5227,7 +5422,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   />
                 ))}
 
-                {/* Section model B2 — add a dryland block (before / after pool). */}
+                {/* Section model B2 — add a dryland block. Phase 6: advanced_generate bundle. */}
+                {featureFlags?.advanced_generate !== false && (
                 <div className="screen-only" style={{ marginTop: 12, marginBottom: 4 }}>
                   {!drylandPickerOpen ? (
                     <button onClick={() => setDrylandPickerOpen(true)}
@@ -5257,17 +5453,32 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Coach note (screen only — user opted not to include in print) */}
                 <div className="screen-only" style={{ marginTop: 20, background: "rgba(30,41,59,0.6)", borderRadius: 12, padding: 16, border: "1px solid var(--color-border)", color: "var(--color-text-muted)", fontSize: 13 }}>
                   <span style={{ fontWeight: 600, color: "#cbd5e1" }}>📋 Coach's Note: </span>
-                  {poolMode === "50m"
-                    ? "Intervals are scaled from your pace setting. Adjust ±10–15 sec to match your base in long-course."
-                    : poolMode === "25m"
-                    ? "Intervals are scaled from your pace setting. Adjust ±10–15 sec to match your base in short-course meters."
-                    : "Intervals are calibrated for a masters pace of 2:00–2:15/100 yds. Adjust ±10–15 sec to match your base."
-                  }
-                  Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets.
+                  {(() => {
+                    // Type/context/pace-aware note. Branches on workout type,
+                    // race-pace, and coach-vs-self context instead of asserting a
+                    // fixed masters pace on every workout (eval 2026-06-06, 6/6).
+                    const blocks    = workout?.blocks || [];
+                    const isLesson  = workout?.typeId === "lesson";
+                    const isTech    = workout?.typeId === "technique";
+                    const isRace    = blocks.some(b => /race[\s-]?pace/i.test(b?.name || ""));
+                    const forSwimmer = !!(generateForTarget && generateForTarget.name);
+                    const whose     = forSwimmer ? "your swimmers'" : "your";
+                    const course    = poolMode === "50m" ? "long-course meters"
+                                    : poolMode === "25m" ? "short-course meters"
+                                    : "short-course yards";
+                    if (isLesson) {
+                      return "This is a skill session — let stroke mechanics lead. Treat the intervals as soft suggestions: give generous rest, keep cues short, and end a set when form breaks down rather than when the clock says so.";
+                    }
+                    if (isRace) {
+                      return `Race-pace targets are computed from the goal/PR time on file, not a generic pace. Hold the listed split and take the full rest; if ${forSwimmer ? "a swimmer" : "you"} can't hold pace, cut the rep count before easing the speed.`;
+                    }
+                    return `Intervals are scaled from ${forSwimmer ? "the" : "your"} pace setting (${paceInput}/100 ${course}). Adjust ±10–15 sec to match ${whose} base. ${isTech ? "On drill and technique sets, prioritize stroke mechanics over hitting a split." : "Always prioritize stroke mechanics over hitting a split — especially on drill and technique sets."}`;
+                  })()}
                 </div>
 
                 {/* Save-to-history form (only for freshly generated workouts) */}
@@ -5445,7 +5656,9 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                  + /api/me/team-defaults fetches on open. */
               appSessions={sessions}
               appTeamDefaults={teamDefaults}
+              appTeamCalendars={teamCalendars}
               appBillingStatus={billingStatus}
+              appFeatureFlags={featureFlags}
               appLevel={level}
               appNextEvent={nextEvent}
               appPhase={phase}
@@ -5509,6 +5722,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               onClose={() => setMultiPaceLanes(null)}
             />
           )}
+          {/* Eval 2026-06-06 #2 — Whiteboard print overlay. */}
+          {showWhiteboard && workout && (
+            <WhiteboardPrintView
+              workout={workout}
+              unit={unit}
+              onClose={() => setShowWhiteboard(false)}
+            />
+          )}
           {/* I — schedule-for-day picker. Opens when scheduleDate state is
               non-null (set by the 📅 Schedule for… button). Picks a date,
               POSTs to /api/scheduled-workouts with the current workout. */}
@@ -5518,7 +5739,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                 background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
                 padding: 22, maxWidth: 420, width: "100%",
               }}>
-                <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Schedule workout</div>
+                <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Schedule workout</div>
                 <div style={{ color: "var(--color-text)", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Pick a date</div>
                 <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
                   style={{ width: "100%", padding: "8px 10px", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, fontSize: 14 }} />
@@ -5646,7 +5867,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             color: "var(--color-border-strong)", fontSize: 11, fontFamily: "system-ui, -apple-system, sans-serif",
             borderTop: "1px solid var(--color-card)", marginTop: 40,
           }}>
-            © 2026 Competition Aquatics, LLC · All rights reserved.
+            <div>Created by Patrick Cassidy &amp; Veronica Cassidy (coach &amp; swimmer).</div>
+            <div style={{ marginTop: 4 }}>© 2026 Competition Aquatics, LLC · All rights reserved.</div>
           </footer>
         </div>
       );

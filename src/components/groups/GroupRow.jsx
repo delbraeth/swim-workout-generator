@@ -9,7 +9,8 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function GroupRow({ group, coachPool, managedInTeam, onChanged }) {   // exported for src/components/teams/TeamsView.jsx
+    export function GroupRow({ group, coachPool, managedInTeam, onChanged, featureFlags = null }) {   // exported for src/components/teams/TeamsView.jsx
+      const ff = featureFlags || {};   // Phase 6: gate the lane-plans panel
       const [expanded, setExpanded] = React.useState(false);
       const [detail,   setDetail]   = React.useState(null);
       const [addMemberId, setAddMemberId] = React.useState("");
@@ -190,6 +191,14 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                 <div style={{ color: "var(--color-text-dim)", fontSize: 12, padding: "10px 0" }}>Loading…</div>
               ) : (
                 <>
+                  {/* MAAP two-deep soft-warning (eval 2026-06-06 #3). Non-blocking:
+                      a group with any under-18 member and fewer than 2 active
+                      coaches falls short of USA Swimming's two-deep guidance. */}
+                  {(detail.members || []).some(m => m.is_minor === true) && (detail.coaches || []).length < 2 && (
+                    <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "rgba(245,158,11,0.12)", border: "1px solid var(--color-warn)", color: "var(--color-warn)", fontSize: 12, lineHeight: 1.4 }}>
+                      ⚠ <strong>Two-deep recommended.</strong> This group has under-18 swimmers and only one coach. USA Swimming MAAP guidance calls for at least two adults — add a co-coach below.
+                    </div>
+                  )}
                   {/* Members */}
                   <div style={{ marginTop: 10 }}>
                     <div style={{ fontSize: 11, color: "var(--color-text-muted)", fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -209,7 +218,7 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                         </span>
                         {detail.viewer_role && (
                           <button onClick={() => removeMember(m.id, m.display_name)}
-                            style={{ padding: "2px 8px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
+                            style={{ padding: "2px 8px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
                             Remove
                           </button>
                         )}
@@ -255,7 +264,7 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                         </span>
                         {isPrimary && c.role !== "primary" && (
                           <button onClick={() => removeCoach(c.coach_sub)}
-                            style={{ padding: "2px 8px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
+                            style={{ padding: "2px 8px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
                             Remove
                           </button>
                         )}
@@ -301,15 +310,15 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                           Roster visible to members: {detail.roster_visible_to_members ? "ON" : "OFF"}
                         </button>
                         <button onClick={archive}
-                          style={{ padding: "5px 11px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                          style={{ padding: "5px 11px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
                           Archive group
                         </button>
                       </div>
                     </div>
                   )}
 
-                  {/* Lane plans (R-E) — hidden for solo groups per #17 */}
-                  {(detail.members || []).length >= 2 && (
+                  {/* Lane plans (R-E) — hidden for solo groups per #17; Phase 6 lane_plans flag */}
+                  {ff.lane_plans !== false && (detail.members || []).length >= 2 && (
                     <LanePlansPanel groupId={group.id} members={detail.members || []} isPrimary={isPrimary} onChanged={onChanged} />
                   )}
 

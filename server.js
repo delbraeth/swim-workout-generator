@@ -31,7 +31,8 @@
 //   GET  /api/auth/signout          → revoke current session, redirect /
 //
 // Required env vars:
-//   DB_HOST, DB_USER, DB_PASSWORD   — see db.js for the full list
+//   DB_CONFIG (JSON blob: host/user/password/port/name) — or the legacy
+//   DB_HOST/DB_USER/DB_PASSWORD fallback. See db.js for details.
 //
 // Apple Sign-In env vars (all required when Apple auth is active):
 //   APPLE_TEAM_ID            — 10-char team ID from Apple Developer console
@@ -49,13 +50,20 @@ import express   from "express";
 import crypto    from "crypto";
 import path      from "path";
 import { readFile } from "fs/promises";
+import { readFileSync } from "fs";
 import helmet    from "helmet";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
+import { PUSH_ACTIVE, pushConfigState, sendPushToUser } from "./lib/push.js";
+import { WEATHER_ACTIVE, weatherConfigState, getForecast, weatherSelfTest } from "./lib/weather.js";
+import { resolveTeamFlags, unionFlags } from "./src/lib/featureFlags.js";
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
+import { buildIcs } from "./lib/ics.js";
+import { toCsv } from "./lib/csv.js";
+import { eventKindEmoji } from "./src/lib/eventKinds.js";
 
 import {
   pool, dbActive, pingDb,
@@ -80,6 +88,7 @@ import {
   dbInsertFeedback, dbAdminListFeedback, dbAdminUpdateFeedback,
   isMinor, postFeedbackToDiscord,
   dbIsUser, dbIsAdmin, dbIsCoach, dbHasLessonAccess, dbIsSupportRole, dbConsumeInviteCode, dbEnsureUser, dbAuditEvent, dbGetMe, dbUpdateMe, dbGetBootstrapForUser,
+  dbGetOrCreateAppleAppAccountToken, dbGetAppleAppAccountToken,
   dbGetUserSubByProvider, dbLinkOAuthProvider, dbFindUserByVerifiedEmail,
   dbAdminListUsers, dbAdminSetUserFlag, dbAdminUpdateUser, dbAdminDeleteUser,
   dbExportAccount,
@@ -89,6 +98,7 @@ import {
   dbRevokeSession, dbRevokeSessionByPrefix, dbRevokeOthersByUser, dbListSessions,
   dbGetOrCreateCsrf, dbVerifyCsrf,
   dbCreateTeam, dbGetTeam, dbListTeamsForCoach, dbUpdateTeam, dbArchiveTeam,
+  dbGetTeamFlagsRow, dbSetTeamFlags, dbListUserTeamsForFlags,
   dbGetTeamRole, dbListTeamCoaches, dbAddTeamCoach, dbRemoveTeamCoach, dbListCoachesForPicker,
   dbUpdateTeamCoachRole, dbTransferGroupPrimary,
   dbProposeOwnershipTransfer, dbCancelOwnershipTransfer, dbAcceptOwnershipTransfer,
@@ -98,7 +108,11 @@ import {
   dbAddTeamDisfavorite, dbRemoveTeamDisfavorite,
   dbListTeamCuration, dbGetTeamSettings, dbSetTeamDefault,
   dbListTeamFacilities, dbCreateTeamFacility, dbUpdateTeamFacility, dbArchiveTeamFacility,
-  dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster,
+  dbGetOrCreateTeamCalendarToken, dbRotateTeamCalendarToken, dbGetTeamByCalendarToken,
+  dbTeamCalendarFeedData, dbTeamRosterForExport, dbListTeamCalendarsForUser,
+  dbListEventTimes, dbUpsertEventTime, dbDeleteEventTime, dbResolveRaceGoals,
+  dbAddEventPrHistory, dbListEventPrHistory, dbDeleteEventPrHistory,
+  dbApplyTeamDefaultToRoster, dbListTeamDefaultsForUser, dbGetTeamRoster, dbGetTeamAttendanceLog,
   dbCreateParentInvite, dbRevokeParentInvite, dbConsumePendingInvitesForUser,
   dbListPendingInvitesForUser, dbAcceptParentInvite, dbDeclineParentInvite,
   dbListGuardiansForSwimmer, dbListParentInvitesForSwimmer, dbRemoveGuardian,
@@ -119,6 +133,12 @@ import {
   dbListGroupCoaches, dbAddGroupCoach, dbRemoveGroupCoach,
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
+  dbCreateTeamEventSeries, dbDeleteTeamEventSeries,
+  dbSetRsvp, dbGetMyRsvp, dbGetRsvpSummary, dbSetTeamEventStatus,
+  dbGetPracticeContext, dbListUpcomingPracticesForUser,
+  dbCreateOrLinkVenue, dbGetVenue, dbListVenues, dbArchiveVenue, dbGetWeatherCache, dbPutWeatherCache,
+  dbProposeVenueEdit, dbListVenueEditProposals, dbReviewVenueEditProposal,
+  dbListRsvpRespondentSubs,
   dbIsSwimmerInTeam, dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
   dbListAssignmentsForSwimmer, dbListAssignmentsForGroup,
@@ -126,6 +146,8 @@ import {
   dbCreateGroupLanePlan, dbGetGroupLanePlan, dbListGroupLanePlans,
   dbUpdateGroupLanePlan, dbArchiveGroupLanePlan, dbSetDefaultLanePlan,
   dbCreateGroupJoinToken, dbGetGroupJoinToken, dbListGroupJoinTokens,
+  dbGetPersonIdForUser, dbListPersonCredentials, dbSetPersonCredential, dbDeletePersonCredential, CREDENTIAL_SYSTEMS,
+  dbAddPushSubscription, dbDeletePushSubscription,
   dbDeleteGroupJoinToken, dbRedeemGroupJoinToken,
   dbCreateClaimToken, dbGetClaimToken, dbListClaimTokensForManaged,
   dbDeleteClaimToken, dbRedeemClaimToken,
@@ -286,6 +308,17 @@ const writeLimiter = rateLimit({
   },
 });
 
+// Public calendar-feed limiter. The .ics route is unauthenticated (token-only) and
+// polled by calendar clients on a schedule, so keyed by IP with a generous cap.
+const feedLimiter = rateLimit({
+  windowMs:        60 * 1000,
+  limit:           120,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  keyGenerator:    (req) => req.ip,
+  message:         "too many requests, try again later",
+});
+
 // ───── Cookie helper ─────────────────────────────────────────────────
 function getCookie(req, name) {
   const header = req.headers.cookie || "";
@@ -409,6 +442,12 @@ async function requireAuth(req, res, next) {
       const valid = await dbValidateImpersonationHeader(sub, impersonateHeader);
       if (!valid) {
         return res.status(401).json({ error: "impersonation_session_invalid", reason: "no active session matches the X-Impersonate-Sub header — start a new session" });
+      }
+      // Security: privilege is otherwise checked only at session START, so a
+      // mid-session admin/support revocation (account left enabled) would keep
+      // honoring the header for up to 30 min. Re-verify on every request.
+      if (!(await dbIsAdmin(sub) || await dbIsSupportRole(sub))) {
+        return res.status(401).json({ error: "impersonation_not_privileged", reason: "your admin/support access was revoked — impersonation ended" });
       }
       req.impersonatorSub = sub;       // the real admin
       req.userSub         = impersonateHeader; // the target (rewritten)
@@ -858,15 +897,31 @@ app.get("/api/me", requireAuth, async (req, res) => {
 // helpers that failed so the client can decide to re-fetch lazily.
 app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
   try {
-    const [bootstrap, billingStatus] = await Promise.all([
+    const [bootstrap, billingStatus, teamCalendars] = await Promise.all([
       dbGetBootstrapForUser(req.userSub),
       getBillingStatusFor(req.userSub).catch(err => {
         console.warn(`[bootstrap] billing status failed for ${req.userSub}: ${err.message}`);
         return { tier: "free" };
       }),
+      // Folded into bootstrap so the parent/swimmer calendar widget needs no extra
+      // request (avoids the page-load burst that trips Hyperlift's rate limit).
+      dbListTeamCalendarsForUser(req.userSub).catch(() => []),
     ]);
     if (!bootstrap || !bootstrap.me) return res.status(404).json({ error: "user not found" });
-    res.json({ ...bootstrap, billing: { status: billingStatus } });
+    const team_calendars = (teamCalendars || []).map(t => ({ team_id: t.team_id, team_name: t.team_name, url: calendarFeedUrl(req, t.token) }));
+    // Phase 6: union visibility map across the user's teams (most-permissive — a
+    // surface shows if ANY of their teams enables it; no teams ⇒ all defaults on).
+    // Gates personal/nav surfaces; team-scoped surfaces use the team's own flags.
+    let feature_flags;
+    try {
+      const teams = await dbListUserTeamsForFlags(req.userSub);
+      const maps = await Promise.all(teams.map(async t => {
+        const row = await dbGetTeamFlagsRow(t.id).catch(() => null);
+        return resolveTeamFlags({ preset: row?.preset || null, overrides: row?.overrides || {}, hasMinors: t.team_type !== "masters" });
+      }));
+      feature_flags = unionFlags(maps);
+    } catch (e) { console.warn(`[bootstrap] feature-flag union failed: ${e.message}`); feature_flags = unionFlags([]); }
+    res.json({ ...bootstrap, team_calendars, feature_flags, billing: { status: billingStatus } });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
@@ -881,9 +936,17 @@ app.get("/api/me/bootstrap", requireAuth, async (req, res) => {
 
 // The workout-type catalog the client's Generate form needs (id/label/…).
 // Static engine data, no DB. 503 if the engine failed to extract at boot.
-app.get("/api/workout-types", requireAuth, (req, res) => {
+app.get("/api/workout-types", requireAuth, async (req, res) => {
   if (!generatorReady()) return res.status(503).json({ error: "generator_unavailable" });
-  res.json({ types: engineWorkoutTypes() });
+  // Lesson tier (Phase 5) — gate the `lesson` type to lesson-access users.
+  // This endpoint feeds BOTH the web type grid AND the native iOS picker, so
+  // gating here removes lesson from non-lesson clients everywhere (the web also
+  // filters client-side; this is the authoritative gate + free iOS gating).
+  let types = engineWorkoutTypes();
+  try {
+    if (!(await dbHasLessonAccess(req.userSub))) types = types.filter(t => t.id !== "lesson");
+  } catch (_) { types = types.filter(t => t.id !== "lesson"); }  // fail closed
+  res.json({ types });
 });
 
 const POOL_MODES = ["25y", "25m", "50m"];
@@ -923,10 +986,21 @@ app.post("/api/generate", requireAuth, writeLimiter, async (req, res) => {
     // CURATION — server-authoritative, rehydrated from the DB (own + coach union).
     const curation = (await dbGetGenerationContextForUser(req.userSub)) || {};
 
+    // Phase 5 #4 — race-pace (native/iOS path; web resolves goals client-side).
+    // Goals resolve goal→pr for the caller at the requested course (poolMode).
+    const racePace  = !!b.racePace;
+    const raceEvent = (typeof b.raceEvent === "string") ? b.raceEvent : "free_100";
+    const raceKind  = b.raceKind === "pr" ? "pr" : "goal";
+    const usrpt     = !!b.usrpt;
+    const raceGoals = racePace ? await dbResolveRaceGoals({ userSub: req.userSub, course: poolMode }) : {};
+    const youthMode = !!b.youthMode;   // Eval #5 — Learn-to-Swim youth bank (native/iOS path)
+
     const workout = engineGenerate({
       typeId, maxYards, poolMode, equipment, sectionBias, includedSections,
       recoveryMode, phase, userMin, sectionSources, lanesPaceSecs,
+      racePace, raceEvent, raceKind, usrpt, raceGoals,
       ...curation,
+      youthMode,
     });
 
     // Engine failure sentinel (e.g. required equipment can't be satisfied).
@@ -2780,9 +2854,11 @@ app.post("/api/billing/checkout", checkOrigin, requireAuth, requireCsrf, writeLi
         message: "You already have an active subscription through the App Store. Manage it in your iPhone's Settings → Apple Account → Subscriptions.",
       });
     }
-    // tier: "coach" (default) or "lesson". Lesson is inert until its price_id
-    // is configured in Stripe (returns no_price_id otherwise).
-    const tier = (req.body && req.body.tier === "lesson") ? "lesson" : "coach";
+    // tier: "coach" (default), "lesson", or "supporter". Lesson + supporter are
+    // inert until their price_id is configured (returns no_price_id otherwise).
+    // Supporter (eval #7) is an optional "support SetForge" sub that gates nothing.
+    const _t = req.body && req.body.tier;
+    const tier = (_t === "lesson" || _t === "supporter") ? _t : "coach";
     const result = await createCheckoutSession({
       userSub:    req.userSub,
       successUrl: `${APP_URL}/?upgrade=success`,
@@ -2796,7 +2872,7 @@ app.post("/api/billing/checkout", checkOrigin, requireAuth, requireCsrf, writeLi
       details:   { tier, result_type: result?.url ? "session_created" : (result?.error || result?.skipped || "unknown") },
     });
     if (result?.url) return res.json({ url: result.url });
-    if (result?.error === "no_price_id") return res.status(500).json({ error: "no_price_id", message: tier === "lesson" ? "Lesson price not configured yet (set price_id_lesson_monthly in STRIPE_CONFIG)." : "Stripe price ID not configured. Set STRIPE_PRICE_ID_COACH_MONTHLY in env." });
+    if (result?.error === "no_price_id") return res.status(500).json({ error: "no_price_id", message: tier === "lesson" ? "Lesson price not configured yet (set price_id_lesson_monthly in STRIPE_CONFIG)." : tier === "supporter" ? "Supporter price not configured yet (set price_id_supporter_monthly in STRIPE_CONFIG)." : "Stripe price ID not configured. Set STRIPE_PRICE_ID_COACH_MONTHLY in env." });
     res.status(500).json({ error: "checkout_session_failed", result });
   } catch (err) {
     console.error("[billing/checkout]", err.message);
@@ -2944,6 +3020,23 @@ app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res
     if (!jws || typeof jws !== "string") return res.status(400).json({ error: "signedTransaction required" });
     const v = await verifyTransaction(jws);
     if (v.skipped || v.error) return res.status(v.error === "not_activated" ? 503 : 400).json(v);
+    // Security (Critical): bind the transaction to THIS user. The app passes a
+    // per-user appAccountToken at purchase that Apple bakes into the receipt; if a
+    // token is present it MUST match the caller's stored one — otherwise this is a
+    // signed receipt being replayed onto another account. (Legacy receipts with no
+    // token fall through to the originalTransactionId cross-user check below.)
+    if (v.appAccountToken) {
+      const myToken = await dbGetAppleAppAccountToken(req.userSub);
+      if (!myToken || String(v.appAccountToken).toLowerCase() !== String(myToken).toLowerCase()) {
+        dbAuditEvent({ userSub: req.userSub, eventType: "billing.apple.token_mismatch", ...reqMeta(req),
+          details: { original_txn_id: v.originalTransactionId || null } });
+        return res.status(403).json({ error: "transaction_not_yours" });
+      }
+    }
+    // Capture cross-channel state BEFORE applying — applyVerifiedTransaction
+    // overwrites tier_source to apple_iap_*, after which checkCrossChannel would
+    // see apple===apple and always report blocked:false (dead double-pay warning).
+    const xc = await checkCrossChannel(req.userSub, "apple");
     const result = await applyVerifiedTransaction({
       userSub:               req.userSub,
       productId:             v.productId,
@@ -2951,12 +3044,16 @@ app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res
       expiresDate:           v.expiresDate,
       revoked:               v.revoked,
     });
+    // A receipt whose originalTransactionId already belongs to another account.
+    if (result && result.error === "txn_belongs_to_another_user") {
+      dbAuditEvent({ userSub: req.userSub, eventType: "billing.apple.txn_reuse", ...reqMeta(req),
+        details: { original_txn_id: v.originalTransactionId || null } });
+      return res.status(403).json({ error: "transaction_not_yours" });
+    }
     // Double-pay note: if the user ALSO has an active Stripe sub, Apple has
     // already charged them — we still grant the tier (never take their money
     // and deny access) but flag it so we (and they) can cancel the redundant
-    // Stripe sub. The iOS paywall itself should pre-block this via the
-    // pre-purchase check below; this is the belt-and-suspenders server log.
-    const xc = await checkCrossChannel(req.userSub, "apple");
+    // Stripe sub.
     if (xc.blocked) {
       dbAuditEvent({
         userSub:   req.userSub,
@@ -2971,6 +3068,16 @@ app.post("/api/billing/apple/verify", requireAuth, writeLimiter, async (req, res
     console.error("[billing/apple/verify]", err.message);
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// The per-user appAccountToken (UUID) the iOS app must pass into the StoreKit
+// purchase so the resulting receipt is bound to THIS account. Stable per user.
+app.get("/api/billing/apple/account-token", requireAuth, async (req, res) => {
+  try {
+    const token = await dbGetOrCreateAppleAppAccountToken(req.userSub);
+    if (!token) return res.status(404).json({ error: "user_not_found" });
+    res.json({ token });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // App Store Server Notifications V2 — Apple POSTs a signed payload on
@@ -3002,25 +3109,11 @@ app.post("/api/billing/apple/notify", express.raw({ type: "application/json" }),
       return res.status(400).json({ error: result.error });
     }
 
-    // Idempotency: the notificationUUID is only known post-verify, so we record
-    // AFTER processing (mirrors the intent of the Stripe webhook dedupe, keyed
-    // on Apple's UUID). INSERT IGNORE-style: if we've already processed this
-    // UUID, this is a retry — ack without re-applying.
-    const uuid = result?.notificationUUID;
-    if (uuid) {
-      try {
-        await pool.query(
-          "INSERT INTO `apple_iap_events` (`notification_uuid`, `notification_type`, `subtype`, `original_txn_id`, `processed_status`, `payload_json`) " +
-          "VALUES (?, ?, ?, ?, 'processed', ?)",
-          [uuid, result.handled || result.notificationType || "unknown", result.subtype || null,
-           result.original_txn_id || null, JSON.stringify(result).slice(0, 16777215)]
-        );
-      } catch (dupErr) {
-        if (dupErr.code === "ER_DUP_ENTRY" || /duplicate/i.test(dupErr.message || "")) {
-          return res.status(200).json({ ok: true, deduped: true, notification_uuid: uuid });
-        }
-        throw dupErr;
-      }
+    // Idempotency is now handled INSIDE processNotification: it reserves the
+    // notificationUUID (INSERT IGNORE) BEFORE applying the grant/revoke, so an Apple
+    // retry can't re-run the side effect. A retry comes back as result.deduped.
+    if (result?.deduped) {
+      return res.status(200).json({ ok: true, deduped: true, notification_uuid: result.notificationUUID });
     }
     res.status(200).json({ ok: true, result });
   } catch (err) {
@@ -3054,8 +3147,16 @@ app.get("/api/billing/history", requireAuth, async (req, res) => {
 //   portal_return }.
 app.get("/api/admin/billing/config", requireAuth, requireAdmin, async (req, res) => {
   try {
-    res.json({ stripe: billingConfigState(), apple_iap: appleIapConfigState() });
+    res.json({ stripe: billingConfigState(), apple_iap: appleIapConfigState(), push: pushConfigState(), weather: weatherConfigState() });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// WeatherKit live probe (admin) — signs a token + makes one real WeatherKit
+// call so config issues surface as a concrete HTTP status (200 ok / 401 bad
+// sub-or-token / 403 capability missing). See lib/weather.js weatherSelfTest.
+app.get("/api/admin/weather/selftest", requireAuth, requireAdmin, async (req, res) => {
+  try { res.json(await weatherSelfTest()); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 app.post("/api/admin/email/test", checkOrigin, requireAuth, requireAdmin, requireCsrf, async (req, res) => {
@@ -3136,6 +3237,22 @@ app.post("/api/teams", checkOrigin, requireAuth, requireCoach, requireCsrf, writ
   } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
 });
 
+// Resolve a team's effective Phase-6 visibility map (preset + overrides, with
+// compliance force-ON for non-masters teams — F5). team must be a dbGetTeam row.
+async function teamFeatureFlags(team) {
+  const row = await dbGetTeamFlagsRow(team.id).catch(() => null);
+  // A5: no explicit config + a Lesson-tier owner → default to the Simple preset
+  // (the lesson/private coach gets the stripped-down app out of the box).
+  let preset = row?.preset || null;
+  if (!row && team.owner_coach_sub) {
+    const owner = await dbGetMe(team.owner_coach_sub).catch(() => null);
+    if (owner && owner.tier === "lesson") preset = "simple";
+  }
+  // A6: a declared "no minors" team lifts the F5 compliance force-on.
+  const hasMinors = team.team_type !== "masters" && !(row && row.no_minors);
+  return resolveTeamFlags({ preset, overrides: row?.overrides || {}, hasMinors });
+}
+
 // Team detail. Requires active membership of any role.
 app.get("/api/teams/:id", requireAuth, async (req, res) => {
   try {
@@ -3144,7 +3261,43 @@ app.get("/api/teams/:id", requireAuth, async (req, res) => {
     const team = await dbGetTeam(req.params.id);
     if (!team) return res.status(404).json({ error: "team not found" });
     const coaches = await dbListTeamCoaches(req.params.id);
-    res.json({ ...team, viewer_role: role, coaches });
+    res.json({ ...team, viewer_role: role, coaches, feature_flags: await teamFeatureFlags(team) });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Read the team's visibility config (raw preset+overrides + resolved map).
+// Any team member can read (so the client knows what to render); writes are owner/admin.
+app.get("/api/teams/:id/feature-flags", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const row = await dbGetTeamFlagsRow(team.id);
+    res.json({
+      preset: row?.preset || null,
+      overrides: row?.overrides || {},
+      no_minors: !!(row && row.no_minors),
+      resolved: await teamFeatureFlags(team),
+      team_type: team.team_type,
+      can_edit: role === "owner" || role === "admin",
+    });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Write the team's visibility config (owner/admin). Body: { preset?, overrides? }.
+app.put("/api/teams/:id/feature-flags", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "owner or admin required" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const { preset = null, overrides = {}, no_minors } = req.body || {};
+    const clean = (overrides && typeof overrides === "object") ? overrides : {};
+    const r = await dbSetTeamFlags(req.params.id, { preset, overrides: clean, noMinors: (no_minors === undefined ? undefined : !!no_minors) }, req.userSub);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.feature_flags", ...reqMeta(req), details: { team_id: req.params.id, preset: preset || null } });
+    res.json({ ok: true, resolved: await teamFeatureFlags(team) });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -3166,7 +3319,7 @@ app.get("/api/teams/:id/detail", requireAuth, async (req, res) => {
       dbListGroupsForTeam(req.params.id, { includeArchived: false }),
       dbListTeamEvents(req.params.id),
     ]);
-    res.json({ team: { ...team, viewer_role: role, coaches }, groups, events });
+    res.json({ team: { ...team, viewer_role: role, coaches, feature_flags: await teamFeatureFlags(team) }, groups, events });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -3175,14 +3328,17 @@ app.patch("/api/teams/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter,
   try {
     const role = await getCallerTeamRole(req.params.id, req.userSub);
     if (role !== "owner") return res.status(403).json({ error: "owner only" });
-    const { name } = req.body || {};
-    const r = await dbUpdateTeam(req.params.id, { name });
+    const { name, team_code } = req.body || {};
+    const patch = {};
+    if (name !== undefined) patch.name = name;
+    if (team_code !== undefined) patch.team_code = team_code;
+    const r = await dbUpdateTeam(req.params.id, patch);
     if (!r.ok) return res.status(400).json({ error: r.reason || "update failed" });
     dbAuditEvent({
       userSub:   req.userSub,
-      eventType: "team.rename",
+      eventType: "team.update",
       ...reqMeta(req),
-      details:   { team_id: req.params.id, name },
+      details:   { team_id: req.params.id, fields: Object.keys(patch) },
     });
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
@@ -3837,7 +3993,12 @@ app.get("/api/parent/digest", requireAuth, requireParent, async (req, res) => {
       week = d.toISOString().slice(0, 10);
     }
     const payload = await dbGetWeeklyDigestPayload({ parentSub: req.userSub, weekStart: week });
-    res.json(payload);
+    // Fold team calendar links into the digest so the parent portal's calendar
+    // widget needs no extra request (Hyperlift burst-limit avoidance). guardianOnly:
+    // the parent portal shows only the kids' teams, not the parent's own.
+    const tc = await dbListTeamCalendarsForUser(req.userSub, { guardianOnly: true }).catch(() => []);
+    const team_calendars = (tc || []).map(t => ({ team_id: t.team_id, team_name: t.team_name, url: calendarFeedUrl(req, t.token) }));
+    res.json({ ...payload, team_calendars });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -4268,6 +4429,9 @@ app.post("/api/groups/:id/anchor", checkOrigin, requireAuth, requireCsrf, writeL
     const event = await dbGetTeamEvent(eventId);
     if (!event) return res.status(404).json({ error: "event not found" });
     if (event.team_id !== group.team_id) return res.status(400).json({ error: "event/team mismatch" });
+    // Only meets are taper-anchor eligible (MEET_SCHEDULE_WEATHER_SCOPE §3.3.1 / §8 #10):
+    // a banquet or meeting must never become a taper anchor.
+    if (event.kind && event.kind !== "meet") return res.status(400).json({ error: "only meets can be taper anchors" });
 
     const anchorId = await dbSetGroupAnchor({
       groupId:     req.params.id,
@@ -4329,6 +4493,81 @@ app.get("/api/me/export", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// ── Export bridges (Phase 5 Slice A): team calendar feed ────────────────
+// Build the absolute live-subscribe URL from the proxied request.
+function calendarFeedUrl(req, token) {
+  const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim();
+  const host  = req.headers["x-forwarded-host"] || req.headers.host || "setforge.io";
+  return `${proto}://${host}/calendar/${token}.ics`;
+}
+// A team's calendar link (token lazy-creates on first read). Any team coach can
+// read it (to share with families); only owner/admin can rotate it.
+app.get("/api/teams/:id/calendar-token", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const token = await dbGetOrCreateTeamCalendarToken(req.params.id);
+    if (!token) return res.status(404).json({ error: "team not found" });
+    res.json({ token, url: calendarFeedUrl(req, token) });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+// Rotate (revoke + reissue) — any previously shared URL stops working. Owner/admin.
+app.post("/api/teams/:id/calendar-token/rotate", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "owner or admin required" });
+    const token = await dbRotateTeamCalendarToken(req.params.id);
+    if (!token) return res.status(404).json({ error: "team not found" });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.calendar.token_rotate", ...reqMeta(req), details: { team_id: req.params.id } });
+    res.json({ token, url: calendarFeedUrl(req, token) });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+// Calendar feed links for every team the caller is connected to (coach, swimmer,
+// or guardian) — drives the copy buttons in the parent + swimmer portals. Returns
+// the URL so the client can copy it without rendering it. MAAP-safe: the feed has
+// no minor PII, and this only exposes (not rotates) the shared team token.
+app.get("/api/me/team-calendars", requireAuth, async (req, res) => {
+  try {
+    const teams = await dbListTeamCalendarsForUser(req.userSub);
+    res.json(teams.map(t => ({ team_id: t.team_id, team_name: t.team_name, url: calendarFeedUrl(req, t.token) })));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+// Public live-subscribe feed — the token IS the authorization (no cookies/CSRF).
+// URL shape is /calendar/<token>.ics; we capture the filename and strip .ics so
+// the route is unambiguous (base64url tokens contain no dot).
+app.get("/calendar/:file", feedLimiter, async (req, res) => {
+  try {
+    const token = String(req.params.file || "").replace(/\.ics$/i, "");
+    const team = token ? await dbGetTeamByCalendarToken(token) : null;
+    if (!team) return res.status(404).type("text/plain").send("Not found");
+    const { scheduled, events } = await dbTeamCalendarFeedData(team.id);
+    const items = [];
+    for (const sw of scheduled) {
+      const title = (sw.payload && (sw.payload.title || sw.payload.name)) || "Practice";
+      const groupBit = sw.group_name ? ` (${sw.group_name})` : "";
+      items.push({
+        uid: "sw-" + sw.id, date: sw.scheduled_date, summary: "🏊 " + title + groupBit,
+        description: sw.notes || "", location: sw.facility_name || "",
+      });
+    }
+    for (const ev of events) {
+      const item = { uid: "te-" + ev.id, date: ev.date, summary: `${eventKindEmoji(ev.kind)} ${ev.name || "Team event"}` };
+      // Venue → LOCATION (name only; venues carry no city/region field).
+      if (ev.venue && ev.venue.name) item.location = ev.venue.name;
+      // start_time + venue tz → timed DTSTART (UTC); otherwise stays all-day.
+      if (ev.start_time && ev.venue && ev.venue.timezone) {
+        item.start = { date: ev.date, time: ev.start_time, tz: ev.venue.timezone };
+      }
+      items.push(item);
+    }
+    const ics = buildIcs(items, { calName: team.name || "SetForge", nowIso: new Date().toISOString() });
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", 'inline; filename="team.ics"');
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(ics);
+  } catch (err) { res.status(500).type("text/plain").send("error"); }
+});
+
 // Team Curation v1 slice 5 (2026-05-27): list every team default the
 // caller inherits. Drives ProfileModal inheritance disclosure. Empty
 // array = user isn't in any team that has set defaults yet.
@@ -4345,6 +4584,95 @@ app.get("/api/teams/:id/roster", requireAuth, async (req, res) => {
     const role = await getCallerTeamRole(req.params.id, req.userSub);
     if (!role) return res.status(403).json({ error: "not a team member" });
     res.json(await dbGetTeamRoster(req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Export bridges (Phase 5 Slice A): roster CSV in Hy-Tek Meet Manager import
+// format. Required column order: Swimming ID, Date of Birth, First Name, Last
+// Name, Gender, Team Name (+ optional Preferred Name). Gender spelled out
+// (M→MALE, F→FEMALE); X / prefer_not_to_say → blank (coach fills in MM). DOB as
+// MM/DD/YYYY (Hy-Tek's expected format). Source = active managed swimmers on the
+// team. Any team coach can export.
+app.get("/api/teams/:id/roster.csv", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const roster = await dbTeamRosterForExport(req.params.id);
+    const genderMap = { M: "MALE", F: "FEMALE" };
+    const ymdToMdy = (ymd) => {
+      if (!ymd) return "";
+      const [y, m, d] = String(ymd).split("-");
+      return (y && m && d) ? `${m}/${d}/${y}` : "";
+    };
+    const headers = ["Swimming ID", "Date of Birth", "First Name", "Last Name", "Gender", "Team Name", "Preferred Name"];
+    const rows = roster.map(s => [
+      s.usa_swimming_id || "",
+      ymdToMdy(s.dob),
+      s.first_name || "",
+      s.last_name || "",
+      genderMap[s.gender] || "",
+      team.team_code || team.name || "",   // Hy-Tek "Team Name" wants the abbreviation
+      s.preferred_name || "",
+    ]);
+    const csv = toCsv(headers, rows);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safeName = (team.name || "team").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "team";
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="roster-${safeName}-${stamp}.csv"`);
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.roster.export_csv", ...reqMeta(req), details: { team_id: req.params.id, count: rows.length } });
+    res.send(csv);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// MAAP exports (eval 2026-06-06 #3) — coach/owner-only safety records.
+// Anonymized roster: initials + age + gender + group only (no names/DOB/contact).
+app.get("/api/teams/:id/roster-anon.csv", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const sections = await dbGetTeamRoster(req.params.id);
+    const headers = ["Group", "Initials", "Age", "Gender"];
+    const rows = [];
+    for (const sec of sections) {
+      for (const m of (sec.members || [])) {
+        rows.push([sec.group_name || "", m.initials || "", m.age != null ? m.age : "", m.gender || ""]);
+      }
+    }
+    const csv = toCsv(headers, rows);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safeName = (team.name || "team").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "team";
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="roster-anon-${safeName}-${stamp}.csv"`);
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.roster.export_anon_csv", ...reqMeta(req), details: { team_id: req.params.id, count: rows.length } });
+    res.send(csv);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Attendance log: per-swimmer present/absent across completed practices in a
+// range (default last 90 days). A coach-side safety/attendance record.
+app.get("/api/teams/:id/attendance.csv", requireAuth, async (req, res) => {
+  try {
+    const role = await getCallerTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team member" });
+    const team = await dbGetTeam(req.params.id);
+    if (!team) return res.status(404).json({ error: "team not found" });
+    const ymd = (d) => d.toISOString().slice(0, 10);
+    const end = /^\d{4}-\d{2}-\d{2}$/.test(req.query.end || "") ? req.query.end : ymd(new Date());
+    const start = /^\d{4}-\d{2}-\d{2}$/.test(req.query.start || "") ? req.query.start : ymd(new Date(Date.now() - 90 * 86400000));
+    const log = await dbGetTeamAttendanceLog(req.params.id, { startYmd: start, endYmd: end });
+    const headers = ["Date", "Group", "Swimmer", "Initials", "Present"];
+    const rows = log.map(r => [r.date, r.group, r.name, r.initials, r.present ? "Y" : "N"]);
+    const csv = toCsv(headers, rows);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safeName = (team.name || "team").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "team";
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="attendance-${safeName}-${stamp}.csv"`);
+    dbAuditEvent({ userSub: req.userSub, eventType: "team.attendance.export_csv", ...reqMeta(req), details: { team_id: req.params.id, count: rows.length, start, end } });
+    res.send(csv);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -4669,10 +4997,13 @@ app.delete("/api/claim-tokens/:token", checkOrigin, requireAuth, requireCsrf, wr
 // Preview a claim token (lets the swimmer see who/what they're about to
 // claim BEFORE committing). Token itself is the secret; any authed user
 // can look it up.
-app.get("/api/claim-tokens/:token/preview", requireAuth, async (req, res) => {
+app.get("/api/claim-tokens/:token/preview", requireAuth, feedLimiter, async (req, res) => {
   try {
     const tok = await dbGetClaimToken(req.params.token);
     if (!tok) return res.status(404).json({ error: "invalid_token" });
+    // Privacy: a redeemed/expired token must NOT keep serving the (minor) swimmer's
+    // name + coach name to anyone who ever held the link. Generic 410, no PII.
+    if (tok.is_redeemed || tok.is_expired) return res.status(410).json({ error: "token_no_longer_valid" });
     res.json({
       managed_id:   tok.managed_id,
       managed_name: tok.managed_name,
@@ -4791,6 +5122,30 @@ app.post("/api/coach-notes", checkOrigin, requireAuth, requireLessonAccess, requ
         ...reqMeta(req),
         details:   { note_id: r.id, swimmer_sub: swimmerSub, managed_id: managedId, visibility, workout_id: workoutId },
       });
+      // MAAP parent-CC (eval 2026-06-06 #3): if the target swimmer is a minor,
+      // CC their guardian(s) so coach↔minor communication is parent-visible.
+      // Fire-and-forget + fully guarded — never blocks or breaks note creation.
+      (async () => {
+        try {
+          let dob = null, swimmerName = "your swimmer";
+          if (managedId) { const ms = await dbGetManagedSwimmer(managedId); dob = ms?.dob || null; swimmerName = ms?.display_name || swimmerName; }
+          else { const u = await dbGetMe(swimmerSub); dob = u?.dob || null; swimmerName = u?.display_name || u?.first_name || swimmerName; }
+          if (isMinor(dob) !== true) return;
+          const guardians = await dbListGuardiansForSwimmer({ swimmerSub, managedId });
+          const author = await dbGetMe(req.userSub);
+          const coachName = author?.display_name || author?.first_name || "Your coach";
+          for (const g of guardians) {
+            if (!g.email && !g.user_sub) continue;
+            enqueueEmail({
+              dedupKey:  `coach-note-guardian:${r.id}:${g.id}`,
+              toEmail:   g.email || null,
+              toUserSub: g.email ? null : g.user_sub,
+              templateId: "coach-note-guardian",
+              swimmerName, coachName, note: body,
+            }).catch(() => {});
+          }
+        } catch (_) { /* parent-CC is best-effort */ }
+      })();
       res.json(r);
     } catch (e) {
       const msg = e.message || String(e);
@@ -4895,6 +5250,183 @@ app.get("/api/benchmarks", requireAuth, async (req, res) => {
     const kind  = req.query.kind || null;
     const limit = Math.min(200, Number(req.query.limit) || 50);
     res.json(await dbListBenchmarks(req.userSub, { kind, limit }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ── Compliance credentials (Phase 5 #3 MAAP, Slice A) ────────────────
+// SELF — a coach records their own USA-Swimming ID, SafeSport cert (+ expiry),
+// and background-check ID. Display + expiry warning only; nothing is gated.
+app.get("/api/me/credentials", requireAuth, async (req, res) => {
+  try {
+    const personId = await dbGetPersonIdForUser(req.userSub);
+    if (!personId) return res.json([]);
+    res.json(await dbListPersonCredentials(personId));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.put("/api/me/credentials", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const personId = await dbGetPersonIdForUser(req.userSub);
+    if (!personId) return res.status(400).json({ error: "no_person" });
+    const { system, external_id, expires_at } = req.body || {};
+    const r = await dbSetPersonCredential({ personId, system, externalId: external_id, expiresAt: expires_at || null });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/me/credentials/:system", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const personId = await dbGetPersonIdForUser(req.userSub);
+    if (!personId) return res.status(400).json({ error: "no_person" });
+    res.json(await dbDeletePersonCredential(personId, req.params.system));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ── Web Push (notification infrastructure) ───────────────────────────
+// Inert until VAPID keys are set (PUSH_CONFIG). Minor-safety: subscribing is
+// refused for minors server-side, mirroring the email/Discord minor-bypass.
+app.get("/api/push/config", requireAuth, async (req, res) => {
+  res.json(pushConfigState());
+});
+// Security (SSRF): the push endpoint is later POSTed to by the server (push/test
+// + cron sweeps). It must be an HTTPS URL on a known push-service host — never an
+// internal/metadata address or http://. Allowlist the real Web-Push providers.
+function isAllowedPushEndpoint(endpoint) {
+  let u;
+  try { u = new URL(String(endpoint)); } catch (_) { return false; }
+  if (u.protocol !== "https:") return false;
+  const host = u.hostname.toLowerCase();
+  const allow = [".push.apple.com", "fcm.googleapis.com", ".notify.windows.com",
+                 "updates.push.services.mozilla.com", ".push.services.mozilla.com"];
+  return allow.some(s => s.startsWith(".") ? host.endsWith(s) : host === s);
+}
+app.post("/api/push/subscribe", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!PUSH_ACTIVE) return res.status(503).json({ error: "push_not_configured" });
+    const me = await dbGetMe(req.userSub);
+    if (me?.is_minor) return res.status(403).json({ error: "minor_not_eligible" });
+    const s = req.body?.subscription || req.body || {};
+    const endpoint = s.endpoint;
+    const p256dh = s.keys?.p256dh, auth = s.keys?.auth;
+    if (!endpoint || !p256dh || !auth) return res.status(400).json({ error: "bad_subscription" });
+    if (!isAllowedPushEndpoint(endpoint)) return res.status(400).json({ error: "bad_endpoint" });
+    const r = await dbAddPushSubscription({
+      userSub: req.userSub, endpoint, p256dh, auth,
+      platform: "web", userAgent: (req.get("user-agent") || "").slice(0, 255),
+    });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/push/unsubscribe", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const endpoint = req.body?.endpoint;
+    if (!endpoint) return res.status(400).json({ error: "no_endpoint" });
+    res.json(await dbDeletePushSubscription(endpoint, req.userSub));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/push/test", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await sendPushToUser(req.userSub, { title: "SetForge", body: "🔔 Notifications are working.", url: "/" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ── Race event goal/PR times (Phase 5 #4) ────────────────────────────
+// SELF — any authed swimmer manages their own goal/PR times.
+app.get("/api/me/event-times", requireAuth, async (req, res) => {
+  try { res.json(await dbListEventTimes({ userSub: req.userSub })); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.put("/api/me/event-times", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { event, course, kind, time_secs } = req.body || {};
+    const r = await dbUpsertEventTime({ userSub: req.userSub, event, course, kind, timeSecs: time_secs });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/me/event-times/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try { res.json(await dbDeleteEventTime(req.params.id, { userSub: req.userSub })); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// MANAGED swimmers — coach-owned (lesson access + per-resource owner check).
+app.get("/api/managed-swimmers/:id/event-times", requireAuth, requireLessonAccess, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    res.json(await dbListEventTimes({ managedId: Number(req.params.id) }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.put("/api/managed-swimmers/:id/event-times", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    const { event, course, kind, time_secs } = req.body || {};
+    const r = await dbUpsertEventTime({ managedId: Number(req.params.id), event, course, kind, timeSecs: time_secs });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/managed-swimmers/:id/event-times/:etid", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    res.json(await dbDeleteEventTime(req.params.etid, { managedId: Number(req.params.id) }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// ─── Per-event PR history (eval 2026-06-06 #7 — progression) ──────────────────
+// Logging a dated result also PROMOTES the current PR when it's faster, so the
+// two systems (current PR ↔ dated history) stay in sync.
+async function _promotePrIfFaster(owner, event, course, timeSecs) {
+  try {
+    const times = await dbListEventTimes(owner);
+    const cur = times.find(x => x.event === event && x.course === course && x.kind === "pr");
+    if (!cur || Number(timeSecs) < Number(cur.time_secs)) {
+      await dbUpsertEventTime({ ...owner, event, course, kind: "pr", timeSecs, skipHistory: true });
+      return true;
+    }
+  } catch (_) { /* promotion is best-effort */ }
+  return false;
+}
+
+app.get("/api/me/event-pr-history", requireAuth, async (req, res) => {
+  try { res.json(await dbListEventPrHistory({ userSub: req.userSub })); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/me/event-pr-history", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { event, course, time_secs, achieved_on, note } = req.body || {};
+    const r = await dbAddEventPrHistory({ userSub: req.userSub, event, course, timeSecs: time_secs, achievedOn: achieved_on, note: note || null, source: "logged" });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    const promoted = await _promotePrIfFaster({ userSub: req.userSub }, event, course, time_secs);
+    res.json({ ...r, promoted });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/me/event-pr-history/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try { res.json(await dbDeleteEventPrHistory(req.params.id, { userSub: req.userSub })); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// MANAGED variant — coach-owned (lesson access + owner check).
+app.get("/api/managed-swimmers/:id/event-pr-history", requireAuth, requireLessonAccess, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    res.json(await dbListEventPrHistory({ managedId: Number(req.params.id) }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.post("/api/managed-swimmers/:id/event-pr-history", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    const { event, course, time_secs, achieved_on, note } = req.body || {};
+    const r = await dbAddEventPrHistory({ managedId: Number(req.params.id), event, course, timeSecs: time_secs, achievedOn: achieved_on, note: note || null, source: "logged" });
+    if (!r.ok) return res.status(400).json({ error: r.reason || "bad_request" });
+    const promoted = await _promotePrIfFaster({ managedId: Number(req.params.id) }, event, course, time_secs);
+    res.json({ ...r, promoted });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+app.delete("/api/managed-swimmers/:id/event-pr-history/:hid", checkOrigin, requireAuth, requireLessonAccess, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    if (!(await dbIsManagedSwimmerOwnedBy(req.params.id, req.userSub))) return res.status(403).json({ error: "not owner of this profile" });
+    res.json(await dbDeleteEventPrHistory(req.params.hid, { managedId: Number(req.params.id) }));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -5296,10 +5828,11 @@ app.delete("/api/join-tokens/:token", checkOrigin, requireAuth, requireCsrf, wri
 // Pre-redeem preview: swimmer can look up a token they were given to see
 // which group they're about to join, without committing. Open to any auth'd
 // user (the token itself is the secret).
-app.get("/api/join-tokens/:token/preview", requireAuth, async (req, res) => {
+app.get("/api/join-tokens/:token/preview", requireAuth, feedLimiter, async (req, res) => {
   try {
     const tok = await dbGetGroupJoinToken(req.params.token);
     if (!tok) return res.status(404).json({ error: "invalid_token" });
+    if (tok.is_redeemed || tok.is_expired) return res.status(410).json({ error: "token_no_longer_valid" });
     res.json({
       group_id:      tok.group_id,
       group_name:    tok.group_name,
@@ -5316,11 +5849,15 @@ app.get("/api/join-tokens/:token/preview", requireAuth, async (req, res) => {
 // the UI can prompt before retrying. Atomic group-membership write per #33.
 app.post("/api/join-tokens/:token/redeem", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    // Hard gate: DOB required per scope (joining a group is a meaningful
-    // commitment that triggers compliance derivations).
+    // Hard gate: DOB required per scope (joining a group triggers minor-
+    // compliance derivations). MAAP (Phase 5 #3) team-type posture: MASTERS
+    // (adults-only) groups don't run minor derivations, so they skip the DOB
+    // gate — removes the friction the Masters coach flagged in the eval.
+    const tok = await dbGetGroupJoinToken(req.params.token);
+    const dobExempt = tok?.team_type === "masters";
     const me = await dbGetMe(req.userSub);
     if (!me) return res.status(404).json({ error: "user not found" });
-    if (!me.dob) return res.status(400).json({ error: "dob_required", reason: "dob_required" });
+    if (!dobExempt && !me.dob) return res.status(400).json({ error: "dob_required", reason: "dob_required" });
 
     const r = await dbRedeemGroupJoinToken(req.params.token, req.userSub);
     if (!r.ok) return res.status(400).json({ error: r.reason, ...r });
@@ -5425,13 +5962,23 @@ app.post("/api/teams/:teamId/events", checkOrigin, requireAuth, requireCsrf, wri
   try {
     const callerRole = await dbGetTeamRole(req.params.teamId, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date } = req.body || {};
-    const r = await dbCreateTeamEvent({ teamId: req.params.teamId, name, date, createdByCoachSub: req.userSub });
+    const { name, date, kind, venue_id, start_time, group_id, recurrence } = req.body || {};
+    // Security: a group target must belong to THIS team (else a coach could aim an
+    // event at another team's group, leaking it into that team's swimmers' feeds).
+    if (group_id) {
+      const grp = await dbGetGroup(group_id);
+      if (!grp || grp.team_id !== req.params.teamId || grp.archived) return res.status(400).json({ error: "group_not_in_team" });
+    }
+    const base = { teamId: req.params.teamId, name, date, kind, venueId: venue_id || null, startTime: start_time || null, groupId: group_id || null, createdByCoachSub: req.userSub };
+    // C5 — a recurrence ({ freq, interval?, count?|until? }) materializes a series.
+    const r = (recurrence && recurrence.freq)
+      ? await dbCreateTeamEventSeries(base, recurrence)
+      : await dbCreateTeamEvent(base);
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "team_event.create",
       ...reqMeta(req),
-      details:   { event_id: r.id, team_id: req.params.teamId, name, date },
+      details:   { event_id: r.id, team_id: req.params.teamId, name, date, kind: kind || "meet", venue_id: venue_id || null, group_id: group_id || null, series_id: r.series_id || null, count: r.count || 1 },
     });
     res.json(r);
   } catch (err) { res.status(400).json({ error: err.message || String(err) }); }
@@ -5453,6 +6000,114 @@ app.get("/api/teams/:teamId/events", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// ───── RSVP (Phase 5 #5 Slice B) ─────────────────────────────────────
+// Set an RSVP: self (swimmer_sub = caller) or coach-on-behalf (managed_id).
+app.put("/api/rsvp", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { target_kind, target_id, status, managed_id } = req.body || {};
+    if (!["meet", "practice"].includes(target_kind) || !target_id) return res.status(400).json({ error: "bad_target" });
+    let teamId = null, practiceGroupId = null;
+    if (target_kind === "meet") {
+      const ev = await dbGetTeamEvent(target_id);
+      if (!ev) return res.status(404).json({ error: "event not found" });
+      if (ev.status === "cancelled") return res.status(409).json({ error: "event_cancelled" });
+      teamId = ev.team_id;
+    } else {
+      // C2 — practice RSVP. Resolve the practice's group/team for access scope.
+      const ctx = await dbGetPracticeContext(target_id);
+      if (!ctx) return res.status(404).json({ error: "practice not found" });
+      if (!ctx.teamId) return res.status(400).json({ error: "practice_not_team_scoped" });
+      teamId = ctx.teamId;
+      practiceGroupId = ctx.groupId;
+    }
+    if (managed_id) {
+      // Security: RSVP-on-behalf requires OWNING the managed swimmer — matching every
+      // other managed-swimmer write (dbIsManagedSwimmerOwnedBy). A bare team role is
+      // NOT enough; otherwise any team coach could write RSVP rows for arbitrary
+      // managed ids (incl. swimmers on other teams), polluting the tally.
+      const owns = await dbIsManagedSwimmerOwnedBy(managed_id, req.userSub).catch(() => false);
+      if (!owns) return res.status(403).json({ error: "not authorized for this swimmer" });
+      const r = await dbSetRsvp({ targetKind: target_kind, targetId: target_id, managedId: Number(managed_id), status, respondedBySub: req.userSub });
+      return r.ok ? res.json(r) : res.status(400).json({ error: r.reason });
+    }
+    // self
+    const role = await dbGetTeamRole(teamId, req.userSub);
+    let canSee = !!role;
+    if (!canSee) {
+      // Meets: team membership. Practices: membership of the targeted group.
+      canSee = practiceGroupId
+        ? (await dbListGroupMembers(practiceGroupId)).some(m => m.member_swimmer_sub === req.userSub)
+        : await dbIsSwimmerInTeam(req.userSub, teamId);
+    }
+    if (!canSee) return res.status(403).json({ error: "no access to this event" });
+    const r = await dbSetRsvp({ targetKind: target_kind, targetId: target_id, swimmerSub: req.userSub, status, respondedBySub: req.userSub });
+    return r.ok ? res.json(r) : res.status(400).json({ error: r.reason });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Coach view: RSVP tally + per-swimmer list for an event or practice.
+app.get("/api/rsvp/:kind/:id", requireAuth, async (req, res) => {
+  try {
+    const { kind, id } = req.params;
+    if (kind === "meet") {
+      const ev = await dbGetTeamEvent(id);
+      if (!ev) return res.status(404).json({ error: "event not found" });
+      const role = await dbGetTeamRole(ev.team_id, req.userSub);
+      if (!role) return res.status(403).json({ error: "not a team coach" });
+    } else if (kind === "practice") {
+      const ctx = await dbGetPracticeContext(id);
+      if (!ctx) return res.status(404).json({ error: "practice not found" });
+      const role = ctx.teamId ? await dbGetTeamRole(ctx.teamId, req.userSub) : null;
+      // The practice owner (the coach who scheduled it) can always see its RSVPs.
+      if (!role && ctx.ownerSub !== req.userSub) return res.status(403).json({ error: "not a team coach" });
+    } else {
+      return res.status(400).json({ error: "unsupported_kind" });
+    }
+    res.json(await dbGetRsvpSummary(kind, id));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Swimmer self: my upcoming group practices with RSVP status (C2).
+app.get("/api/me/practices/upcoming", requireAuth, async (req, res) => {
+  try { res.json(await dbListUpcomingPracticesForUser(req.userSub)); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Swimmer self: my RSVP status for an event.
+app.get("/api/me/rsvp/:kind/:id", requireAuth, async (req, res) => {
+  try {
+    const status = await dbGetMyRsvp({ targetKind: req.params.kind, targetId: req.params.id, swimmerSub: req.userSub });
+    res.json({ status });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Cancel / un-cancel an event (coach of the team). Freezes RSVP + shows CANCELLED.
+app.post("/api/events/:id/status", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "not found" });
+    const role = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team coach" });
+    const { status, note } = req.body || {};
+    const r = await dbSetTeamEventStatus(req.params.id, status, note);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "team_event.status", ...reqMeta(req), details: { event_id: req.params.id, status, note: note || null } });
+    // Notify trigger: on cancellation, push everyone who RSVP'd going/maybe.
+    // Event-driven (fires on the coach's explicit action) so no dedup needed.
+    if (status === "cancelled" && PUSH_ACTIVE) {
+      dbListRsvpRespondentSubs("meet", req.params.id, ["going", "maybe"])
+        .then(subs => Promise.all(subs.map(sub => sendPushToUser(sub, {
+          title: "⚠️ Event cancelled",
+          body: `${ev.name} on ${ev.date} is cancelled${note ? ` — ${note}` : ""}.`,
+          url: "/assigned",
+        }))))
+        .then(out => { if (out.length) console.log(`[notify] cancellation push fanned to ${out.length} swimmer(s) for ${req.params.id}`); })
+        .catch(e => console.warn(`[notify] cancellation push failed: ${e.message}`));
+    }
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // Update event. Caller must have any role on the event's team. Editable: name, date.
 app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
@@ -5460,10 +6115,19 @@ app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter
     if (!ev) return res.status(404).json({ error: "not found" });
     const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
     if (!callerRole) return res.status(403).json({ error: "not a team coach" });
-    const { name, date } = req.body || {};
+    const { name, date, kind, venue_id, start_time, group_id } = req.body || {};
+    // Security: re-targeting to a group must keep it within the event's own team.
+    if (group_id) {
+      const grp = await dbGetGroup(group_id);
+      if (!grp || grp.team_id !== ev.team_id || grp.archived) return res.status(400).json({ error: "group_not_in_team" });
+    }
     const patch = {};
     if (name !== undefined) patch.name = name;
     if (date !== undefined) patch.date = date;
+    if (kind !== undefined) patch.kind = kind;
+    if (venue_id !== undefined) patch.venueId = venue_id;
+    if (start_time !== undefined) patch.startTime = start_time;
+    if (group_id !== undefined) patch.groupId = group_id;
     const r = await dbUpdateTeamEvent(req.params.id, patch);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({
@@ -5494,13 +6158,161 @@ app.delete("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimite
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// C5 — delete a recurring series. ?scope=future (default) deletes this occurrence
+// and all later ones; ?scope=all deletes the whole series. Coach-only.
+app.delete("/api/events/:id/series", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "not found" });
+    const callerRole = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!callerRole) return res.status(403).json({ error: "not a team coach" });
+    if (!ev.series_id) return res.status(400).json({ error: "not_a_series" });
+    const scope = req.query.scope === "all" ? "all" : "future";
+    const r = await dbDeleteTeamEventSeries(ev.series_id, { fromDate: scope === "future" ? ev.date : null });
+    dbAuditEvent({
+      userSub:   req.userSub,
+      eventType: "team_event.delete_series",
+      ...reqMeta(req),
+      details:   { event_id: req.params.id, series_id: ev.series_id, team_id: ev.team_id, scope, affected: r.affected },
+    });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // Aggregated upcoming events for the pool-mode pill row (decision #38).
 app.get("/api/events/upcoming", requireAuth, async (req, res) => {
   try { res.json(await dbListUpcomingEventsForUser(req.userSub)); }
   catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// ───── Venues (universal pool catalog) + WeatherKit (Phase 5 #5 Slice B) ─────
+// Create or link a venue. Coach-gated (any coach may extend the shared catalog).
+// The CLIENT geocodes the address via MapKit JS (browser-scoped token) and POSTs
+// latitude/longitude/timezone — the server cannot use the MapKit token itself.
+app.post("/api/venues", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { name, address, latitude, longitude, indoor_outdoor, course, timezone } = req.body || {};
+    const r = await dbCreateOrLinkVenue({
+      name, address: address || null,
+      latitude: latitude ?? null, longitude: longitude ?? null,
+      indoorOutdoor: indoor_outdoor || "unknown", course: course || null,
+      timezone: timezone || null, coachSub: req.userSub,
+    });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    const venue = await dbGetVenue(r.id);
+    res.json({ ...r, venue });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Soft-archive a venue (admin-only — universal catalog, edits/removal moderated
+// per scope §2 #4). Events keep their venue_id; it drops from search + weather.
+app.delete("/api/venues/:id", checkOrigin, requireAuth, requireAdmin, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbArchiveVenue(req.params.id);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "venue.archive", ...reqMeta(req), details: { venue_id: req.params.id } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Search the venue catalog for the picker (coach-only). Nearest-first when lat/lng given.
+app.get("/api/venues", requireAuth, requireCoach, async (req, res) => {
+  try {
+    const lat = req.query.lat != null ? Number(req.query.lat) : null;
+    const lng = req.query.lng != null ? Number(req.query.lng) : null;
+    const near = (Number.isFinite(lat) && Number.isFinite(lng)) ? { latitude: lat, longitude: lng } : null;
+    res.json(await dbListVenues({ q: req.query.q || null, near, limit: 20 }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// C4 — a coach proposes a correction to a shared venue's fields. Stored pending;
+// applied only on admin approval (the catalog is universal, so no silent edits).
+app.post("/api/venues/:id/propose-edit", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { changes, note } = req.body || {};
+    const r = await dbProposeVenueEdit({ venueId: req.params.id, changes, note: note || null, proposedBySub: req.userSub });
+    if (!r.ok) return res.status(r.reason === "venue_not_found" ? 404 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "venue.propose_edit", ...reqMeta(req), details: { venue_id: req.params.id, proposal_id: r.id } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// C4 — admin moderation queue: list venue-edit proposals (default pending).
+app.get("/api/admin/venue-edits", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const status = req.query.status === "" ? null : (req.query.status || "pending");
+    res.json(await dbListVenueEditProposals(status));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// C4 — admin approves (applies to venues) or rejects a proposal.
+app.post("/api/admin/venue-edits/:id/review", checkOrigin, requireAuth, requireAdmin, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { action, review_note } = req.body || {};
+    const r = await dbReviewVenueEditProposal({ id: req.params.id, action, reviewerSub: req.userSub, reviewNote: review_note || null });
+    if (!r.ok) return res.status(r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "venue.review_edit", ...reqMeta(req), details: { proposal_id: req.params.id, action, applied: r.applied } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Outdoor-venue forecast for an event. Visible to anyone who can see the event.
+// Returns { weather: null, reason } when not applicable (indoor / no coords /
+// not configured / outside horizon) — never an error, so the event still renders.
+app.get("/api/events/:id/weather", requireAuth, async (req, res) => {
+  try {
+    const ev = await dbGetTeamEvent(req.params.id);
+    if (!ev) return res.status(404).json({ error: "not found" });
+    const role = await dbGetTeamRole(ev.team_id, req.userSub);
+    if (!role) {
+      const isMember = await dbIsSwimmerInTeam(req.userSub, ev.team_id);
+      if (!isMember) return res.status(403).json({ error: "no access to this event" });
+    }
+    const v = ev.venue;
+    if (!v || v.latitude == null || v.longitude == null) return res.json({ weather: null, reason: "no_venue_coords" });
+    if (v.indoor_outdoor !== "outdoor") return res.json({ weather: null, reason: "not_outdoor" });
+    if (!WEATHER_ACTIVE) return res.json({ weather: null, reason: "not_configured" });
+
+    // Cache per (venue, day); refresh hourly within 24h of the event, else 6-hourly.
+    const cached = await dbGetWeatherCache(v.id, ev.date);
+    const hrsToEvent = (new Date(`${ev.date}T12:00:00Z`).getTime() - Date.now()) / 3600000;
+    const ttlMs = (hrsToEvent <= 24 ? 1 : 6) * 3600000;
+    if (cached && cached.payload && (Date.now() - cached.fetched_ms) < ttlMs) {
+      return res.json({ weather: cached.payload, cached: true });
+    }
+    const fc = await getForecast({ lat: v.latitude, lng: v.longitude, tz: v.timezone || "UTC", dayYmd: ev.date, startTime: ev.start_time || null });
+    if (!fc) return res.json({ weather: cached?.payload || null, reason: "no_forecast", cached: !!cached?.payload });
+    await dbPutWeatherCache(v.id, ev.date, fc);
+    res.json({ weather: fc, cached: false });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
 // ───── Static files ───────────────────────────────────────────────────
+// index.html is served with the MapKit JS token substituted at boot from the
+// runtime env (MAPKIT_TOKEN — an origin-scoped, client-public ES256 JWT). Cached
+// once; process.env is fixed for the process lifetime. The token lives only in the
+// platform env (never the repo) and is rotatable without a code redeploy — just a
+// restart. When unset, the literal "__MAPKIT_TOKEN__" placeholder remains, which the
+// client loader treats as "not configured" and skips MapKit. The `__BUILD_STAMP__`/
+// `__BUILD_SHA__` placeholders were already replaced at deploy time by _deploy.py.
+const INDEX_HTML_PATH = path.join(__dirname, "public", "index.html");
+let INDEX_HTML = "";
+try {
+  INDEX_HTML = readFileSync(INDEX_HTML_PATH, "utf8")
+    .replaceAll("__MAPKIT_TOKEN_VALUE__", process.env.MAPKIT_TOKEN || "__MAPKIT_TOKEN_VALUE__");
+  console.log(`[web] index.html preloaded (MapKit token ${process.env.MAPKIT_TOKEN ? "injected" : "absent"})`);
+} catch (e) {
+  console.warn("[web] could not preload index.html — falling back to sendFile:", e.message);
+}
+function sendIndex(res) {
+  res.setHeader("Cache-Control", "no-cache");
+  if (INDEX_HTML) return res.type("html").send(INDEX_HTML);
+  return res.sendFile(INDEX_HTML_PATH);
+}
+// Serve the templated index for the document routes BEFORE express.static, so the
+// raw (un-templated) file isn't returned for "/" or "/index.html".
+app.get(["/", "/index.html"], (req, res) => sendIndex(res));
+
 app.use(express.static(path.join(__dirname, "public"), {
   extensions: ["html"],
   setHeaders: (res, filePath) => {
@@ -5518,8 +6330,7 @@ app.use(express.static(path.join(__dirname, "public"), {
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) return next();
   if (!(req.headers.accept || "").includes("text/html")) return next();
-  res.setHeader("Cache-Control", "no-cache");
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  sendIndex(res);
 });
 
 app.use((req, res) => res.status(404).send("Not found"));

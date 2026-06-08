@@ -2,10 +2,13 @@
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
 import { PSC_TYPE_GROUPS } from "../../lib/constants.js";
+import { useDialogA11y } from "../shell/useDialogA11y.js";
 
     const { useState, useEffect } = React;
 
-    export function ConstraintFormModal({ open, managedId, prefill, onClose, onSaved }) {
+    // Polymorphic target: EITHER managedId OR swimmerSub (eval 2026-06-06 #4).
+    export function ConstraintFormModal({ open, managedId = null, swimmerSub = null, prefill, onClose, onSaved }) {
+      const dialogRef = useDialogA11y(onClose);
       const [type,     setType]     = React.useState(prefill?.constraint_type || "stroke_no_fly");
       const [valueNum, setValueNum] = React.useState(prefill?.value_num != null ? String(prefill.value_num) : "");
       const [valueStr, setValueStr] = React.useState(prefill?.value_str || "easy_only");
@@ -37,7 +40,9 @@ import { PSC_TYPE_GROUPS } from "../../lib/constants.js";
 
       const submit = async () => {
         setErr(null);
-        const body = { managed_id: managedId, constraint_type: type };
+        const body = swimmerSub
+          ? { swimmer_sub: swimmerSub, constraint_type: type }
+          : { managed_id: managedId, constraint_type: type };
         if (needsYd) {
           const n = parseInt(valueNum, 10);
           if (!Number.isInteger(n) || n <= 0) { setErr("Yardage cap must be a positive integer"); return; }
@@ -66,7 +71,7 @@ import { PSC_TYPE_GROUPS } from "../../lib/constants.js";
       return (
         <div onClick={onClose} className="modal-overlay"
           style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(2,6,23,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "10vh 16px" }}>
-          <div onClick={e => e.stopPropagation()}
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Swimmer constraint" onClick={e => e.stopPropagation()}
             style={{ width: "100%", maxWidth: 460, background: "var(--color-bg)", border: "1px solid var(--color-card)", borderRadius: 14, padding: "22px 22px 18px", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <h3 style={{ color: "var(--color-text)", fontSize: 17, margin: 0, fontWeight: 700 }}>

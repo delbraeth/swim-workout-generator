@@ -2,11 +2,14 @@
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
 import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
+import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
+import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function TeamSettingsTab({ teamId, viewerRole, archived }) {
+    export function TeamSettingsTab({ teamId, viewerRole, archived, featureFlags }) {
       const canWrite = viewerRole === "owner" || viewerRole === "admin";
+      const ff = featureFlags || {};   // Phase 6: gate the team-curation surface
       // fmtDate is defined inside several other components; keep this one
       // self-contained so we don't pull from a closure that won't exist.
       const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
@@ -17,6 +20,8 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
       const [newDisfav, setNewDisfav] = React.useState("");
       const [paceDraft, setPaceDraft] = React.useState("");                   // pending edit
       const [busy, setBusy]         = React.useState(false);
+      const [teamCode, setTeamCode] = React.useState("");                     // team abbreviation (meet exports)
+      const [teamCodeSaved, setTeamCodeSaved] = React.useState("");           // last persisted value
       // Ownership transfer (owner-only section).
       const [coaches, setCoaches]                 = React.useState([]);
       const [pendingTransfer, setPendingTransfer] = React.useState(null);
@@ -25,11 +30,12 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
 
       const load = React.useCallback(async () => {
         try {
-          const [cRes, sRes, coRes, ptRes] = await Promise.all([
+          const [cRes, sRes, coRes, ptRes, tRes] = await Promise.all([
             fetch(`/api/teams/${teamId}/curation`, { cache: "no-store" }),
             fetch(`/api/teams/${teamId}/settings`, { cache: "no-store" }),
             fetch(`/api/teams/${teamId}/coaches`, { cache: "no-store" }),
             fetch(`/api/teams/${teamId}/pending-transfer`, { cache: "no-store" }),
+            fetch(`/api/teams/${teamId}`, { cache: "no-store" }),
           ]);
           if (!cRes.ok) throw new Error(`curation HTTP ${cRes.status}`);
           if (!sRes.ok) throw new Error(`settings HTTP ${sRes.status}`);
@@ -38,6 +44,7 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
           setCuration(c);
           setSettings(s);
           setPaceDraft(s.default_pace_base || "");
+          if (tRes.ok) { try { const t = await tRes.json(); const tc = t.team_code || ""; setTeamCode(tc); setTeamCodeSaved(tc); } catch (_) {} }
           if (coRes.ok) { try { setCoaches(await coRes.json()); } catch (_) {} }
           if (ptRes.ok) { try { const pt = await ptRes.json(); setPendingTransfer(pt && pt.id ? pt : null); } catch (_) {} }
         } catch (e) {
@@ -104,6 +111,25 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
             throw new Error(j.error || `HTTP ${res.status}`);
           }
           await load();
+        } catch (e) { setMsg(`Save failed: ${e.message}`); }
+        finally { setBusy(false); }
+      };
+
+      const saveTeamCode = async () => {
+        const value = teamCode.trim().toUpperCase();
+        if (value && !/^[A-Z0-9]{1,6}$/.test(value)) { setMsg("Team code must be 1–6 letters/numbers."); return; }
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/teams/${teamId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ team_code: value || null }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${res.status}`);
+          }
+          setTeamCode(value); setTeamCodeSaved(value);
         } catch (e) { setMsg(`Save failed: ${e.message}`); }
         finally { setBusy(false); }
       };
@@ -198,7 +224,7 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
                 {canWrite && !archived && (
                   <button onClick={() => removeCuration(kind, it.label)} disabled={busy}
                     title="Remove from team list"
-                    style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive)", fontSize: 11, cursor: busy ? "not-allowed" : "pointer" }}>
+                    style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive-text)", fontSize: 11, cursor: busy ? "not-allowed" : "pointer" }}>
                     ×
                   </button>
                 )}
@@ -230,6 +256,37 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
             )}
           </h3>
 
+          {/* Phase 6 — Team Option Visibility: hide surfaces to simplify the app. */}
+          <VisibleOptionsPanel teamId={teamId} canWrite={canWrite} />
+
+          {/* Team calendar feed — shareable live-subscribe .ics (team events +
+              practices for the team's groups). Visible to any member; only
+              owner/admin can rotate the token. */}
+          <TeamCalendarFeed teamId={teamId} canManage={canWrite} />
+
+          {/* Team code / abbreviation — used as the "Team Name" column in meet-entry
+              (Hy-Tek) roster exports. Owner-only (matches the rename route). */}
+          {viewerRole === "owner" && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+                🏷 Team code (meet-entry abbreviation)
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                <input value={teamCode}
+                  onChange={e => setTeamCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 6).toUpperCase())}
+                  onKeyDown={e => { if (e.key === "Enter") saveTeamCode(); }}
+                  placeholder="e.g. WSU" maxLength={6}
+                  style={{ width: 110, padding: "6px 9px", fontSize: 13, fontFamily: "monospace", letterSpacing: "0.05em", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
+                <button onClick={saveTeamCode} disabled={busy || teamCode.trim().toUpperCase() === teamCodeSaved}
+                  style={{ padding: "6px 12px", background: (busy || teamCode.trim().toUpperCase() === teamCodeSaved) ? "var(--color-border)" : "var(--color-primary)", color: "#fff", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: (busy || teamCode.trim().toUpperCase() === teamCodeSaved) ? "not-allowed" : "pointer" }}>
+                  Save
+                </button>
+                <span style={{ fontSize: 11, color: "var(--color-text-dim)" }}>1–6 letters/numbers. Falls back to the team name in exports when empty.</span>
+              </div>
+            </div>
+          )}
+
+          {ff.curation !== false && (<>
           <div style={{ marginBottom: 18 }}>
             <div style={{ color: "var(--color-positive)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
               ⭐ Team Favorites ({curation.favorites.length})
@@ -238,11 +295,12 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
           </div>
 
           <div style={{ marginBottom: 18 }}>
-            <div style={{ color: "var(--color-destructive)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+            <div style={{ color: "var(--color-destructive-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
               👎 Team Disfavorites ({curation.disfavorites.length})
             </div>
             {renderCurationList("disfav", curation.disfavorites, "var(--color-destructive)")}
           </div>
+          </>)}
 
           <TeamFacilitiesSection teamId={teamId} canWrite={canWrite && !archived} />
 
@@ -259,7 +317,7 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
                   </div>
                   {!archived && (
                     <button onClick={cancelTransfer} disabled={transferBusy}
-                      style={{ marginTop: 8, padding: "5px 12px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive)", fontSize: 12, fontWeight: 700, cursor: transferBusy ? "not-allowed" : "pointer" }}>
+                      style={{ marginTop: 8, padding: "5px 12px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive-text)", fontSize: 12, fontWeight: 700, cursor: transferBusy ? "not-allowed" : "pointer" }}>
                       {transferBusy ? "Working…" : "Cancel transfer"}
                     </button>
                   )}
@@ -294,8 +352,9 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
             </div>
           )}
 
+          {ff.curation !== false && (
           <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 6 }}>
-            <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+            <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
               Team Defaults
             </div>
             <p style={{ color: "var(--color-text-dim)", fontSize: 11, margin: "0 0 12px", lineHeight: 1.5, fontStyle: "italic" }}>
@@ -367,6 +426,7 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
               Equipment defaults + apply-to-roster for non-pace fields land in v1.1.
             </div>
           </div>
+          )}
 
           {msg && <div style={{ color: msg.startsWith("✓") ? "var(--color-positive)" : "var(--color-warn)", fontSize: 12, marginTop: 12, padding: "8px 10px", background: msg.startsWith("✓") ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.12)", borderRadius: 5 }}>{msg}</div>}
         </div>

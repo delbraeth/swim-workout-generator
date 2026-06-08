@@ -260,7 +260,7 @@ import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                     <div style={{ color: isToday ? "var(--color-primary)" : "var(--color-text)", fontSize: 13, fontWeight: 700 }}>
                       {fmtMonDay(d)}
-                      {isToday && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</span>}
+                      {isToday && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-primary-text)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</span>}
                       {isPast && rows.length === 0 && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--color-border-strong)", fontStyle: "italic" }}>(rest day)</span>}
                     </div>
                     <span style={{ fontSize: 10, color: "var(--color-border-strong)" }}>{rows.length} {rows.length === 1 ? "workout" : "workouts"}</span>
@@ -313,7 +313,7 @@ import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
                           )}
                           {sw.facility_name && (
                             <span title={`At ${sw.facility_name}${sw.facility_course ? ` · ${poolModeLabel(sw.facility_course)}` : ""}`}
-                              style={{ marginLeft: 6, fontSize: 10, color: "var(--color-primary)", background: "rgba(59,130,246,0.12)", border: "1px solid var(--color-primary)", borderRadius: 4, padding: "1px 6px", fontWeight: 700, letterSpacing: "0.04em" }}>
+                              style={{ marginLeft: 6, fontSize: 10, color: "var(--color-primary-text)", background: "rgba(59,130,246,0.12)", border: "1px solid var(--color-primary)", borderRadius: 4, padding: "1px 6px", fontWeight: 700, letterSpacing: "0.04em" }}>
                               🏊 {sw.facility_name}
                             </span>
                           )}
@@ -327,7 +327,7 @@ import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
                               style={{ padding: "3px 10px", border: "1px solid var(--color-warn)", borderRadius: 5, background: "transparent", color: "var(--color-warn)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>▶ Generate</button>
                             <button onClick={() => setIntentForm({ date: sw.scheduled_date, intent: sw.intent_params, editingId: sw.id, facilityId: sw.facility_id })}
                               title="Edit this intent"
-                              style={{ padding: "3px 10px", border: "1px solid var(--color-primary)", borderRadius: 5, background: "transparent", color: "var(--color-primary)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit intent</button>
+                              style={{ padding: "3px 10px", border: "1px solid var(--color-primary)", borderRadius: 5, background: "transparent", color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit intent</button>
                           </>
                         )}
                         {!done && !isIntent && (
@@ -337,7 +337,7 @@ import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
                               style={{ padding: "3px 10px", border: "1px solid #22c55e", borderRadius: 5, background: "transparent", color: "var(--color-positive)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>▶ Run</button>
                             <button onClick={() => onEditScheduled && onEditScheduled(sw)}
                               title="Open in the generator to edit / regenerate"
-                              style={{ padding: "3px 10px", border: "1px solid var(--color-primary)", borderRadius: 5, background: "transparent", color: "var(--color-primary)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit</button>
+                              style={{ padding: "3px 10px", border: "1px solid var(--color-primary)", borderRadius: 5, background: "transparent", color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit</button>
                           </>
                         )}
                         {/* Reporting Phase A — practice attendance. Visible on
@@ -357,7 +357,7 @@ import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
                         {!done && (
                           <button onClick={() => handleDelete(sw)}
                             title="Delete this scheduled workout"
-                            style={{ padding: "3px 10px", border: "1px solid #ef4444", borderRadius: 5, background: "transparent", color: "var(--color-destructive)", fontSize: 11, cursor: "pointer" }}>🗑</button>
+                            style={{ padding: "3px 10px", border: "1px solid #ef4444", borderRadius: 5, background: "transparent", color: "var(--color-destructive-text)", fontSize: 11, cursor: "pointer" }}>🗑</button>
                         )}
                       </div>
                     );
@@ -380,7 +380,7 @@ import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
                   background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
                   padding: 22, maxWidth: 420, width: "100%",
                 }}>
-                  <div style={{ color: "var(--color-primary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Copy workout</div>
+                  <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Copy workout</div>
                   <div style={{ color: "var(--color-text)", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>
                     Copy "{copyTarget.sw.payload?.typeLabel || copyTarget.sw.payload?.type || "workout"}" to:
                   </div>

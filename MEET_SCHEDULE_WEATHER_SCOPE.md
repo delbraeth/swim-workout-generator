@@ -1,5 +1,24 @@
 # Team Calendar (meets, events, practices) + Outdoor-Pool Weather + RSVP — scope (spec only)
 
+> **✅ BUILT 2026-06-06 (web): RSVP (Slice B1/B2) + the universal venue catalog +
+> WeatherKit weather.** Shipped: `venues` table (vn_xxx, dedup-on-create, §2),
+> `team_events.venue_id`/`start_time` (Option A, §3.3), `weather_cache` (§4.2 #4),
+> `lib/weather.js` (WeatherKit REST, ES256 JWT, inert-until-configured, §4.2),
+> client `VenuePicker` (search/create + MapKit geocode, §7.2) + `WeatherChip` on
+> coach event rows and the swimmer RSVP panel. Migration **058**. Decisions locked
+> per §9: venue id `vn_xxx` (#1); extend `team_events` (#2); venues usable on
+> create, edit-moderation reserved (#3/#4); dedicated `weather_cache` (#5); MapKit
+> JS client-side geocode, server never geocodes (#14); daily forecast + hourly
+> lightning/heat advisory when `start_time` set (#15). **Still deferred:** practice
+> RSVP/weather; group-level events (§3.5); recurrence (§3.3.2); shared venue
+> edit-moderation surface (§2 #4); all push/notify behaviors (§7.1); iOS parity.
+> **✅ ACTIVATED in prod 2026-06-06** — WeatherKit live (selftest 200, real
+> forecasts rendering). `sub` = bundle `com.delbraeth.swimworkout` (via
+> `APPLE_NATIVE_BUNDLE_ID`/`APPLE_CLIENT_ID` fallback, no new env var); WeatherKit
+> capability must be enabled on BOTH the key AND the App ID (the `NOT_ENABLED`
+> gotcha). Admin `DELETE /api/venues/:id` archive route now exists (partially
+> closes the §2 #4 edit-moderation gap — removal only; field edits still deferred).
+
 **Status:** spec-only (2026-06-01). No implementation. Deferred future enhancement; sizing band L (shared venue model + a new external API + first forward-looking attendance surface). This doc defines the data model, the "universal pool" decision, the generalized team-event calendar + pills, the outdoor tag + WeatherKit call, and unified RSVP — so implementation is mechanical when prioritized.
 
 > **Merged 2026-06-03:** the former separate Phase 5 item "one-way CSV/.ics export"
@@ -215,7 +234,14 @@ Mirror `practice_attendance`'s exactly-one-of-swimmer_sub/managed_id convention 
 
 ## 7. Prerequisites & shared dependencies (acquire before / alongside build)
 
-### 7.1 Notification infrastructure — DOES NOT EXIST YET (shared blocker)
+### 7.1 Notification infrastructure
+> **✅ UPDATE 2026-06-06:** Web Push infra shipped (mig 056, `lib/push.js`, `sw.js`,
+> opt-in UI; `PUSH_ACTIVE` true in prod). **Notify triggers — first cut shipped:**
+> event-cancellation push + weather-advisory cron (`lib/notify.js`, mig 059
+> `notifications_sent` dedup). **Still deferred:** RSVP "you haven't responded"
+> reminders (needs roster-diff). The original "blocker" note below is historical.
+
+**(historical) Notification infrastructure — DID NOT EXIST AT SPEC TIME (shared blocker)**
 There is **no push/notification system** in the app today (grep confirms: no APNs, no web push, no FCM — the only "notifications" are Apple's *inbound* App Store Server Notifications for IAP). Multiple high-value behaviors in this scope all depend on it and are therefore **all deferred to a v1.1 that builds push first**:
 - Weather advisory alerts (§4.3 — "notify the RSVP'd swimmers when lightning fires").
 - RSVP reminders / "you haven't responded" nudges (§6.4 #6).

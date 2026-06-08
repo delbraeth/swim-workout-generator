@@ -11,6 +11,7 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
 import { ManagedSwimmerForm } from "./ManagedSwimmerForm.jsx";
 import { ParentsPanel } from "./ParentsPanel.jsx";
 import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
+import { RaceGoalsPanel } from "../profile/RaceGoalsPanel.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -29,7 +30,8 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
       );
     }
 
-    export function ManagedSwimmersView({ mySub = null } = {}) {
+    export function ManagedSwimmersView({ mySub = null, featureFlags = null } = {}) {
+      const ff = featureFlags || {};   // Phase 6: gate constraints / coach-notes panels
       const [list,       setList]       = React.useState(null);
       const [showArch,   setShowArch]   = React.useState(false);
       const [selectedId, setSelectedId] = React.useState(null);
@@ -236,7 +238,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
                     <MinorPill swimmer={detail} />
                     {detail.parent_managed_flag && (
                       <span title="Coach has flagged this profile as parent-managed; claim blocked even if 13+"
-                        style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }}>parent-managed</span>
+                        style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }}>parent-managed</span>
                     )}
                   </div>
                 </div>
@@ -295,7 +297,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
             {/* Declutter (2026-06-04): the per-swimmer panels are now collapsible
                 sections (collapsed by default) so the detail screen is a tidy list,
                 not one long stacked wall. */}
-            {!detail.archived && (
+            {!detail.archived && ff.constraints !== false && (
               <DetailSection emoji="🚱" title="Constraints">
                 <ConstraintsPanel key={"con-" + detail.id} managedId={detail.id}
                   seedConstraints={bundle?.constraints} />
@@ -311,6 +313,13 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
               </DetailSection>
             )}
 
+            {/* Phase 5 #4 — race goals/PRs that anchor Race-Pace workout targets. */}
+            {!detail.archived && (
+              <DetailSection emoji="🎯" title="Race goals / PRs">
+                <RaceGoalsPanel key={"rg-" + detail.id} endpoint={`/api/managed-swimmers/${detail.id}/event-times`} />
+              </DetailSection>
+            )}
+
             {/* Parent Portal MVP — invite/revoke parents on this profile */}
             {!detail.archived && (
               <DetailSection emoji="👪" title="Parents">
@@ -320,7 +329,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
             )}
 
             {/* R-H: coach notes journal for this managed profile */}
-            {!detail.archived && (
+            {!detail.archived && ff.coach_notes !== false && (
               <DetailSection emoji="🗒️" title="Coach notes">
                 <CoachNotesPanel
                   key={"cn-" + detail.id}
@@ -368,7 +377,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
                 {showArch ? "Hide archived" : "Show archived"}
               </button>
               <button onClick={() => setImporting(true)}
-                style={{ padding: "6px 14px", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                style={{ padding: "6px 14px", background: "transparent", color: "var(--color-primary-text)", border: "1px solid var(--color-primary)", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                 📥 Import
               </button>
               <button onClick={() => setCreating(c => !c)}
@@ -432,7 +441,7 @@ import { SwimmerEquipmentPanel } from "./SwimmerEquipmentPanel.jsx";
                         </div>
                         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                           {teamName && (
-                            <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }} title="Team affiliation">
+                            <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 999, background: "#3b82f622", border: "1px solid var(--color-primary)", color: "var(--color-primary-text)", fontWeight: 700 }} title="Team affiliation">
                               {teamName}
                             </span>
                           )}

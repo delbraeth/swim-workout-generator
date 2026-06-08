@@ -33,7 +33,7 @@
       const banner = (() => {
         if (!result) return null;
         if (!result.ok) {
-          return { color: "var(--color-destructive)", text: `Server error: ${result.data?.error || "unknown"}` };
+          return { color: "var(--color-destructive-text)", text: `Server error: ${result.data?.error || "unknown"}` };
         }
         const d = result.data || {};
         if (d.id) {

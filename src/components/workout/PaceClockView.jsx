@@ -314,7 +314,7 @@ import { fmtTime, parseIntervalSeconds } from "../../lib/format.js";
                   {sectionName || "Pace Clock"}
                 </div>
                 {focusNote && (
-                  <div style={{ fontSize: 12, color: "var(--color-primary)", fontStyle: "italic", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div style={{ fontSize: 12, color: "var(--color-primary-text)", fontStyle: "italic", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     🎯 {focusNote}
                   </div>
                 )}
@@ -445,7 +445,7 @@ import { fmtTime, parseIntervalSeconds } from "../../lib/format.js";
                 {sectionName || "Pace Clock"}
               </div>
               {focusNote && (
-                <div style={{ fontSize: 13, color: "var(--color-primary)", fontStyle: "italic", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 13, color: "var(--color-primary-text)", fontStyle: "italic", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   🎯 {focusNote}
                 </div>
               )}

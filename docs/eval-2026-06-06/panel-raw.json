@@ -1,0 +1,522 @@
+{
+  "panel": [
+    {
+      "persona": "Private and small-group swim coach (1-on-1 and tiny mixed-age groups, heavy learn-to-swim and stroke work). Budget-sensitive solo operator.",
+      "tier": "Lesson (4.99/mo)",
+      "strengths": [
+        {
+          "title": "Lesson type plus per-swimmer equipment is the exact wedge I asked for and shipped well",
+          "detail": "Both my prior blockers are gone. The Lesson type (engine.js) drops the forced Main Set (Warm-Up/Skill Focus/Send-off, low floor). Per-managed-swimmer equipment (migration 046, SwimmerEquipmentPanel.jsx) loads when I pick a swimmer in Generate-for, so my no-gear 7yo and paddles-plus-buoy adult no longer need re-toggling. Coach-authored leveled lesson sets (migration 048) let me build a 325yd kids lesson from my own content."
+        },
+        {
+          "title": "Generate-for reaches individuals and team-free lesson groups without club scaffolding",
+          "detail": "The June follow-up (dbListCoachTargets, team-less lesson-groups, LessonGroupsView) lets me run a 1-on-1 as a one-person group or fan to a tiny group without a Team, removing the youth-club roster weight the prior eval flagged. LIVE_EVIDENCE confirms end-to-end flow, no console errors, sub-second bootstrap pool-side."
+        },
+        {
+          "title": "Parent recap closes the value loop I used to fake with Copy-Text",
+          "detail": "The Send-recap button (LessonRecapButton.jsx, POST /api/lessons/recap, lib/email-templates/lesson-recap.js) sends a branded one-pager with my note to the guardian email, minor-bypass routing to the adult. For higher-rate clients this is the polished artifact I could not produce before."
+        }
+      ],
+      "gaps": [
+        {
+          "title": "Coach Note still hardcodes masters pace 2:00-2:15/100 on Lesson workouts for kids",
+          "detail": "src/App.jsx 5362-5368 keys the note only on pool mode, never workout type or swimmer. An 800yd Lesson for a 7yo in SCY shows calibrated for a masters pace of 2:00-2:15/100 yds, which LIVE_EVIDENCE caught verbatim. Leaks adult framing onto the surface I would screenshot for a parent.",
+          "severity": "minor"
+        },
+        {
+          "title": "Parent recap is email-only and gated behind invite, accept, and email-on-file",
+          "detail": "My prior ask was printable PDF or mailto. Shipped is email-only with no PDF/print, and hard-fails with no_guardian_email (server.js 4071) unless the parent was invited, accepted, and has email on file. Most clients want a screenshot now, not an OAuth-backed guardian-link flow. Requires a managed swimmer so a true drop-in cannot generate one.",
+          "severity": "major"
+        },
+        {
+          "title": "No learn-to-swim content (25-based survival sets, no-interval mode)",
+          "detail": "Lesson type fixes structure but content comes from the technique/drill bank (engine.js aliases lesson to technique, main to drill). No 25-based cannot-swim-100-yet sets, no float/breath-control progressions, no go-on-the-whistle mode. Authored sets let me build my own, but that is content work the bank does for every other type.",
+          "severity": "major"
+        }
+      ],
+      "requests": [
+        {
+          "title": "Type/age-aware Coach Note that removes masters framing on Lesson",
+          "why": "Branch App.jsx 5362 on workout type so Lesson reads age-appropriate (cues over yardage, soft intervals) not masters pace. Trivial conditional; difference between purpose-built and masters-relabel on a parent-facing surface.",
+          "cost_band": "S"
+        },
+        {
+          "title": "Printable/shareable parent recap one-pager that works without a linked guardian",
+          "why": "Add a Print/PDF/copy-as-image version of the lesson-recap template for ANY client including un-invited drop-ins, independent of the guardian-email chain. Reuses lesson-recap.js render; needs a render-to-page target.",
+          "cost_band": "M"
+        },
+        {
+          "title": "Learn-to-swim content pack (25-based beginner sets, no-interval mode)",
+          "why": "A small beginner bank (25s, streamline, float, breath, stroke-survival, generous rest) tagged to feed the Lesson type, plus a go-on-the-whistle toggle. Makes Lesson cover my learn-to-swim half, converting me from useful to my whole book.",
+          "cost_band": "L"
+        }
+      ],
+      "verdict": {
+        "would_pay": "Yes",
+        "single_blocker": "None blocks the buy; the per-swimmer-equipment and Lesson-type combo I conditioned my prior maybe on both shipped. Largest remaining friction is the email-only recap behind a guardian-link chain, routed around with Copy Text.",
+        "rationale": "At 4.99/mo Lesson delivers the two features I said would flip me to yes (per-swimmer equipment, Lesson type) plus team-free groups and parent recap. Generate speed and per-swimmer kit save real prep across a mixed-age book. The learn-to-swim gap and email-only recap keep it from a slam-dunk for beginners but neither is a buy-blocker. Clean upgrade from my May maybe."
+      },
+      "live_notes": "Driving the live app surfaced two things source-reading would miss. The hardcoded masters-pace Coach Note actually renders on generated workouts (from engine.js you would assume pace-derived; on screen it is a static type-blind string leaking adult framing onto a kids tool). And deck reliability/latency is genuinely fine (sub-second bootstrap and team-calendar calls, instant SPA nav, no console errors, healthy 200s), which pool-side on phone wifi is use-versus-abandon. Caveat: run was on an already-authed session, so first-run/Apple-OAuth onboarding friction is unverified and invite-only signup remains a barrier for a solo coach.",
+      "shipped_since_last": "Three prior items shipped well. Per-managed-swimmer equipment (my Gap 2/Request 1) exactly as asked. The Lesson workout type (my Request 2) as Warm-Up/Skill Focus/Send-off, no Main Set, 800-1200yd or down to 100 with authored content, plus bonus coach-authored leveled lesson sets. Parent recap (my Request 3) as an emailed branded one-pager but only half: I asked for printable PDF or mailto and got email-only gated behind a guardian-link flow, so the print/shareable path for un-linked drop-ins is still missing. Net: two hard blockers resolved (maybe to yes), recap shipped partially.",
+      "_key": "private",
+      "_label": "Private coach"
+    },
+    {
+      "tier": "Free tier. Would not pay Coach 10/mo for a 7-week season; would consider a one-time sub-25 seasonal pass only if beginner content and a whiteboard print existed.",
+      "persona": "Summer-league head coach: 6-week season, 40-plus kids age 5-14 across 4-6 ability lanes, volunteer/HS-student assistants, booster-funded, whiteboard on deck. Shows up 10 min before practice with a phone. Needs beginner content (25s, low yardage), zero account/roster friction, and a giant printable lane plan to copy onto the whiteboard.",
+      "strengths": [
+        {
+          "title": "Multi-lane generate works rosterless",
+          "detail": "manual L2001 plus settings.extra.multi_lane: flip Multi-lane ON, type up to 12 lane paces by hand (Manual entry, no group required), get one workout fitting all lanes. No 40 managed-swimmer profiles with DOBs. Config saves per-account, survives reload. LIVE_EVIDENCE confirms the GENERATE FOR picker and multi-lane toggle work end-to-end. This is the escape from the youth-club data model I asked for last eval."
+        },
+        {
+          "title": "Generate in 30 seconds with low floors via Recovery and Lesson types",
+          "detail": "LIVE_EVIDENCE: generate runs end-to-end with 60/90/120-min presets and a max-yardage slider; Recovery mode drops the floor to 1200yd (manual L583) and suspends stay-close-to-max, giving my 11-14 group a real short Wednesday-meet session. The new Lesson type (engine.js L32-46) gives an 800-1200yd no-main skill session for the younger end. Two taps to something usable when I arrive cold."
+        },
+        {
+          "title": "Free tier is genuinely generous",
+          "detail": "manual L1390-1400 commits per Terms that Free keeps generation, history, full bank plus engine, multi-lane PRINT, run-screen, and personal favorites forever. I can run the whole generate-print-whiteboard loop on Free without paying; the paid gate is on managed swimmers/groups/parent portal, which I do not need. Right wedge for my segment even if it is not a revenue path for them."
+        }
+      ],
+      "gaps": [
+        {
+          "title": "Still no genuine beginner content - my 6-and-under group cannot use the bank",
+          "detail": "My #1 No blocker last eval, only half fixed. Lesson type LESSON_MIN is 100 (engine.js L45) but the comment at L40-44 is explicit: built-in technique content cannot go below ~800yd; genuinely short 25-based, generous-rest, wait-for-whistle sessions require coach-authored sets I would write myself. Pace presets still only reach Recreational 2:30/100 (constants.js L16), which assumes a kid can HOLD 2:30 for any distance; half mine cannot swim 100 continuously. Still no learn-to-swim / stroke-survival / DQ-avoidance (breast pullout, fly two-hand, IM order) pack. 60% of my roster stays locked out.",
+          "severity": "blocker"
+        },
+        {
+          "title": "No whiteboard print - MultiPacePrintView hands sheets, it does not help transcription",
+          "detail": "My #3 prior ask (S-cost 1-page big-font landscape lane sheet) did NOT ship. The only print is MultiPacePrintView.jsx: Per-lane pages (one full page PER lane, manual L1616-1619) or a Matrix view the manual itself calls harder to read on deck (L1619). Margins 0.5in, portrait, minHeight 10in - sized to hand a swimmer a page, not to post one giant sheet I copy onto a whiteboard. 5 lanes equals a 5-page printout. No large-font single-landscape-page deck view exists in src/components.",
+          "severity": "major"
+        },
+        {
+          "title": "Pricing is structurally wrong for a 7-week booster-funded season",
+          "detail": "9.99/mo with a 14-day trial (manual L1353) over 7 weeks is ~20-25 of booster money for year-round-club features. The manual CLAIMS HS and summer per-season passes are available (L1385) but I found ZERO billing code - grep of server.js and AdminBillingConfig.jsx returns nothing for season/per-season/season_pass. The seasonal SKU is marketing copy, not a purchase path. And the Lesson tier paywall (5-7) is inert: server.js L2839 returns no_price_id because price_id_lesson_monthly is not configured. The thing that would make me pay either does not exist or is not wired.",
+          "severity": "major"
+        }
+      ],
+      "requests": [
+        {
+          "title": "Youth / Learn-to-Swim content pack: 25-based sets, generous rest, no-interval mode, a floor that actually delivers ~200-400yd",
+          "why": "Lowering LESSON_MIN to 100 without short built-in content is a no-op - I am not authoring a bank. Ship a real beginner pack (stroke-survival 25s, kick-with-board, streamline-off-wall, breast-pullout/fly-two-hand/IM-order DQ drills) tagged so a Youth/Summer team type swaps the adult vocabulary out, plus a no-interval coach-starts-each-rep mode. Without it 60% of my swimmers cannot use SetForge. This single thing flips my verdict.",
+          "cost_band": "L"
+        },
+        {
+          "title": "Whiteboard print: one big-font landscape page, Lane 1/2/3 columns, no swimmer names",
+          "why": "Re-requesting the S-cost item that did not ship. I do not hand kids paper - parents drop them and leave. I transcribe one sheet onto a deck whiteboard. Give me a single landscape page, large font, lane label plus pace plus the workout, readable from 6 feet. It is a new print stylesheet over the lanes array MultiPacePrintView already has. Cheapest high-impact win on my list.",
+          "cost_band": "S"
+        },
+        {
+          "title": "A real seasonal SKU - a one-time ~15-20 pass covering a season, actually purchasable",
+          "why": "The manual already promises this (L1385) but it is vapor - no Stripe code exists. Build a one-time seasonal price (Stripe one-time charge to a tier grant with expiry) wired into AdminBillingConfig, or drop the claim. As written it is a credibility gap: I would click per-season pass and hit a monthly trial. A genuine 15 summer pass is the only price point booster money approves.",
+          "cost_band": "M"
+        }
+      ],
+      "verdict": {
+        "would_pay": "No",
+        "single_blocker": "No genuine beginner content - the bank still floors out around 800yd of adult-coded sets; my 5-9yo and non-swimmers (60% of the roster) have nothing to do in 25s, and the Lesson type lowered floor is a no-op without short built-in content.",
+        "rationale": "Two of my three prior blockers were addressed at the plumbing level - rosterless multi-lane is real and excellent, and a Lesson type now exists - but the content that actually serves summer-league beginners did NOT ship, the whiteboard print I asked for did NOT ship, and the seasonal pricing the manual advertises is not wired. I would happily run the Free tier (multi-lane generate plus print beats my Google Doc), but I will not pay 10/mo for 7 weeks of a year-round-club product whose beginner half is empty. Ship the youth content pack plus whiteboard print plus a real 15 seasonal pass and this becomes an easy Yes."
+      },
+      "live_notes": "Driving the live app (LIVE_EVIDENCE 2026-06-06) confirmed the generator, multi-lane fanout, and per-lane print all work end-to-end with healthy latency (bootstrap 200 in ~563ms, no console errors, instant SPA nav) - reliability on deck is not a concern, which matters on bad pool wifi 10 min before practice. The live run surfaced two things source-reading soft-pedals: (1) the generated Coach's Note literally read calibrated for a masters pace of 2:00-2:15/100yds even in a coach context - exactly wrong for a 7-year-old lane, signaling the content is still masters-coded underneath; (2) the live app is invite-only and Apple/Google-auth only, so my volunteer HS-student assistant cannot just be handed a login - the onboarding gate I flagged last time is unchanged. First-run for a summer coach is still get-an-invite, OAuth, then discover the bank is adult-pace - the friction-then-disappointment arc is intact.",
+      "shipped_since_last": "Of my three 2026-05-25 requests: (1) Beginner content plus low-yardage floor - PARTIALLY shipped. A Lesson type landed (engine.js LESSON_SECTIONS, floor lowered to 100) but built-in content still cannot go below ~800yd and there is no 25-based / no-interval / DQ-avoidance pack, so the actual beginner gap is unaddressed. (2) Meet-prep set bank (legal-stroke, IM-order, relay take-off) - NOT shipped; HS race-pace templates shipped instead (verified live: a 200-free goal produced exact 28.09/50 targets), which serves HS/club, not summer-league novices. (3) Whiteboard mode / roster-free lane plans - HALF shipped: rosterless multi-lane manual-entry is now real (my biggest win), but the giant single-page whiteboard PRINT did not ship (still MultiPacePrintView per-lane pages). Adjacent cross-eval items that DID ship: per-swimmer equipment (Lesson tier), calendar/.ics plus roster CSV export, a11y AA pass, parent portal. Net: plumbing for my segment improved a lot; the content and the cheap whiteboard print - the two things that would convert me - did not.",
+      "_key": "summer",
+      "_label": "Summer-League coach"
+    },
+    {
+      "persona": "High school SCY coach — ~30 swimmers, dual-meet season into a championship taper, school/district budget (pays ~$10/mo Coach out of pocket). Cares about meet-anchored periodization, race-pace sets tied to swimmers' goal times, and a deck-friendly print.",
+      "tier": "Coach ($10/mo)",
+      "strengths": [
+        {
+          "title": "Race-pace sets are now exact and goal/PR-anchored — my #2 ask shipped, and well",
+          "detail": "In src/lib/engine.js buildRacePaceMain() the 🏁 Race-Pace toggle swaps the MAIN for reps sized to the solver's budget and anchored to a real goal/PR time. LIVE_EVIDENCE confirms a 200-free goal of 1:52.34 produced '26×50 — 200 Free goal pace @ 28.09' — the per-rep split is engine-exact, not a generic 'race effort' label. The HS event taxonomy (50/100/200/500 free, 100 back/breast/fly, 200 IM) plus a USRPT mode (short reps, fixed rest, fail-out note) is exactly the championship-week vocabulary I was hand-writing before. This alone is the wedge that moves me off a clipboard."
+        },
+        {
+          "title": "Multi-lane generate + per-lane pace fit is the right daily primitive for an ability-split deck",
+          "detail": "I run 2-3 lanes by ability; the pace-aware picker (optionFitsAllLanes, MIN_REST/MAX_REST_RATIO) produces one workout every lane can hold, and the generate flow auto-routes to MultiPacePrintView. Combined with Plan-an-Intent + Repeat Week + group fanout (assign_to in src/App.jsx ~3529), I can sketch Mon distance / Tue technique / Wed sprint and copy the microcycle forward — that matches how a 3.5-month HS season actually runs."
+        },
+        {
+          "title": "Coach curation propagates to 30 athletes without per-swimmer tuning",
+          "detail": "Tri-state Fav/Disfavor at label/set/engine-template level with 3×/0.25× weighting (PHASES + picker in engine.js) and coach-to-swimmer propagation means my program's identity biases every swimmer's generator silently. With 30+ athletes I can't tune one-by-one, so dbGetEffectiveFavorites unioning own+coach+team is real leverage. Reliability held up too: LIVE_EVIDENCE shows bootstrap 200 in ~563ms, no console errors, instant route nav — fine for pulling a set up on deck."
+        }
+      ],
+      "gaps": [
+        {
+          "title": "Meet-anchored taper still does NOT auto-shift the phase — my #1 ask only half-shipped",
+          "detail": "The anchor exists (🎯 Anchor in TeamsView, group_anchors table, lib/season.js suggestedPhaseFromWeeksOut) and shows a countdown + 'suggested phase' badge on the swimmer card (AssignedToMeView ~143). But the generator never applies it: src/App.jsx:2959 reads effectivePhase = generateForTarget?.current_phase || phase — the group's MANUALLY-set phase, not the anchor's suggested_phase. So I still hand-flip every group's Base→Build→Peak→Taper pill each week; the app just tells me what I should have picked. The exact 'set state-meet date and let phases roll' value is still missing.",
+          "severity": "major"
+        },
+        {
+          "title": "No 1-page big-font whiteboard print — my #3 ask did not ship at all",
+          "detail": "The daily single-workout 'Print' is just window.print() of the normal web layout (App.jsx ~5089/5444), and the lane-split print is MultiPacePrintView — the per-lane, multi-page flow I explicitly said was over-engineered for the deck last time. There is still no large-font, single landscape page, Lane 1/2/3 view I can post pool-side without burning a page per lane/swimmer. This is the artifact I touch every single practice.",
+          "severity": "major"
+        },
+        {
+          "title": "Race-pace targets only personalize for ONE swimmer — group fanout reverts to generic",
+          "detail": "raceGoals is the logged-in coach's own goal store (App.jsx ~1637), so generating Race-Pace for a whole group applies one target to everyone; ROADMAP confirms 'group fanout uses generic text.' For a 30-swimmer squad where every kid has a different 100-free goal, I'd have to generate 30 times individually to get per-swimmer splits. The headline 'PR-anchored targets' feature is effectively a private/individual-lesson feature, not a team-practice feature.",
+          "severity": "major"
+        }
+      ],
+      "requests": [
+        {
+          "title": "Wire anchor suggested_phase into the generator (opt-in auto-apply)",
+          "why": "Make effectivePhase fall back to the active anchor's suggested_phase when the coach hasn't manually overridden, or add a one-tap 'Apply suggested phase' on the generate screen. lib/season.js already computes it and the badge already renders it — this is the last mile that turns the taper feature from advisory into the auto-shift I asked for. Flips my taper workflow from manual to hands-off.",
+          "cost_band": "S"
+        },
+        {
+          "title": "Deck/whiteboard print: one big-font landscape page, lane-labeled, no roster names",
+          "why": "A single printable page sized for transcription onto a pool whiteboard (Lane 1/2/3 with per-lane pace, no swimmer names, large type) over the existing generated workout data. Smallest-cost item that three coaches wanted last eval; it's a new print view over data I already have, not new engine work.",
+          "cost_band": "M"
+        },
+        {
+          "title": "Per-swimmer race-pace on group fanout (use each member's goal/PR)",
+          "why": "When I generate Race-Pace for a group, resolve each member's own goal/PR (dbResolveRaceGoals already exists per-swimmer) and render per-lane or per-swimmer split annotations in the print — the way PSC substitutions already annotate MultiPacePrintView. Without it, the marquee PR-anchored feature can't be used for an actual team practice without 30 separate generations.",
+          "cost_band": "L"
+        }
+      ],
+      "verdict": {
+        "would_pay": "Maybe",
+        "single_blocker": "Meet-anchored taper still requires manual weekly phase flips (no auto-shift) AND there's still no deck-friendly whiteboard print — the two daily/weekly artifacts an HS season runs on.",
+        "rationale": "Two of my three prior asks moved: race-pace anchoring shipped genuinely well and is a real reason to open the app on championship week. But the taper 'auto-shift' I named as my single blocker last time is still advisory-only (badge, not applied — confirmed at src/App.jsx:2959), and the whiteboard print never shipped. At $120/yr out of my own pocket, the race-pace wedge nudges me from 'no' toward 'yes,' but until the season scaffolding actually drives Generate and I get a postable one-page deck sheet, I'm still writing taper-week sets by hand — so I stay at Maybe."
+      },
+      "live_notes": "LIVE_EVIDENCE confirmed the generator works end-to-end on the real app and is fast on deck (bootstrap ~563ms, team-calendars ~465ms, no console errors, instant SPA nav) — the reliability blind spot from the last eval looks fine for a single coach pulling up a set. Two things only the live run surfaced: (1) the race-pace per-rep target really is exact in production (28.09/50 from a 1:52.34 goal), which reading source alone wouldn't have proven was wired through to render; (2) the auto-generated Coach's Note still reads 'calibrated for a masters pace of 2:00–2:15/100yds' even when I'm generating as a coach for HS swimmers — a generic, off-persona note that undercuts trust on a sheet I'd hand a swimmer. The swimmer-facing surface I could see is parent/guardian-centric (/parent: .ics calendar, weekly digest, address mgmt); the athlete's own assigned-workout/goal view wasn't exercised live, so I can't confirm my swimmers would actually see their PR-anchored targets the way I set them.",
+      "shipped_since_last": "Of my three prior asks: (1) Meet-date-driven taper auto-shift — PARTIAL: anchor + countdown + suggested-phase badge shipped (lib/season.js, TeamsView 🎯 Anchor, AssignedToMe badge), but auto-shift is NOT wired into Generate (effectivePhase uses manual current_phase, not suggested_phase), so the core value is still missing. (2) HS race-pace template pack — SHIPPED and landed well: exact goal/PR-anchored per-rep splits + USRPT + HS event taxonomy, live-verified. (3) Print-the-whiteboard quick view — NOT shipped; still normal window.print() or the per-lane multi-page MultiPacePrintView I'd flagged as wrong for the deck. Also shipped from the broader roadmap and relevant to me: per-swimmer constraints, .ics/CSV exports, event-kind tags, kick set, and an a11y AA pass. Net: my #2 is done, #1 is half-done, #3 untouched — so my verdict holds at Maybe rather than advancing to Yes.",
+      "_key": "hs",
+      "_label": "High School coach"
+    },
+    {
+      "persona": "USA-Swimming year-round club head coach / program director (~30+ athletes across age-group + senior groups, multi-group periodization). Existing stack: TeamUnify for roster/registration/billing, Hy-Tek Meet Manager + SWIMS for meets/times, MAAP/SafeSport obligations on every minor group. Evaluating the $25/mo Program tier strictly as a replace-or-integrate decision, not a workout-idea toy.",
+      "tier": "Program ($25/mo) — but only conditionally; today I'd buy at most Coach ($9.99) for myself as a generator, not Program for the club.",
+      "strengths": [
+        {
+          "title": "Coach curation cascade + UGC sharing is genuinely staff-grade",
+          "detail": "Tri-state fav/disfavor at label/set/engine-template levels with 3x boost / 0.25x downweight or hard-exclude, auto-propagated primary+assistant coach → swimmers (dbGetEffectiveFavorites unions own+coach+team via group_members→teams), plus team-shared UGC with admin moderation and graduate-to-JS. For a multi-coach staff this beats emailing PDFs — an assistant can author a set, share to the team, and it propagates with an audit trail (bank_option_reviews, promoted_at). This is the one area that feels built for a program, not a solo user."
+        },
+        {
+          "title": "Per-swimmer constraints (PSC v1) close the real injury/modification gap",
+          "detail": "swimmer_constraints table (migration 037, 14 types across stroke/equipment/section/caps) hard-excludes at picker step-0 (optionViolatesPSC) before lane-fit, with V9 validator backstop, expiry semantics, and a Generate-time 'Tonight's constraints' checklist. 'No fly for Linda this month' / 'shoulder — no paddles' now composes through the same pipeline as curation. The prior eval's #1 masters/club ask shipped, and it shipped correctly (authz via dbAuthzCoachOfSwimmer, not id-only)."
+        },
+        {
+          "title": "Multi-lane generate + per-lane print + Hy-Tek roster CSV are real deck/meet primitives",
+          "detail": "optionFitsAllLanes pace-aware picker + MultiPacePrintView per-lane pages is something Commit Swimming doesn't do well, and the new GET /api/teams/:id/roster.csv (server.js:4476) emits the exact Hy-Tek MM import column order (Swimming ID, DOB, First, Last, Gender, Team Name, Preferred). Combined with the .ics team-calendar feed (no minor PII), there's now a one-way bridge OUT to my meet-day stack instead of a closed silo."
+        }
+      ],
+      "gaps": [
+        {
+          "title": "No real periodization — 'season planner' is a 4-bucket if/else, not a macrocycle",
+          "detail": "lib/season.js suggestedPhaseFromWeeksOut is a static formula: weeksOut>=12→base, >=8→build, >=4→peak, else taper, surfaced as a countdown badge. There are no mesocycle templates, no per-week load progression, no 'Week 6 of 14 toward Sectionals' plan I can edit, no multi-meet season (one anchor per group). Training Phase is still a single dropdown per generate. For a year-round USA-S club this is table stakes that Commit Swimming / TrainingPeaks all have. The 2026-05-25 Club gap #1 is functionally unchanged — only a phase HINT shipped.",
+          "severity": "blocker"
+        },
+        {
+          "title": "Program tier is still billing chrome — undifferentiated from Coach, and 'coming soon'",
+          "detail": "The manual's Compare-plans table (manual.html:1357) only has Free / Lesson / Coach columns; Program is a 'coming soon' callout. Team curation, parent portal, roster CSV, attendance — all the 'team' features — already live under Coach ($9.99) with 2 free assistant seats. ROADMAP even flags this internally ('without team-level curation, Program is billing chrome over four Coach accounts'). I literally cannot tell what my club's $25/mo buys over a $9.99 Coach seat, so there is nothing to evaluate.",
+          "severity": "blocker"
+        },
+        {
+          "title": "MAAP/SafeSport posture is a single text field + a soft warning — not board-defensible",
+          "detail": "I can store one usa_swimming_id per person (ManagedSwimmerForm.jsx:55), but person_external_ids (migration 039) is empty — no SafeSport cert/expiry, no background-check tracking, no expiry gating. Two-deep is still a soft warning (PHASE_5_SCOPE explicitly reserves the hard block as unbuilt; no minor-group save refusal in db.js). Parent portal is read-only recap, not MAAP-compliant minor-directed comms with guardian CC. I can't put this in front of my Platinum group's parents as a compliance system.",
+          "severity": "major"
+        }
+      ],
+      "requests": [
+        {
+          "title": "Define and ship the Program tier: team-level periodization plan + org-wide reports as the differentiator",
+          "why": "Bundle the season planner (editable macrocycle: pick 1-3 championship meets, auto-roll phase weekly with editable mesocycle loads, per-group) WITH cross-coach org reports and shared roster as the thing $25 buys over Coach. Right now Program is undefined; this gives it a reason to exist and answers the one question every board treasurer asks: what does the higher tier do.",
+          "cost_band": "XL"
+        },
+        {
+          "title": "MAAP compliance pack: SafeSport cert/expiry tracking + two-deep hard block + guardian-CC comms",
+          "why": "Wire the empty person_external_ids table to a UI (USA-S ID + SafeSport cert + expiry + background-check), flip the two-deep soft warning to a team_type-driven hard refuse on minor groups, and route minor-directed coach notes to guardians via the existing email rails. This is the gate between 'workout toy' and 'system my board can approve' — it's a hard no until it ships.",
+          "cost_band": "L"
+        },
+        {
+          "title": "Two-way roster/results integration with TeamUnify + SWIMS, not just export",
+          "why": "One-way Hy-Tek roster CSV is a start, but my roster truth lives in TeamUnify and my times live in SWIMS/Meet Manager. To replace anything I need to CONSUME a TeamUnify roster export (so I'm not double-entering 30 athletes) and ingest SWIMS times so race-pace targets anchor to real meet results, not hand-typed PRs. Without this I run SetForge in parallel forever, which kills the $25 value prop.",
+          "cost_band": "XL"
+        }
+      ],
+      "verdict": {
+        "would_pay": "No",
+        "single_blocker": "The Program tier ($25/mo) is undefined and undifferentiated — it's 'coming soon' with no feature column in the manual, and everything team-shaped already lives under the $9.99 Coach tier — so there is nothing for a club to buy that replaces or integrates with TeamUnify/Hy-Tek/SWIMS.",
+        "rationale": "Two of the three things that would move me — per-swimmer constraints and a roster CSV bridge — actually shipped well since the last eval, and the curation cascade is real program infrastructure. But the core club thesis still fails on two counts: (1) there's no periodization beyond a 4-bucket phase hint, which is table stakes for year-round USA-S; and (2) Program tier doesn't exist as a distinct product, so $25/mo is billing chrome over Coach. I'd happily pay $9.99 for myself as a generator with curation + PSC. I will not move my program onto it, or pay the Program rate, until periodization, a defined Program tier, and a board-defensible MAAP pack ship."
+      },
+      "live_notes": "The live walkthrough (LIVE_EVIDENCE.md) confirmed the generator + group-fanout + race-pace are genuinely solid on deck — the 200-free 1:52.34 goal producing '50 Free @ 28.09' per-rep targets is the kind of exactness I'd trust in front of athletes, and bootstrap/calendar latency (~470-560ms, no console errors, instant SPA nav) reads as deck-reliable. But two things only surfaced by driving it live: (1) the Coach's Note on a coach-generated workout still says 'calibrated for a masters pace of 2:00-2:15/100' — generic masters framing leaking into a club-coach context erodes trust that the output is actually tailored; (2) Reports shows 'YARDS BY STROKE: No data in range' (a stroke-attribution gap) and the header admits 'charts in a future phase' — for a program director who lives in data, numbers-only tables with a stroke-attribution hole is thin. The athlete-side I could reach was parent/guardian-centric (recap + .ics + address), not a real swimmer logging-against-assignment experience, so I can't confirm assigned workouts actually get used by the kids — which is the load-bearing assumption under the free-swimmer tier.",
+      "shipped_since_last": "Strong delivery against my prior asks: (1) Per-swimmer constraints — my #1 request and the triple-cross-validated gap — SHIPPED as PSC v1 (4 slices, migration 037) and landed well: hard-exclude at picker step-0, V9 validator, expiry, Generate-time checklist, proper coach authz. (2) Roster CSV export — SHIPPED in Hy-Tek MM format (server.js:4476) plus an .ics team calendar with no minor PII; this is the 'data portability' my request #3 led with, though it's export-only, not the TeamUnify/SWIMS two-way integration I actually need. (3) HS race-pace + PR/goal-anchored targets — SHIPPED (migration 053, buildRacePaceMain, live-verified) covering the meet-prep set gap. (4) Meet-anchored taper — SHIPPED but only as the cheap 'suggested phase' version (lib/season.js), so my #1 request (a real season planner / macrocycle) is still NOT done. (5) MAAP pack — NOT shipped (still soft-warning + empty person_external_ids); remains a hard no. Net: the M-cost items landed; the two XL items that would actually replace tools in my stack (season planner, integration) did not.",
+      "_key": "club",
+      "_label": "Club coach"
+    },
+    {
+      "persona": "Masters swim coach — adult fitness + some competition squad (5:30am / noon / 6pm lanes), mixed abilities 1:10–2:45/100, shoulder/knee/back injuries common across the roster, zero minors. Programs on deck from a phone, wants per-swimmer injury/stroke exclusions, resents youth-club compliance (DOB gates, claim flows) applied to adults. Budget ceiling ~$10/mo Coach tier out of pocket.",
+      "tier": "Coach ($9.99/mo)",
+      "strengths": [
+        {
+          "title": "Per-swimmer constraints actually shipped and flow through the picker",
+          "detail": "My #1 ask last time. db.js:5977 defines a real 14-type closed vocab (stroke_no_fly/breast/back/free, equip_no_paddles/fins/snorkel/kickboard/buoy, section_no_main/kick/drill, cap_yardage, cap_intensity). Not just a tag store: optionViolatesPSC filters at picker step 0, tonightOverrides (src/App.jsx:3021) applies it for one Generate, computeSubstitutionsForSwimmer (src/lib/workout-helpers.js:222) builds a substitution table, and AssignedToMeView shows a per-card 'N substitutions applied' badge. 'No fly for Linda this month' with an expires_at is now first-class. This flips me off my side spreadsheet."
+        },
+        {
+          "title": "Content is genuinely adult-coded, not kid sets relabeled",
+          "detail": "Verified in src/lib/engine.js: 2:00/100 masters baseline on every interval, IM aerobic tests ('400 IM strong — test your aerobic fitness', On 12:00), broken-400 race-pace, breast pull-out isolation drills, DPS/stroke-count/threshold focus cues. Manual (lines 353, 641) names 'masters' as the baseline preset. No learn-to-swim clutter polluting my generate. For an adult squad this vocabulary is correct out of the box."
+        },
+        {
+          "title": "Multi-lane generate + per-lane print remains the killer deck primitive — now PSC-aware",
+          "detail": "optionFitsAllLanes still fits one workout to every lane, and MultiPacePrintView (src/components/multipace/MultiPacePrintView.jsx:124) now annotates per-swimmer substitutions on the printed lane page — a shoulder-injured swimmer's fly swap prints inline. For my mixed-ability lanes this is exactly the on-deck artifact I need, and the substitution layer closes the loop I complained about last time."
+        }
+      ],
+      "gaps": [
+        {
+          "title": "DOB hard-gate still fires on adult masters teams — no team-type exemption",
+          "detail": "server.js:5523: joining a group via token returns dob_required UNCONDITIONALLY ('joining a group is a meaningful commitment that triggers compliance derivations'). team_type='masters' exists (db.js:2933) but the gate ignores it — there is no posture branch. Onboarding 30 adults to a masters group forces every one to enter a birthdate that serves no adult purpose. Prior synthesis flagged 'team-type-driven compliance posture' as candidate #5; it did not ship. Friction without value, and the thing I most resent.",
+          "severity": "major"
+        },
+        {
+          "title": "Constraints can only be set on MANAGED swimmers, not real adults with logins",
+          "detail": "ConstraintsPanel and ConstraintFormModal accept only managedId; the POST body (src/components/people/ConstraintFormModal.jsx:42) sends only managed_id. The DB/authz layer supports swimmer_sub (dbAuthzCoachOfSwimmer real-swimmer branch, db.js:5995) but there is NO coach UI to add a constraint to a logged-in adult. My masters swimmers mostly self-register with Apple/Google — real users, not managed rows — so I cannot record 'no paddles, bad shoulder' for the swimmers most likely to have logins. The shipped feature works for the wrong half of my roster.",
+          "severity": "major"
+        },
+        {
+          "title": "No 'same practice, multiple sessions' object — AM/noon/PM is still copy-paste",
+          "detail": "My prior gap #2. Attendance is still per scheduled_workout row (db.js:1216, 4317); no concept of one practice delivered to three rosters in three lane configs across the day. I Repeat-week or copy-from-history three times and reconcile attendance by hand. For a masters program with multiple daily deliveries of the same set, ongoing daily overhead.",
+          "severity": "minor"
+        }
+      ],
+      "requests": [
+        {
+          "title": "Coach-facing constraints UI for real (non-managed) logged-in swimmers",
+          "why": "The DB + authz already support swimmer_sub; this is wiring a swimmer-sub variant of ConstraintFormModal/ConstraintsPanel into the real-swimmer profile a coach opens (and the 'Generate for' per-practice checklist). Without it the headline injury feature doesn't reach the self-registered adults who dominate a masters roster. Single change that converts my 'maybe' to 'yes'.",
+          "cost_band": "M"
+        },
+        {
+          "title": "Team-type compliance posture: masters teams skip the DOB hard-gate on group join",
+          "why": "Branch server.js:5523 on the group's team_type — masters/adult teams should not surface dob_required. The team_type enum already exists; this is a conditional, not a refactor. Removes the most-resented youth-club friction and lets me hand join links to 30 adults without a birthdate interrogation.",
+          "cost_band": "S"
+        },
+        {
+          "title": "Per-lane interval overrides on a shared set (widen the real lane spread)",
+          "why": "My lanes run 1:10–2:45/100. optionFitsAllLanes with MIN_REST=5s / MAX_REST_RATIO=1.5 will fallback-banner on that spread every time, or empty the pool. Let one generated set carry per-lane send-offs (or auto-bucket into 2 print groups) so the multi-lane primitive survives a genuine masters ability range, not just a tight one.",
+          "cost_band": "M"
+        }
+      ],
+      "verdict": {
+        "would_pay": "Maybe",
+        "single_blocker": "Per-swimmer constraints don't reach real logged-in adult swimmers (managed-only UI) — the injury feature I'd pay for misses the half of my roster that self-registers.",
+        "rationale": "Two of my three prior gaps got serious, well-built attention: constraints shipped end-to-end with real picker integration and per-lane print annotations, and content is properly adult-coded. At $10/mo the multi-lane + per-lane-print + constraints combo already beats my Google Doc. But the constraint UI is managed-swimmer-only and my masters swimmers have their own Apple/Google logins, so I'd still keep a side note for the injured adults — exactly the friction I came to eliminate. Wire constraints to real swimmers and drop the DOB gate for adult teams and it's an instant yes."
+      },
+      "live_notes": "LIVE_EVIDENCE confirms the generator is healthy on deck: bootstrap 200 in ~563ms, team-calendars ~465ms, no console errors, SPA nav instant, reports 1–2s — fine for poolside phone use. Two things source-reading alone would miss: (1) the Coach's Note rendered live still says 'Intervals are calibrated for a masters pace of 2:00–2:15/100' even when I generate AS a coach for a group — generic self-coached framing leaks into a coaching artifact (src/App.jsx:5366). (2) The race-pace path is real and exact live: a 200-free goal of 1:52.34 produced '26×50 @ 28.09, hold 200 goal pace' — for the competition-minded subset of my masters squad that PR-anchored target is genuinely useful and doesn't read as trustworthy until you watch it compute the per-50 live. Reports still show 'YARDS BY STROKE: No data in range' and charts are deferred, so analytics is numbers-only today.",
+      "shipped_since_last": "Strong delivery against the prior Masters report. My #1 request (per-swimmer constraint tags: stroke + equipment exclusions, expiry, compose with picker like coach-propagation) SHIPPED as PSC v1 — 14-type vocab, picker filter, substitution engine, AssignedToMe badges, per-lane print annotations — almost exactly as scoped, EXCEPT restricted to managed swimmers (the 'real-user coach panel' was explicitly deferred to v1.1 per ROADMAP). My #3 (same-practice-multiple-sessions object) did NOT ship — attendance still per-row. Cross-eval candidate #5 (team-type compliance posture so masters skips DOB) also did NOT ship — the gate at server.js:5523 is still unconditional. Adjacent wins that landed: meet-anchored taper (cheap version), HS/event race-pace with PR/goal anchoring, calendar/roster CSV+.ics exports, a11y AA pass. Net: my injury blocker is half-solved — the engine is there, the reach isn't.",
+      "_key": "masters",
+      "_label": "Masters coach"
+    },
+    {
+      "persona": "Individual competitive swimmer, no coach — a self-directed athlete (college club / serious adult age-grouper) who programs their own training, runs race-pace sets, tracks PRs and goal times, and logs history. The self-pay athlete the \"coach-pays / swimmer-free\" thesis explicitly does NOT cover.",
+      "tier": "Free (Swimmer). There is no paid tier aimed at me — Lesson ($4.99) and Coach ($9.99) are entirely coach-roster features. So my honest \"tier I'd buy at\" is $0 unless a swimmer-facing paid tier is created.",
+      "strengths": [
+        {
+          "title": "Race-pace main, anchored to MY goal/PR time, actually works end-to-end",
+          "detail": "Verified in LIVE_EVIDENCE + src/lib/engine.js buildRacePaceMain (line ~7052) + RaceGoalsPanel.jsx: I enter a 200-free goal of 1:52.34 under Profile → Race goals, flip 🏁 Race Pace ON, pick the event, and the MAIN becomes '26×50 @ 28.09, hold 200 goal pace' with an exact per-50 split. Eight events covered (50/100/200/500 free, 100 back/breast/fly, 200 IM), USRPT toggle present. This is the single most coach-replacing feature for a self-directed racer — it does the goal-pace split math I'd otherwise do by hand on a whiteboard."
+        },
+        {
+          "title": "Run mode + pace clock + split logging is a genuine on-deck training tool, not a printout",
+          "detail": "PaceClockView + BenchmarksSection + the splits system (manual.html #splits): full-screen landscape pace clock, ✓ Lap captures actual-vs-expected delta per rep, live 'last −0:08 · 1:52' and 'avg ∆' pills, audio T-3/2/1 cues primed for iOS Safari silent-switch, and one-tap 'Log as today's session (with N splits)'. For a solo swimmer with no coach calling sets on deck, this replaces both the pace clock on the wall and the coach with a stopwatch."
+        },
+        {
+          "title": "The whole solo loop is free and self-serve — generate, run, log, see progress",
+          "detail": "Subscription section (manual.html) makes Free-tier permanence a Terms-level commitment: generator (all 9 types + Engine/Mix), history, stats, goals, the 📈 Progress dashboard (90-day volume + yards-by-stroke + test-set bests + TT logger via ProgressDashboard.jsx), favorites/disfavorites, recovery mode, training-phase bias, intent planning, .ics personal event countdown. I can run a serious self-coached program without ever hitting a paywall and without a coach account existing. Latency is fine (LIVE_EVIDENCE: bootstrap 200 in ~563ms, no console errors)."
+        }
+      ],
+      "gaps": [
+        {
+          "title": "Two disconnected PR systems, and neither auto-tracks my race times",
+          "detail": "There are TWO separate 'best time' surfaces that never talk: (1) RaceGoalsPanel.jsx per-event goal/PR (the thing race-pace uses) is a flat grid I type by hand — entering a PR does nothing but anchor splits; there is no history, no progression-over-time, no chart. (2) ProgressDashboard.jsx 'Test-set bests' only knows three kinds — T-30, 500 TT, Broken 500 — as pace/100, and is computed from the BenchmarksSection logger, NOT from my logged splits or race times. So when I swim a fast 100 free in a meet (or log splits in Run mode), nothing updates my 100-free PR, and the Progress view never shows my per-event times at all. For an athlete whose entire motivation is 'am I getting faster at my events,' this is the core job and it's half-built.",
+          "severity": "major"
+        },
+        {
+          "title": "Race goals are SCY-only — I can't set or train LCM goal pace",
+          "detail": "RaceGoalsPanel.jsx hardcodes course='25y' and the helper text literally reads 'Short-course yards.' raceEvents.js comments confirm 'High-school events are short-course yards (SCY).' A serious adult age-grouper or college club swimmer races a full summer LCM season; I generate LCM workouts (pool mode supports it), but I cannot enter an LCM goal time, so race-pace in a 50m pool falls back to generic pace and the exact-split value vanishes exactly when I'm doing my most important long-course race-pace work.",
+          "severity": "major"
+        },
+        {
+          "title": "Race-pace send-off interval is cosmetically scaled, not race-rest calibrated",
+          "detail": "LIVE_EVIDENCE notes the 200-free race-pace set rendered '26×50 ... On :55' but flags '(Send-off :55 is app-scaled post-engine; target is engine-exact).' engine.js sets racePace:60 as a flat 'full recovery' and buildRacePaceMain leans on a generic rest model; USRPT exists as a checkbox but real USRPT is defined by a specific rest:work and a fail-out rule, not a blanket :55. So the per-rep TARGET is right but the structure I actually swim (rep count, rest, fail-out) isn't tuned to the event/energy system the way a coach's race-pace set would be — I still end up hand-editing intervals.",
+          "severity": "minor"
+        }
+      ],
+      "requests": [
+        {
+          "title": "Unify PRs: auto-detect per-event bests from logged splits/sessions and show a per-event progression chart in 📈 Progress",
+          "why": "Close the loop between Run-mode splits and the RaceGoalsPanel: if I swim a 100 free faster than my stored PR (in a logged TT or via splits), prompt to update it, and render a line-per-event 'time over the last N months' chart in ProgressDashboard.jsx alongside the existing T-30/500TT bests. This turns SetForge from a set-generator into a training-progress system — the one thing that would make a self-pay athlete actually pay.",
+          "cost_band": "L"
+        },
+        {
+          "title": "Add SCM/LCM course tabs to RaceGoalsPanel and thread course through race-pace",
+          "why": "RaceGoalsPanel already passes a `course` prop and event_times rows store course; the data model is ready. Surface SCY/SCM/LCM tabs so I can enter long-course goal times and get exact LCM race-pace splits in 50m pool mode. Without it the headline feature silently degrades for half my race season.",
+          "cost_band": "M"
+        },
+        {
+          "title": "A real swimmer-facing paid tier (or 'Athlete Pro') so there's something to buy",
+          "why": "Today the pricing model has literally nothing for me — Lesson/Coach are roster tools. If race-pace + PR-progression + LCM goals + USRPT-true rest were bundled as a $3–5 'Athlete' tier, I'd pay; right now the answer to 'would you pay' is structurally 'no, because there's no SKU.' The prior eval's open follow-up already flagged the swimmer side was never tested — this is the monetization consequence.",
+          "cost_band": "S"
+        }
+      ],
+      "verdict": {
+        "would_pay": "No",
+        "single_blocker": "There is no paid tier for a solo athlete to buy — and the free swimmer experience, while strong on generation/run-mode, doesn't yet track my per-event PRs over time, which is the one thing I'd actually pay for.",
+        "rationale": "As the self-pay athlete the 'coach-pays/swimmer-free' thesis explicitly excludes, my verdict is a structural No: every solo feature I use (generator, run mode, race-pace, goals, Progress) is free and committed-free in the Terms, so there is nothing to charge me for. I WOULD become a Maybe-to-Yes at $3–5/mo if a swimmer tier bundled (a) auto-tracked per-event PR progression that closes the loop from my logged splits/race times — instead of two disconnected manual systems — and (b) LCM/SCM goal-pace so race-pace works across my whole season. The product is clearly built for the absent coach (teams, rosters, lane plans, attendance, parent recaps dominate the surface area and the paywall); the athlete side is real and well-executed but treated as a free funnel, not a product."
+      },
+      "live_notes": "LIVE_EVIDENCE was captured as a COACH account (Patrick Cassidy) — no actual non-coach athlete session was driven ('NOT exercised live: A real swimmer (non-coach, non-parent) athlete session'). That's the same blind spot the 2026-05-25 synthesis flagged ('No one evaluated the swimmer-side experience'), so my read leans on source + manual for the pure-athlete flow. What the live pass DID surface that source alone wouldn't: (1) race-pace produces an EXACT per-rep target live (1:52.34 → 28.09/50) — the headline feature genuinely works, not just compiles; (2) the send-off interval is honestly disclosed as post-engine cosmetic scaling, which matters for whether I trust the set as-swum; (3) the coach-home 'Coach's Note' still reads generic-masters ('2:00–2:15/100') even mid-flow, reinforcing that the default voice is coach/masters, not 'you, the racer'; (4) reliability/latency is fine on a logged-in session (sub-600ms bootstrap, no console errors), so on-deck responsiveness is not a concern. The athlete-side onboarding (invite-only Apple/Google gate, then finding 📈 Progress and Profile → Race goals two clicks deep) was not exercised live and remains the untested first-run path for a solo user.",
+      "shipped_since_last": "Mostly n/a — new persona (the prior eval was 5 COACH personas; no solo/self-pay athlete was run). But the three prior-eval threads most relevant to a self-directed racer have since shipped and I verified them: (1) HS race-pace + PR/goal-anchored targets — SHIPPED and landed WELL (engine.js buildRacePaceMain + RaceGoalsPanel + tasks 53–59); the exact-split generation is the strongest thing in the app for my archetype. (2) Swimmer progress dashboard — SHIPPED as 📈 Progress (ProgressDashboard.jsx, web v1) but landed PARTIALLY: it shows volume + yards-by-stroke + three test-set bests, yet omits per-event PRs and any progression-over-time chart, so it doesn't yet answer 'am I getting faster at my events.' (3) Per-swimmer equipment + calendar/.ics + roster CSV — SHIPPED but coach-roster-scoped; the .ics personal next-event countdown is the only piece that touches my solo flow. The meta-critique's own open follow-up ('swimmer-side never evaluated; pricing thesis untested for self-use') is exactly what this run confirms: the athlete experience is good and entirely free, which is great for adoption and fatal for athlete-side revenue.",
+      "_key": "swimmer",
+      "_label": "Individual Swimmer"
+    }
+  ],
+  "synthesis": {
+    "at_a_glance": [
+      {
+        "persona": "Private / small-group coach",
+        "tier": "Lesson ($4.99)",
+        "verdict": "Yes (up from Maybe)",
+        "single_blocker": "None blocks the buy; recap is email-only behind a guardian-link chain, routed around with Copy Text."
+      },
+      {
+        "persona": "Summer-league head coach",
+        "tier": "Free (would not pay $10/mo for 7 weeks)",
+        "verdict": "No (unchanged)",
+        "single_blocker": "No genuine beginner content — built-in bank still floors ~800yd of adult-coded sets; ~60% of roster (5-9yo / non-swimmers) has nothing to swim."
+      },
+      {
+        "persona": "High school SCY coach",
+        "tier": "Coach ($10)",
+        "verdict": "Maybe (unchanged)",
+        "single_blocker": "Meet-anchored taper still requires manual weekly phase flips (no auto-shift; App.jsx:2959) AND no deck-friendly whiteboard print."
+      },
+      {
+        "persona": "USA-S club / program director",
+        "tier": "Coach ($9.99) for self only; will NOT buy Program ($25)",
+        "verdict": "No (unchanged)",
+        "single_blocker": "Program tier is undefined/undifferentiated billing chrome over Coach; no real periodization and no board-defensible MAAP pack."
+      },
+      {
+        "persona": "Masters coach",
+        "tier": "Coach ($9.99)",
+        "verdict": "Maybe (up from leaning no)",
+        "single_blocker": "Per-swimmer constraints UI is managed-swimmer-only — can't set injury exclusions on the self-registered adults who dominate a masters roster."
+      },
+      {
+        "persona": "Individual competitive swimmer",
+        "tier": "Free (no SKU exists for them)",
+        "verdict": "No (structural)",
+        "single_blocker": "No paid tier exists for a solo athlete, and the free Progress view doesn't track per-event PRs over time — the one thing they'd pay for."
+      }
+    ],
+    "shared_themes": [
+      {
+        "theme": "No 1-page big-font whiteboard/deck print",
+        "personas": "Summer-league, High school, Club (3 of 6, all deck coaches)",
+        "detail": "Every on-deck coach transcribes one sheet onto a pool whiteboard; none hand kids paper. The only prints are window.print() of the web layout or MultiPacePrintView's per-lane multi-page flow (one page PER lane), explicitly the wrong artifact. This was an S-cost ask in the 2026-05-25 eval, was re-requested, and still did not ship. It is the single cheapest high-impact convergent item — a new print stylesheet over the lanes array that already exists, no engine work."
+      },
+      {
+        "theme": "Genuine learn-to-swim / beginner content (25-based, no-interval, generous rest)",
+        "personas": "Private, Summer-league, (HS adjacent via low floor) — strongest from the 2 youth/beginner coaches",
+        "detail": "The Lesson type lowered LESSON_MIN to 100 but built-in technique content can't go below ~800yd, so the lowered floor is a no-op without short authored sets. Summer-league's ~60% beginner roster and Private's learn-to-swim half are both locked out. Pace presets bottom out at Recreational 2:30/100, which assumes a kid can hold 2:30 — many can't swim 100 continuously. No stroke-survival/DQ-avoidance pack (breast pullout, fly two-hand, IM order)."
+      },
+      {
+        "theme": "Off-persona Coach's Note leaks 'masters pace 2:00-2:15/100' onto every coach/kid/HS workout",
+        "personas": "Private, Summer-league, HS, Club, Masters, Swimmer (ALL 6)",
+        "detail": "Verified at App.jsx:5362-5367: the note is branched ONLY on poolMode, never on workout type, swimmer age, or coach context. The SCY/default branch hardcodes the masters string. It renders verbatim on a kids' Lesson, an HS race-pace set, and a club-coach sheet. Universally caught live; erodes trust on any parent- or athlete-facing surface. Trivial conditional fix (branch on workout type / persona). Highest-consensus item in the entire eval."
+      },
+      {
+        "theme": "Per-swimmer personalization (constraints + race-pace) doesn't reach the swimmers who actually have it",
+        "personas": "Masters, HS, Club",
+        "detail": "PSC v1 shipped well but the coach UI accepts managedId only — the DB/authz already support swimmer_sub, so it's wiring, not architecture. Masters/HS/club rosters are dominated by self-registered Apple/Google logins, not managed rows. Same shape on race-pace: goal store is the logged-in coach's own, so group fanout applies one target to everyone — the marquee 'PR-anchored' feature is effectively individual-only, not a team-practice feature."
+      },
+      {
+        "theme": "Reliability/latency on deck is a solved blind spot",
+        "personas": "All 6",
+        "detail": "Every persona independently confirmed from LIVE_EVIDENCE: bootstrap 200 in ~563ms, team-calendars ~465ms, reports 1-2s, no console errors, instant SPA nav, healthy 200s (not 503). The prior eval's reliability blind spot reads as fine for a single coach pulling up a set poolside. This removes a prior worry rather than adding a request."
+      }
+    ],
+    "contradictions": [
+      {
+        "tension": "Masters coach praises content as 'genuinely adult-coded, not kid sets relabeled' while Summer-league/Private say content is masters-coded and locked out for beginners — opposite complaints about the SAME bank.",
+        "resolution": "Both are right; the bank has ONE center of gravity (masters/adult ~2:00/100) and no breadth at the extremes. It's correct for the audience it was built for (masters, HS, club) and empty for the audience it wasn't (learn-to-swim, 5-9yo). The fix is not 'rebalance' — it's an additive beginner content pack tagged to feed the Lesson/Youth type, leaving the adult bank untouched."
+      },
+      {
+        "tension": "Roadmap declares Phase 5 'Lesson tier BUILT (web) 2026-06-04' and the Private coach buys at $4.99, yet Summer-league found the Lesson paywall is inert (server.js returns no_price_id).",
+        "resolution": "Both true and not contradictory. The Lesson FEATURES (Lesson workout type, per-swimmer equipment, recap) shipped and work — that's what flips the Private coach. The Lesson PRICE button is unwired because price_id_lesson_monthly isn't configured in Stripe (verified server.js:2839). The features are live; the purchase path for that specific tier is not. Operational gap, not a feature gap — fix is config, not code."
+      },
+      {
+        "tension": "Swimmer-side experience is rated 'real and well-executed' (Swimmer persona) yet was NOT exercised live and flagged as the recurring untested blind spot.",
+        "resolution": "The judgment is source/manual-based, not live-grounded. LIVE_EVIDENCE was captured on a COACH account (Patrick Cassidy); the parent/guardian surface was driven but the swimmer's own athlete session (logging against an assignment, seeing PR-anchored targets as set) was not. The praise is plausible but unverified — treat 'swimmers actually use assigned workouts' as an assumption, not a finding. This is the load-bearing gap under the entire free-swimmer thesis."
+      }
+    ],
+    "roadmap_candidates": [
+      {
+        "rank": 1,
+        "title": "Type/persona-aware Coach's Note (kill the hardcoded masters string)",
+        "unlocks": "All 6 personas — trust on every parent/athlete/coach-facing sheet",
+        "cost": "S",
+        "rationale": "Highest consensus in the eval (6/6 caught it live) at the lowest cost. App.jsx:5362-5367 branches only on poolMode; add branches on workout type (Lesson → age-appropriate cue-over-yardage; Race-Pace → goal-pace framing) and coach-vs-self context. A few conditionals over data already in scope. Removes a credibility leak from the one surface coaches screenshot for parents."
+      },
+      {
+        "rank": 2,
+        "title": "Single-page big-font landscape whiteboard print",
+        "unlocks": "Summer-league, HS, Club (every deck coach) — the daily artifact a season runs on",
+        "cost": "S",
+        "rationale": "Re-requested S-cost item that did NOT ship two evals running. A new print stylesheet over the existing lanes array: Lane 1/2/3 columns, large type, per-lane pace, no swimmer names, one landscape page readable from 6 feet. No engine work. Cheapest path to making the multi-lane primitive actually usable on deck for three personas."
+      },
+      {
+        "rank": 3,
+        "title": "Wire anchor suggested_phase into the generator (opt-in auto-apply)",
+        "unlocks": "HS coach (flips taper from advisory to hands-off); Club partially",
+        "cost": "S",
+        "rationale": "The taper feature half-shipped: lib/season.js computes suggested_phase and the badge renders it, but effectivePhase (App.jsx:2959) reads the manually-set current_phase, never the anchor's suggestion. Last-mile fix: fall back to suggested_phase when not manually overridden, or a one-tap 'Apply suggested phase' on Generate. Turns the HS persona's named #1 blocker from advisory into the auto-shift asked for since 2026-05-25."
+      },
+      {
+        "rank": 4,
+        "title": "Per-swimmer constraints UI for real (non-managed) logged-in swimmers",
+        "unlocks": "Masters (flips Maybe→Yes), HS, Club",
+        "cost": "M",
+        "rationale": "PSC v1's DB + authz already support swimmer_sub (db.js:5995); only the ConstraintFormModal/ConstraintsPanel UI is managedId-only. Masters/HS/club rosters are dominated by self-registered logins, so the shipped injury feature currently misses the half of the roster most likely to have it. Wiring, not architecture — explicitly the deferred v1.1 slice. Single change that converts the Masters persona's Maybe to Yes."
+      },
+      {
+        "rank": 5,
+        "title": "Youth / Learn-to-Swim content pack (25-based, no-interval mode, real ~200-400yd floor)",
+        "unlocks": "Summer-league (flips No→Yes), Private (learn-to-swim half)",
+        "cost": "L",
+        "rationale": "The single thing that flips the Summer-league verdict and completes the Private coach's book. A beginner bank (stroke-survival 25s, kick-with-board, streamline, breath/float progressions, breast-pullout/fly-two-hand/IM-order DQ drills) tagged to feed the Lesson/Youth type, plus a go-on-the-whistle no-interval mode. Without it the lowered Lesson floor is a no-op and ~60% of a summer roster can't use the app. Content work, but it's the wedge into the entire youth segment."
+      },
+      {
+        "rank": 6,
+        "title": "Define + ship the Program tier (team periodization + org reports) — or drop the $25 claim",
+        "unlocks": "Club / program director (the only path to $25/mo revenue)",
+        "cost": "XL",
+        "rationale": "Program is 'coming soon' billing chrome — every team-shaped feature already lives under $9.99 Coach, and the manual's compare table has no Program column. The roadmap itself flags this. Until an editable macrocycle (1-3 championship meets, per-week mesocycle loads, per-group) + cross-coach org reports differentiate it, there is literally nothing for a club to evaluate. XL and demand-gated, but it's the gate on the top revenue tier; the cheap interim is to remove the unsupported seasonal/Program claims from the manual."
+      },
+      {
+        "rank": 7,
+        "title": "Unify PRs + per-event progression chart, and define a swimmer-facing SKU",
+        "unlocks": "Individual swimmer (the only persona with zero buyable product)",
+        "cost": "L",
+        "rationale": "Two disconnected PR systems (RaceGoalsPanel hand-typed goals vs ProgressDashboard's three test-set bests) never talk, and neither auto-tracks race times — so 'am I getting faster at my events' is unanswered. Close the loop from logged splits → per-event PR → progression chart, add SCM/LCM course tabs (data model already carries course), and bundle as a $3-5 Athlete tier. Lower priority because it serves the one segment the 'coach-pays/swimmer-free' thesis explicitly excludes, but it's the only athlete-side monetization path and the swimmer experience is otherwise strong + free."
+      }
+    ],
+    "whats_changed": [
+      "Per-swimmer constraints (PSC v1) SHIPPED and landed well — 14-type vocab, optionViolatesPSC step-0 picker filter, V9 validator, expiry, Generate-time checklist, per-lane print annotations, proper coach authz. Resolved the triple-cross-validated #1 gap from 2026-05-25 — EXCEPT it's managed-swimmer-only, so it misses self-registered adults (Masters) and is the new top remaining ask.",
+      "Lesson workout type SHIPPED (engine.js LESSON_SECTIONS: Warm-Up/Skill Focus/Send-off, no forced Main Set) plus per-managed-swimmer equipment (migration 046) and coach-authored leveled lesson sets (migration 048). This resolved BOTH of the Private coach's prior blockers and flipped that persona from Maybe to Yes.",
+      "HS race-pace + PR/goal-anchored targets SHIPPED and landed strongest of all — buildRacePaceMain produces engine-exact per-rep splits (live-verified: 200-free 1:52.34 goal → 26x50 @ 28.09), 8-event taxonomy, USRPT mode. Resolved the HS coach's #2 ask and is the most coach-replacing feature for the solo swimmer. BUT group fanout reverts to one generic target for everyone, so it's effectively individual-only.",
+      "Meet-anchored taper shipped ONLY the cheap version — lib/season.js suggestedPhaseFromWeeksOut + countdown + suggested-phase badge — but it is NOT wired into Generate (effectivePhase at App.jsx:2959 uses manual current_phase). The HS coach's named #1 blocker is half-done: advisory, not auto-shifting. The club's 'real season planner / macrocycle' ask is essentially untouched.",
+      "Calendar (.ics) + roster CSV exports SHIPPED — Hy-Tek MM column order (server.js:4476), team .ics feed with no minor PII. One-way bridge OUT to the meet-day stack. Resolved the club's data-portability lead, but it's export-only, not the TeamUnify/SWIMS two-way integration needed to actually replace tools.",
+      "Swimmer Progress dashboard SHIPPED as web v1 (volume + yards-by-stroke + 3 test-set bests) but PARTIAL — omits per-event PRs and any progression-over-time chart, so it doesn't answer 'am I getting faster at my events.' Reports still show 'YARDS BY STROKE: No data in range' (stroke-attribution gap) and charts deferred.",
+      "Team curation cascade, parent portal, identity refactor, ownership transfer, a11y AA pass all SHIPPED (Phases 1-4 engineering-complete). The a11y pass is real but has 3 inline modals still not converted to role=dialog (roadmap Next).",
+      "NOT shipped despite prior asks: the 1-page whiteboard print (S-cost, re-requested by 3 coaches), genuine beginner content, team-type compliance posture (masters still hits unconditional DOB gate at server.js:5523), a defined Program tier, and the MAAP/SafeSport pack (person_external_ids table still empty, two-deep still a soft warning). The Lesson PRICE button is also inert — server.js:2839 returns no_price_id because price_id_lesson_monthly isn't configured in Stripe."
+    ],
+    "blind_spots": [
+      "The swimmer-side athlete session was STILL not exercised live — the exact blind spot the 2026-05-25 synthesis flagged. LIVE_EVIDENCE was captured on a coach account; the parent/guardian surface was driven but no real non-coach, non-parent swimmer logged against an assignment or viewed their PR-anchored targets. The free-swimmer thesis (and the Swimmer persona's whole verdict) rests on an unverified assumption that swimmers actually use assigned workouts.",
+      "First-run / onboarding friction is unverified — every live note caveats that the run was on an already-authed session. Invite-only + Apple/Google-only signup was flagged by 3 personas (Private, Summer-league, Masters) as a barrier (a volunteer HS assistant can't just be handed a login; a solo coach hits the invite wall), but nobody actually drove the OAuth gate or first-generate empty state. The 'friction-then-disappointment arc' is asserted, not observed.",
+      "iOS native was entirely untested — LIVE_EVIDENCE is web-only, yet the roadmap touts builds 8-10 with coach tools, IAP, and Practices roll-call. No persona could speak to iOS parity, the deferred tier-comparison chart's Web-vs-Universal column, or whether the on-deck phone experience (the stated primary use case) actually differs native vs web.",
+      "No persona stress-tested the multi-lane primitive at a REALISTIC ability spread. The Masters coach noted lanes run 1:10-2:45/100 and optionFitsAllLanes (MIN_REST 5s / MAX_REST_RATIO 1.5) would fallback-banner on that range — but this is a source inference, not a live finding. Whether the killer deck primitive survives a genuine masters/summer spread is untested.",
+      "Latency was measured only as single-coach, single-session bootstrap calls on good wifi. 'Deck-reliable' is asserted for the happy path; nobody tested concurrent load, bad pool wifi, the 429 rate-limit pressure the roadmap itself flags (parallel screen-build calls), or a 30-40 swimmer fanout generate. Reliability is 'fine for one coach pulling up a set,' not validated at team scale.",
+      "Pricing willingness is self-reported intent, not behavior — and notably, with the Lesson price button inert and Program undefined, two of the four paid tiers literally cannot be purchased today, so even the personas who said 'Yes' (Private at $4.99) couldn't actually complete the buy. The eval measures stated demand against a checkout that doesn't fully exist.",
+      "No competitive grounding — Commit Swimming, TrainingPeaks, TeamUnify are named by the club coach but no persona actually compared SetForge's output quality or workflow head-to-head, so 'beats my Google Doc' is the only real baseline and the replace-an-incumbent bar is asserted from one persona's domain knowledge."
+    ],
+    "headline": "Since the 2026-05-25 eval, SetForge shipped almost exactly the right things and shipped them well: per-swimmer constraints, the Lesson type + per-swimmer equipment, and exact PR/goal-anchored race-pace are all live and live-verified, and they moved real verdicts — the Private coach flipped Maybe→Yes and the Masters coach moved toward Yes. Reliability on deck, the prior eval's reliability blind spot, now reads as solved. But the gains are concentrated in the audience the bank was already built for (masters/HS/club individuals), and three patterns hold the product back from broad conversion: the marquee personalization features (constraints, race-pace) don't reach the self-registered swimmers and team fanouts where they're most needed; the cheap, thrice-requested whiteboard print and genuine beginner content still haven't shipped, leaving the summer-league and learn-to-swim segments empty; and an off-persona 'masters pace 2:00-2:15/100' Coach's Note (App.jsx:5362, all 6 personas caught it) plus an inert Lesson price button and an undefined Program tier undercut trust and revenue on the surfaces and SKUs that should close deals. Net: the engineering execution is strong, but the last-mile wiring (suggested_phase into Generate, constraints to real swimmers, per-swimmer race-pace on fanout) and the two stubbornly-unshipped cheap items (whiteboard print, type-aware note) are now the highest-leverage, lowest-cost moves on the board."
+  }
+}

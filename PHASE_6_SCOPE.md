@@ -29,12 +29,20 @@ behavior change for existing teams); the owner opts *down* to simpler.
 
 ### Candidate toggles ("wherever it makes sense" — to be finalized in the scope session)
 Generation: Bank/Engine/Mix source toggle · multi-lane generate · kick section · dryland ·
-advanced equipment · recovery mode · training-phase picker.
+advanced equipment · recovery mode · training-phase picker · 🏁 race-pace · 🧒 Learn-to-Swim.
 Coach surfaces: per-swimmer constraints · team curation tier · Catalog browser · UGC / My
-Sets · Reports · lane plans · meet anchors.
+Sets · Reports · lane plans · meet anchors · 🛡 compliance credentials.
 Planning: intents / week view · "Generate for" target picker.
 (Grouped, with a few **presets** — e.g. "Simple / Standard / Full" — so an owner sets it in
 one click instead of 15.)
+
+> **✅ AUDIT DONE 2026-06-06 → see `docs/PHASE_6_TOGGLE_AUDIT.md`.** That doc is the
+> canonical inventory (full web + iOS code sweep) and **supersedes the hand-written list
+> above**, which was stale. It groups ~60 surfaces into **21 toggle bundles + 3 presets**
+> (Simple / Standard / Full), confirms **📅 Events/RSVP/venues/weather/calendar** as a
+> toggle cluster (the flagged one), and corrects two errors here: "training-phase picker"
+> is a personal Profile setting (not a generate toggle) and "Generate-for" is CORE (never
+> gate). Use the audit's open-decisions list to drive the scope session.
 
 ### Reuses (deps already satisfied)
 - **Team settings infra** — `TeamSettingsTab` (public/index.html) + team-scoped owner-write

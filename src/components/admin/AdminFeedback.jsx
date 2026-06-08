@@ -46,7 +46,7 @@ import { csrfHeaders } from "../../lib/api.js";
 
       const STATUSES = [
         { id: "new",       label: "New",       color: "var(--color-warn)" },
-        { id: "reviewed",  label: "Reviewed",  color: "var(--color-primary)" },
+        { id: "reviewed",  label: "Reviewed",  color: "var(--color-primary-text)" },
         { id: "resolved",  label: "Resolved",  color: "var(--color-positive)" },
         { id: "dismissed", label: "Dismissed", color: "var(--color-text-dim)" },
       ];

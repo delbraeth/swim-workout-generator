@@ -29,6 +29,7 @@ const GLOBALS = new Set([
   "localStorage","sessionStorage","alert","confirm","prompt","URL","URLSearchParams","Blob","File","FileReader",
   "FormData","Headers","Request","Response","AudioContext","webkitAudioContext","atob","btoa","structuredClone",
   "crypto","TextEncoder","TextDecoder","undefined","NaN","Infinity","globalThis","performance","Intl","BigInt",
+  "Uint8Array","Uint16Array","Uint32Array","Int8Array","Float32Array","Float64Array","ArrayBuffer","DataView",
   "IntersectionObserver","ResizeObserver","MutationObserver","queueMicrotask","getComputedStyle","DOMParser",
   "Image","Audio","Notification","AbortController","Event","CustomEvent","HTMLElement","Node","clearImmediate",
   "print","scrollTo","matchMedia","CSS","DataTransfer","ClipboardEvent","KeyboardEvent","MouseEvent",

@@ -1,6 +1,7 @@
 // src/components/practices/AssignedToMeView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders } from "../../lib/api.js";
+import { RsvpEventsPanel } from "./RsvpEventsPanel.jsx";
 import { COMPLETION_LABELS, PSC_LABEL_MAP } from "../../lib/constants.js";
 import { computeSubstitutionsForSwimmer } from "../../lib/workout-helpers.js";
 import { DrylandBlock } from "../workout/DrylandBlock.jsx";
@@ -82,6 +83,9 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
       return (
         <div>
           <h2 style={{ color: "var(--color-text)", marginTop: 0 }}>📥 Assigned to me</h2>
+
+          {/* Slice B2 — swimmer RSVP for upcoming team events. Self-hides when none. */}
+          <RsvpEventsPanel />
 
           <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
             {[{ id: "", label: "All", n: list?.length || 0 }, ...Object.keys(COMPLETION_LABELS).map(k => ({ id: k, label: COMPLETION_LABELS[k].label, n: counts[k] || 0 }))].map(f => {
@@ -239,7 +243,7 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                             ◐ Mark partial
                           </button>
                           <button onClick={() => handleMarkMissed(a)}
-                            style={{ padding: "7px 12px", background: "transparent", color: "var(--color-destructive)", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+                            style={{ padding: "7px 12px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
                             ✕ Mark missed
                           </button>
                         </div>

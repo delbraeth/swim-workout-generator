@@ -25,7 +25,7 @@
             <div style={{ fontSize: 13, color: "var(--color-text)", fontWeight: 600 }}>{metric.label}</div>
             {!editing && isSet && (
               <div style={{ fontSize: 11, color: "var(--color-text-dim)", marginTop: 2 }}>
-                Target: <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>{value.toLocaleString()}</span> {metric.unit}
+                Target: <span style={{ color: "var(--color-primary-text)", fontWeight: 700 }}>{value.toLocaleString()}</span> {metric.unit}
               </div>
             )}
           </div>
@@ -69,7 +69,7 @@
           ) : (
             <button onClick={startEdit}
               style={{ padding: "4px 12px", borderRadius: 6, border: "1px dashed var(--color-border-strong)",
-                background: "transparent", color: "var(--color-primary)",
+                background: "transparent", color: "var(--color-primary-text)",
                 fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
               + Set a goal
             </button>

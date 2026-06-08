@@ -13,6 +13,9 @@ MariaDB lives on a separate Spaceship Starlight VM managed by CyberPanel.
 Repo working title is `swim-workout-generator` (predates the SetForge
 rebrand; not renamed to avoid breaking deploy paths).
 
+**Created by Patrick Cassidy (engineering) and Veronica Cassidy (coach &
+swimmer — coaching/swimming domain design).**
+
 ## Layout
 
 - `public/index.html` — the entire frontend (single-file React app).
