@@ -133,7 +133,9 @@ import {
   dbListGroupMembers, dbAddGroupMember, dbRemoveGroupMember, dbGetGroupMember,
   dbCreateTeamEvent, dbGetTeamEvent, dbDeleteTeamEvent, dbUpdateTeamEvent, dbListTeamEvents,
   dbSetRsvp, dbGetMyRsvp, dbGetRsvpSummary, dbSetTeamEventStatus,
+  dbGetPracticeContext, dbListUpcomingPracticesForUser,
   dbCreateOrLinkVenue, dbGetVenue, dbListVenues, dbArchiveVenue, dbGetWeatherCache, dbPutWeatherCache,
+  dbProposeVenueEdit, dbListVenueEditProposals, dbReviewVenueEditProposal,
   dbListRsvpRespondentSubs,
   dbIsSwimmerInTeam, dbListUpcomingEventsForUser,
   dbBulkCreateAssignments, dbListAssignmentsForWorkout, dbGetAssignment, dbUpdateAssignmentCompletion,
@@ -5952,14 +5954,19 @@ app.put("/api/rsvp", checkOrigin, requireAuth, requireCsrf, writeLimiter, async 
   try {
     const { target_kind, target_id, status, managed_id } = req.body || {};
     if (!["meet", "practice"].includes(target_kind) || !target_id) return res.status(400).json({ error: "bad_target" });
-    let teamId = null;
+    let teamId = null, practiceGroupId = null;
     if (target_kind === "meet") {
       const ev = await dbGetTeamEvent(target_id);
       if (!ev) return res.status(404).json({ error: "event not found" });
       if (ev.status === "cancelled") return res.status(409).json({ error: "event_cancelled" });
       teamId = ev.team_id;
     } else {
-      return res.status(400).json({ error: "practice_rsvp_not_yet" });   // B2
+      // C2 — practice RSVP. Resolve the practice's group/team for access scope.
+      const ctx = await dbGetPracticeContext(target_id);
+      if (!ctx) return res.status(404).json({ error: "practice not found" });
+      if (!ctx.teamId) return res.status(400).json({ error: "practice_not_team_scoped" });
+      teamId = ctx.teamId;
+      practiceGroupId = ctx.groupId;
     }
     if (managed_id) {
       const role = teamId ? await dbGetTeamRole(teamId, req.userSub) : null;
@@ -5970,23 +5977,45 @@ app.put("/api/rsvp", checkOrigin, requireAuth, requireCsrf, writeLimiter, async 
     }
     // self
     const role = await dbGetTeamRole(teamId, req.userSub);
-    const canSee = role ? true : await dbIsSwimmerInTeam(req.userSub, teamId);
+    let canSee = !!role;
+    if (!canSee) {
+      // Meets: team membership. Practices: membership of the targeted group.
+      canSee = practiceGroupId
+        ? (await dbListGroupMembers(practiceGroupId)).some(m => m.member_swimmer_sub === req.userSub)
+        : await dbIsSwimmerInTeam(req.userSub, teamId);
+    }
     if (!canSee) return res.status(403).json({ error: "no access to this event" });
     const r = await dbSetRsvp({ targetKind: target_kind, targetId: target_id, swimmerSub: req.userSub, status, respondedBySub: req.userSub });
     return r.ok ? res.json(r) : res.status(400).json({ error: r.reason });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
-// Coach view: RSVP tally + per-swimmer list for an event.
+// Coach view: RSVP tally + per-swimmer list for an event or practice.
 app.get("/api/rsvp/:kind/:id", requireAuth, async (req, res) => {
   try {
-    if (req.params.kind !== "meet") return res.status(400).json({ error: "unsupported_kind" });
-    const ev = await dbGetTeamEvent(req.params.id);
-    if (!ev) return res.status(404).json({ error: "event not found" });
-    const role = await dbGetTeamRole(ev.team_id, req.userSub);
-    if (!role) return res.status(403).json({ error: "not a team coach" });
-    res.json(await dbGetRsvpSummary(req.params.kind, req.params.id));
+    const { kind, id } = req.params;
+    if (kind === "meet") {
+      const ev = await dbGetTeamEvent(id);
+      if (!ev) return res.status(404).json({ error: "event not found" });
+      const role = await dbGetTeamRole(ev.team_id, req.userSub);
+      if (!role) return res.status(403).json({ error: "not a team coach" });
+    } else if (kind === "practice") {
+      const ctx = await dbGetPracticeContext(id);
+      if (!ctx) return res.status(404).json({ error: "practice not found" });
+      const role = ctx.teamId ? await dbGetTeamRole(ctx.teamId, req.userSub) : null;
+      // The practice owner (the coach who scheduled it) can always see its RSVPs.
+      if (!role && ctx.ownerSub !== req.userSub) return res.status(403).json({ error: "not a team coach" });
+    } else {
+      return res.status(400).json({ error: "unsupported_kind" });
+    }
+    res.json(await dbGetRsvpSummary(kind, id));
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Swimmer self: my upcoming group practices with RSVP status (C2).
+app.get("/api/me/practices/upcoming", requireAuth, async (req, res) => {
+  try { res.json(await dbListUpcomingPracticesForUser(req.userSub)); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 // Swimmer self: my RSVP status for an event.
@@ -6112,6 +6141,37 @@ app.get("/api/venues", requireAuth, requireCoach, async (req, res) => {
     const lng = req.query.lng != null ? Number(req.query.lng) : null;
     const near = (Number.isFinite(lat) && Number.isFinite(lng)) ? { latitude: lat, longitude: lng } : null;
     res.json(await dbListVenues({ q: req.query.q || null, near, limit: 20 }));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// C4 — a coach proposes a correction to a shared venue's fields. Stored pending;
+// applied only on admin approval (the catalog is universal, so no silent edits).
+app.post("/api/venues/:id/propose-edit", checkOrigin, requireAuth, requireCoach, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { changes, note } = req.body || {};
+    const r = await dbProposeVenueEdit({ venueId: req.params.id, changes, note: note || null, proposedBySub: req.userSub });
+    if (!r.ok) return res.status(r.reason === "venue_not_found" ? 404 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "venue.propose_edit", ...reqMeta(req), details: { venue_id: req.params.id, proposal_id: r.id } });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// C4 — admin moderation queue: list venue-edit proposals (default pending).
+app.get("/api/admin/venue-edits", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const status = req.query.status === "" ? null : (req.query.status || "pending");
+    res.json(await dbListVenueEditProposals(status));
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// C4 — admin approves (applies to venues) or rejects a proposal.
+app.post("/api/admin/venue-edits/:id/review", checkOrigin, requireAuth, requireAdmin, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const { action, review_note } = req.body || {};
+    const r = await dbReviewVenueEditProposal({ id: req.params.id, action, reviewerSub: req.userSub, reviewNote: review_note || null });
+    if (!r.ok) return res.status(r.reason === "not_found" ? 404 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "venue.review_edit", ...reqMeta(req), details: { proposal_id: req.params.id, action, applied: r.applied } });
+    res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 

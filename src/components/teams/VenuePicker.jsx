@@ -21,8 +21,40 @@ export function VenuePicker({ value, onChange }) {
   const [cName, setCName] = React.useState("");
   const [cAddr, setCAddr] = React.useState("");
   const [cIO, setCIO]     = React.useState("indoor");
+  // C4 — suggest-edit form (proposes corrections to the shared catalog).
+  const [suggesting, setSuggesting] = React.useState(false);
+  const [sName, setSName] = React.useState("");
+  const [sIO, setSIO]     = React.useState("");
+  const [sCourse, setSCourse] = React.useState("");
+  const [sNote, setSNote] = React.useState("");
+  const [sBusy, setSBusy] = React.useState(false);
+  const [sMsg, setSMsg]   = React.useState(null);
 
   const mapkitOn = isMapKitConfigured();
+
+  const openSuggest = () => {
+    setSName(value?.name || ""); setSIO(value?.indoor_outdoor || ""); setSCourse(""); setSNote(""); setSMsg(null);
+    setSuggesting(true);
+  };
+  const submitSuggest = async () => {
+    const changes = {};
+    if (sName.trim() && sName.trim() !== (value?.name || "")) changes.name = sName.trim();
+    if (sIO && sIO !== value?.indoor_outdoor) changes.indoor_outdoor = sIO;
+    if (sCourse) changes.course = sCourse;
+    if (Object.keys(changes).length === 0) { setSMsg("No changes to suggest."); return; }
+    setSBusy(true); setSMsg(null);
+    try {
+      const r = await fetch(`/api/venues/${value.id}/propose-edit`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() },
+        body: JSON.stringify({ changes, note: sNote.trim() || null }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      setSMsg("✓ Sent for review. An admin will apply it.");
+      setSuggesting(false);
+    } catch (e) { setSMsg(`Couldn't send: ${e.message}`); }
+    setSBusy(false);
+  };
 
   const runSearch = async () => {
     setBusy(true); setErr(null);
@@ -65,12 +97,45 @@ export function VenuePicker({ value, onChange }) {
     <div>
       <label style={labelStyle}>Venue</label>
       {value ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "var(--color-card)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
-          <span style={{ fontSize: 13, color: "var(--color-text)" }}>
-            {value.indoor_outdoor === "outdoor" ? "🌤 " : "🏟 "}{value.name}
-            {value.indoor_outdoor === "outdoor" && <span style={{ marginLeft: 6, fontSize: 10, color: "var(--color-text-dim)" }}>outdoor</span>}
-          </span>
-          <button type="button" onClick={() => onChange(null)} style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 11, background: "transparent", color: "var(--color-text-muted)", border: "1px solid var(--color-border-strong)", borderRadius: 4, cursor: "pointer" }}>Clear</button>
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "var(--color-card)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
+            <span style={{ fontSize: 13, color: "var(--color-text)" }}>
+              {value.indoor_outdoor === "outdoor" ? "🌤 " : "🏟 "}{value.name}
+              {value.indoor_outdoor === "outdoor" && <span style={{ marginLeft: 6, fontSize: 10, color: "var(--color-text-dim)" }}>outdoor</span>}
+            </span>
+            <button type="button" onClick={() => onChange(null)} style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 11, background: "transparent", color: "var(--color-text-muted)", border: "1px solid var(--color-border-strong)", borderRadius: 4, cursor: "pointer" }}>Clear</button>
+          </div>
+          {/* C4 — suggest a correction to this shared venue (admin-moderated). */}
+          {!suggesting ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button type="button" onClick={openSuggest} style={{ background: "none", border: "none", color: "var(--color-text-dim)", cursor: "pointer", fontSize: 11, padding: 0, textDecoration: "underline" }}>Suggest a correction</button>
+              {sMsg && <span style={{ fontSize: 11, color: sMsg.startsWith("✓") ? "var(--color-positive)" : "var(--color-warn)" }}>{sMsg}</span>}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 6, padding: 8, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 6 }}>
+              <input value={sName} onChange={e => setSName(e.target.value)} placeholder="Corrected name" style={inputStyle} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <select value={sIO} onChange={e => setSIO(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                  <option value="">Indoor/outdoor (no change)</option>
+                  <option value="indoor">🏟 Indoor</option>
+                  <option value="outdoor">🌤 Outdoor</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+                <select value={sCourse} onChange={e => setSCourse(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                  <option value="">Course (no change)</option>
+                  <option value="SCY">SCY</option>
+                  <option value="SCM">SCM</option>
+                  <option value="LCM">LCM</option>
+                </select>
+              </div>
+              <input value={sNote} onChange={e => setSNote(e.target.value)} placeholder="Note for the reviewer (optional)" style={inputStyle} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" onClick={submitSuggest} disabled={sBusy} style={{ padding: "5px 11px", fontSize: 12, background: "var(--color-primary)", color: "var(--color-bg)", border: "none", borderRadius: 5, cursor: sBusy ? "wait" : "pointer", fontWeight: 700 }}>{sBusy ? "…" : "Send for review"}</button>
+                <button type="button" onClick={() => { setSuggesting(false); setSMsg(null); }} style={{ padding: "5px 9px", fontSize: 12, background: "var(--color-border)", color: "#cbd5e1", border: "none", borderRadius: 5, cursor: "pointer" }}>Cancel</button>
+              </div>
+              {sMsg && <div style={{ fontSize: 11, color: sMsg.startsWith("✓") ? "var(--color-positive)" : "var(--color-warn)" }}>{sMsg}</div>}
+            </div>
+          )}
         </div>
       ) : mode === "idle" ? (
         <div style={{ display: "flex", gap: 6 }}>

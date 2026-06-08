@@ -6018,6 +6018,116 @@ export async function dbArchiveVenue(venueId) {
   return { ok: true, affected: Number(r.affectedRows || 0) };
 }
 
+// ─── C4 — Venue field-edit moderation (mig 063) ─────────────────────────────
+// Coaches propose corrections to the shared catalog; admins apply or reject.
+// Only this whitelist of venue columns is editable via a proposal.
+function _sanitizeVenueChanges(changes) {
+  const out = {}; const errs = [];
+  if (!changes || typeof changes !== "object") return { out, errs: ["changes_required"] };
+  if ("name" in changes) {
+    const n = String(changes.name || "").trim();
+    if (!n) errs.push("name_empty"); else if (n.length > 200) errs.push("name_too_long"); else out.name = n;
+  }
+  if ("indoor_outdoor" in changes) {
+    if (!VENUE_INDOOR_OUTDOOR.includes(changes.indoor_outdoor)) errs.push("bad_io"); else out.indoor_outdoor = changes.indoor_outdoor;
+  }
+  if ("course" in changes) {
+    if (changes.course === null || changes.course === "") out.course = null;
+    else if (!VENUE_COURSES.includes(changes.course)) errs.push("bad_course"); else out.course = changes.course;
+  }
+  if ("timezone" in changes) {
+    const tz = changes.timezone == null ? null : String(changes.timezone).slice(0, 64).trim();
+    out.timezone = tz || null;
+  }
+  if ("latitude" in changes) {
+    const lat = (changes.latitude == null || changes.latitude === "") ? null : Number(changes.latitude);
+    if (lat != null && !(lat >= -90 && lat <= 90)) errs.push("bad_lat"); else out.latitude = lat;
+  }
+  if ("longitude" in changes) {
+    const lng = (changes.longitude == null || changes.longitude === "") ? null : Number(changes.longitude);
+    if (lng != null && !(lng >= -180 && lng <= 180)) errs.push("bad_lng"); else out.longitude = lng;
+  }
+  return { out, errs };
+}
+
+export async function dbProposeVenueEdit({ venueId, changes, note = null, proposedBySub }) {
+  if (!venueId || !proposedBySub) return { ok: false, reason: "missing_args" };
+  const venue = await dbGetVenue(venueId);
+  if (!venue) return { ok: false, reason: "venue_not_found" };
+  const { out, errs } = _sanitizeVenueChanges(changes);
+  if (errs.length) return { ok: false, reason: errs[0] };
+  if (Object.keys(out).length === 0) return { ok: false, reason: "no_changes" };
+  const r = await pool.query(
+    "INSERT INTO `venue_edit_proposals` (`venue_id`,`proposed_by_sub`,`changes`,`note`) VALUES (?,?,?,?)",
+    [venueId, proposedBySub, JSON.stringify(out), note ? String(note).slice(0, 280) : null]
+  );
+  return { ok: true, id: Number(r.insertId) };
+}
+
+export async function dbListVenueEditProposals(status = "pending") {
+  const where = []; const vals = [];
+  if (status) { where.push("p.`status` = ?"); vals.push(status); }
+  const rows = await pool.query(
+    "SELECT p.`id`, p.`venue_id`, p.`proposed_by_sub`, p.`changes`, p.`note`, p.`status`, " +
+    "       p.`created_at`, p.`reviewed_at`, p.`review_note`, " +
+    "       v.`name` AS venue_name, v.`indoor_outdoor` AS venue_io, v.`course` AS venue_course, " +
+    "       v.`timezone` AS venue_tz, v.`latitude` AS venue_lat, v.`longitude` AS venue_lng, " +
+    "       pr.`initials` AS proposer_initials " +
+    "FROM `venue_edit_proposals` p " +
+    "LEFT JOIN `venues` v ON v.`id` = p.`venue_id` " +
+    "LEFT JOIN `users` u ON CONVERT(u.`sub` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(p.`proposed_by_sub` USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
+    "LEFT JOIN `persons` pr ON pr.`id` = u.`person_id` " +
+    (where.length ? "WHERE " + where.join(" AND ") + " " : "") +
+    "ORDER BY p.`created_at` DESC LIMIT 200",
+    vals
+  );
+  return rows.map(r => {
+    let changes = r.changes;
+    if (typeof changes === "string") { try { changes = JSON.parse(changes); } catch (_) { changes = {}; } }
+    return {
+      id: Number(r.id), venue_id: r.venue_id, status: r.status,
+      changes: changes || {}, note: r.note || null,
+      created_at: dtToIso(r.created_at), reviewed_at: dtToIso(r.reviewed_at), review_note: r.review_note || null,
+      proposer_initials: r.proposer_initials || null,
+      current: r.venue_name == null ? null : {
+        name: r.venue_name, indoor_outdoor: r.venue_io, course: r.venue_course || null,
+        timezone: r.venue_tz || null,
+        latitude: r.venue_lat == null ? null : Number(r.venue_lat),
+        longitude: r.venue_lng == null ? null : Number(r.venue_lng),
+      },
+    };
+  });
+}
+
+export async function dbReviewVenueEditProposal({ id, action, reviewerSub = null, reviewNote = null }) {
+  if (!id || !["approve", "reject"].includes(action)) return { ok: false, reason: "bad_args" };
+  const rows = await pool.query(
+    "SELECT `venue_id`, `changes`, `status` FROM `venue_edit_proposals` WHERE `id` = ? LIMIT 1",
+    [Number(id)]
+  );
+  if (!rows[0]) return { ok: false, reason: "not_found" };
+  if (rows[0].status !== "pending") return { ok: false, reason: "already_reviewed" };
+  if (action === "approve") {
+    let changes = rows[0].changes;
+    if (typeof changes === "string") { try { changes = JSON.parse(changes); } catch (_) { changes = {}; } }
+    const { out, errs } = _sanitizeVenueChanges(changes);
+    if (errs.length) return { ok: false, reason: errs[0] };
+    const sets = []; const vals = [];
+    // Keys are the sanitized whitelist (name/indoor_outdoor/course/timezone/lat/lng),
+    // so this column interpolation is injection-safe.
+    for (const [k, v] of Object.entries(out)) { sets.push(`\`${k}\` = ?`); vals.push(v); }
+    if (sets.length) {
+      vals.push(rows[0].venue_id);
+      await pool.query(`UPDATE \`venues\` SET ${sets.join(", ")} WHERE \`id\` = ?`, vals);
+    }
+  }
+  await pool.query(
+    "UPDATE `venue_edit_proposals` SET `status` = ?, `reviewed_by_sub` = ?, `review_note` = ?, `reviewed_at` = NOW() WHERE `id` = ?",
+    [action === "approve" ? "approved" : "rejected", reviewerSub, reviewNote ? String(reviewNote).slice(0, 280) : null, Number(id)]
+  );
+  return { ok: true, applied: action === "approve" };
+}
+
 // ─── Weather forecast cache (one row per venue+day; TTL enforced by caller) ───
 export async function dbGetWeatherCache(venueId, day) {
   if (!venueId || !day) return null;
@@ -9273,4 +9383,159 @@ export async function dbListUpcomingEventsForUser(userSub) {
     status: r.status || "scheduled", status_note: r.status_note || null,
     my_rsvp: r.my_rsvp || null,
   }));
+}
+
+// ── C2 — Practice RSVP (extend RSVP to scheduled_workouts) ──────────────────
+// Practices live on a coach's account with the group_id embedded in the schedule
+// JSON; group → team gives the authorization scope + roster. Resolve a practice
+// id to that context for the RSVP route.
+export async function dbGetPracticeContext(scheduledId) {
+  if (!scheduledId) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `user_sub`, `scheduled_date`, `intent_params`, `payload`, `notes` " +
+    "FROM `scheduled_workouts` WHERE `id` = ? LIMIT 1",
+    [Number(scheduledId)]
+  );
+  if (!rows[0]) return null;
+  const row = rows[0];
+  const groupId = schedRowGroupId(row);
+  let group = null, teamId = null;
+  if (groupId) { group = await dbGetGroup(groupId); teamId = group ? group.team_id : null; }
+  return {
+    id: Number(row.id), ownerSub: row.user_sub,
+    scheduledDate: dateToYmd(row.scheduled_date),
+    groupId: groupId || null, teamId: teamId || null,
+    groupName: group ? group.name : null, notes: row.notes || null,
+  };
+}
+
+// A swimmer's upcoming group practices with their RSVP status. Mirror of
+// dbListUpcomingEventsForUser, but practices' group_id lives in JSON — so we pull
+// candidate rows for the coaches of the swimmer's groups' teams, filter by group
+// in JS, then attach my_rsvp in one query.
+export async function dbListUpcomingPracticesForUser(userSub, { days = 21 } = {}) {
+  if (!userSub) return [];
+  const gm = await pool.query(
+    "SELECT g.`id` AS group_id, g.`team_id`, g.`name` AS group_name, t.`name` AS team_name " +
+    "FROM `group_members` m JOIN `groups` g ON g.`id` = m.`group_id` " +
+    "LEFT JOIN `teams` t ON t.`id` = g.`team_id` " +
+    "WHERE m.`member_swimmer_sub` = ? AND m.`left_at` IS NULL AND g.`team_id` IS NOT NULL",
+    [userSub]
+  );
+  if (gm.length === 0) return [];
+  const myGroups = new Map(gm.map(r => [r.group_id, { groupName: r.group_name, teamName: r.team_name }]));
+  const teamIds = [...new Set(gm.map(r => r.team_id).filter(Boolean))];
+  if (teamIds.length === 0) return [];
+  const tph = teamIds.map(() => "?").join(",");
+  const cc = await pool.query(
+    `SELECT DISTINCT \`coach_sub\` FROM \`team_coaches\` WHERE \`team_id\` IN (${tph}) AND \`removed_at\` IS NULL`,
+    teamIds
+  );
+  const coachSubs = cc.map(r => r.coach_sub).filter(Boolean);
+  if (coachSubs.length === 0) return [];
+  const today = new Date(); const end = new Date(today); end.setUTCDate(end.getUTCDate() + days);
+  const startYmd = today.toISOString().slice(0, 10);
+  const endYmd = end.toISOString().slice(0, 10);
+  const cph = coachSubs.map(() => "?").join(",");
+  const rows = await pool.query(
+    "SELECT sw.`id`, sw.`scheduled_date`, sw.`intent_params`, sw.`payload`, sw.`notes`, " +
+    "       f.`name` AS facility_name " +
+    "FROM `scheduled_workouts` sw LEFT JOIN `team_facilities` f ON f.`id` = sw.`facility_id` " +
+    `WHERE sw.\`user_sub\` IN (${cph}) AND sw.\`scheduled_date\` BETWEEN ? AND ?`,
+    [...coachSubs, startYmd, endYmd]
+  );
+  const seen = new Set(); const practices = [];
+  for (const r of rows) {
+    const gid = schedRowGroupId(r);
+    if (!gid || !myGroups.has(gid)) continue;
+    const id = Number(r.id);
+    if (seen.has(id)) continue; seen.add(id);
+    const meta = myGroups.get(gid);
+    practices.push({
+      id, group_id: gid, group_name: meta.groupName, team_name: meta.teamName,
+      scheduled_date: dateToYmd(r.scheduled_date), notes: r.notes || null,
+      facility_name: r.facility_name || null, my_rsvp: null,
+    });
+  }
+  if (practices.length === 0) return [];
+  const ids = practices.map(p => String(p.id));
+  const iph = ids.map(() => "?").join(",");
+  const rsvps = await pool.query(
+    "SELECT `target_id`, `status` FROM `event_rsvp` " +
+    `WHERE \`target_kind\` = 'practice' AND \`target_id\` IN (${iph}) ` +
+    "AND CONVERT(`swimmer_sub` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci",
+    [...ids, userSub]
+  );
+  const byId = new Map(rsvps.map(r => [String(r.target_id), r.status]));
+  for (const p of practices) p.my_rsvp = byId.get(String(p.id)) || null;
+  practices.sort((a, b) =>
+    a.scheduled_date < b.scheduled_date ? -1 :
+    a.scheduled_date > b.scheduled_date ?  1 : a.id - b.id);
+  return practices.slice(0, 20);
+}
+
+// ── D1 — RSVP-reminder cron support (roster-diff vs respondents) ─────────────
+// Swimmer subs (full accounts only — managed swimmers have no push) who are the
+// audience for an event/practice: a specific group's members, or (group_id null)
+// every member across the team's groups.
+export async function dbListEventAudienceSubs({ team_id = null, group_id = null }) {
+  if (group_id) {
+    const rows = await pool.query(
+      "SELECT DISTINCT `member_swimmer_sub` AS sub FROM `group_members` " +
+      "WHERE `group_id` = ? AND `left_at` IS NULL AND `member_swimmer_sub` IS NOT NULL",
+      [group_id]
+    );
+    return rows.map(r => r.sub).filter(Boolean);
+  }
+  if (team_id) {
+    const rows = await pool.query(
+      "SELECT DISTINCT gm.`member_swimmer_sub` AS sub FROM `group_members` gm " +
+      "JOIN `groups` g ON g.`id` = gm.`group_id` " +
+      "WHERE g.`team_id` = ? AND gm.`left_at` IS NULL AND gm.`member_swimmer_sub` IS NOT NULL",
+      [team_id]
+    );
+    return rows.map(r => r.sub).filter(Boolean);
+  }
+  return [];
+}
+
+// Scheduled (non-cancelled) future team events within the reminder window.
+export async function dbListUpcomingEventsForReminders(withinHours = 48) {
+  const rows = await pool.query(
+    "SELECT `id`, `name`, `team_id`, `group_id`, `date`, `start_time` FROM `team_events` " +
+    "WHERE `status` = 'scheduled' AND `date` >= CURRENT_DATE " +
+    "  AND `date` <= DATE_ADD(CURRENT_DATE, INTERVAL ? DAY)",
+    [Math.ceil((Number(withinHours) || 48) / 24)]
+  );
+  return rows.map(r => ({
+    id: r.id, name: r.name, team_id: r.team_id, group_id: r.group_id || null,
+    date: dateToYmd(r.date), start_time: r.start_time ? String(r.start_time).slice(0, 5) : null,
+  }));
+}
+
+// Upcoming group practices within the reminder window, resolved to a group/team
+// (org-wide; rows are bounded by the small date window). One entry per practice.
+export async function dbListUpcomingPracticesForReminders(withinHours = 48) {
+  const days = Math.ceil((Number(withinHours) || 48) / 24);
+  const today = new Date(); const end = new Date(today); end.setUTCDate(end.getUTCDate() + days);
+  const startYmd = today.toISOString().slice(0, 10);
+  const endYmd = end.toISOString().slice(0, 10);
+  const rows = await pool.query(
+    "SELECT `id`, `scheduled_date`, `intent_params`, `payload` FROM `scheduled_workouts` " +
+    "WHERE `scheduled_date` BETWEEN ? AND ?",
+    [startYmd, endYmd]
+  );
+  const out = [];
+  for (const r of rows) {
+    const gid = schedRowGroupId(r);
+    if (!gid) continue;
+    const group = await dbGetGroup(gid);
+    if (!group || !group.team_id) continue;
+    out.push({
+      id: Number(r.id), group_id: gid, team_id: group.team_id,
+      name: `Practice${group.name ? " · " + group.name : ""}`,
+      date: dateToYmd(r.scheduled_date), start_time: null,
+    });
+  }
+  return out;
 }
