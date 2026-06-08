@@ -413,6 +413,15 @@ const DEFAULT_SESSION_TTL_SEC = 60 * 60 * 24 * 30;   // 30 days
 function newSessionId() {
   return crypto.randomBytes(32).toString("base64url");
 }
+// Hash a presented session token to its stored form. The CLIENT holds the raw
+// token (cookie/bearer); the DB stores only this hash, so a DB-read leak yields
+// nothing replayable. base64url(sha256) is 43 chars — same width as the legacy
+// raw id, so no column change is needed. (No raw fallback on lookup: that would
+// make the stored hash itself a usable token. Existing pre-hash sessions simply
+// don't resolve → one-time re-login, by design.)
+function _hashSid(raw) {
+  return crypto.createHash("sha256").update(String(raw)).digest("base64url");
+}
 function nowDt() {
   return new Date().toISOString().replace("T", " ").replace("Z", "");
 }
@@ -423,25 +432,30 @@ function futureDt(secondsFromNow) {
 
 export async function dbCreateSession({ userSub, ip = null, userAgent = null, ttlSeconds = DEFAULT_SESSION_TTL_SEC }) {
   if (!userSub) throw new Error("userSub required");
-  const id = newSessionId();
+  const rawId = newSessionId();          // returned to the client (cookie/bearer)
+  const storedId = _hashSid(rawId);      // only the hash is persisted
   await pool.query(
     "INSERT INTO `sessions` (`id`, `user_sub`, `created_at`, `expires_at`, `last_seen_at`, `ip`, `user_agent`) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [id, userSub, nowDt(), futureDt(ttlSeconds), nowDt(), ip, userAgent ? String(userAgent).slice(0, 255) : null]
+    [storedId, userSub, nowDt(), futureDt(ttlSeconds), nowDt(), ip, userAgent ? String(userAgent).slice(0, 255) : null]
   );
   // Stamp the user's last-login timestamp as a side effect.
   await pool.query("UPDATE `users` SET `last_login_at` = NOW(3) WHERE `sub` = ?", [userSub]);
-  return id;
+  return rawId;
 }
 
-export async function dbGetSession(id) {
-  if (!id) return null;
+// `value` is the raw token presented by the client; we look up by its hash. The
+// returned row's `id` is the stored hash, which becomes req.sessionId — every
+// downstream op (CSRF, touch, revoke, session-list prefix) keys off that, so no
+// other call site changes.
+export async function dbGetSession(value) {
+  if (!value) return null;
   const rows = await pool.query(
     `SELECT * FROM \`sessions\`
       WHERE \`id\` = ?
         AND \`revoked_at\` IS NULL
         AND \`expires_at\` > NOW()
       LIMIT 1`,
-    [id]
+    [_hashSid(value)]
   );
   return rows[0] || null;
 }
@@ -9710,10 +9724,20 @@ export async function dbListUpcomingPracticesForReminders(withinHours = 48) {
     [startYmd, endYmd]
   );
   const out = [];
+  // Resolve every referenced group in ONE query instead of dbGetGroup-per-row
+  // (the N+1 the audit flagged — this sweep runs org-wide every cron tick).
+  const gids = [...new Set(rows.map(r => schedRowGroupId(r)).filter(Boolean))];
+  if (gids.length === 0) return out;
+  const gph = gids.map(() => "?").join(",");
+  const grpRows = await pool.query(
+    "SELECT `id`, `team_id`, `name` FROM `groups` WHERE `id` IN (" + gph + ")",
+    gids
+  );
+  const groupById = new Map(grpRows.map(g => [g.id, g]));
   for (const r of rows) {
     const gid = schedRowGroupId(r);
     if (!gid) continue;
-    const group = await dbGetGroup(gid);
+    const group = groupById.get(gid);
     if (!group || !group.team_id) continue;
     out.push({
       id: Number(r.id), group_id: gid, team_id: group.team_id,
