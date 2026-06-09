@@ -101,6 +101,7 @@
       generateEngineForSection, generateWorkout, getBankOptions, getOverlayRowsForTuple, inferBlockZone,
       inferSetZone, pick, regenerateSection, scaleInterval, LESSON_MIN, LESSON_MAX,
       parseIntervalSecs, paceRestFloorSecs, factorFor, setStrokeKey, resolveStrokeFactors,
+      cssZonePaceSecs,
     } from "./lib/engine.js";
     import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
 import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
@@ -2806,11 +2807,19 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // makeable floor (#2): never less than userSecs × dist/100 × strokeFactor +
       // minRest. The floor uses the swimmer's EFFECTIVE stroke factors, so a
       // custom pace profile personalizes here. Floor only raises, never lowers.
-      const rescaleSetForPace = useCallback((s, ratio, userSecs) => {
-        const scaled = scaleInterval(s.interval, ratio);
+      const rescaleSetForPace = useCallback((s, ratio, userSecs, triMode = false, sectionKey = "main") => {
+        // 🔱 Triathlete CSS-relative zones: instead of one uniform ratio, target each
+        // set's CSS-relative zone (easy CSS+9, aerobic +4, threshold ≈CSS, over −4).
+        // cssZonePaceSecs trusts an explicit set.zone, else infers (continuous reps only).
+        let effRatio = ratio, effSecs = userSecs;
+        if (triMode) {
+          effSecs  = cssZonePaceSecs(userSecs, s, sectionKey);
+          effRatio = effSecs / PACE_BASELINE_SECS;
+        }
+        const scaled = scaleInterval(s.interval, effRatio);
         const scaledSecs = parseIntervalSecs(scaled);
         if (scaledSecs == null) return { ...s, interval: scaled };  // "No interval" / unparseable
-        const floorSecs = paceRestFloorSecs(s.dist, userSecs, factorFor(setStrokeKey(s), strokeFactorsRef.current));
+        const floorSecs = paceRestFloorSecs(s.dist, effSecs, factorFor(setStrokeKey(s), strokeFactorsRef.current));
         return { ...s, interval: formatIntervalSecs(Math.max(scaledSecs, floorSecs)) };
       }, []);
 
@@ -2823,11 +2832,11 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setWorkout(prev => {
           const newBlocks = prev.blocks.map(b => Array.isArray(b.sets) ? ({
             ...b,
-            sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs)),
+            sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs, triathlete, b.section)),
           }) : b);   // Section model B — dryland blocks have no intervals; pass through.
           return { ...prev, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
         });
-      }, [paceInput, rescaleSetForPace]);
+      }, [paceInput, rescaleSetForPace, triathlete]);
 
       // ── Per-set interval editing ──────────────────────────────────
       const [editIntervalKey,   setEditIntervalKey]   = useState(null);
@@ -3297,11 +3306,11 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
           const userSecs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-          if (userSecs && userSecs >= 30 && userSecs <= 300 && userSecs !== PACE_BASELINE_SECS) {
-            const ratio = userSecs / PACE_BASELINE_SECS;
+          if (userSecs && userSecs >= 30 && userSecs <= 300 && (userSecs !== PACE_BASELINE_SECS || triathlete)) {
+            const ratio = userSecs / PACE_BASELINE_SECS;   // 🔱 triathlete: run even at base pace so CSS-zone offsets apply
             const newBlocks = newWorkout.blocks.map(b => ({
               ...b,
-              sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs)),
+              sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs, triathlete, b.section)),
             }));
             newWorkout = { ...newWorkout, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
           }
@@ -3377,7 +3386,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, lessonYouth, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, lessonYouth, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap, triathlete]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -3454,13 +3463,13 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
           const userSecs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-          if (userSecs && userSecs >= 30 && userSecs <= 300 && userSecs !== PACE_BASELINE_SECS) {
-            const ratio = userSecs / PACE_BASELINE_SECS;
+          if (userSecs && userSecs >= 30 && userSecs <= 300 && (userSecs !== PACE_BASELINE_SECS || triathlete)) {
+            const ratio = userSecs / PACE_BASELINE_SECS;   // 🔱 triathlete: run even at base pace so CSS-zone offsets apply
             const newBlocks = regenWorkout.blocks.map((b, bi) => {
               const origBlock = workout.blocks[bi];
               // Only rescale the regenerated section; leave others as-is
               if (b.section !== sectionKey) return b;
-              return { ...b, sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs)) };
+              return { ...b, sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs, triathlete, b.section)) };
             });
             regenWorkout = { ...regenWorkout, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
           }
@@ -3510,7 +3519,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         // it was previously loaded from history.
         setLoadedFromHistoryId(null);
         setSaveStatus(null); setSaveError(null);
-      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, favoriteSets, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, lessonMySetsOnly, lessonLevelChoice, lessonYouth, generateForTarget]);
+      }, [workout, selectedType, maxYards, equipment, poolMode, paceInput, sliderMin, pinnedSections, recentMainLabels, sessionRecentLabels, phase, favorites, favoriteSets, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, lessonMySetsOnly, lessonLevelChoice, lessonYouth, generateForTarget, triathlete]);
 
       const handleTogglePin = useCallback((sectionKey) => {
         setPinnedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
