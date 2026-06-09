@@ -3658,7 +3658,7 @@ app.patch("/api/teams/:id/settings", checkOrigin, requireAuth, requireCsrf, writ
     const role = await dbAssertTeamWriter(req.params.id, req.userSub);
     if (!role) return res.status(403).json({ error: "owner or admin required" });
     const body = req.body || {};
-    const allowed = ["pace_base", "disfavor_mode", "equipment_modes"];
+    const allowed = ["pace_base", "disfavor_mode", "equipment_modes", "pace_profile"];
     const updates = [];
     for (const field of allowed) {
       if (field in body) {

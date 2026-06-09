@@ -3466,7 +3466,8 @@ export async function dbAutoCompleteTransfers() {
 // must check dbGetTeamRole(teamId, callerSub) ∈ ('owner','admin') for
 // writes. dbAssertTeamWriter wraps that check for re-use.
 
-const TEAM_DEFAULT_FIELDS = ["pace_base", "disfavor_mode", "equipment_modes"];
+const TEAM_DEFAULT_FIELDS = ["pace_base", "disfavor_mode", "equipment_modes", "pace_profile"];
+const TEAM_PACE_PRESETS   = ["club", "masters", "youth"];
 const TEAM_DISFAVOR_MODES = ["downweight", "exclude"];
 
 // Authz helper used by all team-curation write routes. Returns the role
@@ -3574,7 +3575,7 @@ export async function dbListTeamCuration(teamId) {
 export async function dbGetTeamSettings(teamId) {
   if (!teamId) return null;
   const rows = await pool.query(
-    "SELECT `default_pace_base`, `default_disfavor_mode`, `default_equipment_modes` " +
+    "SELECT `default_pace_base`, `default_disfavor_mode`, `default_equipment_modes`, `default_pace_profile` " +
     "FROM `teams` WHERE `id` = ? LIMIT 1",
     [teamId]
   );
@@ -3585,10 +3586,16 @@ export async function dbGetTeamSettings(teamId) {
     try { equipment = typeof r.default_equipment_modes === "string" ? JSON.parse(r.default_equipment_modes) : r.default_equipment_modes; }
     catch (_) { equipment = null; }
   }
+  let paceProfile = null;
+  if (r.default_pace_profile != null) {
+    try { paceProfile = typeof r.default_pace_profile === "string" ? JSON.parse(r.default_pace_profile) : r.default_pace_profile; }
+    catch (_) { paceProfile = null; }
+  }
   return {
     default_pace_base:        r.default_pace_base,
     default_disfavor_mode:    r.default_disfavor_mode,
     default_equipment_modes:  equipment,
+    default_pace_profile:     paceProfile,
   };
 }
 
@@ -3722,6 +3729,18 @@ export async function dbSetTeamDefault({ teamId, field, value }) {
       // Accept any object/array; serialize to JSON. Client owns the shape.
       if (typeof value !== "object") return { ok: false, reason: "bad_equipment_shape" };
       try { stored = JSON.stringify(value); } catch (_) { return { ok: false, reason: "equipment_not_serializable" }; }
+    } else if (field === "pace_profile") {
+      // { preset?: "club"|"masters"|"youth", factors?: {back,fly,breast,im: number} }
+      if (typeof value !== "object" || Array.isArray(value)) return { ok: false, reason: "bad_pace_profile_shape" };
+      if (value.preset != null && !TEAM_PACE_PRESETS.includes(value.preset)) return { ok: false, reason: "bad_preset" };
+      if (value.factors != null) {
+        if (typeof value.factors !== "object") return { ok: false, reason: "bad_factors" };
+        for (const k of ["back", "fly", "breast", "im"]) {
+          const v = value.factors[k];
+          if (v != null && (typeof v !== "number" || v < 0.8 || v > 2.0)) return { ok: false, reason: "factor_out_of_range" };
+        }
+      }
+      try { stored = JSON.stringify(value); } catch (_) { return { ok: false, reason: "pace_profile_not_serializable" }; }
     }
   }
   const col = `default_${field}`;
@@ -3742,10 +3761,11 @@ export async function dbSetTeamDefault({ teamId, field, value }) {
 // For unsupported fields, returns 501-style ok:false reason.
 export async function dbApplyTeamDefaultToRoster({ teamId, field }) {
   if (!teamId || !field) return { ok: false, reason: "missing_args" };
-  if (field !== "pace_base") return { ok: false, reason: "field_not_apply_capable_yet" };
+  if (!["pace_base", "pace_profile"].includes(field)) return { ok: false, reason: "field_not_apply_capable_yet" };
   const settings = await dbGetTeamSettings(teamId);
-  if (!settings || settings.default_pace_base == null) return { ok: false, reason: "default_not_set" };
-  const pace = settings.default_pace_base;
+  if (!settings) return { ok: false, reason: "default_not_set" };
+  const teamValue = field === "pace_base" ? settings.default_pace_base : settings.default_pace_profile;
+  if (teamValue == null) return { ok: false, reason: "default_not_set" };
   // Collect all swimmer subs from any group under this team (active members).
   const swimmerRows = await pool.query(
     "SELECT DISTINCT gm.`member_swimmer_sub` AS sub " +
@@ -3755,15 +3775,22 @@ export async function dbApplyTeamDefaultToRoster({ teamId, field }) {
   );
   let updated = 0;
   for (const r of swimmerRows) {
-    // Base pace MUST land in settings.pace_input — the field the generator
-    // reads (dbGetSettings → client paceInput → auto-applied on generate at
-    // handleGenerate). The old write targeted user_settings.pace, a column
-    // NOTHING reads, so a coach-assigned base pace never reached the
-    // generator and swimmers generated at the 2:00 baseline. (Fix 2026-06-08.)
-    await dbUpsertSettings(r.sub, { paceInput: pace });
+    if (field === "pace_base") {
+      // Base pace MUST land in settings.pace_input — the field the generator
+      // reads (dbGetSettings → client paceInput → auto-applied on generate at
+      // handleGenerate). The old write targeted user_settings.pace, a column
+      // NOTHING reads, so a coach-assigned base pace never reached the
+      // generator and swimmers generated at the 2:00 baseline. (Fix 2026-06-08.)
+      await dbUpsertSettings(r.sub, { paceInput: teamValue });
+    } else {
+      // pace_profile (#3) → settings.extra.pace_profile; dbGetSettings spreads
+      // `extra`, so it arrives as s.pace_profile → client resolveStrokeFactors →
+      // rest floor. Merge-patch so other extra keys survive.
+      await dbPatchSettingsExtra(r.sub, { pace_profile: teamValue });
+    }
     updated++;
   }
-  return { ok: true, field, value: pace, count: updated };
+  return { ok: true, field, value: teamValue, count: updated };
 }
 
 // Team roster v1 (2026-05-27): grouped roster across every active group

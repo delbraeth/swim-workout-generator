@@ -4,6 +4,7 @@ import { csrfHeaders } from "../../lib/api.js";
 import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
 import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
 import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
+import { PaceProfileEditor } from "../pace/PaceProfileEditor.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -168,6 +169,38 @@ import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
           const j = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
           setMsg(`✓ Pushed pace ${j.value} to ${j.count} swimmer${j.count === 1 ? "" : "s"}.`);
+        } catch (e) { setMsg(`Apply failed: ${e.message}`); }
+        finally { setBusy(false); }
+      };
+
+      const savePaceProfile = async (profile) => {
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/teams/${teamId}/settings`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ pace_profile: profile }),
+          });
+          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `HTTP ${res.status}`); }
+          await load();
+          setMsg("✓ Saved team pace profile.");
+        } catch (e) { setMsg(`Save failed: ${e.message}`); }
+        finally { setBusy(false); }
+      };
+
+      const applyPaceProfileToRoster = async () => {
+        if (!settings?.default_pace_profile) { setMsg("Save a team pace profile before pushing it."); return; }
+        if (!window.confirm("Push this pace profile to every active swimmer in any group under this team?\n\nThis overwrites their existing profile. One-time action.")) return;
+        setBusy(true); setMsg(null);
+        try {
+          const res = await fetch(`/api/teams/${teamId}/settings/apply-to-roster`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ field: "pace_profile" }),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+          setMsg(`✓ Pushed pace profile to ${j.count} swimmer${j.count === 1 ? "" : "s"}.`);
         } catch (e) { setMsg(`Apply failed: ${e.message}`); }
         finally { setBusy(false); }
       };
@@ -384,6 +417,25 @@ import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
                   </button>
                 </div>
               )}
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ color: "var(--color-text-muted)", fontSize: 12, fontWeight: 600, display: "block", marginBottom: 6 }}>
+                Pace profile <span style={{ color: "var(--color-text-dim)", fontWeight: 400 }}>— stroke pacing (masters/youth swim non-free strokes slower)</span>
+              </label>
+              <PaceProfileEditor
+                value={settings.default_pace_profile}
+                onSave={savePaceProfile}
+                busy={busy}
+                readOnly={!(canWrite && !archived)}
+                extraButton={canWrite && !archived ? (
+                  <button onClick={applyPaceProfileToRoster} disabled={busy || !settings.default_pace_profile}
+                    title={settings.default_pace_profile ? "Push to every active swimmer in every group under this team (one-time, overwrites)" : "Save a profile first"}
+                    style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--color-warn)", borderRadius: 5, color: "var(--color-warn)", fontSize: 12, fontWeight: 700, cursor: (busy || !settings.default_pace_profile) ? "not-allowed" : "pointer" }}>
+                    Push to roster
+                  </button>
+                ) : null}
+              />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "120px 1fr auto", gap: 10, alignItems: "center", marginBottom: 4 }}>

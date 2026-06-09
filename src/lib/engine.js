@@ -7591,6 +7591,73 @@ export const TEMPLATE_REST_BY_EFFORT = {
       sprint:    60,  // full recovery between sprints
     };
 
+// ── Pace profiles (preset + advanced override) ───────────────────────────────
+// Presets set the stroke factors; resolved team→profile→code-default. The
+// effective factor feeds the client rest floor (paceRestFloorSecs), so a custom
+// profile personalizes intervals WITHOUT threading factors through the engine.
+// (Starting heuristics — tune; advanced override exists because one global set
+// won't fit every swimmer. See PACE_PROFILE_SCOPE.md.)
+export const PACE_PROFILE_PRESETS = {
+      club:    { back: 1.09, fly: 1.05, breast: 1.18, im: 1.13 }, // = STROKE_PACE_FACTOR (competitive age-group)
+      masters: { back: 1.10, fly: 1.15, breast: 1.22, im: 1.16 }, // older: fly/breast relatively harder
+      youth:   { back: 1.12, fly: 1.18, breast: 1.22, im: 1.18 }, // novice: non-free strokes much slower
+    };
+
+// Normalize any stroke token OR free-text desc to a factor key. IM is checked
+// FIRST (an IM desc names fly/back/breast/free); \bim\b avoids matching "swim".
+export function strokeKeyOf(stroke) {
+      const s = String(stroke || "").toLowerCase();
+      if (/\bim\b|medley/.test(s))          return "im";
+      if (/breast/.test(s))                 return "breast";
+      if (/\bbutterfly\b|\bfly\b/.test(s))  return "fly";
+      if (/\bback/.test(s))                 return "back";
+      return "free";
+    }
+
+// Effective factor for a stroke under a factors map (falls back to code default).
+export function factorFor(stroke, factors = STROKE_PACE_FACTOR) {
+      const k = strokeKeyOf(stroke);
+      const v = factors && factors[k];
+      return (typeof v === "number" && v > 0) ? v : (STROKE_PACE_FACTOR[k] ?? 1.0);
+    }
+
+// A set's stroke: engine sets carry __engineMeta.stroke; else detect from desc.
+export function setStrokeKey(set) {
+      if (set && set.__engineMeta && set.__engineMeta.stroke) return strokeKeyOf(set.__engineMeta.stroke);
+      return strokeKeyOf(set && set.desc || "");
+    }
+
+// Resolve effective stroke factors. Order (highest wins): profile override →
+// profile preset → team override → team preset → STROKE_PACE_FACTOR. Each arg is
+// { preset?: string, factors?: {back,fly,breast,im} } or null. free stays 1.0.
+export function resolveStrokeFactors(profile = null, team = null) {
+      const eff = { free: 1.0, back: STROKE_PACE_FACTOR.back, fly: STROKE_PACE_FACTOR.fly,
+                    breast: STROKE_PACE_FACTOR.breast, im: STROKE_PACE_FACTOR.im };
+      const apply = (src) => {
+        if (!src) return;
+        const preset = src.preset && PACE_PROFILE_PRESETS[src.preset];
+        if (preset) for (const k of ["back", "fly", "breast", "im"]) eff[k] = preset[k];
+        if (src.factors) for (const k of ["back", "fly", "breast", "im"]) {
+          const v = src.factors[k];
+          if (typeof v === "number" && v > 0) eff[k] = v;
+        }
+      };
+      apply(team);      // lower precedence
+      apply(profile);   // higher precedence — applied last, wins
+      eff.IM = eff.im;  // alias for engine "IM" tokens
+      return eff;
+    }
+
+// Minimum makeable send-off for a swimmer at their own free pace, stroke-adjusted.
+// userSecs = the swimmer's free pace per 100 (seconds). Returns interval seconds
+// (rounded up to :05) or 0 when inputs are unusable. The client clamps each
+// scaled interval UP to this (floor only raises — never lowers).
+export function paceRestFloorSecs(distYd, userSecs, strokeFactor, minRest = 10) {
+      if (!userSecs || userSecs <= 0 || !distYd || distYd <= 0) return 0;
+      const swim = (distYd / 100) * userSecs * (strokeFactor || 1.0);
+      return Math.ceil((swim + minRest) / 5) * 5;
+    }
+
 export function templateComputeInterval(distYd, effortKey, stroke = "free") {
       const restSecs = TEMPLATE_REST_BY_EFFORT[effortKey] ?? 15;
       const swimSecs = (distYd / 100) * TEMPLATE_BASELINE_PACE_SECS * templateStrokeFactor(stroke);

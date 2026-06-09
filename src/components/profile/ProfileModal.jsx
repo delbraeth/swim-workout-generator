@@ -11,6 +11,7 @@ import { GoalRow } from "./GoalRow.jsx";
 import { JoinGroupSection } from "./JoinGroupSection.jsx";
 import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
 import { RaceGoalsPanel } from "./RaceGoalsPanel.jsx";
+import { PaceProfileEditor } from "../pace/PaceProfileEditor.jsx";
 import { CompliancePanel } from "./CompliancePanel.jsx";
 import { PushNotificationsPanel } from "./PushNotificationsPanel.jsx";
 import { useDialogA11y } from "../shell/useDialogA11y.js";
@@ -22,7 +23,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags }) {
+    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile }) {
       const dialogRef = useDialogA11y(onClose);
       // Phase 6 visibility (union across the user's teams; undefined ⇒ all-on).
       const ff = appFeatureFlags || {};
@@ -365,6 +366,23 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
         }
       };
 
+      const [paceProfileBusy, setPaceProfileBusy] = React.useState(false);
+      const [paceProfileMsg,  setPaceProfileMsg]  = React.useState(null);
+      const savePaceProfile = async (profile) => {
+        setPaceProfileBusy(true); setPaceProfileMsg(null);
+        try {
+          const res = await fetch("/api/settings/extra", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ pace_profile: profile }),
+          });
+          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `HTTP ${res.status}`); }
+          setPaceProfileMsg("✓ Saved — applies on your next generate.");
+          if (onProfileChange) onProfileChange();   // refreshBootstrap → applySettings → rest-floor factors
+        } catch (e) { setPaceProfileMsg(`Save failed: ${e.message}`); }
+        finally { setPaceProfileBusy(false); }
+      };
+
       const handleRevokeOne = async (prefix) => {
         setRevokeMsg(null);
         try {
@@ -619,6 +637,23 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                       ))}
                     </div>
                   )}
+                </div>
+                )}
+
+                {tab === "account" && (
+                <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                    🏊 Pace profile
+                  </div>
+                  <p style={{ color: "var(--color-text-dim)", fontSize: 11, margin: "0 0 10px", lineHeight: 1.5 }}>
+                    How much slower you swim each stroke vs. freestyle. Sets the send-off rest floor so breast/fly intervals stay makeable. Masters &amp; novices swim non-free strokes relatively slower.
+                  </p>
+                  <PaceProfileEditor
+                    value={appPaceProfile}
+                    busy={paceProfileBusy}
+                    onSave={savePaceProfile}
+                    hint={paceProfileMsg}
+                  />
                 </div>
                 )}
 

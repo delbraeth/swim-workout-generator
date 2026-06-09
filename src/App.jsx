@@ -99,6 +99,7 @@
       WORKOUT_TYPES, ZONES, applyEngineOverrides, calcEstimatedMin, equipMode, formatIntervalSecs,
       generateEngineForSection, generateWorkout, getBankOptions, getOverlayRowsForTuple, inferBlockZone,
       inferSetZone, pick, regenerateSection, scaleInterval, LESSON_MIN, LESSON_MAX,
+      parseIntervalSecs, paceRestFloorSecs, factorFor, setStrokeKey, resolveStrokeFactors,
     } from "./lib/engine.js";
     import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
 import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
@@ -1459,6 +1460,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [maxYards, setMaxYards]         = useState(2400);
       const [poolMode, setPoolMode]         = useState("25y");
       const [paceInput, setPaceInput]       = useState("2:00");
+      const [paceProfile, setPaceProfile]   = useState(null);   // #3 — { preset, factors } | null
       // Onboarding tour. tourStep -1 = inactive, 0..N-1 = active step.
       // tourSeen defaults true so the tour never flashes before settings
       // resolve; applySettings sets the real value (unset → false → auto-run
@@ -2354,6 +2356,12 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         if (s.sliderMin) setSliderMin(s.sliderMin);
         if (s.sliderMax) { setSliderMax(s.sliderMax); setMaxYards(v => Math.min(v, s.sliderMax)); }
         if (s.paceInput) setPaceInput(s.paceInput);
+        // #3 pace profile — effective stroke factors for the rest floor.
+        // settings.extra.pace_profile = { preset, factors }; dbGetSettings spreads
+        // `extra` so it arrives as s.pace_profile. Folds team default + own override
+        // (roster-push writes it like pace_base). Falls back to code defaults.
+        strokeFactorsRef.current = resolveStrokeFactors(s.pace_profile || null, null);
+        setPaceProfile(s.pace_profile || null);
         if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
         // Q: next-event countdown lives in settings.extra; dbGetSettings
         // spreads extra into the top-level response.
@@ -2775,6 +2783,23 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // ── Pace rescaling ────────────────────────────────────────────
       const PACE_BASELINE_SECS = 120; // app intervals calibrated for 2:00/100yd
 
+      // Effective stroke factors (#3 pace profile). Resolved profile→team→default;
+      // seeded from bootstrap in Phase 3. A ref so the pace handlers read the
+      // current value without re-memoizing. Defaults to STROKE_PACE_FACTOR.
+      const strokeFactorsRef = React.useRef(resolveStrokeFactors(null, null));
+
+      // Scale a set's interval to the swimmer's pace, THEN clamp it UP to a
+      // makeable floor (#2): never less than userSecs × dist/100 × strokeFactor +
+      // minRest. The floor uses the swimmer's EFFECTIVE stroke factors, so a
+      // custom pace profile personalizes here. Floor only raises, never lowers.
+      const rescaleSetForPace = useCallback((s, ratio, userSecs) => {
+        const scaled = scaleInterval(s.interval, ratio);
+        const scaledSecs = parseIntervalSecs(scaled);
+        if (scaledSecs == null) return { ...s, interval: scaled };  // "No interval" / unparseable
+        const floorSecs = paceRestFloorSecs(s.dist, userSecs, factorFor(setStrokeKey(s), strokeFactorsRef.current));
+        return { ...s, interval: formatIntervalSecs(Math.max(scaledSecs, floorSecs)) };
+      }, []);
+
       const handleApplyPace = useCallback(() => {
         const parts = paceInput.trim().split(":");
         if (parts.length !== 2) return;
@@ -2784,11 +2809,11 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setWorkout(prev => {
           const newBlocks = prev.blocks.map(b => Array.isArray(b.sets) ? ({
             ...b,
-            sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })),
+            sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs)),
           }) : b);   // Section model B — dryland blocks have no intervals; pass through.
           return { ...prev, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
         });
-      }, [paceInput]);
+      }, [paceInput, rescaleSetForPace]);
 
       // ── Per-set interval editing ──────────────────────────────────
       const [editIntervalKey,   setEditIntervalKey]   = useState(null);
@@ -3261,7 +3286,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             const ratio = userSecs / PACE_BASELINE_SECS;
             const newBlocks = newWorkout.blocks.map(b => ({
               ...b,
-              sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })),
+              sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs)),
             }));
             newWorkout = { ...newWorkout, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
           }
@@ -3419,7 +3444,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               const origBlock = workout.blocks[bi];
               // Only rescale the regenerated section; leave others as-is
               if (b.section !== sectionKey) return b;
-              return { ...b, sets: b.sets.map(s => ({ ...s, interval: scaleInterval(s.interval, ratio) })) };
+              return { ...b, sets: b.sets.map(s => rescaleSetForPace(s, ratio, userSecs)) };
             });
             regenWorkout = { ...regenWorkout, blocks: newBlocks, estimatedMin: calcEstimatedMin(newBlocks) };
           }
@@ -5696,6 +5721,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                  + /api/me/team-defaults fetches on open. */
               appSessions={sessions}
               appTeamDefaults={teamDefaults}
+              appPaceProfile={paceProfile}
               appTeamCalendars={teamCalendars}
               appBillingStatus={billingStatus}
               appFeatureFlags={featureFlags}
