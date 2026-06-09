@@ -5,6 +5,7 @@ import { TeamFacilitiesSection } from "./TeamFacilitiesSection.jsx";
 import { TeamCalendarFeed } from "./TeamCalendarFeed.jsx";
 import { VisibleOptionsPanel } from "./VisibleOptionsPanel.jsx";
 import { PaceProfileEditor } from "../pace/PaceProfileEditor.jsx";
+import { SdifImportModal } from "../people/SdifImportModal.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
@@ -21,6 +22,7 @@ import { PaceProfileEditor } from "../pace/PaceProfileEditor.jsx";
       const [newDisfav, setNewDisfav] = React.useState("");
       const [paceDraft, setPaceDraft] = React.useState("");                   // pending edit
       const [busy, setBusy]         = React.useState(false);
+      const [showSdifImport, setShowSdifImport] = React.useState(false);
       const [teamCode, setTeamCode] = React.useState("");                     // team abbreviation (meet exports)
       const [teamCodeSaved, setTeamCodeSaved] = React.useState("");           // last persisted value
       // Ownership transfer (owner-only section).
@@ -297,6 +299,21 @@ import { PaceProfileEditor } from "../pace/PaceProfileEditor.jsx";
               owner/admin can rotate the token. */}
           <TeamCalendarFeed teamId={teamId} canManage={canWrite} />
 
+          {canWrite && !archived && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ color: "var(--color-primary-text)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+                📥 Import from Hy-Tek (SDIF)
+              </div>
+              <p style={{ color: "var(--color-text-dim)", fontSize: 11, margin: "0 0 8px", lineHeight: 1.5 }}>
+                Upload a <code>.sd3</code> / <code>.cl2</code> best-times or results export to create swimmers and import their PRs (feeds race-pace targets). Preview before anything is written.
+              </p>
+              <button onClick={() => setShowSdifImport(true)}
+                style={{ padding: "6px 12px", background: "var(--color-primary)", color: "#fff", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                Import .sd3 / .cl2 →
+              </button>
+            </div>
+          )}
+
           {/* Team code / abbreviation — used as the "Team Name" column in meet-entry
               (Hy-Tek) roster exports. Owner-only (matches the rename route). */}
           {viewerRole === "owner" && (
@@ -481,6 +498,12 @@ import { PaceProfileEditor } from "../pace/PaceProfileEditor.jsx";
           )}
 
           {msg && <div style={{ color: msg.startsWith("✓") ? "var(--color-positive)" : "var(--color-warn)", fontSize: 12, marginTop: 12, padding: "8px 10px", background: msg.startsWith("✓") ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.12)", borderRadius: 5 }}>{msg}</div>}
+
+          {showSdifImport && (
+            <SdifImportModal teamId={teamId}
+              onClose={() => setShowSdifImport(false)}
+              onImported={() => setMsg("✓ Hy-Tek import complete — swimmers + best times added to your managed roster.")} />
+          )}
         </div>
       );
     }
