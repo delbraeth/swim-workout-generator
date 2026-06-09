@@ -158,6 +158,33 @@ export const PHASES = {
                   multipliers: { easy: 2.0, aerobic: 1.5, threshold: 0.3, vo2: 0.2, anaerobic: 0.1 } },
     };
 
+// 🔱 Race-date periodization. Days-until-A-race → training PHASE: build the base far out,
+// add intensity approaching, taper into race week. Boundaries (days out): taper ≤14,
+// peak 15–35, build 36–84, base >84. Returns a PHASES id, or null for no/invalid/past
+// date. Pure (today passed in) so it's deterministic + unit-testable.
+export const RACE_PHASE_DAYS = { taper: 14, peak: 35, build: 84 };  // upper bound (inclusive) per phase
+export function phaseForRaceDate(raceDateISO, todayISO) {
+      if (!raceDateISO || !todayISO) return null;
+      const race  = Date.parse(`${raceDateISO}T00:00:00`);
+      const today = Date.parse(`${todayISO}T00:00:00`);
+      if (Number.isNaN(race) || Number.isNaN(today)) return null;
+      const days = Math.round((race - today) / 86400000);
+      if (days < 0) return null;                    // race already passed → no auto-phase
+      if (days <= RACE_PHASE_DAYS.taper) return "taper";
+      if (days <= RACE_PHASE_DAYS.peak)  return "peak";
+      if (days <= RACE_PHASE_DAYS.build) return "build";
+      return "base";
+    }
+
+// Whole days from today → race (negative = past), or null if either date is invalid.
+export function daysUntilRace(raceDateISO, todayISO) {
+      if (!raceDateISO || !todayISO) return null;
+      const race  = Date.parse(`${raceDateISO}T00:00:00`);
+      const today = Date.parse(`${todayISO}T00:00:00`);
+      if (Number.isNaN(race) || Number.isNaN(today)) return null;
+      return Math.round((race - today) / 86400000);
+    }
+
 export function inferSetZone(set, sectionKey) {
       if (!set) return "aerobic";
       const text = `${set.desc || ""} ${set.focus || ""}`.toLowerCase();

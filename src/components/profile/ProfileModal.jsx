@@ -4,7 +4,7 @@ import { csrfHeaders } from "../../lib/api.js";
 import { GOAL_METRICS, LEVEL_PRESETS } from "../../lib/constants.js";
 import { AddressManager } from "../people/AddressManager.jsx";
 import { ClaimManagedSection } from "../people/ClaimManagedSection.jsx";
-import { COOLDOWN_OPTIONS, DRILL_OPTIONS, MAIN_OPTIONS, WARMUP_OPTIONS, PHASES } from "../../lib/engine.js";
+import { COOLDOWN_OPTIONS, DRILL_OPTIONS, MAIN_OPTIONS, WARMUP_OPTIONS, PHASES, phaseForRaceDate, daysUntilRace } from "../../lib/engine.js";
 import { BenchmarksSection } from "./BenchmarksSection.jsx";
 import { EditableProfileField } from "./EditableProfileField.jsx";
 import { GoalRow } from "./GoalRow.jsx";
@@ -24,7 +24,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile, appAllowGuardianRsvp, appTriathlete, appCssSecs }) {
+    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile, appAllowGuardianRsvp, appTriathlete, appCssSecs, appRaceDate }) {
       const dialogRef = useDialogA11y(onClose);
       // Phase 6 visibility (union across the user's teams; undefined ⇒ all-on).
       const ff = appFeatureFlags || {};
@@ -419,6 +419,19 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
           if (onProfileChange) onProfileChange();
         } catch (_) {} finally { setCssBusy(false); }
       };
+
+      // 🔱 A-race date → training-phase periodization. settings.extra.race_date (ISO yyyy-mm-dd).
+      const [raceDate, setRaceDate] = React.useState(typeof appRaceDate === "string" ? appRaceDate : "");
+      const [raceBusy, setRaceBusy] = React.useState(false);
+      React.useEffect(() => { setRaceDate(typeof appRaceDate === "string" ? appRaceDate : ""); }, [appRaceDate]);
+      const saveRaceDate = async (val) => {
+        setRaceDate(val); setRaceBusy(true);   // optimistic
+        try {
+          const res = await fetch("/api/settings/extra", { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ race_date: val || null }) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (onProfileChange) onProfileChange();
+        } catch (_) {} finally { setRaceBusy(false); }
+      };
       const toggleGuardianRsvp = async () => {
         const next = !guardianRsvp;
         setGuardianRsvp(next); setGuardianRsvpBusy(true);   // optimistic
@@ -757,6 +770,36 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                             Use as my generator pace →
                           </button>
                         )}
+                      </div>
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-card)" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)", marginBottom: 4 }}>A-race date</div>
+                        <div style={{ fontSize: 11, color: "var(--color-text-dim)", marginBottom: 8, lineHeight: 1.5 }}>
+                          Set your goal race and the generator periodizes automatically — Base early, then Build, Peak, and Taper into race week.
+                        </div>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                          <input type="date" value={raceDate} disabled={raceBusy} onChange={e => saveRaceDate(e.target.value)}
+                            style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
+                          {raceDate && (() => {
+                            const today = new Date().toISOString().slice(0, 10);
+                            const d = daysUntilRace(raceDate, today);
+                            if (d == null) return null;
+                            if (d < 0) return <span style={{ fontSize: 12, color: "var(--color-text-dim)" }}>race has passed — clear or update</span>;
+                            const ph = phaseForRaceDate(raceDate, today);
+                            const P = ph && PHASES[ph];
+                            return (
+                              <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                                {d === 0 ? "race day" : `${Math.ceil(d / 7)} wk out`}
+                                {P && <> · <strong style={{ color: P.color }}>{P.emoji} {P.label}</strong></>}
+                              </span>
+                            );
+                          })()}
+                          {raceDate && (
+                            <button onClick={() => saveRaceDate("")} disabled={raceBusy}
+                              style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid var(--color-border-strong)", background: "transparent", color: "var(--color-text-dim)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              Clear
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}

@@ -101,7 +101,7 @@
       generateEngineForSection, generateWorkout, getBankOptions, getOverlayRowsForTuple, inferBlockZone,
       inferSetZone, pick, regenerateSection, scaleInterval, LESSON_MIN, LESSON_MAX,
       parseIntervalSecs, paceRestFloorSecs, factorFor, setStrokeKey, resolveStrokeFactors,
-      cssZonePaceSecs,
+      cssZonePaceSecs, phaseForRaceDate,
     } from "./lib/engine.js";
     import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
 import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
@@ -1467,6 +1467,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [allowGuardianRsvp, setAllowGuardianRsvp] = useState(false);  // D1 — swimmer opt-in for guardian RSVP
       const [triathlete, setTriathlete]   = useState(false);   // multi-sport — self-identifier; gates tri race events
       const [cssSecs, setCssSecs]         = useState(null);    // Critical Swim Speed (sec/100) for triathletes
+      const [raceDate, setRaceDate]       = useState("");      // 🔱 A-race date (ISO yyyy-mm-dd) → auto-periodization
       // Triathlete mode hides stroke-specialty + IM types — if one was selected, clear it.
       useEffect(() => {
         if (triathlete && ["back", "breast", "fly", "im", "lesson"].includes(selectedType)) setSelectedType(null);
@@ -2376,6 +2377,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setAllowGuardianRsvp(s.allow_guardian_rsvp === true);   // D1 consent
         setTriathlete(s.triathlete === true);                   // multi-sport identifier
         setCssSecs(typeof s.css_secs === "number" ? s.css_secs : null);   // CSS pace anchor
+        setRaceDate(typeof s.race_date === "string" ? s.race_date : "");   // 🔱 A-race periodization date
         if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
         // Q: next-event countdown lives in settings.extra; dbGetSettings
         // spreads extra into the top-level response.
@@ -3086,10 +3088,15 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // (eval 2026-06-06): if the coach opts in, the active anchor's
       // suggested_phase takes precedence for THIS generation only — turning the
       // taper from advisory (badge) into something that actually drives Generate.
+      // 🔱 Race-date periodization: when an A-race date is set, derive the phase from
+      // weeks-out (Base→Build→Peak→Taper). A manually-picked phase still wins; the race
+      // date only fills in when no manual phase is chosen.
+      const raceDerivedPhase = phaseForRaceDate(raceDate, new Date().toISOString().slice(0, 10));
       const effectivePhase =
         (applySuggestedPhase && generateForTarget?.suggested_phase)
         || generateForTarget?.current_phase
-        || phase;
+        || phase
+        || raceDerivedPhase;
 
       // Phase 3 PSC slice 3 — per-practice checklist data fetch.
       // When Generate target switches to a group, fetch its active constraints
@@ -3326,8 +3333,9 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         }
         // N5: stamp the current training phase on the workout so the soft
         // badge renders alongside the summary bar.
-        if (phase && PHASES[phase]) {
-          newWorkout = { ...newWorkout, phase };
+        const _stampPhase = phase || raceDerivedPhase;   // 🔱 stamp the applied personal phase (manual or race-derived)
+        if (_stampPhase && PHASES[_stampPhase]) {
+          newWorkout = { ...newWorkout, phase: _stampPhase };
         }
         // v2.1 — stamp multi-lane state onto the workout so save-to-history
         // round-trips it. Workout payload is JSON server-side so no migration.
@@ -3386,7 +3394,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, lessonYouth, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap, triathlete]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, lessonYouth, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap, triathlete, raceDate]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -5782,6 +5790,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               appAllowGuardianRsvp={allowGuardianRsvp}
               appTriathlete={triathlete}
               appCssSecs={cssSecs}
+              appRaceDate={raceDate}
               appTeamCalendars={teamCalendars}
               appBillingStatus={billingStatus}
               appFeatureFlags={featureFlags}

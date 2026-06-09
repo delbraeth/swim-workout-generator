@@ -1937,6 +1937,12 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         return res.status(400).json({ error: "level must be one of: " + allowed.join(", ") });
       }
     }
+    // 🔱 Validate race_date if present (A-race periodization). ISO YYYY-MM-DD, or null/"" to clear.
+    if ("race_date" in patch && patch.race_date !== null && patch.race_date !== "") {
+      if (typeof patch.race_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(patch.race_date)) {
+        return res.status(400).json({ error: "race_date must be YYYY-MM-DD" });
+      }
+    }
     // Validate engine_section_sources if present (S3 — template engine
     // per-section toggle state). Object with optional keys warmup/drill/
     // main/cooldown, each value ∈ "bank" | "engine" | "mix". Anything
