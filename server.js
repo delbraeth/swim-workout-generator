@@ -120,6 +120,7 @@ import {
   dbAddPersonAddress, dbUpdatePersonAddress, dbRemovePersonAddress,
   dbGetHomeAddrConsent, dbSetHomeAddrConsent, dbGetHouseholdSiblings,
   dbListSwimmersForParent, dbGetWeeklyDigestPayload, dbQueueWeeklyDigests,
+  dbListGuardianSubsForSwimmer, dbGetDisplayNameForSub,
   dbAuthzCoachOfSwimmer,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
@@ -6182,17 +6183,35 @@ app.post("/api/events/:id/status", checkOrigin, requireAuth, requireCsrf, writeL
     const r = await dbSetTeamEventStatus(req.params.id, status, note);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({ userSub: req.userSub, eventType: "team_event.status", ...reqMeta(req), details: { event_id: req.params.id, status, note: note || null } });
-    // Notify trigger: on cancellation, push everyone who RSVP'd going/maybe.
+    // Notify trigger: on cancellation, push everyone who RSVP'd going/maybe, AND
+    // (D2 follow-on) the guardians of consented children who RSVP'd — mute-respecting.
     // Event-driven (fires on the coach's explicit action) so no dedup needed.
     if (status === "cancelled" && PUSH_ACTIVE) {
-      dbListRsvpRespondentSubs("meet", req.params.id, ["going", "maybe"])
-        .then(subs => Promise.all(subs.map(sub => sendPushToUser(sub, {
-          title: "⚠️ Event cancelled",
-          body: `${ev.name} on ${ev.date} is cancelled${note ? ` — ${note}` : ""}.`,
-          url: "/assigned",
-        }))))
-        .then(out => { if (out.length) console.log(`[notify] cancellation push fanned to ${out.length} swimmer(s) for ${req.params.id}`); })
-        .catch(e => console.warn(`[notify] cancellation push failed: ${e.message}`));
+      const body = `${ev.name} on ${ev.date} is cancelled${note ? ` — ${note}` : ""}.`;
+      (async () => {
+        const subs = await dbListRsvpRespondentSubs("meet", req.params.id, ["going", "maybe"]);
+        let swCount = 0, gCount = 0;
+        for (const sub of subs) {
+          try { const r2 = await sendPushToUser(sub, { title: "⚠️ Event cancelled", body, url: "/assigned" }); if (r2 && r2.sent > 0) swCount++; } catch (_) {}
+          // Guardians of a CONSENTED child get the notice too (unless muted).
+          try {
+            const cs = await dbGetSettings(sub);
+            if (!cs || cs.allow_guardian_rsvp !== true) continue;
+            const guardianSubs = await dbListGuardianSubsForSwimmer(sub);
+            if (!guardianSubs.length) continue;
+            const who = (await dbGetDisplayNameForSub(sub).catch(() => null)) || "your swimmer";
+            for (const g of guardianSubs) {
+              try {
+                const gs = await dbGetSettings(g);
+                if (gs && gs.mute_swimmer_alerts === true) continue;
+                const gr = await sendPushToUser(g, { title: "⚠️ Event cancelled", body: `${body} (${who})`, url: "/parent" });
+                if (gr && gr.sent > 0) gCount++;
+              } catch (_) {}
+            }
+          } catch (_) {}
+        }
+        if (swCount || gCount) console.log(`[notify] cancellation push for ${req.params.id}: ${swCount} swimmer + ${gCount} guardian`);
+      })().catch(e => console.warn(`[notify] cancellation push failed: ${e.message}`));
     }
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
