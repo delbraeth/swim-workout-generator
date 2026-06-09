@@ -5630,10 +5630,21 @@ app.patch("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf, 
       const v = await validateIntentParams(req.body.intent_params, req.userSub);
       if (!v.ok) return res.status(v.status).json({ error: v.error });
     }
+    // Capture the old date BEFORE the update so we can detect a reschedule.
+    const wantsDate = req.body && "scheduled_date" in req.body;
+    let oldCtx = null;
+    if (PUSH_ACTIVE && wantsDate) { try { oldCtx = await dbGetPracticeContext(req.params.id); } catch (_) {} }
     const r = await dbUpdateScheduledWorkout(req.params.id, req.userSub, req.body || {});
     if (!r.ok) {
       const status = r.reason === "not_found" ? 404 : r.reason === "not_owner" ? 403 : 400;
       return res.status(status).json({ error: r.reason });
+    }
+    // Practice reschedule notice — only when the DATE actually changed. Same fan-out
+    // as a team event: going/maybe RSVPs + consented guardians (mute-respecting).
+    if (oldCtx && req.body.scheduled_date && req.body.scheduled_date !== oldCtx.scheduledDate) {
+      const body = `${oldCtx.groupName || "Practice"} moved to ${req.body.scheduled_date}.`;
+      pushEventNoticeToRsvpAndGuardians({ targetId: req.params.id, targetKind: "practice", title: "🗓 Practice rescheduled", body, tag: "practice-reschedule" })
+        .catch(e => console.warn(`[notify] practice reschedule push failed: ${e.message}`));
     }
     dbAuditEvent({
       userSub:   req.userSub,
@@ -5647,10 +5658,25 @@ app.patch("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf, 
 
 app.delete("/api/scheduled-workouts/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
+    // Capture RSVPs + context BEFORE the delete (the row — and its RSVP rows — go away).
+    let pre = null;
+    if (PUSH_ACTIVE) {
+      try {
+        const subs = await dbListRsvpRespondentSubs("practice", req.params.id, ["going", "maybe"]);
+        if (subs.length) pre = { subs, ctx: await dbGetPracticeContext(req.params.id) };
+      } catch (_) {}
+    }
     const r = await dbDeleteScheduledWorkout(req.params.id, req.userSub);
     if (!r.ok) {
       const status = r.reason === "not_found" ? 404 : r.reason === "not_owner" ? 403 : 400;
       return res.status(status).json({ error: r.reason });
+    }
+    // Practice cancellation notice — fan to the pre-captured going/maybe RSVPs +
+    // their consented guardians (deletion is the cancel; no status field).
+    if (pre) {
+      const body = `${pre.ctx?.groupName || "Practice"}${pre.ctx?.scheduledDate ? ` on ${pre.ctx.scheduledDate}` : ""} is cancelled.`;
+      pushEventNoticeToRsvpAndGuardians({ targetId: req.params.id, targetKind: "practice", subs: pre.subs, title: "⚠️ Practice cancelled", body, tag: "practice-cancel" })
+        .catch(e => console.warn(`[notify] practice cancel push failed: ${e.message}`));
     }
     dbAuditEvent({
       userSub:   req.userSub,
@@ -6175,11 +6201,12 @@ app.get("/api/me/rsvp/:kind/:id", requireAuth, async (req, res) => {
 // Fan an event notice (cancellation, reschedule) to everyone who RSVP'd going/maybe,
 // PLUS the guardians of consented children (mute-respecting). Event-driven → no dedup.
 // Best-effort: never throws; call fire-and-forget (.catch at the call site).
-async function pushEventNoticeToRsvpAndGuardians({ eventId, title, body, tag }) {
+async function pushEventNoticeToRsvpAndGuardians({ targetId, targetKind = "meet", subs = null, title, body, tag }) {
   if (!PUSH_ACTIVE) return;
-  const subs = await dbListRsvpRespondentSubs("meet", eventId, ["going", "maybe"]);
+  // subs may be pre-fetched by the caller (e.g. a DELETE that wipes the RSVP rows).
+  const respondents = subs || await dbListRsvpRespondentSubs(targetKind, targetId, ["going", "maybe"]);
   let swCount = 0, gCount = 0;
-  for (const sub of subs) {
+  for (const sub of respondents) {
     try { const r = await sendPushToUser(sub, { title, body, url: "/assigned" }); if (r && r.sent > 0) swCount++; } catch (_) {}
     try {
       const cs = await dbGetSettings(sub);
@@ -6197,7 +6224,7 @@ async function pushEventNoticeToRsvpAndGuardians({ eventId, title, body, tag }) 
       }
     } catch (_) {}
   }
-  if (swCount || gCount) console.log(`[notify] ${tag || "event notice"} ${eventId}: ${swCount} swimmer + ${gCount} guardian`);
+  if (swCount || gCount) console.log(`[notify] ${tag || "event notice"} ${targetId}: ${swCount} swimmer + ${gCount} guardian`);
 }
 
 // Cancel / un-cancel an event (coach of the team). Freezes RSVP + shows CANCELLED.
@@ -6214,7 +6241,7 @@ app.post("/api/events/:id/status", checkOrigin, requireAuth, requireCsrf, writeL
     // On cancellation, fan a notice to going/maybe RSVPs + consented guardians.
     if (status === "cancelled" && PUSH_ACTIVE) {
       const body = `${ev.name} on ${ev.date} is cancelled${note ? ` — ${note}` : ""}.`;
-      pushEventNoticeToRsvpAndGuardians({ eventId: req.params.id, title: "⚠️ Event cancelled", body, tag: "cancellation" })
+      pushEventNoticeToRsvpAndGuardians({ targetId: req.params.id, targetKind: "meet", title: "⚠️ Event cancelled", body, tag: "cancellation" })
         .catch(e => console.warn(`[notify] cancellation push failed: ${e.message}`));
     }
     res.json(r);
@@ -6252,7 +6279,7 @@ app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter
       const newDate = patch.date ?? ev.date;
       const newTime = patch.startTime !== undefined ? patch.startTime : ev.start_time;
       const body = `${name ?? ev.name} moved to ${newDate}${newTime ? ` at ${newTime}` : ""}.`;
-      pushEventNoticeToRsvpAndGuardians({ eventId: req.params.id, title: "🗓 Event rescheduled", body, tag: "reschedule" })
+      pushEventNoticeToRsvpAndGuardians({ targetId: req.params.id, targetKind: "meet", title: "🗓 Event rescheduled", body, tag: "reschedule" })
         .catch(e => console.warn(`[notify] reschedule push failed: ${e.message}`));
     }
     dbAuditEvent({
