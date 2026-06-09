@@ -862,10 +862,10 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                       {billingStatus.tier === "free" && (
                         <div>
                           <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10, lineHeight: 1.5 }}>
-                            Subscribe to Coach for <strong>$10/month</strong> with a 14-day free trial.
+                            Subscribe to Coach (<strong>pricing TBD</strong>).
                             Unlocks managed swimmers, teams, group assignments, multi-lane generate,
                             coach reports, UGC authoring, and team curation.
-                            Cancel anytime before day 14 for no charge.
+                            Cancel anytime.
                           </div>
                           <button
                             onClick={async () => {
@@ -903,16 +903,16 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                               color: "var(--color-bg)", fontSize: 13, fontWeight: 700,
                               cursor: billingBusy ? "wait" : "pointer",
                             }}>
-                            {billingBusy ? "Starting…" : "Start free trial"}
+                            {billingBusy ? "Starting…" : "Subscribe to Coach"}
                           </button>
 
-                          {/* Lesson tier (Phase 5) — additive $5/mo plan for
+                          {/* Lesson tier (Phase 5) — additive plan (pricing TBD) for
                               private/small-group instructors. Only shown once the
                               Stripe lesson price is configured (has_price_id_lesson). */}
                           {billingStatus.has_price_id_lesson && (
                             <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
                               <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10, lineHeight: 1.5 }}>
-                                Just teaching lessons? Subscribe to <strong>Lesson</strong> for <strong>$5/month</strong>.
+                                Just teaching lessons? Subscribe to <strong>Lesson</strong> (<strong>pricing TBD</strong>).
                                 Unlocks the Lesson workout type (short skill sessions), managed swimmers,
                                 per-swimmer equipment, and parent recap exports.
                               </div>
@@ -951,7 +951,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                                   color: "var(--color-primary-text)", fontSize: 13, fontWeight: 700,
                                   cursor: billingBusy ? "wait" : "pointer",
                                 }}>
-                                {billingBusy ? "Starting…" : "Subscribe to Lesson — $5/mo"}
+                                {billingBusy ? "Starting…" : "Subscribe to Lesson"}
                               </button>
                             </div>
                           )}
@@ -964,7 +964,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                             <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
                               <div style={{ fontSize: 12, color: "var(--color-text-dim)", marginBottom: 10, lineHeight: 1.5 }}>
                                 Just a swimmer? <strong>You'll never pay to use SetForge</strong> — every workout feature you use
-                                today stays free, always. Becoming a <strong>Supporter</strong> (<strong>$2.99/month</strong>) is an
+                                today stays free, always. Becoming a <strong>Supporter</strong> (optional, <strong>pricing TBD</strong>) is an
                                 optional way to back development, and it gets you first access to upcoming <strong>community
                                 features</strong> (starting with social workout sharing). 💙
                               </div>
@@ -998,7 +998,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                                   background: "transparent", color: "var(--color-text)", fontSize: 13, fontWeight: 700,
                                   cursor: billingBusy ? "wait" : "pointer",
                                 }}>
-                                {billingBusy ? "Starting…" : "❤️ Support SetForge — $2.99/mo"}
+                                {billingBusy ? "Starting…" : "❤️ Support SetForge"}
                               </button>
                             </div>
                           )}

@@ -1410,7 +1410,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
     //   - Hero tagline: "Swim workouts in seconds." (matches og-image.png)
     //   - Subtitle: "Generator and pace clock for coaches and their swimmers."
     //   - 3 value props: free-for-swimmers-forever / no-ads-trackers-passwords /
-    //     coach-pays-$10 + solo-founder. Marketing's "lean-in" set.
+    //     coach-pricing-TBD + solo-founder. Marketing's "lean-in" set.
     //   - Primary CTA: Sign in with Apple (existing). Secondary: "No invite?
     //     Request one" mailto. Google OAuth slot pre-wired but commented out.
 
@@ -1906,7 +1906,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           const params = new URLSearchParams(window.location.search);
           const u = params.get("upgrade");
           if (u === "success") {
-            setUpgradeBanner({ kind: "success", text: "Welcome to Coach tier — your 14-day free trial is active. Manage your subscription anytime from Profile → Subscription." });
+            setUpgradeBanner({ kind: "success", text: "Welcome to Coach tier. Manage your subscription anytime from Profile → Subscription." });
             // Webhook arrives async (~1-2s after Stripe redirect). Refresh
             // bootstrap twice with a small delay so we usually catch the
             // tier flip without forcing the user to wait or reload. First

@@ -72,7 +72,7 @@
                 {[
                   { icon: "🆓", text: <><strong style={{color:"#fff"}}>Free for swimmers, forever.</strong> Written into our Terms — not just a marketing promise.</> },
                   { icon: "🛡️", text: <><strong style={{color:"#fff"}}>No ads, no trackers, no passwords.</strong> OAuth sign-in only; we can't lose what we never had.</> },
-                  { icon: "✉️", text: <><strong style={{color:"#fff"}}>Coach pays $10/mo. One person answers the email.</strong> No support queue, no enterprise sales call.</> },
+                  { icon: "✉️", text: <><strong style={{color:"#fff"}}>Coach pricing TBD. One person answers the email.</strong> No support queue, no enterprise sales call.</> },
                 ].map((vp, i) => (
                   <li key={i} style={{
                     display: "flex", gap: 12, alignItems: "flex-start",
