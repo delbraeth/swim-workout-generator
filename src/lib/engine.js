@@ -1683,6 +1683,33 @@ export const MAIN_OPTIONS = [
           { id: "s_jb7ool", reps: 1, dist: 1000, desc: "Freestyle — sighting every 6-8 strokes (open water simulation)", interval: "On 22:00", focus: "Practice open-water mechanics with sighting" },
           { id: "s_6dvmtl", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down" },
         ]},
+      // ── Triathlete main sets (types:["tri"]) — merged into the pool ONLY when the
+      // triathlete flag is on (engine `triathlete` option). Freestyle, open-water +
+      // CSS + race-distance. Authored in yards; getBankOptions converts to metric. ──
+      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri"], strokes: [], sets: [
+          { id: "s_tri_pk1", reps: 1, dist: 200, desc: "Freestyle — easy, long and relaxed", interval: "On 4:00", focus: "Loosen before the surge" },
+          { id: "s_tri_pk2", reps: 4, dist: 50, desc: "Freestyle — FAST first 25 (race-start sprint) then settle to race pace", interval: "On 1:15", focus: "Rehearse the chaotic fast start, then find rhythm" },
+          { id: "s_tri_pk3", reps: 1, dist: 800, desc: "Freestyle — race pace, sighting every 6–8 strokes, no walls", interval: "On 16:00", focus: "Hold pace after the start spike — open-water sustain" },
+          { id: "s_tri_pk4", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down" },
+        ]},
+      { label: "🔱 CSS Pyramid", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+          { id: "s_tri_cp1", reps: 1, dist: 200, desc: "Freestyle — at CSS pace, smooth", interval: "On 4:00", focus: "Settle into threshold" },
+          { id: "s_tri_cp2", reps: 1, dist: 300, desc: "Freestyle — at CSS pace, hold the split", interval: "On 5:45", focus: "Threshold sustain" },
+          { id: "s_tri_cp3", reps: 1, dist: 400, desc: "Freestyle — at CSS pace, the long one", interval: "On 7:30", focus: "Hold CSS under fatigue" },
+          { id: "s_tri_cp4", reps: 1, dist: 200, desc: "Freestyle — at CSS pace, finish strong", interval: "On 4:00", focus: "Close at threshold" },
+          { id: "s_tri_cp5", reps: 1, dist: 100, desc: "Easy — flush", interval: "No interval — swim easy", focus: "Recover" },
+        ]},
+      { label: "🔱 Broken Race 1500", totalYards: 1400, types: ["tri"], strokes: [], sets: [
+          { id: "s_tri_br1", reps: 1, dist: 100, desc: "Freestyle — build to race pace", interval: "On 2:00", focus: "Prime" },
+          { id: "s_tri_br2", reps: 5, dist: 300, desc: "Freestyle — Olympic-leg race pace, ~15s rest (rehearse the 1500 broken)", interval: "On 6:00", focus: "Race-distance pace with micro-recoveries" },
+          { id: "s_tri_br3", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down" },
+        ]},
+      { label: "🔱 Sighting & Drafting Skills", totalYards: 1175, types: ["tri"], strokes: [], sets: [
+          { id: "s_tri_sd1", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length (eyes up, hips down)", interval: "On 4:15", focus: "Smooth sighting mechanics" },
+          { id: "s_tri_sd2", reps: 6, dist: 100, desc: "Freestyle — odd: sight every 6 strokes / even: bilateral breathe by 3", interval: "On 2:00", focus: "Sighting + both-sides breathing for OW awareness" },
+          { id: "s_tri_sd3", reps: 3, dist: 75, desc: "Freestyle — draft: 25 hard (on the feet) / 50 settle", interval: "On 1:40", focus: "Surge to catch a draft, then hold it cheap" },
+          { id: "s_tri_sd4", reps: 1, dist: 100, desc: "Easy — close", interval: "No interval — swim easy", focus: "Cool down" },
+        ]},
       { label: "Aerobic Step-Up", totalYards: 1100, types: ["endurance"], strokes: [], sets: [
           { id: "s_bhyx2o", reps: 1, dist: 100, desc: "Freestyle — RPE 5/10", interval: "On 2:15", focus: "Easy" },
           { id: "s_wwusuz", reps: 1, dist: 200, desc: "Freestyle — RPE 6/10", interval: "On 4:30", focus: "Aerobic" },
@@ -6597,6 +6624,7 @@ export function generateWorkout({
       lessonMySetsOnly = false,         // Lesson tier (Phase 5) — use ONLY coach-authored lesson content (drop built-ins).
       lessonLevel = null,               // Lesson tier (Phase 5) — beginner/intermediate/advanced; filters authored lesson sets.
       youthMode = false,                // Eval #5 — Learn-to-Swim: swap lesson banks for the beginner YOUTH pack (25-based, deck-paced).
+      triathlete = false,               // 🔱 Triathlete mode — merge tri-tagged main sets (open-water/CSS/race) into the main pool, preferred.
       racePace = false,                 // Phase 5 #4 — build the MAIN block as race-pace reps for `raceEvent`.
       raceEvent = "free_100",           // which race event the set anchors to (see raceEvents.js).
       raceGoals = {},                   // { event_id: secs } — goal→pr resolved server-side; fills the per-rep target.
@@ -6687,7 +6715,11 @@ export function generateWorkout({
       const _allCooldownsRaw = getBankOptions("cooldown", typeId, poolMode, ugcOverlay, _lessonOpts);
       const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay, _lessonOpts);
       const _kickListRaw     = getBankOptions("kick",     typeId, poolMode, ugcOverlay, _lessonOpts);
-      const _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay, _lessonOpts);
+      let   _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay, _lessonOpts);
+      if (triathlete) {   // 🔱 prefer tri content: tri mains first, regular pool as budget fallback
+        const _triMains = getBankOptions("main", "tri", poolMode, ugcOverlay, _lessonOpts);
+        if (_triMains.length) _mainListRaw = _triMains.concat(_mainListRaw);
+      }
 
       // Phase 3 PSC slice 2/3 — hard-exclude step 0. Per
       // PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.4: drop options before weight
@@ -6760,6 +6792,16 @@ export function generateWorkout({
                         + (pinnedBlocks.cooldown ? pinnedBlocks.cooldown.totalYards : 0);
       const freeBudget  = maxYards - pinnedTotal;
       const hasPins     = pinnedTotal > 0;
+
+      // 🔱 Triathlete mode — now that the free budget is known, PREFER the tri-tagged
+      // mains (open-water / CSS / race-distance) merged in above: keep only tri sets
+      // that fit comfortably (≤70% of free budget, leaving room for warmup/cooldown).
+      // If none fit (a short session), fall back to the full pool so generation still
+      // succeeds — mirrors the recovery-mode "filter, else keep all" pattern above.
+      if (triathlete && !pinnedBlocks.main) {
+        const _triFit = mainList.filter(o => o.types && o.types.includes("tri") && o.totalYards <= freeBudget * 0.7);
+        if (_triFit.length) mainList = _triFit;
+      }
 
       // Per-section minimums (0 for pinned sections — they don't consume free budget)
       const minWu = (pinnedBlocks.warmup   || !_incl.warmup)   ? 0 : Math.min(...allWarmups.map(o => o.totalYards));
@@ -7241,6 +7283,7 @@ export function regenerateSection({
       lessonMySetsOnly = false,       // Lesson tier (Phase 5) — use only authored lesson content.
       lessonLevel = null,             // Lesson tier (Phase 5) — ability-level filter for authored lesson sets.
       youthMode = false,              // Eval #5 — Learn-to-Swim youth bank swap (inert for non-lesson types).
+      triathlete = false,             // 🔱 re-roll the main from the tri pool (open-water/CSS/race) when triathlete.
     } = {}) {
       const _lessonOpts = { lessonMySetsOnly, lessonLevel, youthMode };   // Phase 5 / eval #5 — inert for non-lesson types
       // Eval #5 — match generateWorkout's youth guards on the regenerate path:
@@ -7283,6 +7326,12 @@ export function regenerateSection({
       else if (sectionKey === "kick")     pool = getBankOptions("kick",     typeId, poolMode, ugcOverlay, _lessonOpts);
       else {
         let basePool = getBankOptions("main", typeId, poolMode, ugcOverlay, _lessonOpts);
+        // 🔱 Triathlete — re-roll the main from tri content (the ×2/×3 expansion below
+        // gives the fixed tri sets the size range to hit the section target).
+        if (triathlete) {
+          const _triMains = getBankOptions("main", "tri", poolMode, ugcOverlay, _lessonOpts);
+          if (_triMains.length) basePool = _triMains;
+        }
         // C: in recovery mode, only consider easy/aerobic mains, no repeat variants.
         if (recoveryMode) {
           const recoveryMains = basePool.filter(o => {
@@ -8859,9 +8908,12 @@ export function getBankOptions(kind, typeId, poolMode, ugcOverlay = null, opts =
             (o.types   && o.types.includes(canonType)) ||
             (o.strokes && o.strokes.includes(canonType))
           );
-          if (list.length === 0 && canonType !== "mixed") {
+          if (list.length === 0 && canonType !== "mixed" && canonType !== "tri") {
             list = data.filter(o => o.types && o.types.includes("mixed"));
           }
+          // 🔱 "tri" mains live only in the yards bank — DON'T let the mixed-fallback
+          // hijack the metric chain entries; fall through so the yards tri sets are
+          // reached and unit-converted (no metric-native duplication needed).
         }
         if (list && list.length > 0) {
           canonical = unit === targetUnit ? list : list.map(o => convertOptionUnits(o, unit, targetUnit));

@@ -3225,6 +3225,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           lessonMySetsOnly: _isLessonGen ? lessonMySetsOnly : false,
           lessonLevel:    _lessonLevel,
           youthMode:      _isLessonGen ? lessonYouth : false,   // Eval #5 — Learn-to-Swim youth bank
+          triathlete,                                           // 🔱 merge tri main pool (open-water/CSS/race) when triathlete
           // Phase 5 #4 — race-pace MAIN (ignored unless racePace). raceGoals is the
           // target's goal→PR map (loaded by effect); raceKind labels the chosen event.
           racePace:       racePace && !_isLessonGen,
@@ -3407,6 +3408,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           lessonMySetsOnly: _isLessonRegen ? lessonMySetsOnly : false,
           lessonLevel:  _isLessonRegen ? (lessonLevelChoice || generateForTarget?.lesson_level || null) : null,
           youthMode:    _isLessonRegen ? lessonYouth : false,   // Eval #5 — Learn-to-Swim youth bank
+          triathlete,                                           // 🔱 re-roll main from tri pool when triathlete
           recentLabels,
           recoveryMode: isRecovery,
           phase,
