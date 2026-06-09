@@ -5036,6 +5036,99 @@ export async function dbBulkCreateManagedSwimmers(ownerSub, rows, { team_id = nu
   return { inserted, errors, results };
 }
 
+// ── SDIF import (Hy-Tek SD3/CL2 → roster + best times) ────────────────────────
+// Maps parsed SDIF D0 rows to SetForge's 8 tracked race events, groups by swimmer,
+// matches existing managed swimmers (USS# first, then name+DOB), and either PREVIEWS
+// (commit=false → writes nothing) or COMMITS (create new managed swimmers + upsert PRs,
+// keeping the FASTER of existing vs imported). See SDIF_IMPORT_SCOPE.md.
+const SDIF_EVENT_MAP = {
+  "free|50": "free_50", "free|100": "free_100", "free|200": "free_200", "free|500": "free_500",
+  "back|100": "back_100", "breast|100": "breast_100", "fly|100": "fly_100", "im|200": "im_200",
+};
+const SDIF_COURSE_MAP = { scy: "25y", scm: "25m", lcm: "50m" };
+const _sdifNameKey = (name) =>
+  String(name || "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean).sort().join(" ");
+
+export async function dbSdifImport({ coachSub, teamId = null, rows = [], commit = false }) {
+  if (!coachSub) return { ok: false, reason: "no_coach" };
+
+  // 1. Group rows by swimmer; keep the fastest time per (event, course).
+  const swimmers = new Map();
+  const eventsSkipped = [];
+  for (const r of rows) {
+    const race = SDIF_EVENT_MAP[`${r.stroke}|${r.distance}`];
+    const course = SDIF_COURSE_MAP[r.course];
+    if (!race || !course) { eventsSkipped.push({ name: r.name, event: r.eventLabel || `${r.distance} ${r.stroke}`, course: r.course, reason: race ? "course_unmapped" : "event_not_tracked" }); continue; }
+    const key = r.uss ? `u:${String(r.uss).toUpperCase()}` : `n:${_sdifNameKey(r.name)}|${r.dob || ""}`;
+    let sw = swimmers.get(key);
+    if (!sw) { sw = { uss: r.uss || null, name: r.name, last: r.last, first: r.first, dob: r.dob || null, sex: r.sex || null, times: new Map() }; swimmers.set(key, sw); }
+    const ek = `${race}|${course}`;
+    const prev = sw.times.get(ek);
+    if (!prev || r.timeSecs < prev.timeSecs) sw.times.set(ek, { event: race, course, timeSecs: r.timeSecs, timeText: r.timeText, eventLabel: r.eventLabel });
+  }
+
+  // 2. Index existing managed swimmers for matching (USS# + name|dob).
+  const existing = await dbListManagedSwimmersForCoach(coachSub, { includeArchived: false });
+  const byUss = new Map(), byND = new Map();
+  for (const m of existing) {
+    if (m.usa_swimming_id) byUss.set(String(m.usa_swimming_id).toUpperCase(), m);
+    if (m.display_name && m.dob) byND.set(`${_sdifNameKey(m.display_name)}|${m.dob}`, m);
+  }
+  const matchOf = (sw) =>
+    (sw.uss && byUss.get(String(sw.uss).toUpperCase())) ||
+    (sw.dob && byND.get(`${_sdifNameKey(sw.name)}|${sw.dob}`)) || null;
+
+  // 3. Build the per-swimmer preview (and gather what commit would write).
+  const preview = [];
+  let timesToWrite = 0, timesSkipped = 0;
+  for (const sw of swimmers.values()) {
+    const m = matchOf(sw);
+    const existingTimes = {};
+    if (m) {
+      const ets = await dbListEventTimes({ managedId: m.id });
+      for (const t of ets) if (t.kind === "pr") existingTimes[`${t.event}|${t.course}`] = Number(t.time_secs);
+    }
+    const times = [];
+    for (const t of sw.times.values()) {
+      const cur = existingTimes[`${t.event}|${t.course}`];
+      const outcome = (cur == null) ? "new" : (t.timeSecs < cur ? "faster" : "slower_skip");
+      if (outcome === "slower_skip") timesSkipped++; else timesToWrite++;
+      times.push({ event: t.event, course: t.course, eventLabel: t.eventLabel, timeText: t.timeText, timeSecs: t.timeSecs, outcome, existingSecs: cur ?? null });
+    }
+    preview.push({ name: sw.name, first: sw.first, last: sw.last, uss: sw.uss, dob: sw.dob, sex: sw.sex, status: m ? "matched" : "new", managed_id: m ? m.id : null, times });
+  }
+
+  const totals = {
+    swimmers: preview.length,
+    newSwimmers: preview.filter(p => p.status === "new").length,
+    matched: preview.filter(p => p.status === "matched").length,
+    timesToWrite, timesSkipped, eventsSkipped: eventsSkipped.length,
+  };
+
+  if (!commit) return { ok: true, mode: "preview", swimmers: preview, eventsSkipped, totals };
+
+  // 4. Commit: create new managed swimmers, then upsert new/faster PRs. Per-row atomic.
+  let swimmersCreated = 0, timesWritten = 0;
+  const errors = [];
+  for (const p of preview) {
+    let managedId = p.managed_id;
+    if (p.status === "new") {
+      try {
+        const cr = await dbCreateManagedSwimmer({ ownerSub: coachSub, team_id: teamId, first_name: p.first || null, last_name: p.last || null, dob: p.dob, gender: p.sex || null, usa_swimming_id: p.uss || null });
+        managedId = cr.id; swimmersCreated++;
+      } catch (err) { errors.push({ name: p.name, error: err.message || String(err) }); continue; }
+    }
+    for (const t of p.times) {
+      if (t.outcome === "slower_skip") continue;
+      try {
+        const r = await dbUpsertEventTime({ managedId, event: t.event, course: t.course, kind: "pr", timeSecs: t.timeSecs });
+        if (r.ok) timesWritten++; else errors.push({ name: p.name, event: t.event, error: r.reason });
+      } catch (err) { errors.push({ name: p.name, event: t.event, error: err.message || String(err) }); }
+    }
+  }
+  return { ok: true, mode: "commit", swimmers: preview, eventsSkipped, totals, committed: { swimmersCreated, timesWritten, errors } };
+}
+
 // ── User DOB (R-B) ────────────────────────────────────────────────────
 // Self-serve DOB write — soft-prompt at next login per decision #37, and
 // also writable from the profile if the user wants to update it.

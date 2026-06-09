@@ -58,6 +58,7 @@ import { OAuth2Client as GoogleOAuth2Client } from "google-auth-library";
 import { enqueueEmail, startEmailWorker, EMAIL_ACTIVE } from "./lib/email.js";
 import { BILLING_ACTIVE, billingConfigState, createCheckoutSession, createPortalSession, processWebhookEvent, verifyWebhookSignature, grantTier, revokeTier, getBillingStatusFor, getBillingHistoryFor } from "./lib/billing.js";
 import { PUSH_ACTIVE, pushConfigState, sendPushToUser } from "./lib/push.js";
+import { parseSdif } from "./lib/sdif.js";
 import { WEATHER_ACTIVE, weatherConfigState, getForecast, weatherSelfTest } from "./lib/weather.js";
 import { resolveTeamFlags, unionFlags } from "./src/lib/featureFlags.js";
 import { IAP_ACTIVE, appleIapConfigState, verifyTransaction, applyVerifiedTransaction, processNotification, checkCrossChannel } from "./lib/appleIap.js";
@@ -124,7 +125,7 @@ import {
   dbAuthzCoachOfSwimmer,
   dbCreateManagedSwimmer, dbGetManagedSwimmer, dbListManagedSwimmersForCoach,
   dbUpdateManagedSwimmer, dbArchiveManagedSwimmer, dbIsManagedSwimmerOwnedBy,
-  dbBulkCreateManagedSwimmers, dbUpdateMeDob,
+  dbBulkCreateManagedSwimmers, dbUpdateMeDob, dbSdifImport,
   dbCreateGroup, dbGetGroup, dbListGroupsForTeam, dbListGroupsForCoach,
   dbUpdateGroup, dbArchiveGroup, dbSetGroupPhase, dbGetGroupRole,
   dbSetGroupAnchor, dbClearGroupAnchor, dbGetActiveAnchor, dbExpireOrphanAnchors, dbListAnchorsForMemberSwimmer,
@@ -4717,6 +4718,27 @@ app.get("/api/teams/:id/roster-anon.csv", requireAuth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="roster-anon-${safeName}-${stamp}.csv"`);
     dbAuditEvent({ userSub: req.userSub, eventType: "team.roster.export_anon_csv", ...reqMeta(req), details: { team_id: req.params.id, count: rows.length } });
     res.send(csv);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// SDIF (Hy-Tek SD3/CL2) import — roster + best times. Coach-gated. The file is POSTed
+// as a TEXT/PLAIN body (sidesteps the 100kb JSON limit; global json parser skips it).
+// Default = dry-run PREVIEW (writes nothing); ?commit=1 creates swimmers + upserts PRs.
+// See SDIF_IMPORT_SCOPE.md. Parser offsets need real-sample calibration — preview-gated.
+app.post("/api/teams/:id/import/sdif", checkOrigin, requireAuth, requireCsrf, writeLimiter,
+  express.text({ type: "*/*", limit: "8mb" }), async (req, res) => {
+  try {
+    const role = await dbGetTeamRole(req.params.id, req.userSub);
+    if (!role) return res.status(403).json({ error: "not a team coach" });
+    const sdif = typeof req.body === "string" ? req.body : "";
+    if (sdif.length < 4) return res.status(400).json({ error: "no_sdif" });
+    const parsed = parseSdif(sdif);
+    if (!parsed.ok) return res.status(422).json({ error: "no_parsable_rows", counts: parsed.counts });
+    const commit = req.query.commit === "1" || req.query.commit === "true";
+    const result = await dbSdifImport({ coachSub: req.userSub, teamId: req.params.id, rows: parsed.rows, commit });
+    dbAuditEvent({ userSub: req.userSub, eventType: commit ? "team.import.sdif.commit" : "team.import.sdif.preview",
+      ...reqMeta(req), details: { team_id: req.params.id, ...(result.totals || {}) } });
+    res.json({ ...result, parse: parsed.counts });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
