@@ -194,6 +194,8 @@ import { GuardianRsvpPanel } from "../practices/GuardianRsvpPanel.jsx";
             <HouseholdSiblings key={"hh-" + (selected.managed_id || selected.swimmer_sub)} swimmerRef={selected.managed_id || selected.swimmer_sub} />
           </div>
 
+          <div style={{ color: "var(--color-text-dim)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", margin: "4px 0 8px" }}>🔔 Notifications</div>
+
           {/* Pause digest toggle */}
           <div className="card" style={{ padding: 14, borderRadius: 10, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>

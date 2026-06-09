@@ -6172,6 +6172,34 @@ app.get("/api/me/rsvp/:kind/:id", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
+// Fan an event notice (cancellation, reschedule) to everyone who RSVP'd going/maybe,
+// PLUS the guardians of consented children (mute-respecting). Event-driven → no dedup.
+// Best-effort: never throws; call fire-and-forget (.catch at the call site).
+async function pushEventNoticeToRsvpAndGuardians({ eventId, title, body, tag }) {
+  if (!PUSH_ACTIVE) return;
+  const subs = await dbListRsvpRespondentSubs("meet", eventId, ["going", "maybe"]);
+  let swCount = 0, gCount = 0;
+  for (const sub of subs) {
+    try { const r = await sendPushToUser(sub, { title, body, url: "/assigned" }); if (r && r.sent > 0) swCount++; } catch (_) {}
+    try {
+      const cs = await dbGetSettings(sub);
+      if (!cs || cs.allow_guardian_rsvp !== true) continue;          // child opted in?
+      const guardianSubs = await dbListGuardianSubsForSwimmer(sub);
+      if (!guardianSubs.length) continue;
+      const who = (await dbGetDisplayNameForSub(sub).catch(() => null)) || "your swimmer";
+      for (const g of guardianSubs) {
+        try {
+          const gs = await dbGetSettings(g);
+          if (gs && gs.mute_swimmer_alerts === true) continue;        // guardian muted?
+          const gr = await sendPushToUser(g, { title, body: `${body} (${who})`, url: "/parent" });
+          if (gr && gr.sent > 0) gCount++;
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+  if (swCount || gCount) console.log(`[notify] ${tag || "event notice"} ${eventId}: ${swCount} swimmer + ${gCount} guardian`);
+}
+
 // Cancel / un-cancel an event (coach of the team). Freezes RSVP + shows CANCELLED.
 app.post("/api/events/:id/status", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
@@ -6183,35 +6211,11 @@ app.post("/api/events/:id/status", checkOrigin, requireAuth, requireCsrf, writeL
     const r = await dbSetTeamEventStatus(req.params.id, status, note);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     dbAuditEvent({ userSub: req.userSub, eventType: "team_event.status", ...reqMeta(req), details: { event_id: req.params.id, status, note: note || null } });
-    // Notify trigger: on cancellation, push everyone who RSVP'd going/maybe, AND
-    // (D2 follow-on) the guardians of consented children who RSVP'd — mute-respecting.
-    // Event-driven (fires on the coach's explicit action) so no dedup needed.
+    // On cancellation, fan a notice to going/maybe RSVPs + consented guardians.
     if (status === "cancelled" && PUSH_ACTIVE) {
       const body = `${ev.name} on ${ev.date} is cancelled${note ? ` — ${note}` : ""}.`;
-      (async () => {
-        const subs = await dbListRsvpRespondentSubs("meet", req.params.id, ["going", "maybe"]);
-        let swCount = 0, gCount = 0;
-        for (const sub of subs) {
-          try { const r2 = await sendPushToUser(sub, { title: "⚠️ Event cancelled", body, url: "/assigned" }); if (r2 && r2.sent > 0) swCount++; } catch (_) {}
-          // Guardians of a CONSENTED child get the notice too (unless muted).
-          try {
-            const cs = await dbGetSettings(sub);
-            if (!cs || cs.allow_guardian_rsvp !== true) continue;
-            const guardianSubs = await dbListGuardianSubsForSwimmer(sub);
-            if (!guardianSubs.length) continue;
-            const who = (await dbGetDisplayNameForSub(sub).catch(() => null)) || "your swimmer";
-            for (const g of guardianSubs) {
-              try {
-                const gs = await dbGetSettings(g);
-                if (gs && gs.mute_swimmer_alerts === true) continue;
-                const gr = await sendPushToUser(g, { title: "⚠️ Event cancelled", body: `${body} (${who})`, url: "/parent" });
-                if (gr && gr.sent > 0) gCount++;
-              } catch (_) {}
-            }
-          } catch (_) {}
-        }
-        if (swCount || gCount) console.log(`[notify] cancellation push for ${req.params.id}: ${swCount} swimmer + ${gCount} guardian`);
-      })().catch(e => console.warn(`[notify] cancellation push failed: ${e.message}`));
+      pushEventNoticeToRsvpAndGuardians({ eventId: req.params.id, title: "⚠️ Event cancelled", body, tag: "cancellation" })
+        .catch(e => console.warn(`[notify] cancellation push failed: ${e.message}`));
     }
     res.json(r);
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
@@ -6239,6 +6243,18 @@ app.patch("/api/events/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter
     if (group_id !== undefined) patch.groupId = group_id;
     const r = await dbUpdateTeamEvent(req.params.id, patch);
     if (!r.ok) return res.status(400).json({ error: r.reason });
+    // Reschedule notice — only when the DATE or START TIME actually changed (not
+    // name/venue/kind edits), and the event isn't cancelled. Same fan-out as a
+    // cancellation: going/maybe RSVPs + consented guardians (mute-respecting).
+    const dateChanged = patch.date !== undefined && patch.date !== ev.date;
+    const timeChanged = patch.startTime !== undefined && patch.startTime !== ev.start_time;
+    if ((dateChanged || timeChanged) && ev.status !== "cancelled" && PUSH_ACTIVE) {
+      const newDate = patch.date ?? ev.date;
+      const newTime = patch.startTime !== undefined ? patch.startTime : ev.start_time;
+      const body = `${name ?? ev.name} moved to ${newDate}${newTime ? ` at ${newTime}` : ""}.`;
+      pushEventNoticeToRsvpAndGuardians({ eventId: req.params.id, title: "🗓 Event rescheduled", body, tag: "reschedule" })
+        .catch(e => console.warn(`[notify] reschedule push failed: ${e.message}`));
+    }
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "team_event.update",
