@@ -11,6 +11,7 @@ import { GoalRow } from "./GoalRow.jsx";
 import { JoinGroupSection } from "./JoinGroupSection.jsx";
 import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
 import { RaceGoalsPanel } from "./RaceGoalsPanel.jsx";
+import { cssFromTT, parseRaceTime, formatRaceTime } from "../../lib/raceEvents.js";
 import { PaceProfileEditor } from "../pace/PaceProfileEditor.jsx";
 import { CompliancePanel } from "./CompliancePanel.jsx";
 import { PushNotificationsPanel } from "./PushNotificationsPanel.jsx";
@@ -23,7 +24,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile, appAllowGuardianRsvp }) {
+    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile, appAllowGuardianRsvp, appTriathlete, appCssSecs }) {
       const dialogRef = useDialogA11y(onClose);
       // Phase 6 visibility (union across the user's teams; undefined ⇒ all-on).
       const ff = appFeatureFlags || {};
@@ -386,6 +387,38 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
       const [guardianRsvp, setGuardianRsvp]       = React.useState(!!appAllowGuardianRsvp);
       const [guardianRsvpBusy, setGuardianRsvpBusy] = React.useState(false);
       React.useEffect(() => { setGuardianRsvp(!!appAllowGuardianRsvp); }, [appAllowGuardianRsvp]);
+
+      const [triathlete, setTriathlete] = React.useState(!!appTriathlete);
+      const [triBusy, setTriBusy]       = React.useState(false);
+      React.useEffect(() => { setTriathlete(!!appTriathlete); }, [appTriathlete]);
+      const toggleTriathlete = async () => {
+        const next = !triathlete;
+        setTriathlete(next); setTriBusy(true);   // optimistic
+        try {
+          const res = await fetch("/api/settings/extra", { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ triathlete: next }) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (onProfileChange) onProfileChange();
+        } catch (_) { setTriathlete(!next); }
+        finally { setTriBusy(false); }
+      };
+
+      // CSS engine — triathlete pace anchor (400+200 TT → pace/100). settings.extra.css_secs.
+      const [cssVal, setCssVal] = React.useState(typeof appCssSecs === "number" ? appCssSecs : null);
+      const [cssT400, setCssT400] = React.useState("");
+      const [cssT200, setCssT200] = React.useState("");
+      const [cssBusy, setCssBusy] = React.useState(false);
+      React.useEffect(() => { setCssVal(typeof appCssSecs === "number" ? appCssSecs : null); }, [appCssSecs]);
+      const computedCss = cssFromTT(parseRaceTime(cssT400), parseRaceTime(cssT200));
+      const saveCss = async (secs) => {
+        if (secs == null) return;
+        setCssBusy(true);
+        try {
+          const res = await fetch("/api/settings/extra", { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ css_secs: secs }) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setCssVal(secs);
+          if (onProfileChange) onProfileChange();
+        } catch (_) {} finally { setCssBusy(false); }
+      };
       const toggleGuardianRsvp = async () => {
         const next = !guardianRsvp;
         setGuardianRsvp(next); setGuardianRsvpBusy(true);   // optimistic
@@ -606,7 +639,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                         Data comes from /api/me/bootstrap (via App props) — no extra request. */}
                     <TeamCalendarDownload teams={Array.isArray(appTeamCalendars) ? appTeamCalendars : []} />
                     {/* Race goals / PRs — anchor Race-Pace workout targets to your times. */}
-                    <RaceGoalsPanel endpoint="/api/me/event-times" />
+                    <RaceGoalsPanel endpoint="/api/me/event-times" showTri={triathlete} />
                     {/* MAAP / SafeSport (Phase 5 #3) — coaches record their own
                         compliance credentials (cert + expiry). Coach-only. */}
                     {ff.compliance !== false && (appEffectiveMe ? appEffectiveMe.is_coach : appMe?.is_coach) && (
@@ -668,7 +701,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                 </div>
                 )}
 
-                {tab === "account" && (
+                {tab === "account" && !triathlete && (
                 <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
                     🏊 Pace profile
@@ -682,6 +715,51 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     onSave={savePaceProfile}
                     hint={paceProfileMsg}
                   />
+                </div>
+                )}
+
+                {tab === "account" && (
+                <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                    🔱 Triathlete
+                  </div>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: triBusy ? "wait" : "pointer" }}>
+                    <input type="checkbox" checked={triathlete} disabled={triBusy} onChange={toggleTriathlete} style={{ marginTop: 2, width: 16, height: 16, cursor: "inherit" }} />
+                    <span style={{ fontSize: 13, color: "var(--color-text)", lineHeight: 1.4 }}>
+                      I’m a triathlete
+                      <span style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", marginTop: 2 }}>
+                        Unlocks open-water swim-leg race distances (Sprint 750m · Olympic 1.5K · 70.3 1.9K · Ironman 3.8K) in race-pace targets &amp; goals. More multi-sport features coming.
+                      </span>
+                    </span>
+                  </label>
+                  {triathlete && (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-card)" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)", marginBottom: 4 }}>Critical Swim Speed (CSS)</div>
+                      <div style={{ fontSize: 11, color: "var(--color-text-dim)", marginBottom: 8, lineHeight: 1.5 }}>
+                        Your threshold pace, from a <strong>400 + 200 time trial</strong> (best effort, full recovery between). CSS/100 = (400 − 200) ÷ 2.
+                      </div>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+                        <label style={{ fontSize: 12, color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: 5 }}>400 TT
+                          <input value={cssT400} onChange={e => setCssT400(e.target.value)} placeholder="6:00" style={{ width: 64, padding: "4px 6px", fontFamily: "monospace", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} /></label>
+                        <label style={{ fontSize: 12, color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: 5 }}>200 TT
+                          <input value={cssT200} onChange={e => setCssT200(e.target.value)} placeholder="2:50" style={{ width: 64, padding: "4px 6px", fontFamily: "monospace", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} /></label>
+                        {computedCss != null && <span style={{ fontSize: 13, color: "var(--color-positive)", fontWeight: 700, fontFamily: "monospace" }}>→ {formatRaceTime(computedCss)}/100</span>}
+                      </div>
+                      {cssVal != null && <div style={{ fontSize: 12, color: "var(--color-text)", marginBottom: 8 }}>Current CSS: <strong style={{ fontFamily: "monospace" }}>{formatRaceTime(cssVal)}/100</strong></div>}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button onClick={() => saveCss(computedCss)} disabled={cssBusy || computedCss == null}
+                          style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: (cssBusy || computedCss == null) ? "var(--color-border)" : "var(--color-primary)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: (cssBusy || computedCss == null) ? "not-allowed" : "pointer" }}>
+                          Save CSS
+                        </button>
+                        {cssVal != null && onPaceUpdate && (
+                          <button onClick={() => onPaceUpdate(formatRaceTime(cssVal))}
+                            style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid var(--color-border-strong)", background: "transparent", color: "var(--color-text-muted)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                            Use as my generator pace →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 )}
 

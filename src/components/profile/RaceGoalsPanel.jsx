@@ -12,7 +12,7 @@ const COURSES = [
   { id: "50m", label: "LCM", full: "Long-course meters" },
 ];
 
-export function RaceGoalsPanel({ endpoint, course: initialCourse = "25y", heading = "🎯 Race goals / PRs" }) {
+export function RaceGoalsPanel({ endpoint, course: initialCourse = "25y", heading = "🎯 Race goals / PRs", showTri = false }) {
   const [rows, setRows]   = React.useState(null);  // null = loading
   const [drafts, setDrafts] = React.useState({});  // `${event}_${kind}` → typed string
   const [msg, setMsg]     = React.useState(null);
@@ -94,7 +94,7 @@ export function RaceGoalsPanel({ endpoint, course: initialCourse = "25y", headin
         <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)" }}>Event</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", textAlign: "center" }}>Goal</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", textAlign: "center" }}>PR</span>
-        {RACE_EVENTS.map(ev => (
+        {RACE_EVENTS.filter(ev => ev.category !== "tri" || showTri).map(ev => (
           <React.Fragment key={ev.id}>
             <span style={{ fontSize: 13, color: "var(--color-text)" }}>{ev.label}</span>
             {["goal", "pr"].map(kind => {

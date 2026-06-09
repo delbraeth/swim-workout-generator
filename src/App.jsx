@@ -1464,6 +1464,12 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [paceProfile, setPaceProfile]   = useState(null);   // #3 — { preset, factors } | null
       const [paceIsSet, setPaceIsSet]       = useState(false);  // no-pace nudge: false until pace explicitly set/loaded
       const [allowGuardianRsvp, setAllowGuardianRsvp] = useState(false);  // D1 — swimmer opt-in for guardian RSVP
+      const [triathlete, setTriathlete]   = useState(false);   // multi-sport — self-identifier; gates tri race events
+      const [cssSecs, setCssSecs]         = useState(null);    // Critical Swim Speed (sec/100) for triathletes
+      // Triathlete mode hides stroke-specialty + IM types — if one was selected, clear it.
+      useEffect(() => {
+        if (triathlete && ["back", "breast", "fly", "im"].includes(selectedType)) setSelectedType(null);
+      }, [triathlete, selectedType]);
       // Onboarding tour. tourStep -1 = inactive, 0..N-1 = active step.
       // tourSeen defaults true so the tour never flashes before settings
       // resolve; applySettings sets the real value (unset → false → auto-run
@@ -2367,6 +2373,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         strokeFactorsRef.current = resolveStrokeFactors(s.pace_profile || null, null);
         setPaceProfile(s.pace_profile || null);
         setAllowGuardianRsvp(s.allow_guardian_rsvp === true);   // D1 consent
+        setTriathlete(s.triathlete === true);                   // multi-sport identifier
+        setCssSecs(typeof s.css_secs === "number" ? s.css_secs : null);   // CSS pace anchor
         if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
         // Q: next-event countdown lives in settings.extra; dbGetSettings
         // spreads extra into the top-level response.
@@ -4636,7 +4644,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     <select value={raceEvent} onChange={e => setRaceEvent(e.target.value)}
                       aria-label="Race event"
                       style={{ padding: "5px 9px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
-                      {RACE_EVENTS.map(ev => <option key={ev.id} value={ev.id}>{ev.label}</option>)}
+                      {RACE_EVENTS.filter(ev => ev.category !== "tri" || triathlete).map(ev => <option key={ev.id} value={ev.id}>{ev.label}</option>)}
                     </select>
                     <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--color-text-dim)" }}>
                       <input type="checkbox" checked={raceUsrpt} onChange={e => setRaceUsrpt(e.target.checked)} /> USRPT
@@ -4748,6 +4756,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             <div className="screen-only type-card-grid" data-tour="step-type-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
               {WORKOUT_TYPES
                 .filter(t => t.id !== "lesson" || effectiveMe?.can_lesson)   // Lesson tier (Phase 5) — gated card
+                .filter(t => !triathlete || !["back", "breast", "fly", "im"].includes(t.id))   // Triathlete mode — hide stroke-specialty + IM (free-focused sport)
                 .map(t => {
                 const isSel = selectedType === t.id;
                 const isHov = hover === t.id;
@@ -5760,6 +5769,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               appTeamDefaults={teamDefaults}
               appPaceProfile={paceProfile}
               appAllowGuardianRsvp={allowGuardianRsvp}
+              appTriathlete={triathlete}
+              appCssSecs={cssSecs}
               appTeamCalendars={teamCalendars}
               appBillingStatus={billingStatus}
               appFeatureFlags={featureFlags}

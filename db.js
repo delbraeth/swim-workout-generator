@@ -7871,7 +7871,7 @@ export async function dbUpsertEventTime({ userSub = null, managedId = null, even
   if (!["25y", "25m", "50m"].includes(course)) return { ok: false, reason: "bad_course" };
   if (!RACE_TIME_KINDS.includes(kind)) return { ok: false, reason: "bad_kind" };
   const t = Number(timeSecs);
-  if (!Number.isFinite(t) || t <= 0 || t > 3600) return { ok: false, reason: "bad_time" };
+  if (!Number.isFinite(t) || t <= 0 || t > 7200) return { ok: false, reason: "bad_time" };
   const { where, val } = _eventTimeOwner(userSub, managedId);
   const existing = await pool.query(
     "SELECT `id` FROM `swimmer_event_times` WHERE " + where + " AND `event`=? AND `course`=? AND `kind`=? LIMIT 1",
@@ -7908,7 +7908,7 @@ export async function dbAddEventPrHistory({ userSub = null, managedId = null, ev
   if (!RACE_EVENT_IDS.includes(event)) return { ok: false, reason: "bad_event" };
   if (!["25y", "25m", "50m"].includes(course)) return { ok: false, reason: "bad_course" };
   const t = Number(timeSecs);
-  if (!Number.isFinite(t) || t <= 0 || t > 3600) return { ok: false, reason: "bad_time" };
+  if (!Number.isFinite(t) || t <= 0 || t > 7200) return { ok: false, reason: "bad_time" };
   const day = dateToYmd(achievedOn);
   if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, reason: "bad_date" };
   const src = source === "auto" ? "auto" : "logged";

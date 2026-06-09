@@ -12,6 +12,13 @@ export const RACE_EVENTS = [
   { id: "breast_100", stroke: "breast", dist: 100, label: "100 Breast" },
   { id: "fly_100",    stroke: "fly",    dist: 100, label: "100 Fly" },
   { id: "im_200",     stroke: "im",     dist: 200, label: "200 IM" },
+  // Triathlon swim legs (open-water freestyle, metric). category:"tri" so the UI can
+  // group/filter them apart from the pool events. Phase 1 of the multi-sport set —
+  // they flow through the existing race-pace engine (repDist=100 for >200) unchanged.
+  { id: "free_750",   stroke: "free", dist: 750,  label: "Sprint Tri Swim (750m)", category: "tri" },
+  { id: "free_1500",  stroke: "free", dist: 1500, label: "Olympic Swim (1.5K)",    category: "tri" },
+  { id: "free_1900",  stroke: "free", dist: 1900, label: "70.3 Swim (1.9K)",       category: "tri" },
+  { id: "free_3800",  stroke: "free", dist: 3800, label: "Ironman Swim (3.8K)",    category: "tri" },
 ];
 
 export const RACE_EVENT_IDS = RACE_EVENTS.map(e => e.id);
@@ -29,6 +36,16 @@ export function pacePer(eventId, totalSecs, per = 100) {
   return totalSecs * (per / e.dist);
 }
 
+// Critical Swim Speed (triathlete pace anchor). From a 400 + 200 time trial:
+// CSS speed = (400−200) / (t400 − t200); pace per 100 = 100/speed = (t400 − t200)/2.
+// Returns seconds per 100 (rounded to hundredths), or null if the inputs are invalid
+// (need t400 > t200 — a 400 must be slower in total than a 200).
+export function cssFromTT(t400Secs, t200Secs) {
+  if (!t400Secs || !t200Secs || t400Secs <= t200Secs) return null;
+  const css = (t400Secs - t200Secs) / 2;
+  return css > 0 ? Math.round(css * 100) / 100 : null;
+}
+
 // "1:52.34" / "52.3" / "112.34" → seconds (number), or null if unparseable.
 export function parseRaceTime(str) {
   if (str == null) return null;
@@ -44,7 +61,7 @@ export function parseRaceTime(str) {
   } else {
     secs = parseFloat(s);
   }
-  if (Number.isNaN(secs) || secs <= 0 || secs > 3600) return null;
+  if (Number.isNaN(secs) || secs <= 0 || secs > 7200) return null;   // 2h cap — fits a slow 3800m tri leg
   return Math.round(secs * 100) / 100; // hundredths
 }
 
