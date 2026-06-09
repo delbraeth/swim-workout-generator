@@ -5129,6 +5129,56 @@ export async function dbSdifImport({ coachSub, teamId = null, rows = [], commit 
   return { ok: true, mode: "commit", swimmers: preview, eventsSkipped, totals, committed: { swimmersCreated, timesWritten, errors } };
 }
 
+// ── Social workout sharing (share-by-link, 18+) — SOCIAL_SHARING_SCOPE.md ──────
+// The 18+ gate is enforced in the route (needs the owner's DOB); these are storage
+// primitives. workout is a JSON snapshot; revoke is a soft-delete (revoked_at).
+export async function dbCreateSharedWorkout({ ownerSub, title = null, workout }) {
+  if (!ownerSub || !workout || typeof workout !== "object") return { ok: false, reason: "bad_args" };
+  let json;
+  try { json = JSON.stringify(workout); } catch (_) { return { ok: false, reason: "bad_workout" }; }
+  if (json.length > 200000) return { ok: false, reason: "too_large" };
+  const id = crypto.randomBytes(18).toString("base64url");                    // ~24 chars, unguessable
+  const t = (typeof title === "string" && title.trim()) ? title.trim().slice(0, 120) : null;
+  await pool.query(
+    "INSERT INTO `shared_workouts` (`id`, `owner_sub`, `title`, `workout`) VALUES (?, ?, ?, ?)",
+    [id, ownerSub, t, json]
+  );
+  return { ok: true, id };
+}
+
+export async function dbGetSharedWorkout(id, { countView = false } = {}) {
+  if (!id) return null;
+  const rows = await pool.query(
+    "SELECT `id`, `owner_sub`, `title`, `workout`, `view_count`, `created_at` " +
+    "FROM `shared_workouts` WHERE `id` = ? AND `revoked_at` IS NULL LIMIT 1",
+    [id]
+  );
+  if (!rows[0]) return null;
+  if (countView) { try { await pool.query("UPDATE `shared_workouts` SET `view_count` = `view_count` + 1 WHERE `id` = ?", [id]); } catch (_) {} }
+  let workout = null;
+  try { workout = typeof rows[0].workout === "string" ? JSON.parse(rows[0].workout) : rows[0].workout; } catch (_) {}
+  return { id: rows[0].id, owner_sub: rows[0].owner_sub, title: rows[0].title, workout, view_count: Number(rows[0].view_count), created_at: rows[0].created_at };
+}
+
+export async function dbListMySharedWorkouts(ownerSub) {
+  if (!ownerSub) return [];
+  const rows = await pool.query(
+    "SELECT `id`, `title`, `view_count`, `created_at` FROM `shared_workouts` " +
+    "WHERE `owner_sub` = ? AND `revoked_at` IS NULL ORDER BY `created_at` DESC LIMIT 100",
+    [ownerSub]
+  );
+  return rows.map(r => ({ id: r.id, title: r.title, view_count: Number(r.view_count), created_at: dateToYmd(r.created_at) }));
+}
+
+export async function dbRevokeSharedWorkout(id, ownerSub) {
+  if (!id || !ownerSub) return { ok: false, reason: "bad_args" };
+  const r = await pool.query(
+    "UPDATE `shared_workouts` SET `revoked_at` = NOW() WHERE `id` = ? AND `owner_sub` = ? AND `revoked_at` IS NULL",
+    [id, ownerSub]
+  );
+  return { ok: r.affectedRows > 0, reason: r.affectedRows > 0 ? null : "not_found_or_not_owner" };
+}
+
 // ── User DOB (R-B) ────────────────────────────────────────────────────
 // Self-serve DOB write — soft-prompt at next login per decision #37, and
 // also writable from the profile if the user wants to update it.

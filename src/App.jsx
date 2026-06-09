@@ -7,6 +7,7 @@
     import { ImpersonationStartModal } from "./components/shell/ImpersonationStartModal.jsx";
     import { ImpersonationBanner } from "./components/shell/ImpersonationBanner.jsx";
     import { SignInGate } from "./components/shell/SignInGate.jsx";
+    import { SharedWorkoutView } from "./components/shell/SharedWorkoutView.jsx";
     import { TourOverlay } from "./components/shell/TourOverlay.jsx";
     import { ReportPrintView } from "./components/reports/ReportPrintView.jsx";
     const ProgressDashboard = React.lazy(() => import("./components/reports/ProgressDashboard.jsx").then(m => ({ default: m.ProgressDashboard })));
@@ -1791,6 +1792,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [multiPaceLanes,  setMultiPaceLanes]  = useState(null);
       const [showWhiteboard,  setShowWhiteboard]  = useState(false);
       const [copyFlash,       setCopyFlash]       = useState(false);
+      const [shareFlash,      setShareFlash]      = useState(null);   // social share: 'copied' | 'error' | null
       // Auth state: null = checking, false = not signed in, true = signed in
       const [authenticated, setAuthenticated] = useState(null);
       const [authMode,      setAuthMode]      = useState(null); // "open" | "apple"
@@ -4028,6 +4030,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         });
       }, [history, me]);
 
+      // Public shared-workout link (/s/:id) — renders OUTSIDE the auth gate so a
+      // logged-out viewer (even a non-user) can see it. Also a growth surface.
+      if (typeof window !== "undefined" && window.location.pathname.startsWith("/s/")) {
+        const shareToken = decodeURIComponent(window.location.pathname.slice(3));
+        return <SharedWorkoutView token={shareToken} authenticated={!!authenticated}
+                 onCopyToGenerator={(wk) => { setWorkout(wk); setView("generator"); }} />;
+      }
+
       // Auth gate — render nothing while checking, show gate if no valid code
       if (authenticated === null) return null; // still checking
       if (!authenticated) return <SignInGate authError={authError} />;
@@ -5231,6 +5241,29 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                       title="Copy workout as plain text for texting or pasting into Notes">
                       {copyFlash ? "✓ Copied!" : "📋 Copy Text"}
                     </button>
+                    {me && me.is_minor === false && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/share", { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ workout, title: meta ? meta.label : (selectedType || "Workout") }) });
+                          const j = await res.json().catch(() => ({}));
+                          if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+                          await navigator.clipboard.writeText(window.location.origin + j.path).catch(() => {});
+                          setShareFlash("copied"); setTimeout(() => setShareFlash(null), 2500);
+                        } catch (_) { setShareFlash("error"); setTimeout(() => setShareFlash(null), 2500); }
+                      }}
+                      style={{
+                        padding: "10px 16px", borderRadius: 8,
+                        border: `1px solid ${shareFlash === "copied" ? "var(--color-positive)" : "var(--color-border-strong)"}`,
+                        background: shareFlash === "copied" ? "#052e16" : "var(--color-bg)",
+                        color: shareFlash === "copied" ? "#86efac" : "var(--color-text)",
+                        fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                      }}
+                      title="Create a public share link (copied to clipboard) — anyone with the link can view and copy this workout.">
+                      {shareFlash === "copied" ? "✓ Link copied!" : shareFlash === "error" ? "Share failed" : "⤴ Share"}
+                    </button>
+                    )}
                     <button
                       onClick={() => {
                         if (loadedFromHistoryId) {

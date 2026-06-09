@@ -401,6 +401,16 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
         finally { setGuardianRsvpBusy(false); }
       };
 
+      const [myShares, setMyShares] = React.useState(null);
+      React.useEffect(() => {
+        let off = false;
+        fetch("/api/me/shares", { cache: "no-store" }).then(r => r.ok ? r.json() : []).then(j => { if (!off) setMyShares(Array.isArray(j) ? j : []); }).catch(() => { if (!off) setMyShares([]); });
+        return () => { off = true; };
+      }, []);
+      const revokeShare = async (id) => {
+        try { const res = await fetch(`/api/share/${encodeURIComponent(id)}`, { method: "DELETE", headers: csrfHeaders() }); if (res.ok) setMyShares(s => (s || []).filter(x => x.id !== id)); } catch (_) {}
+      };
+
       const handleRevokeOne = async (prefix) => {
         setRevokeMsg(null);
         try {
@@ -690,6 +700,26 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                       </span>
                     </span>
                   </label>
+                </div>
+                )}
+
+                {tab === "account" && myShares && myShares.length > 0 && (
+                <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                    🔗 Shared workout links
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {myShares.map(s => (
+                      <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--color-card)" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <a href={`/s/${s.id}`} target="_blank" rel="noreferrer" style={{ color: "var(--color-primary-text)", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{s.title || "Shared workout"}</a>
+                          <div style={{ color: "var(--color-text-dim)", fontSize: 11 }}>{s.view_count || 0} views · {s.created_at}</div>
+                        </div>
+                        <button onClick={() => revokeShare(s.id)} style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--color-destructive)", borderRadius: 5, color: "var(--color-destructive-text)", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>Revoke</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ color: "var(--color-text-dim)", fontSize: 11, marginTop: 8 }}>Revoking makes a link stop working immediately.</div>
                 </div>
                 )}
 

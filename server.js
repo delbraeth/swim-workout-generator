@@ -69,6 +69,7 @@ import { eventKindEmoji } from "./src/lib/eventKinds.js";
 import {
   pool, dbActive, pingDb,
   dbListWorkouts, dbWorkoutExists, dbInsertWorkout, dbGetWorkout, dbPatchWorkout, dbDeleteWorkout,
+  dbCreateSharedWorkout, dbGetSharedWorkout, dbListMySharedWorkouts, dbRevokeSharedWorkout,
   dbGetSettings, dbUpsertSettings, dbPatchSettingsExtra,
   dbListFavorites, dbAddFavorite, dbRemoveFavorite,
   dbListFavoriteSets, dbAddFavoriteSet, dbRemoveFavoriteSet,
@@ -2114,6 +2115,49 @@ app.get("/api/favorites", requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// ── Social workout sharing (share-by-link, 18+) — SOCIAL_SHARING_SCOPE.md ──────
+// Create a share. 18+ ONLY: allowed only when isMinor(dob) === false (under-18 AND
+// unknown-DOB are blocked — fails safe). Snapshots the posted workout.
+app.post("/api/share", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const me = await dbGetMe(req.userSub);
+    const minor = isMinor(me && me.dob);
+    if (minor !== false) return res.status(403).json({ error: minor === null ? "dob_required" : "must_be_18" });
+    const { workout, title } = req.body || {};
+    if (!workout || typeof workout !== "object" || !Array.isArray(workout.blocks)) return res.status(400).json({ error: "no_workout" });
+    const r = await dbCreateSharedWorkout({ ownerSub: req.userSub, title, workout });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "workout.shared", ...reqMeta(req), details: { share_id: r.id } });
+    res.json({ ok: true, id: r.id, path: `/s/${r.id}` });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// PUBLIC view of a shared workout — NO auth (the whole point of a link). Rate-limited;
+// no author identity exposed (v1). 404 on missing/revoked.
+app.get("/api/share/:id", feedLimiter, async (req, res) => {
+  try {
+    const sw = await dbGetSharedWorkout(req.params.id, { countView: true });
+    if (!sw) return res.status(404).json({ error: "not_found" });
+    res.json({ id: sw.id, title: sw.title, workout: sw.workout, created_at: sw.created_at });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// My active share links (manage / revoke).
+app.get("/api/me/shares", requireAuth, async (req, res) => {
+  try { res.json(await dbListMySharedWorkouts(req.userSub)); }
+  catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// Revoke a share (owner-only) — soft-delete; the link 404s immediately after.
+app.delete("/api/share/:id", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
+  try {
+    const r = await dbRevokeSharedWorkout(req.params.id, req.userSub);
+    if (!r.ok) return res.status(r.reason === "not_found_or_not_owner" ? 404 : 400).json({ error: r.reason });
+    dbAuditEvent({ userSub: req.userSub, eventType: "workout.share.revoked", ...reqMeta(req), details: { share_id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
 app.post("/api/favorites", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
