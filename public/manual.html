@@ -452,12 +452,20 @@
       </div>
 
       <h3>Pace Input</h3>
-      <p>Enter your comfortable <strong>100-yard pace</strong> (format: <code>M:SS</code>, e.g. <code>2:00</code>) in the pace field. This does two things:</p>
+      <p>Enter your comfortable <strong>100-yard freestyle pace</strong> (format: <code>M:SS</code>, e.g. <code>2:00</code>) in the pace field. This does two things:</p>
       <ul>
-        <li><strong>Scales all intervals</strong> — every generated interval is adjusted from the masters baseline (2:00/100) to your pace.</li>
+        <li><strong>Scales every interval automatically when you generate</strong> — send-offs are sized from the baseline (2:00/100) to <em>your</em> pace the moment a workout is generated, with no extra step. Your saved pace is applied on every generate.</li>
         <li><strong>Powers the time presets</strong> — the ~60/~90/~2hr buttons calculate the right yardage for your pace.</li>
       </ul>
-      <p>You can also rescale intervals after generation from within any workout block. Your default pace is saved to your account.</p>
+      <p>If you haven't set a pace yet, the generator shows a <strong>⚠ Set your base pace</strong> reminder and assumes 2:00/100 until you do — so masters and newer swimmers aren't handed intervals that are too tight. Coaches can also push a team pace baseline to the whole roster (Team Settings → <em>Push to roster</em>). You can still rescale intervals after generation from any workout block, and your default pace is saved to your account.</p>
+
+      <div class="callout tip">
+        <div class="callout-icon">⏱</div>
+        <div class="callout-body"><strong>Stroke-aware, with a rest floor.</strong> Send-offs account for stroke — breaststroke and butterfly are slower than freestyle at the same effort, so a breast 100 isn't handed a freestyle send-off. And no interval is ever tighter than you can actually make at your pace: a built-in <strong>rest floor</strong> guarantees a minimum amount of rest for every rep.</div>
+      </div>
+
+      <h4>Pace profiles (stroke pacing)</h4>
+      <p>Different swimmers have different stroke ratios — a masters swimmer's butterfly runs relatively slower than a club sprinter's. Open <strong>Profile → Account → 🏊 Pace profile</strong> and pick a preset — <strong>Club / Age-group</strong>, <strong>Masters</strong>, or <strong>Youth / Lessons</strong> — that sets how much slower each stroke is than your freestyle. For fine control, expand <strong>Advanced</strong> to override individual stroke factors (freestyle is always the 1.00 reference). Coaches can set a team default pace profile and push it to the roster, just like the pace baseline; a swimmer can override their own on their profile.</p>
     </section>
 
     <!-- ══ POOL MODE ══ -->
@@ -716,11 +724,11 @@
 
       <div class="callout warn">
         <div class="callout-icon">⚠️</div>
-        <div class="callout-body"><strong>Base pace assumption.</strong> The bank's authored intervals are calibrated for a <strong>masters baseline of 2:00/100yd</strong> (~2:11/100m in SCM, slightly slower in LCM). When you set your own pace and click <strong>Rescale all</strong>, every interval is scaled by the ratio (your pace ÷ 2:00) so the relative effort matches. A 1:50 swimmer tightens everything ~8%; a 2:15 swimmer loosens everything ~12.5%. The catalog (coach view) shows the unscaled baseline; per-set editing here uses your scaled values.</div>
+        <div class="callout-body"><strong>Base pace assumption.</strong> The bank's authored intervals are calibrated for a <strong>baseline of 2:00/100yd</strong> (~2:11/100m in SCM, slightly slower in LCM). Your saved pace is applied <strong>automatically every time you generate</strong> — each interval is scaled by the ratio (your pace ÷ 2:00) so the relative effort matches. A 1:50 swimmer tightens everything ~8%; a 2:15 swimmer loosens everything ~12.5%. Scaling is <strong>stroke-aware</strong> (breast/fly/IM are sized slower than free) and protected by a <strong>rest floor</strong> so no rep is ever tighter than you can make. The catalog (coach view) shows the unscaled baseline; per-set editing here uses your scaled values.</div>
       </div>
 
       <h3>Rescale all intervals</h3>
-      <p>In the pace field above the slider, update your pace and the app rescales every interval in the current workout proportionally. This is useful when you want to try a harder or easier version of the same workout.</p>
+      <p>Your pace is already applied when you generate. To try a harder or easier version of the same workout, update the pace field above the slider and the app rescales every interval in the current workout proportionally — re-applying the stroke-aware sizing and rest floor.</p>
 
       <h3>Edit a single interval</h3>
       <p>Click any interval in the workout table to edit it inline. Type the new interval, then press <kbd>Enter</kbd> or click away to commit. The estimated duration updates immediately.</p>
@@ -1319,7 +1327,7 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <p>Enter your goal and PR times per event (50–500 free, 100 back/breast/fly, 200 IM). Switch the <strong>SCY / SCM / LCM</strong> tabs to keep separate times per course — race-pace targets resolve against the pool mode you generate in (goal first, PR as fallback). These feed the 🏁 Race-Pace workouts so the splits are <em>your</em> numbers, not a generic pace. Setting a PR also drops a dated point into your <a href="#goals">Progress</a> per-event trend, and a faster logged result auto-promotes your PR.</p>
 
       <h3 id="notifications">🔔 Browser notifications</h3>
-      <p>Opt in to push notifications on the browsers you use (per-device). Click <strong>Enable browser notifications</strong>, then <strong>Allow</strong> on your browser's permission prompt, and use <strong>Send test</strong> to confirm it works. You'll get a notification even when the SetForge tab is closed. Active alerts: <strong>📣 RSVP reminders</strong> (one nudge for an event or practice you haven't responded to), <strong>⚠️ cancellations</strong> (when a coach cancels an event you said you'd attend), and <strong>⚡/🥵 outdoor-weather advisories</strong>. Turn it off anytime with <strong>Disable on this browser</strong>. The toggle only appears in browsers that support push; it's not available to swimmers under 18.</p>
+      <p>Opt in to push notifications on the browsers you use (per-device). Click <strong>Enable browser notifications</strong>, then <strong>Allow</strong> on your browser's permission prompt, and use <strong>Send test</strong> to confirm it works. You'll get a notification even when the SetForge tab is closed. Active alerts: <strong>📣 RSVP reminders</strong> (one nudge for an event or practice you haven't responded to), <strong>⚠️ cancellations</strong> (event cancelled or practice deleted), <strong>🗓 reschedules</strong> (an event or practice you're attending moves to a new date/time), and <strong>⚡/🥵 outdoor-weather advisories</strong>. Linked parents/guardians can receive these for a swimmer who turns on Guardian access. Turn it off anytime with <strong>Disable on this browser</strong>. The toggle only appears in browsers that support push; it's not available to swimmers under 18.</p>
 
       <h3 id="compliance">🛡 Compliance credentials (coaches)</h3>
       <p>Coaches can record their own <strong>SafeSport certification</strong> (with expiry), <strong>background-check</strong> reference, and <strong>USA-Swimming Member ID</strong>. The app shows an amber <em>expiring</em> badge within 30 days and a red <em>expired</em> badge after — a self-reminder for MAAP/SafeSport. Stored privately; nothing is gated on expiry today.</p>
@@ -1580,14 +1588,17 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
       <h3>RSVP (expected attendance)</h3>
       <p>Swimmers see upcoming team events <em>and group practices</em> on their <strong>📥 Assigned to me</strong> home with a <strong>✅ Going / 🤔 Maybe / ❌ Out</strong> control; their choice saves instantly. Coaches see a per-event <strong>📋 RSVP</strong> tally (going/maybe/out) plus the per-swimmer list. Cancelling an event (Cancel/Restore on the event row) freezes RSVP and shows a struck-through <strong>CANCELLED</strong> badge everywhere — events never silently disappear. RSVP is forward-looking <em>intent</em>, separate from after-the-fact roll-call attendance.</p>
       <p><strong>Practice RSVP.</strong> Group practices you've scheduled within the next few weeks appear to their group's swimmers in a <strong>🏊 Upcoming practices · RSVP</strong> section, with the same going/maybe/out control. Access is group-scoped — only members of the practice's group (and the team's coaches) can respond.</p>
+      <p><strong>Guardian RSVP.</strong> A swimmer with their own account can let a linked parent/guardian respond for them: turn on <strong>Profile → Account → 🛡 Guardian access</strong> (off by default — it's the swimmer's choice). The guardian then sees that swimmer's upcoming practices &amp; meets in the <strong>parent view</strong> with the same Going / Maybe / Out control. For <em>managed</em> swimmers (who have no login of their own), the parent always responds on their behalf. Coaches still only ever see one RSVP per swimmer.</p>
 
       <h3>Event reminders &amp; push alerts</h3>
       <p>If you've enabled <a href="#notifications">browser notifications</a>, SetForge sends a small set of automatic pushes around events and practices:</p>
       <ul>
-        <li><strong>📣 RSVP reminder</strong> — anyone in the audience who hasn't responded to an upcoming event or practice gets one nudge as it approaches (you're reminded once per event, never repeatedly).</li>
-        <li><strong>⚠️ Cancellation</strong> — when a coach cancels an event, everyone who RSVP'd Going/Maybe is pushed immediately.</li>
+        <li><strong>📣 RSVP reminder</strong> — anyone in the audience who hasn't responded to an upcoming event or practice gets one nudge as it approaches (once per event, never repeatedly).</li>
+        <li><strong>⚠️ Cancellation</strong> — when a coach cancels an event <em>or deletes a practice</em>, everyone who RSVP'd Going/Maybe is pushed immediately.</li>
+        <li><strong>🗓 Reschedule</strong> — when a coach changes an event's date or start time, or moves a practice to a different day, the Going/Maybe list is pushed (name/venue edits don't trigger it).</li>
         <li><strong>⚡/🥵 Weather advisory</strong> — for outdoor venues, a lightning or heat advisory in the forecast pushes the going/maybe list once.</li>
       </ul>
+      <p><strong>Parents get these too.</strong> If a swimmer turns on <strong>🛡 Guardian access</strong> (Profile → Account), their linked parents/guardians receive the same RSVP reminders, reschedules and cancellations for that swimmer — so a parent can act even when the swimmer doesn't see the push. Guardians can silence them anytime from the parent view (<strong>RSVP alerts for your swimmers → Mute</strong>); the swimmer's own alerts are unaffected.</p>
 
       <h3>Venues &amp; outdoor-pool weather</h3>
       <p>When creating or editing an event, pick a <strong>venue</strong> from the shared catalog or add a new one (name + address + indoor/outdoor). Venues are a <em>universal</em> catalog — one team's home pool is another's away meet, so a venue is created once and reused; addresses are geocoded in your browser via Apple Maps. For an <strong>outdoor</strong> venue, events within the ~10-day forecast window show a small <strong>weather chip</strong> (condition emoji · temperature) on both the coach event row and the swimmer's RSVP list, with <strong>⚡ lightning</strong> and <strong>🥵 heat</strong> advisories when relevant. Indoor / venue-less events never show weather. Forecasts come from Apple WeatherKit and are cached so a busy meet doesn't hammer the API.</p>
