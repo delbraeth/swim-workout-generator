@@ -4405,6 +4405,33 @@ export async function dbListSwimmersForParent(parentSub) {
   return out;
 }
 
+// D2 — guardian (full-account) subs linked to a real-account swimmer. Used by the
+// RSVP-reminder sweep to fan a non-responder's nudge out to their parents.
+export async function dbListGuardianSubsForSwimmer(swimmerSub) {
+  if (!swimmerSub) return [];
+  const pid = await _swimmerPersonId({ swimmerSub });
+  if (!pid) return [];
+  const rows = await pool.query(
+    "SELECT u.`sub` FROM `guardians` g " +
+    "JOIN `users` u ON u.`person_id` = g.`guardian_person_id` " +
+    "WHERE g.`swimmer_person_id` = ? AND g.`removed_at` IS NULL AND u.`is_disabled` = 0",
+    [pid]
+  );
+  return rows.map(r => r.sub).filter(Boolean);
+}
+
+// Display name for a full-account sub (for notification bodies). null if unknown.
+export async function dbGetDisplayNameForSub(sub) {
+  if (!sub) return null;
+  const rows = await pool.query(
+    "SELECT p.`first_name`, p.`last_name`, p.`preferred_name` " +
+    "FROM `users` u JOIN `persons` p ON p.`id` = u.`person_id` WHERE u.`sub` = ? LIMIT 1",
+    [sub]
+  );
+  if (!rows[0]) return null;
+  return displayNameInline(rows[0]);
+}
+
 // Per-swimmer digest payload: assigned/done/yardage + upcoming +
 // attendance. weekStart = YYYY-MM-DD (Monday). Used by both the
 // in-app /api/parent/digest and the Sunday cron.

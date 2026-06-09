@@ -1461,6 +1461,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [poolMode, setPoolMode]         = useState("25y");
       const [paceInput, setPaceInput]       = useState("2:00");
       const [paceProfile, setPaceProfile]   = useState(null);   // #3 — { preset, factors } | null
+      const [paceIsSet, setPaceIsSet]       = useState(false);  // no-pace nudge: false until pace explicitly set/loaded
+      const [allowGuardianRsvp, setAllowGuardianRsvp] = useState(false);  // D1 — swimmer opt-in for guardian RSVP
       // Onboarding tour. tourStep -1 = inactive, 0..N-1 = active step.
       // tourSeen defaults true so the tour never flashes before settings
       // resolve; applySettings sets the real value (unset → false → auto-run
@@ -2355,13 +2357,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         if (!s || typeof s !== "object") return;
         if (s.sliderMin) setSliderMin(s.sliderMin);
         if (s.sliderMax) { setSliderMax(s.sliderMax); setMaxYards(v => Math.min(v, s.sliderMax)); }
-        if (s.paceInput) setPaceInput(s.paceInput);
+        if (s.paceInput) { setPaceInput(s.paceInput); setPaceIsSet(true); }
         // #3 pace profile — effective stroke factors for the rest floor.
         // settings.extra.pace_profile = { preset, factors }; dbGetSettings spreads
         // `extra` so it arrives as s.pace_profile. Folds team default + own override
         // (roster-push writes it like pace_base). Falls back to code defaults.
         strokeFactorsRef.current = resolveStrokeFactors(s.pace_profile || null, null);
         setPaceProfile(s.pace_profile || null);
+        setAllowGuardianRsvp(s.allow_guardian_rsvp === true);   // D1 consent
         if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
         // Q: next-event countdown lives in settings.extra; dbGetSettings
         // spreads extra into the top-level response.
@@ -2532,6 +2535,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // Pace change with settings persistence
       const handlePaceChange = useCallback((val) => {
         setPaceInput(val);
+        setPaceIsSet(true);   // any explicit pace edit clears the no-pace nudge
         saveSettings(sliderMin, sliderMax, val, initialsDraft);
       }, [sliderMin, sliderMax, initialsDraft]);
 
@@ -4766,7 +4770,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               <div data-tour="step-equipment"><EquipmentPicker equipment={equipment} onChange={handleEquipChange} /></div>
 
               {/* Max Yardage / Distance Slider */}
-              <div data-tour="step-yardage-slider"><YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} /></div>
+              <div data-tour="step-yardage-slider"><YardageSlider value={maxYards} onChange={handleMaxChange} selectedType={selectedType} poolMode={poolMode} paceInput={paceInput} onPaceChange={handlePaceChange} sliderMin={sliderMin} sliderMax={sliderMax} onRangeChange={handleRangeChange} paceUnset={!paceIsSet} /></div>
 
               {/* Lesson tier (Phase 5) — coach-authored content controls. Level
                   defaults to the selected swimmer's saved level (shown as a hint);
@@ -5722,6 +5726,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               appSessions={sessions}
               appTeamDefaults={teamDefaults}
               appPaceProfile={paceProfile}
+              appAllowGuardianRsvp={allowGuardianRsvp}
               appTeamCalendars={teamCalendars}
               appBillingStatus={billingStatus}
               appFeatureFlags={featureFlags}

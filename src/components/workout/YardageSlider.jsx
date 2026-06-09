@@ -5,7 +5,7 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
 
     const { useState } = React;
 
-    export function YardageSlider({ value, onChange, selectedType, poolMode = "25y", paceInput = "2:00", onPaceChange, sliderMin: sliderMinProp, sliderMax: sliderMaxProp, onRangeChange }) {
+    export function YardageSlider({ value, onChange, selectedType, poolMode = "25y", paceInput = "2:00", onPaceChange, sliderMin: sliderMinProp, sliderMax: sliderMaxProp, onRangeChange, paceUnset = false }) {
       const [activePreset, setActivePreset] = React.useState(null);
       const [editingBound, setEditingBound] = React.useState(null); // 'min' | 'max' | null
       const [boundDraft,   setBoundDraft]   = React.useState("");
@@ -103,6 +103,14 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
               </div>
             );
           })()}
+
+          {/* No-pace nudge — keep 2:00 as the silent math fallback, but prompt
+              until the swimmer sets a real pace so send-offs aren't mis-scaled. */}
+          {paceUnset && (
+            <div style={{ fontSize: 11, color: "var(--color-warn)", marginTop: -6, marginBottom: 12, lineHeight: 1.4 }}>
+              ⚠ Set your base pace — intervals currently assume <strong>2:00/100 {unit}</strong>. Type your pace above (or set it in Profile) so send-offs match your speed.
+            </div>
+          )}
 
           {/* Visual track + invisible native input on top */}
           <div style={{ position: "relative", marginBottom: 4 }}>

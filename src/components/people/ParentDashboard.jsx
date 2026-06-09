@@ -5,6 +5,7 @@ import { Stat } from "../Stat.jsx";
 import { TeamCalendarDownload } from "../teams/TeamCalendarDownload.jsx";
 import { AddressManager } from "./AddressManager.jsx";
 import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
+import { GuardianRsvpPanel } from "../practices/GuardianRsvpPanel.jsx";
 
     const { useState, useEffect } = React;
 
@@ -14,6 +15,8 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
       const [selectedId,  setSelectedId]  = React.useState(null);   // managed_id or swimmer_sub
       const [paused,      setPaused]      = React.useState(!!me?.digest_paused);
       const [savingPause, setSavingPause] = React.useState(false);
+      const [muteAlerts,  setMuteAlerts]  = React.useState(false);   // D2 — guardian RSVP alerts
+      const [savingMute,  setSavingMute]  = React.useState(false);
       const [msg,         setMsg]         = React.useState(null);
 
       React.useEffect(() => {
@@ -34,6 +37,7 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
             if (dgRes.ok) {
               const d = await dgRes.json();
               setThisWeek(d);
+              setMuteAlerts(d.mute_swimmer_alerts === true);
             }
           } catch (e) {
             if (!cancelled) { setSwimmers([]); setMsg(e.message); }
@@ -61,6 +65,25 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
           setMsg(`Couldn't update digest preference: ${e.message}`);
         } finally {
           setSavingPause(false);
+        }
+      };
+
+      const toggleMute = async () => {
+        if (savingMute) return;
+        setSavingMute(true); setMsg(null);
+        const next = !muteAlerts;
+        try {
+          const res = await fetch("/api/settings/extra", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body:    JSON.stringify({ mute_swimmer_alerts: next }),
+          });
+          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `HTTP ${res.status}`); }
+          setMuteAlerts(next);
+        } catch (e) {
+          setMsg(`Couldn't update alert preference: ${e.message}`);
+        } finally {
+          setSavingMute(false);
         }
       };
 
@@ -155,6 +178,17 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
 
           {/* Home address (Locations P2) — guardian manages + consent toggle.
               Household/siblings (P3) shown below it. */}
+          {/* D1 — guardian RSVP for a consented real-account child. The hint nudges
+              the swimmer to opt in; only the swimmer can grant it (autonomy). */}
+          {selected.kind === "user" && selected.swimmer_sub && selected.allow_guardian_rsvp && (
+            <GuardianRsvpPanel key={"grsvp-" + selected.swimmer_sub} swimmerSub={selected.swimmer_sub} displayName={selected.display_name} />
+          )}
+          {selected.kind === "user" && selected.swimmer_sub && !selected.allow_guardian_rsvp && (
+            <div className="card" style={{ padding: 14, borderRadius: 10, marginBottom: 14, color: "var(--color-text-dim)", fontSize: 12, lineHeight: 1.5 }}>
+              To RSVP to practices &amp; meets for {selected.display_name || "this swimmer"}, ask them to turn on <strong>🛡 Guardian access</strong> in their Profile → Account. Off by default — their choice.
+            </div>
+          )}
+
           <div className="card" style={{ padding: 14, borderRadius: 10, marginBottom: 14 }}>
             <AddressManager key={selected.managed_id || selected.swimmer_sub} swimmerRef={selected.managed_id || selected.swimmer_sub} showConsent={true} />
             <HouseholdSiblings key={"hh-" + (selected.managed_id || selected.swimmer_sub)} swimmerRef={selected.managed_id || selected.swimmer_sub} />
@@ -184,6 +218,32 @@ import { HouseholdSiblings } from "./HouseholdSiblings.jsx";
                 opacity: savingPause ? 0.6 : 1,
               }}>
               {paused ? "▶ Resume" : "⏸ Pause"}
+            </button>
+          </div>
+
+          {/* D2 — guardian RSVP-alert mute */}
+          <div className="card" style={{ padding: 14, borderRadius: 10, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ color: "var(--color-text)", fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                RSVP alerts for your swimmers
+              </div>
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
+                {muteAlerts
+                  ? "Muted. No push reminders when a swimmer hasn't RSVP'd."
+                  : "On. Get a push when a swimmer who allows guardian access hasn't RSVP'd to an upcoming practice or meet."}
+              </div>
+            </div>
+            <button onClick={toggleMute} disabled={savingMute}
+              style={{
+                padding: "6px 12px", borderRadius: 8,
+                border: "1px solid " + (muteAlerts ? "var(--color-border)" : "var(--color-primary)"),
+                background: muteAlerts ? "var(--color-card)" : "var(--color-primary)",
+                color: muteAlerts ? "var(--color-text)" : "var(--color-bg)",
+                fontSize: 12, fontWeight: 700,
+                cursor: savingMute ? "wait" : "pointer",
+                opacity: savingMute ? 0.6 : 1,
+              }}>
+              {muteAlerts ? "🔔 Unmute" : "🔕 Mute"}
             </button>
           </div>
 

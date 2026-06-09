@@ -23,7 +23,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile }) {
+    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile, appAllowGuardianRsvp }) {
       const dialogRef = useDialogA11y(onClose);
       // Phase 6 visibility (union across the user's teams; undefined ⇒ all-on).
       const ff = appFeatureFlags || {};
@@ -383,6 +383,24 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
         finally { setPaceProfileBusy(false); }
       };
 
+      const [guardianRsvp, setGuardianRsvp]       = React.useState(!!appAllowGuardianRsvp);
+      const [guardianRsvpBusy, setGuardianRsvpBusy] = React.useState(false);
+      React.useEffect(() => { setGuardianRsvp(!!appAllowGuardianRsvp); }, [appAllowGuardianRsvp]);
+      const toggleGuardianRsvp = async () => {
+        const next = !guardianRsvp;
+        setGuardianRsvp(next); setGuardianRsvpBusy(true);   // optimistic
+        try {
+          const res = await fetch("/api/settings/extra", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...csrfHeaders() },
+            body: JSON.stringify({ allow_guardian_rsvp: next }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (onProfileChange) onProfileChange();
+        } catch (_) { setGuardianRsvp(!next); }   // revert on failure
+        finally { setGuardianRsvpBusy(false); }
+      };
+
       const handleRevokeOne = async (prefix) => {
         setRevokeMsg(null);
         try {
@@ -654,6 +672,24 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                     onSave={savePaceProfile}
                     hint={paceProfileMsg}
                   />
+                </div>
+                )}
+
+                {tab === "account" && (
+                <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                    🛡 Guardian access
+                  </div>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: guardianRsvpBusy ? "wait" : "pointer" }}>
+                    <input type="checkbox" checked={guardianRsvp} disabled={guardianRsvpBusy} onChange={toggleGuardianRsvp}
+                      style={{ marginTop: 2, width: 16, height: 16, cursor: "inherit" }} />
+                    <span style={{ fontSize: 13, color: "var(--color-text)", lineHeight: 1.4 }}>
+                      Let a linked parent/guardian RSVP to practices &amp; meets for me
+                      <span style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", marginTop: 2 }}>
+                        Off by default. Only a guardian already linked to your account can RSVP on your behalf — they can't see or change anything else.
+                      </span>
+                    </span>
+                  </label>
                 </div>
                 )}
 

@@ -3974,6 +3974,15 @@ async function requireParent(req, res, next) {
 app.get("/api/parent/swimmers", requireAuth, requireParent, async (req, res) => {
   try {
     const swimmers = await dbListSwimmersForParent(req.userSub);
+    // D1 — surface guardian-RSVP consent for real-account children so the portal
+    // only shows on-behalf RSVP controls where the swimmer opted in. (Managed
+    // swimmers have no login/consent — they're always RSVP-able via managed_id.)
+    await Promise.all(swimmers.map(async (s) => {
+      if (s.kind === "user" && s.swimmer_sub) {
+        const cs = await dbGetSettings(s.swimmer_sub).catch(() => ({}));
+        s.allow_guardian_rsvp = !!(cs && cs.allow_guardian_rsvp === true);
+      }
+    }));
     dbAuditEvent({
       userSub:   req.userSub,
       eventType: "parent.view.swimmer",
@@ -3981,6 +3990,25 @@ app.get("/api/parent/swimmers", requireAuth, requireParent, async (req, res) => 
       details:   { swimmer_count: swimmers.length },
     });
     res.json(swimmers);
+  } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
+});
+
+// D1 — a guardian views a consented real-account child's upcoming practices +
+// meets to RSVP on their behalf. Gated: linked guardian AND child opted in
+// (settings.extra.allow_guardian_rsvp). The RSVP write itself re-checks both in
+// PUT /api/rsvp (defense in depth).
+app.get("/api/parent/swimmers/:sub/upcoming", requireAuth, requireParent, async (req, res) => {
+  try {
+    const childSub = req.params.sub;
+    const rel = await dbIsGuardianOrSelf(req.userSub, { swimmerSub: childSub }).catch(() => ({ ok: false }));
+    if (!rel || !rel.ok) return res.status(403).json({ error: "not a guardian of this swimmer" });
+    const cs = await dbGetSettings(childSub).catch(() => ({}));
+    if (!cs || cs.allow_guardian_rsvp !== true) return res.status(403).json({ error: "guardian_rsvp_not_consented" });
+    const [events, practices] = await Promise.all([
+      dbListUpcomingEventsForUser(childSub).catch(() => []),
+      dbListUpcomingPracticesForUser(childSub).catch(() => []),
+    ]);
+    res.json({ events, practices });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -4011,7 +4039,11 @@ app.get("/api/parent/digest", requireAuth, requireParent, async (req, res) => {
     // the parent portal shows only the kids' teams, not the parent's own.
     const tc = await dbListTeamCalendarsForUser(req.userSub, { guardianOnly: true }).catch(() => []);
     const team_calendars = (tc || []).map(t => ({ team_id: t.team_id, team_name: t.team_name, url: calendarFeedUrl(req, t.token) }));
-    res.json({ ...payload, team_calendars });
+    // D2 — surface the parent's own swimmer-alerts mute so the portal toggle
+    // shows the right state without an extra request.
+    const ps = await dbGetSettings(req.userSub).catch(() => ({}));
+    const mute_swimmer_alerts = !!(ps && ps.mute_swimmer_alerts === true);
+    res.json({ ...payload, team_calendars, mute_swimmer_alerts });
   } catch (err) { res.status(500).json({ error: err.message || String(err) }); }
 });
 
@@ -6039,7 +6071,7 @@ app.get("/api/teams/:teamId/events", requireAuth, async (req, res) => {
 // Set an RSVP: self (swimmer_sub = caller) or coach-on-behalf (managed_id).
 app.put("/api/rsvp", checkOrigin, requireAuth, requireCsrf, writeLimiter, async (req, res) => {
   try {
-    const { target_kind, target_id, status, managed_id } = req.body || {};
+    const { target_kind, target_id, status, managed_id, swimmer_sub } = req.body || {};
     if (!["meet", "practice"].includes(target_kind) || !target_id) return res.status(400).json({ error: "bad_target" });
     let teamId = null, practiceGroupId = null;
     if (target_kind === "meet") {
@@ -6063,6 +6095,29 @@ app.put("/api/rsvp", checkOrigin, requireAuth, requireCsrf, writeLimiter, async 
       const owns = await dbIsManagedSwimmerOwnedBy(managed_id, req.userSub).catch(() => false);
       if (!owns) return res.status(403).json({ error: "not authorized for this swimmer" });
       const r = await dbSetRsvp({ targetKind: target_kind, targetId: target_id, managedId: Number(managed_id), status, respondedBySub: req.userSub });
+      return r.ok ? res.json(r) : res.status(400).json({ error: r.reason });
+    }
+    // Guardian-on-behalf of a REAL-ACCOUNT child (D1, 2026-06-09). Allowed ONLY when
+    // (a) caller is a linked guardian of the child, AND (b) the child opted in via
+    // settings.extra.allow_guardian_rsvp. Default off — preserves teen autonomy.
+    const onBehalfSub = (typeof swimmer_sub === "string" && swimmer_sub && swimmer_sub !== req.userSub) ? swimmer_sub : null;
+    if (onBehalfSub) {
+      const rel = await dbIsGuardianOrSelf(req.userSub, { swimmerSub: onBehalfSub }).catch(() => ({ ok: false }));
+      if (!rel || !rel.ok) return res.status(403).json({ error: "not a guardian of this swimmer" });  // caller≠child ⇒ ok means guardian
+      const childSettings = await dbGetSettings(onBehalfSub).catch(() => ({}));
+      if (!childSettings || childSettings.allow_guardian_rsvp !== true) {
+        return res.status(403).json({ error: "guardian_rsvp_not_consented" });
+      }
+      // The child must be able to see the event (same membership scope as self).
+      const childRole = await dbGetTeamRole(teamId, onBehalfSub);
+      let childCanSee = !!childRole;
+      if (!childCanSee) {
+        childCanSee = practiceGroupId
+          ? (await dbListGroupMembers(practiceGroupId)).some(m => m.member_swimmer_sub === onBehalfSub)
+          : await dbIsSwimmerInTeam(onBehalfSub, teamId);
+      }
+      if (!childCanSee) return res.status(403).json({ error: "swimmer has no access to this event" });
+      const r = await dbSetRsvp({ targetKind: target_kind, targetId: target_id, swimmerSub: onBehalfSub, status, respondedBySub: req.userSub });
       return r.ok ? res.json(r) : res.status(400).json({ error: r.reason });
     }
     // self
