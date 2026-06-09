@@ -1468,7 +1468,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [cssSecs, setCssSecs]         = useState(null);    // Critical Swim Speed (sec/100) for triathletes
       // Triathlete mode hides stroke-specialty + IM types — if one was selected, clear it.
       useEffect(() => {
-        if (triathlete && ["back", "breast", "fly", "im"].includes(selectedType)) setSelectedType(null);
+        if (triathlete && ["back", "breast", "fly", "im", "lesson"].includes(selectedType)) setSelectedType(null);
       }, [triathlete, selectedType]);
       // Onboarding tour. tourStep -1 = inactive, 0..N-1 = active step.
       // tourSeen defaults true so the tour never flashes before settings
@@ -4756,7 +4756,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             <div className="screen-only type-card-grid" data-tour="step-type-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
               {WORKOUT_TYPES
                 .filter(t => t.id !== "lesson" || effectiveMe?.can_lesson)   // Lesson tier (Phase 5) — gated card
-                .filter(t => !triathlete || !["back", "breast", "fly", "im"].includes(t.id))   // Triathlete mode — hide stroke-specialty + IM (free-focused sport)
+                .filter(t => !triathlete || !["back", "breast", "fly", "im", "lesson"].includes(t.id))   // Triathlete mode — hide stroke-specialty + IM + lesson (free-focused sport)
                 .map(t => {
                 const isSel = selectedType === t.id;
                 const isHov = hover === t.id;
