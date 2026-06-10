@@ -354,8 +354,19 @@
          to portrait on engines without named-page support — still usable. */
       @page whiteboard { size: letter landscape; margin: 0.4in; }
       .whiteboard-page { page: whiteboard !important; }
-      body.whiteboard-active > *:not(.whiteboard-overlay) { display: none !important; }
-      .whiteboard-overlay { position: static !important; overflow: visible !important; }
+      /* The overlay renders deep inside #root (no portal), so the old
+         `body > *:not(.whiteboard-overlay) { display:none }` blanked the page —
+         it display:none'd #root and took the overlay with it. Use the
+         visibility technique instead: hide everything, then re-show only the
+         overlay's own subtree (override-able on descendants even when an
+         ancestor is hidden), and pin it to the page top-left. */
+      body.whiteboard-active * { visibility: hidden !important; }
+      body.whiteboard-active .whiteboard-overlay,
+      body.whiteboard-active .whiteboard-overlay * { visibility: visible !important; }
+      body.whiteboard-active .whiteboard-overlay {
+        position: absolute !important; left: 0 !important; top: 0 !important;
+        width: 100% !important; overflow: visible !important;
+      }
       .whiteboard-block { page-break-inside: avoid !important; break-inside: avoid !important; }
     }
 
@@ -374,7 +385,7 @@
 
   <!-- SPA bundle (esbuild). The value placeholder below is a distinct token (not the
        window.__BUILD_ID__ property name) so _deploy.py's stamp can't clobber the property. -->
-  <script>window.__BUILD_ID__ = "7b963b6-dirty · 2026-06-10 12:45 UTC · bundle 7142ece18e94";</script>
+  <script>window.__BUILD_ID__ = "7b963b6-dirty · 2026-06-10 21:08 UTC · bundle 7142ece18e94";</script>
   <!-- MapKit JS token (origin-scoped, client-public by design). The value
        placeholder __MAPKIT_TOKEN_VALUE__ is deliberately distinct from the property
        name so the substitution can't corrupt `window.__MAPKIT_TOKEN__`. Replaced at
