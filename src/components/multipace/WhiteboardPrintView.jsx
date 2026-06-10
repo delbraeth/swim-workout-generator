@@ -25,7 +25,7 @@ export function WhiteboardPrintView({ workout, onClose, unit = "yds" }) {
         style={{ position: "fixed", top: 12, right: 14, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 12, fontWeight: 700, cursor: "pointer", zIndex: 10001 }}>
         ✕ Close print view
       </button>
-      <div className="whiteboard-page" style={{ padding: "0.4in", fontFamily: "Arial, Helvetica, sans-serif" }}>
+      <div className="whiteboard-page" style={{ padding: "0.25in", fontFamily: "Arial, Helvetica, sans-serif" }}>
         <div style={{ borderBottom: "3pt solid #000", paddingBottom: 6, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 16 }}>
           <div style={{ fontSize: "30pt", fontWeight: 800, lineHeight: 1.05 }}>{title}</div>
           <div style={{ fontSize: "18pt", fontWeight: 700, whiteSpace: "nowrap" }}>

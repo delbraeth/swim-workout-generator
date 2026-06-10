@@ -7034,9 +7034,10 @@ export function generateEngineForSection(section, typeId, budgetYd, recent, engi
       });
     }
 
-export function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints = []) {
+export function applyEngineOverrides(typeId, sections, sources, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints = [], mixHeadroom = Infinity) {
       if (!sources) return sections;
       const out = { ...sections };
+      let mixUsed = 0;   // yards already spent on Mix engine suffixes this call
       // kick is bank-only (sources never names it from the UI), so its
       // `sources[sect] || "bank"` short-circuits to bank → no override.
       // Listed here only so a future kick-source would route generically;
@@ -7048,7 +7049,10 @@ export function applyEngineOverrides(typeId, sections, sources, recent, engineDi
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
           const res = generateEngineForSection(sect, typeId, original.totalYards, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints);
-          if (res && res.option) {
+          // Guarantee the engine section never exceeds its bank allocation — rep
+          // rounding overshoots ~8% of the time and would push the workout over
+          // maxYards. If it overshot, keep the (already-budget-sized) bank section.
+          if (res && res.option && res.option.totalYards <= original.totalYards) {
             out[sect] = {
               ...res.option,
               __engineMeta: {
@@ -7057,8 +7061,8 @@ export function applyEngineOverrides(typeId, sections, sources, recent, engineDi
               },
             };
           }
-          // else: engine had no applicable template or all attempts failed —
-          // silent bank fallback (original section stays unchanged)
+          // else: no applicable template, all attempts failed, or engine overshot
+          // its budget — silent bank fallback (original section stays unchanged)
         } else if (src === "mix") {
           // Mix: bank prefix + engine suffix, two parented sub-blocks under
           // one section header (per spec §7.3). Engine sub-block sized at
@@ -7068,9 +7072,15 @@ export function applyEngineOverrides(typeId, sections, sources, recent, engineDi
           // extra variety, not a strict budget mode).
           const original = sections[sect];
           if (!original || !original.totalYards) continue;
-          const engineBudget = Math.max(100, Math.round(original.totalYards * 0.5));
+          // Budget-aware (fix): the engine suffix may only spend the workout's
+          // REMAINING headroom, so Mix never pushes the total over maxYards. No
+          // room → stay pure bank (the old "bank + 50% on top" overshoot is gone).
+          const avail = mixHeadroom - mixUsed;
+          if (avail < 100) continue;
+          const engineBudget = Math.max(100, Math.min(Math.round(original.totalYards * 0.5), avail));
           const res = generateEngineForSection(sect, typeId, engineBudget, recent, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, activeConstraints);
-          if (res && res.option) {
+          if (res && res.option && res.option.totalYards <= avail) {
+            mixUsed += res.option.totalYards;
             const stroke = templateDefaultStroke(typeId);
             out[sect] = {
               // Note: deliberately omit `section` so buildWorkout's
@@ -7574,7 +7584,7 @@ export function generateWorkout({
         const total = wu.totalYards + dr.totalYards + kt.totalYards + ma.totalYards + cd.totalYards;
         if (total >= minTotal && total <= maxYards) {
           // S3 — apply engine overrides per section, then recompute total
-          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, kick: kt, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : []);
+          const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, kick: kt, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : [], maxYards - ((wu && wu.totalYards || 0) + (dr && dr.totalYards || 0) + (kt && kt.totalYards || 0) + (ma && ma.totalYards || 0) + (cd && cd.totalYards || 0)));
           const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.kick.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
           // S3 #19 — telemetry: how often does the random-attempt loop succeed?
           // v2.0 — attach laneFit fallback marker (closure vars live in generateWorkout scope).
@@ -7685,7 +7695,7 @@ export function generateWorkout({
 
       const total = wu.totalYards + dr.totalYards + kt.totalYards + ma.totalYards + cd.totalYards;
       // S3 — apply engine overrides per section, then recompute total
-      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, kick: kt, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : []);
+      const overridden = applyEngineOverrides(typeId, { warmup: wu, drill: dr, kick: kt, main: ma, cooldown: cd }, sectionSources, recentEngineTemplates, engineDisfavorites, disfavorMode, engineFavorites, lanesPaceSecs, usePsc ? _effectiveConstraints : [], maxYards - ((wu && wu.totalYards || 0) + (dr && dr.totalYards || 0) + (kt && kt.totalYards || 0) + (ma && ma.totalYards || 0) + (cd && cd.totalYards || 0)));
       const finalTotal = overridden.warmup.totalYards + overridden.drill.totalYards + overridden.kick.totalYards + overridden.main.totalYards + overridden.cooldown.totalYards;
       // S3 #19 — telemetry: fallback path fired (random loop exhausted attempts).
       // v2.0 — same laneFit attachment as the loop-success path above.
@@ -8028,6 +8038,9 @@ export function regenerateSection({
           engineFavorites,
           lanesPaceSecs,
           _usePscRegen ? _effectiveCRegen : [],
+          // Mix headroom = max − all OTHER blocks − this section's bank size, so a
+          // mixed re-roll can't push the whole workout over maxYards.
+          maxYards - blocks.reduce((s, b, i) => s + (i === idx ? 0 : (b.totalYards || 0)), 0) - (bankBlock.totalYards || 0),
         );
         newBlock = { ...bankBlock, ...overridden[sectionKey] };
       }
@@ -8250,9 +8263,13 @@ export function templatePick(choices, rand = Math.random) {
 export function templatePickRepShape(distChoices, budgetYd, minReps, maxReps, preference = "any", rand = Math.random) {
       const cands = [];
       for (const d of distChoices) {
-        // Rep count that gets closest to budget, clamped to [min, max]
+        // Rep count that gets closest to budget, clamped to [min, max].
         const ideal = Math.round(budgetYd / d);
-        const reps = Math.max(minReps, Math.min(maxReps, ideal));
+        let reps = Math.max(minReps, Math.min(maxReps, ideal));
+        // Engine/Mix sections must not push the workout over maxYards: when the
+        // nearest rep count overshoots the budget and we have room to step down,
+        // round DOWN past the budget rather than to nearest (caps each shape ≤ budget).
+        if (reps * d > budgetYd && reps > minReps) reps -= 1;
         const total = reps * d;
         const pctOff = Math.abs(total - budgetYd) / budgetYd;
         cands.push({ dist: d, reps, total, pctOff });
