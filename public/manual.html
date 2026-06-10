@@ -2221,16 +2221,22 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
         <li><strong>Keyboard navigation</strong> — the app is operable without a mouse, with a
           visible focus indicator and a <em>Skip to main content</em> link for keyboard and
           screen-reader users.</li>
+        <li><strong>Accessible dialogs</strong> — pop-up dialogs move focus to the dialog on open,
+          trap Tab within it, close on <kbd>Esc</kbd>, and return focus to where you were when they
+          close — so you never get lost behind a modal.</li>
+        <li><strong>Labelled controls</strong> — form fields carry programmatic names for screen
+          readers (not just placeholder text), and validation/error states are announced rather than
+          shown by colour alone.</li>
         <li><strong>Semantic structure</strong> — proper landmarks (banner, navigation, main,
-          footer), heading order, and labelled form controls so assistive technology can navigate.</li>
+          footer) and heading order so assistive technology can navigate.</li>
         <li><strong>Scalable text</strong> — the layout reflows when you zoom the page or enlarge
           your browser/OS text size.</li>
       </ul>
       <div class="callout">
         <div class="callout-icon">🌐</div>
         <div class="callout-body">Accessibility improvements land on the <strong>web app first</strong>;
-          the iOS app follows. Some areas are still being refined — screen-reader polish and a few
-          smaller touch targets are on the list.</div>
+          the iOS app follows. We're continuing to verify with manual screen-reader (VoiceOver/NVDA)
+          and high-zoom testing.</div>
       </div>
       <p>Hit an accessibility barrier? Please tell us via <a href="#feedback">Send feedback</a>
         (category <strong>🐛 Bug</strong>) with the page and what got in your way — accessibility
