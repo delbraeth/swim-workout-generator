@@ -793,6 +793,20 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                         <div style={{ fontSize: 11, color: "var(--color-text-dim)", marginBottom: 8, lineHeight: 1.5 }}>
                           Tag your races <strong>A / B / C</strong> by priority. The generator periodizes toward your next <strong>A-race</strong> (Base → Build → Peak → Taper) and rolls to the next A as each passes.
                         </div>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                          <input value={newRaceName} onChange={e => setNewRaceName(e.target.value)} placeholder="Race name" maxLength={80}
+                            style={{ flex: "1 1 120px", minWidth: 100, padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
+                          <input type="date" value={newRaceDate} onChange={e => setNewRaceDate(e.target.value)}
+                            style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
+                          <select value={newRacePrio} onChange={e => setNewRacePrio(e.target.value)}
+                            style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }}>
+                            <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+                          </select>
+                          <button onClick={addRace} disabled={raceBusy || !newRaceName.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(newRaceDate)}
+                            style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: (raceBusy || !newRaceName.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(newRaceDate)) ? "var(--color-border)" : "var(--color-primary)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                            + Add
+                          </button>
+                        </div>
                         {(() => {
                           const today = new Date().toISOString().slice(0, 10);
                           const nextA = nextRaceByPriority(raceCal, today, "A");
@@ -808,7 +822,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                           );
                         })()}
                         {raceCal.length > 0 && (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                             {raceCal.map((r, i) => {
                               const PRIO = { A: "var(--color-destructive-text)", B: "var(--color-warn)", C: "var(--color-text-muted)" };
                               return (
@@ -823,20 +837,6 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                             })}
                           </div>
                         )}
-                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                          <input value={newRaceName} onChange={e => setNewRaceName(e.target.value)} placeholder="Race name" maxLength={80}
-                            style={{ flex: "1 1 120px", minWidth: 100, padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
-                          <input type="date" value={newRaceDate} onChange={e => setNewRaceDate(e.target.value)}
-                            style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
-                          <select value={newRacePrio} onChange={e => setNewRacePrio(e.target.value)}
-                            style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }}>
-                            <option value="A">A</option><option value="B">B</option><option value="C">C</option>
-                          </select>
-                          <button onClick={addRace} disabled={raceBusy || !newRaceName.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(newRaceDate)}
-                            style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: (raceBusy || !newRaceName.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(newRaceDate)) ? "var(--color-border)" : "var(--color-primary)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                            + Add
-                          </button>
-                        </div>
                       </div>
                     </div>
                   )}
