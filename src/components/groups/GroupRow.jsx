@@ -217,6 +217,7 @@ import { LanePlansPanel } from "./LanePlansPanel.jsx";
                           </span>
                           {m.is_coppa_protected && <span style={{ marginLeft: 4, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#dc262622", border: "1px solid #dc2626", color: "#dc2626", fontWeight: 700 }}>under 13</span>}
                           {m.is_minor && !m.is_coppa_protected && <span style={{ marginLeft: 4, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#f59e0b22", border: "1px solid var(--color-warn)", color: "var(--color-warn)", fontWeight: 700 }}>minor</span>}
+                          {m.is_triathlete && <span title="Triathlete — gets the freestyle/CSS variant of mixed-squad sets" style={{ marginLeft: 4, fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "rgba(59,130,246,0.13)", border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontWeight: 700 }}>🔱 tri</span>}
                         </span>
                         {detail.viewer_role && (
                           <button onClick={() => removeMember(m.id, m.display_name)}

@@ -5743,12 +5743,14 @@ export async function dbListGroupMembers(groupId) {
     "       COALESCE(mp.`last_name`, up.`last_name`)      AS last_name, " +
     "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name, " +
     "       COALESCE(mp.`dob`, up.`dob`)             AS dob, " +
-    "       COALESCE(mp.`gender`, up.`gender`) AS gender " +
+    "       COALESCE(mp.`gender`, up.`gender`) AS gender, " +
+    "       st.`extra` AS settings_extra " +   // 🔱 to surface each member's triathlete flag
     "FROM `group_members` gm " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
     "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
     "LEFT JOIN `persons` mp               ON mp.`id` = m.`person_id` " +
     "LEFT JOIN `persons` up               ON up.`id` = u.`person_id` " +
+    "LEFT JOIN `settings` st              ON st.`user_sub` = gm.`member_swimmer_sub` " +
     "WHERE gm.`group_id` = ? AND gm.`left_at` IS NULL " +
     "ORDER BY COALESCE(mp.`last_name`, up.`last_name`) ASC, COALESCE(mp.`first_name`, up.`first_name`) ASC",
     [groupId]
@@ -5766,6 +5768,15 @@ export async function dbListGroupMembers(groupId) {
     is_minor:            isMinor(r.dob),
     is_coppa_protected:  isCoppaProtected(r.dob),
     gender:              r.gender,
+    // 🔱 Mixed-squad: surface the member's own triathlete identity (read-only) so the
+    // coach can see who gets the tri variant. Managed members (no sub/settings) → false.
+    is_triathlete:       (() => {
+      if (!r.settings_extra) return false;
+      try {
+        const ex = typeof r.settings_extra === "string" ? JSON.parse(r.settings_extra) : r.settings_extra;
+        return ex && ex.triathlete === true;
+      } catch (_) { return false; }
+    })(),
   }));
 }
 

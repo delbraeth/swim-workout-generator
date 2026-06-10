@@ -310,6 +310,57 @@ export function cssZonePaceSecs(cssSecs, set, sectionKey = "main") {
       return Math.max(30, cssSecs + off);
     }
 
+// 🔱 Mixed-squad differentiation. Produces the TRIATHLETE variant of a block while
+// keeping the timing skeleton LOCKED (identical reps/dist/interval/rounds/roundRest) so
+// a tri and a pool swimmer in the same lane leave the wall together — the panel's
+// non-negotiable invariant ("one workout, one clock, two answer keys"). Only the
+// CONTENT changes: non-free strokes / IM / stroke-drills → freestyle at the same zone.
+// Freestyle sets are returned untouched (tri + pool do the same → no desync, no variant).
+const _TRI_ZONE_LABEL = { easy: "easy aerobic", aerobic: "aerobic", threshold: "at CSS / threshold pace", vo2: "strong (just under CSS)", anaerobic: "fast (under CSS)" };
+export function triVariantOfSet(set, sectionKey = "main") {
+      if (!set) return set;
+      const desc = set.desc || "";
+      const isStroke = /\bback|\bbreast|\bfly\b|butterfly|\bIM\b|medley/i.test(desc);
+      const isFree   = /free/i.test(desc) && !isStroke;
+      if (isFree || (!isStroke && !/drill/i.test(desc))) return set;  // already free / no stroke to swap
+      const stroke = /\bback/i.test(desc) ? "backstroke"
+                   : /\bbreast/i.test(desc) ? "breaststroke"
+                   : /\bfly\b|butterfly/i.test(desc) ? "butterfly"
+                   : /\bIM\b|medley/i.test(desc) ? "IM"
+                   : "stroke";
+      const zone = (set.zone && _TRI_ZONE_LABEL[set.zone]) ? set.zone : inferSetZone(set, sectionKey);
+      const label = _TRI_ZONE_LABEL[zone] || "aerobic";
+      // Skeleton untouched — only desc/zone change. Same interval keeps the lane in sync.
+      return { ...set, desc: `Freestyle — ${label} (tri: swim free in place of ${stroke}, same send-off)`, zone, _triSwapped: true };
+}
+
+// Block-level wrapper. Returns a NEW block with the tri variant applied to its sets, or
+// the original block reference unchanged when nothing was swapped (all-freestyle block).
+export function triVariantOfBlock(block) {
+      if (!block || !Array.isArray(block.sets)) return block;
+      let changed = false;
+      const sets = block.sets.map(s => {
+        const v = triVariantOfSet(s, block.section);
+        if (v !== s) changed = true;
+        return v;
+      });
+      return changed ? { ...block, sets, _triVariant: true } : block;
+}
+
+// Workout-level wrapper. Maps every block through triVariantOfBlock. `_triVariant` on the
+// returned workout is true iff at least one block actually changed (else identical to base,
+// meaning the whole practice is already freestyle and a triathlete does it as written).
+export function triVariantOfWorkout(workout) {
+      if (!workout || !Array.isArray(workout.blocks)) return workout;
+      let any = false;
+      const blocks = workout.blocks.map(b => {
+        const v = triVariantOfBlock(b);
+        if (v !== b) any = true;
+        return v;
+      });
+      return any ? { ...workout, blocks, _triVariant: true } : { ...workout, _triVariant: false };
+}
+
 export const WARMUP_OPTIONS = [
       { label: "Easy Free 400", typeAffinity: ["sprint"], totalYards: 400, types: [], strokes: [], sets: [
           { id: "s_rw8rg5", reps: 1, dist: 400, desc: "Easy Freestyle", interval: "No interval — swim easy", focus: "Loosen up, steady breathing" },

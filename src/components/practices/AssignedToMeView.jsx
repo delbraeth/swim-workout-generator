@@ -4,12 +4,13 @@ import { csrfHeaders } from "../../lib/api.js";
 import { RsvpEventsPanel } from "./RsvpEventsPanel.jsx";
 import { COMPLETION_LABELS, PSC_LABEL_MAP } from "../../lib/constants.js";
 import { computeSubstitutionsForSwimmer } from "../../lib/workout-helpers.js";
+import { triVariantOfWorkout } from "../../lib/engine.js";
 import { DrylandBlock } from "../workout/DrylandBlock.jsx";
 import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function AssignedToMeView({ onRunAssignment }) {
+    export function AssignedToMeView({ onRunAssignment, viewerTriathlete = false }) {
       const [list,       setList]       = React.useState(null);
       const [stateFilter, setStateFilter] = React.useState("");                  // "" = all
       const [expandedId, setExpandedId] = React.useState(null);
@@ -129,6 +130,11 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                 // them at render time.
                 const subs = a.workout ? computeSubstitutionsForSwimmer(a.workout, myConstraints) : [];
                 const subCount = subs.length;
+                // 🔱 Mixed-squad: if the viewer is a triathlete, render the tri VARIANT of the
+                // assigned practice — same send-offs/structure as their lane, strokes swapped to
+                // freestyle. Computed at view time from their own flag; pool swimmers see the base.
+                const displayWorkout = (viewerTriathlete && a.workout) ? triVariantOfWorkout(a.workout) : a.workout;
+                const isTriVariant = !!(displayWorkout && displayWorkout._triVariant);
                 return (
                   <div key={a.id} style={{ background: "var(--color-card)", border: `1px solid ${meta.color}`, borderRadius: 10, overflow: "hidden" }}>
                     <button onClick={() => setExpandedId(isExpanded ? null : a.id)}
@@ -162,6 +168,14 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                     </button>
                     {isExpanded && (
                       <div style={{ padding: "0 14px 14px", borderTop: "1px solid var(--color-border)" }}>
+                        {isTriVariant && (
+                          <div style={{ marginTop: 10, padding: 10, background: "var(--color-bg)", border: "1px solid var(--color-primary)", borderRadius: 6, fontSize: 11 }}>
+                            <div style={{ color: "var(--color-primary)", fontWeight: 700, marginBottom: 4 }}>🔱 Triathlete version</div>
+                            <div style={{ color: "var(--color-text-muted)" }}>
+                              Strokes are swapped to freestyle for you, on the <strong>same send-offs and structure</strong> as the rest of your lane — so you stay together at the wall. Pool swimmers in your group get the original set.
+                            </div>
+                          </div>
+                        )}
                         {subCount > 0 && (
                           <div style={{ marginTop: 10, padding: 10, background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6, fontSize: 11 }}>
                             <div style={{ color: "var(--color-warn)", fontWeight: 700, marginBottom: 6 }}>
@@ -217,13 +231,13 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                             </ul>
                           </div>
                         )}
-                        {a.workout?.blocks && (
+                        {displayWorkout?.blocks && (
                           <div style={{ marginTop: 10 }}>
-                            {a.workout.blocks.map((b, i) => b && b.kind === "dryland" ? (
+                            {displayWorkout.blocks.map((b, i) => b && b.kind === "dryland" ? (
                               <DrylandBlock key={i} block={b} />
                             ) : (
-                              <WorkoutBlock key={i} block={b} equipment={a.workout.equipment || {}}
-                                recentMainLabels={new Map()} poolMode={a.workout.poolMode || "25y"} />
+                              <WorkoutBlock key={i} block={b} equipment={displayWorkout.equipment || {}}
+                                recentMainLabels={new Map()} poolMode={displayWorkout.poolMode || "25y"} />
                             ))}
                           </div>
                         )}

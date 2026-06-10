@@ -8,6 +8,7 @@
     import { ImpersonationBanner } from "./components/shell/ImpersonationBanner.jsx";
     import { SignInGate } from "./components/shell/SignInGate.jsx";
     import { SharedWorkoutView } from "./components/shell/SharedWorkoutView.jsx";
+    import { MixedSquadSheet } from "./components/workout/MixedSquadSheet.jsx";
     import { TourOverlay } from "./components/shell/TourOverlay.jsx";
     import { ReportPrintView } from "./components/reports/ReportPrintView.jsx";
     const ProgressDashboard = React.lazy(() => import("./components/reports/ProgressDashboard.jsx").then(m => ({ default: m.ProgressDashboard })));
@@ -101,7 +102,7 @@
       generateEngineForSection, generateWorkout, getBankOptions, getOverlayRowsForTuple, inferBlockZone,
       inferSetZone, pick, regenerateSection, scaleInterval, LESSON_MIN, LESSON_MAX,
       parseIntervalSecs, paceRestFloorSecs, factorFor, setStrokeKey, resolveStrokeFactors,
-      cssZonePaceSecs, phaseForRaceDate,
+      cssZonePaceSecs, phaseForRaceDate, triVariantOfWorkout,
     } from "./lib/engine.js";
     import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
 import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
@@ -1831,6 +1832,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [showWhiteboard,  setShowWhiteboard]  = useState(false);
       const [copyFlash,       setCopyFlash]       = useState(false);
       const [tpFlash,         setTpFlash]         = useState(false);  // 🔱 TrainingPeaks export copied
+      const [showMixedSquad,  setShowMixedSquad]  = useState(false);  // 🔱 coach mixed-squad two-column sheet
       const [shareFlash,      setShareFlash]      = useState(null);   // social share: 'copied' | 'error' | null
       // Auth state: null = checking, false = not signed in, true = signed in
       const [authenticated, setAuthenticated] = useState(null);
@@ -4536,11 +4538,13 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
             )}
             {view === "assigned" && (
               <AssignedToMeView
+                viewerTriathlete={triathlete}
                 onRunAssignment={(a) => {
                   // Load the coach-snapshot workout into Run mode and tag the
                   // assignment so the finish-flow writes back to it instead
-                  // of creating a new history entry.
-                  setRunWorkout(a.workout);
+                  // of creating a new history entry. 🔱 A triathlete runs THEIR
+                  // tri variant (strokes→free, same send-offs) of the assigned set.
+                  setRunWorkout(triathlete ? triVariantOfWorkout(a.workout) : a.workout);
                   setRunAssignmentId(a.id);
                   setShowRestPicker(true);
                   setView("generator");
@@ -5396,6 +5400,23 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                         🏊 Multi-pace print…
                       </button>
                     )}
+                    {/* 🔱 Mixed-squad — coach + group only. Toggles a pool | triathlete
+                        two-column lane sheet (same send-offs, strokes→free for tris). */}
+                    {effectiveMe?.is_coach && generateForTarget && generateForTarget.kind === "group" && (
+                      <button
+                        onClick={() => setShowMixedSquad(v => !v)}
+                        style={{
+                          padding: "10px 16px", borderRadius: 8,
+                          border: `1px solid ${showMixedSquad ? "var(--color-primary)" : "var(--color-border-strong)"}`,
+                          background: showMixedSquad ? "rgba(59,130,246,0.15)" : "var(--color-bg)",
+                          color: showMixedSquad ? "var(--color-primary-text)" : "var(--color-text)",
+                          fontSize: 13, fontWeight: 700, cursor: "pointer",
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                        }}
+                        title="Show this practice as a pool | triathlete two-column lane sheet — same send-offs, strokes swapped to freestyle for the triathletes in this group.">
+                        🔱 Mixed-squad view
+                      </button>
+                    )}
                     {/* I — Schedule this workout for a future day. Available
                         whenever there's a workout on screen and the user is
                         authenticated. */}
@@ -5419,6 +5440,13 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     )}
                   </div>
                 </div>
+
+                {/* 🔱 Mixed-squad lane sheet — coach toggle, screen reference */}
+                {showMixedSquad && generateForTarget?.kind === "group" && (
+                  <div className="screen-only">
+                    <MixedSquadSheet workout={workout} poolMode={poolMode} />
+                  </div>
+                )}
 
                 {/* Focus note — pre-workout intention (screen, edit-in-place) */}
                 {loadedFromHistoryId ? (
