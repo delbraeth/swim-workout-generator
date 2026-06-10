@@ -272,6 +272,7 @@ import { SdifImportModal } from "../people/SdifImportModal.jsx";
                 onChange={e => kind === "fav" ? setNewFav(e.target.value) : setNewDisfav(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") addCuration(kind, kind === "fav" ? newFav : newDisfav); }}
                 placeholder={`Add team ${kind === "fav" ? "favorite" : "disfavorite"} (e.g. "4 × 200 IM")`}
+                aria-label={`Add team ${kind === "fav" ? "favorite" : "disfavorite"}`}
                 style={{ flex: 1, padding: "6px 9px", fontSize: 12, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
               <button onClick={() => addCuration(kind, kind === "fav" ? newFav : newDisfav)} disabled={busy}
                 style={{ padding: "6px 12px", background: accent, color: "var(--color-bg)", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
@@ -325,7 +326,7 @@ import { SdifImportModal } from "../people/SdifImportModal.jsx";
                 <input value={teamCode}
                   onChange={e => setTeamCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 6).toUpperCase())}
                   onKeyDown={e => { if (e.key === "Enter") saveTeamCode(); }}
-                  placeholder="e.g. WSU" maxLength={6}
+                  placeholder="e.g. WSU" aria-label="Team code" maxLength={6}
                   style={{ width: 110, padding: "6px 9px", fontSize: 13, fontFamily: "monospace", letterSpacing: "0.05em", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                 <button onClick={saveTeamCode} disabled={busy || teamCode.trim().toUpperCase() === teamCodeSaved}
                   style={{ padding: "6px 12px", background: (busy || teamCode.trim().toUpperCase() === teamCodeSaved) ? "var(--color-border)" : "var(--color-primary)", color: "#fff", border: "none", borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: (busy || teamCode.trim().toUpperCase() === teamCodeSaved) ? "not-allowed" : "pointer" }}>
@@ -385,7 +386,7 @@ import { SdifImportModal } from "../people/SdifImportModal.jsx";
                       </div>
                     ) : !archived ? (
                       <div style={{ display: "flex", gap: 6 }}>
-                        <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)}
+                        <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)} aria-label="New owner (admin)"
                           style={{ flex: 1, padding: "6px 9px", fontSize: 12, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
                           <option value="">— pick an admin —</option>
                           {admins.map(a => <option key={a.coach_sub} value={a.coach_sub}>{a.display_name || a.coach_sub.slice(-8)}</option>)}
@@ -417,6 +418,7 @@ import { SdifImportModal } from "../people/SdifImportModal.jsx";
                 <input value={paceDraft}
                   onChange={e => setPaceDraft(e.target.value)}
                   placeholder="e.g. 2:00"
+                  aria-label="Pace baseline"
                   style={{ padding: "6px 9px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
               ) : (
                 <span style={{ color: "var(--color-text)", fontSize: 13, fontVariantNumeric: "tabular-nums" }}>{settings.default_pace_base || "—"}</span>

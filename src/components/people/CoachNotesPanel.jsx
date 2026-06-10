@@ -149,6 +149,7 @@ import { csrfHeaders } from "../../lib/api.js";
           <div style={{ marginBottom: 10, padding: 8, background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6 }}>
             <textarea value={draftBody} onChange={(e) => setDraftBody(e.target.value)}
               placeholder="Add a note about this swimmer…"
+              aria-label="Add a note about this swimmer"
               rows={2} maxLength={5000}
               style={{ width: "100%", padding: "6px 8px", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 5, fontSize: 12, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>

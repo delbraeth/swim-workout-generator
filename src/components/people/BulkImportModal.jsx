@@ -98,6 +98,7 @@ import { csvParseSwimmers, downloadTemplate, normalizeImportRow } from "../../li
                   <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6, padding: 10, marginBottom: 10 }}>
                     <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 4 }}>Attach all imported swimmers to:</label>
                     <select value={teamId} onChange={e => setTeamId(e.target.value)}
+                      aria-label="Attach all imported swimmers to team"
                       style={{ width: "100%", padding: "6px 10px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
                       <option value="">— no team (free-floating roster) —</option>
                       {teams.map(t => (
@@ -120,6 +121,7 @@ import { csvParseSwimmers, downloadTemplate, normalizeImportRow } from "../../li
 
                 <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Or paste CSV/TSV here:</label>
                 <textarea value={text} onChange={e => { setText(e.target.value); setParsed(null); setErr(null); }}
+                  aria-label="Paste CSV or TSV"
                   placeholder="first_name,last_name,preferred_name,dob,gender,initials,pace_scy_100,pace_scm_100,pace_lcm_100,parental_contact&#10;Sarah,Johnson,,2010-03-15,F,SJ,2:05,,,parent@example.com"
                   rows={8}
                   style={{ width: "100%", padding: "8px 10px", fontSize: 12, fontFamily: "monospace", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, resize: "vertical", boxSizing: "border-box" }} />

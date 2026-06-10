@@ -212,6 +212,7 @@ import { API_BASE } from "../../lib/api.js";
             <div style={{ marginBottom: 12 }}>
               <label style={labelStyle}>Label</label>
               <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120}
+                aria-label="Set label"
                 style={{ ...fieldStyle, width: "100%" }} placeholder="e.g. Build 8×50" />
             </div>
             {/* Lesson tier (Phase 5) — ability level. Optional; tags the set for the
@@ -291,12 +292,12 @@ import { API_BASE } from "../../lib/api.js";
             <div style={{ marginBottom: 16 }}>
               {sets.map((s, i) => (
                 <div key={i} className="editor-row" style={{ display: "grid", gridTemplateColumns: "60px 60px 1fr 100px 1fr 90px 30px", gap: 6, marginBottom: 6, alignItems: "start" }}>
-                  <input type="number" min="1" value={s.reps} onChange={(e) => updateSet(i, { reps: e.target.value })} placeholder="reps" style={fieldStyle}
+                  <input type="number" min="1" value={s.reps} onChange={(e) => updateSet(i, { reps: e.target.value })} aria-label="Reps" placeholder="reps" style={fieldStyle}
                     ref={i === sets.length - 1 ? newRowRepsRef : null} />
-                  <input type="number" min="1" value={s.dist} onChange={(e) => updateSet(i, { dist: e.target.value })} placeholder="dist" style={fieldStyle} />
-                  <input className="editor-row-wide" value={s.desc} onChange={(e) => updateSet(i, { desc: e.target.value })} placeholder="Description" style={fieldStyle} maxLength={500} />
-                  <input className="editor-row-wide" value={s.interval} onChange={(e) => updateSet(i, { interval: e.target.value })} placeholder="On 2:00" style={fieldStyle} />
-                  <input className="editor-row-wide" value={s.focus || ""} onChange={(e) => updateSet(i, { focus: e.target.value })} placeholder="Focus (optional)" style={fieldStyle} maxLength={240} />
+                  <input type="number" min="1" value={s.dist} onChange={(e) => updateSet(i, { dist: e.target.value })} aria-label="Distance" placeholder="dist" style={fieldStyle} />
+                  <input className="editor-row-wide" value={s.desc} onChange={(e) => updateSet(i, { desc: e.target.value })} aria-label="Set description" placeholder="Description" style={fieldStyle} maxLength={500} />
+                  <input className="editor-row-wide" value={s.interval} onChange={(e) => updateSet(i, { interval: e.target.value })} aria-label="Interval" placeholder="On 2:00" style={fieldStyle} />
+                  <input className="editor-row-wide" value={s.focus || ""} onChange={(e) => updateSet(i, { focus: e.target.value })} aria-label="Focus" placeholder="Focus (optional)" style={fieldStyle} maxLength={240} />
                   <select value={s.eq || ""} onChange={(e) => updateSet(i, { eq: e.target.value || null })} style={fieldStyle} title="Equipment required for this set">
                     <option value="">— eq —</option>
                     <option value="kick">kick</option>

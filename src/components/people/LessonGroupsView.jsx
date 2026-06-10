@@ -108,7 +108,7 @@ import { csrfHeaders } from "../../lib/api.js";
           <div style={{ display: "flex", gap: 8, margin: "12px 0 20px", flexWrap: "wrap" }}>
             <input value={newName} onChange={e => setNewName(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") createGroup(); }}
-              placeholder="New group name (e.g. 9:00 AM Sunday)" maxLength={120}
+              placeholder="New group name (e.g. 9:00 AM Sunday)" aria-label="New group name" maxLength={120}
               style={{ flex: 1, minWidth: 200, padding: "8px 10px", fontSize: 13, borderRadius: 6,
                 border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
             <button onClick={createGroup} disabled={busy || !newName.trim()}
@@ -157,6 +157,7 @@ import { csrfHeaders } from "../../lib/api.js";
                       )}
                       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         <select value={addPick[g.id] || ""} onChange={e => setAddPick(prev => ({ ...prev, [g.id]: e.target.value }))}
+                          aria-label="Add a managed swimmer"
                           style={{ flex: 1, minWidth: 160, padding: "6px 9px", fontSize: 13, borderRadius: 5,
                             background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)" }}>
                           <option value="">Add a managed swimmer…</option>

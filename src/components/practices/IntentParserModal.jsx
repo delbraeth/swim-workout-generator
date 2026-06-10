@@ -95,6 +95,7 @@ import { parseIntent } from "../../lib/workout-helpers.js";
                 value={text}
                 onChange={e => { setText(e.target.value); setParsed(null); }}
                 onKeyDown={e => { if (e.key === "Enter") handleParse(); if (e.key === "Escape") onClose(); }}
+                aria-label="Workout intent"
                 placeholder='e.g. "easy 2k aerobic"'
                 style={{
                   flex: 1, padding: "9px 12px", borderRadius: 8,

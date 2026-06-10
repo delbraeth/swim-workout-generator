@@ -135,7 +135,7 @@ import { csrfHeaders } from "../../lib/api.js";
               <>
                 <input type="number" min="100" max="5000" step="25"
                   value={t30Distance} onChange={(e) => setT30Distance(e.target.value)}
-                  placeholder="Total yards (e.g. 1850)"
+                  placeholder="Total yards (e.g. 1850)" aria-label="Total yards"
                   style={{ flex: 2, minWidth: 140, padding: "6px 8px", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 5, fontSize: 12 }} />
                 {Number.isFinite(parseInt(t30Distance, 10)) && parseInt(t30Distance, 10) > 0 && (
                   <span style={{ fontSize: 11, color: "var(--color-text-dim)", fontFamily: "ui-monospace, monospace" }}>
@@ -148,7 +148,7 @@ import { csrfHeaders } from "../../lib/api.js";
               <>
                 <input type="text" value={kind === "tt500" ? tt500Time : broken500Time}
                   onChange={(e) => kind === "tt500" ? setTt500Time(e.target.value) : setBroken500Time(e.target.value)}
-                  placeholder="M:SS (e.g. 6:30)"
+                  placeholder="M:SS (e.g. 6:30)" aria-label="Time (M:SS)"
                   style={{ flex: 2, minWidth: 140, padding: "6px 8px", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 5, fontSize: 12, fontFamily: "ui-monospace, monospace" }} />
                 {parseMSS(kind === "tt500" ? tt500Time : broken500Time) && (
                   <span style={{ fontSize: 11, color: "var(--color-text-dim)", fontFamily: "ui-monospace, monospace" }}>
@@ -157,7 +157,7 @@ import { csrfHeaders } from "../../lib/api.js";
                 )}
               </>
             )}
-            <select value={poolMode} onChange={(e) => setPoolModeBM(e.target.value)}
+            <select value={poolMode} onChange={(e) => setPoolModeBM(e.target.value)} aria-label="Pool length"
               style={{ padding: "6px 8px", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 5, fontSize: 12 }}>
               <option value="25y">25y</option>
               <option value="25m">25m</option>
@@ -169,7 +169,7 @@ import { csrfHeaders } from "../../lib/api.js";
             </button>
           </div>
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional notes"
+            placeholder="Optional notes" aria-label="Notes"
             maxLength={500}
             style={{ padding: "5px 8px", background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 5, fontSize: 11 }} />
           {err && <div style={{ color: "#fca5a5", fontSize: 11 }}>{err}</div>}

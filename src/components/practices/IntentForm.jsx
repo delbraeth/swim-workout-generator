@@ -309,6 +309,7 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
 
             <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Notes (optional)</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={500}
+              aria-label="Notes"
               placeholder="e.g. focus on stroke count, or post-race recovery"
               style={{ width: "100%", padding: "7px 9px", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, fontSize: 12, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", marginBottom: 4 }} />
 

@@ -47,7 +47,7 @@
           {editing ? (
             <>
               <input type="text" autoFocus value={draftName}
-                placeholder="Event name"
+                placeholder="Event name" aria-label="Event name"
                 maxLength={80}
                 onChange={e => setDraftName(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
@@ -57,6 +57,7 @@
                   border: "1px solid var(--color-primary)", borderRadius: 6, outline: "none",
                 }} />
               <input type="date" value={draftDate}
+                aria-label="Event date"
                 onChange={e => setDraftDate(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
                 style={{

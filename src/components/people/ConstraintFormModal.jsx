@@ -84,6 +84,7 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Constraint type</label>
               <select value={type} onChange={e => setType(e.target.value)}
+                aria-label="Constraint type"
                 style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 14 }}>
                 {PSC_TYPE_GROUPS.map(g => (
                   <optgroup key={g.label} label={g.label}>
@@ -97,7 +98,7 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
               <div style={{ marginBottom: 12 }}>
                 <label style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Yardage cap</label>
                 <input type="number" min="100" max="20000" step="100" value={valueNum}
-                  onChange={e => setValueNum(e.target.value)} placeholder="e.g. 1500"
+                  onChange={e => setValueNum(e.target.value)} placeholder="e.g. 1500" aria-label="Yardage cap"
                   style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 14 }} />
                 <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 4 }}>
                   Workouts beyond this size get trimmed from the end (preserves warmup + main when possible).

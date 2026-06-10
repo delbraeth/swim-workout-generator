@@ -69,15 +69,15 @@
           <div style={{ marginTop: 14 }}>
             <label style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Recipient email</label>
             <input type="email" value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)}
-              placeholder="treasurer@school.org" style={input} />
+              aria-label="Recipient email" placeholder="treasurer@school.org" style={input} />
 
             <label style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Organization name</label>
             <input type="text" value={organizationName} onChange={e => setOrganizationName(e.target.value)}
-              placeholder="Lincoln High School Swim Team Booster Club" style={input} />
+              aria-label="Organization name" placeholder="Lincoln High School Swim Team Booster Club" style={input} />
 
             <label style={{ display: "block", fontSize: 11, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Treasurer / contact name</label>
             <input type="text" value={treasurerName} onChange={e => setTreasurerName(e.target.value)}
-              placeholder="Jordan Smith" style={input} />
+              aria-label="Treasurer or contact name" placeholder="Jordan Smith" style={input} />
 
             <button onClick={submit} disabled={busy || !recipientEmail || !organizationName || !treasurerName}
               style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--color-primary)", background: (busy || !recipientEmail || !organizationName || !treasurerName) ? "var(--color-card)" : "var(--color-primary)", color: (busy || !recipientEmail || !organizationName || !treasurerName) ? "var(--color-text-muted)" : "#fff", fontSize: 13, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer" }}>

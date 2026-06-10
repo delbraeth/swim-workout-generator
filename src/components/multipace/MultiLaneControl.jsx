@@ -70,6 +70,7 @@ import { parsePaceMSS } from "../../lib/format.js";
                       value={row.lane_label}
                       onChange={e => updateRow(i, "lane_label", e.target.value)}
                       placeholder={`Lane ${i + 1}`}
+                      aria-label="Lane label"
                       style={{
                         fontSize: 12, padding: "4px 8px", borderRadius: 4,
                         border: "1px solid var(--color-border-strong)", background: "var(--color-bg)",
@@ -80,6 +81,8 @@ import { parsePaceMSS } from "../../lib/format.js";
                       value={row.pace}
                       onChange={e => updateRow(i, "pace", e.target.value)}
                       placeholder="M:SS"
+                      aria-label="Lane pace per 100"
+                      aria-invalid={!isValid}
                       style={{
                         fontSize: 12, fontFamily: "monospace", padding: "4px 8px", borderRadius: 4,
                         border: `1px solid ${isValid ? "var(--color-border-strong)" : "#ef4444"}`,

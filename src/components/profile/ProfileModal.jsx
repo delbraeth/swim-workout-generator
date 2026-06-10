@@ -803,11 +803,11 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                           Tag your races <strong>A / B / C</strong> by priority. The generator periodizes toward your next <strong>A-race</strong> (Base → Build → Peak → Taper) and rolls to the next A as each passes.
                         </div>
                         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-                          <input value={newRaceName} onChange={e => setNewRaceName(e.target.value)} placeholder="Race name" maxLength={80}
+                          <input value={newRaceName} onChange={e => setNewRaceName(e.target.value)} placeholder="Race name" aria-label="Race name" maxLength={80}
                             style={{ flex: "1 1 120px", minWidth: 100, padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
-                          <input type="date" value={newRaceDate} onChange={e => setNewRaceDate(e.target.value)}
+                          <input type="date" value={newRaceDate} onChange={e => setNewRaceDate(e.target.value)} aria-label="Race date"
                             style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
-                          <select value={newRacePrio} onChange={e => setNewRacePrio(e.target.value)}
+                          <select value={newRacePrio} onChange={e => setNewRacePrio(e.target.value)} aria-label="Race priority"
                             style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }}>
                             <option value="A">A</option><option value="B">B</option><option value="C">C</option>
                           </select>

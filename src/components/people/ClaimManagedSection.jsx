@@ -123,6 +123,7 @@ import { csrfHeaders } from "../../lib/api.js";
               <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                 <input value={code} onChange={e => { setCode(e.target.value); setPreview(null); setErr(null); }}
                   placeholder="Paste 10-character claim code"
+                  aria-label="Claim code"
                   onKeyDown={e => { if (e.key === "Enter") { preview ? doRedeem() : doPreview(); } }}
                   style={{ flex: 1, padding: "6px 10px", fontSize: 13, fontFamily: "monospace", letterSpacing: "0.08em", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, textTransform: "lowercase" }} />
                 {!preview && (

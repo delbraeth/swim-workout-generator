@@ -159,6 +159,7 @@ import { csrfHeaders } from "../../lib/api.js";
                 onChange={e => { setEmail(e.target.value); setMsg(null); }}
                 onKeyDown={e => { if (e.key === "Enter") submitInvite(); }}
                 placeholder="parent@example.com"
+                aria-label="Parent email"
                 disabled={busy}
                 style={{ flex: 1, minWidth: 180, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 13 }}
               />

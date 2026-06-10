@@ -9,6 +9,7 @@
     import { SignInGate } from "./components/shell/SignInGate.jsx";
     import { SharedWorkoutView } from "./components/shell/SharedWorkoutView.jsx";
     import { MixedSquadSheet } from "./components/workout/MixedSquadSheet.jsx";
+    import { useDialogA11yWhenOpen } from "./components/shell/useDialogA11y.js";
     import { TourOverlay } from "./components/shell/TourOverlay.jsx";
     import { ReportPrintView } from "./components/reports/ReportPrintView.jsx";
     const ProgressDashboard = React.lazy(() => import("./components/reports/ProgressDashboard.jsx").then(m => ({ default: m.ProgressDashboard })));
@@ -1812,6 +1813,11 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // generation deferred to the scheduled day.
       const [intentDate, setIntentDate] = useState(null);
       const [intentSaveBusy, setIntentSaveBusy] = useState(false);
+      // A11y — these two date pickers are inline .modal-overlay dialogs inside this
+      // mega-component, so they use the isOpen-aware dialog hook (focus-trap / Escape /
+      // focus-restore) keyed on their open flag rather than the mount-based variant.
+      const scheduleDlgRef = useDialogA11yWhenOpen(scheduleDate !== null && !!workout, () => setScheduleDate(null));
+      const intentDlgRef   = useDialogA11yWhenOpen(intentDate !== null, () => setIntentDate(null));
       const [showProfile, setShowProfile]         = useState(false);
       // Setforge rebrand 2026-05-20 — Coach dropdown (REBRAND_SCOPE §8.1).
       // Collapses Teams / Swimmers / Catalog into a single nav entry.
@@ -5501,6 +5507,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                   <div className="screen-only" style={{ marginBottom: 12 }}>
                     <input type="text" value={focusNoteDraft}
                       onChange={e => setFocusNoteDraft(e.target.value.slice(0, 255))}
+                      aria-label="Focus for this workout"
                       placeholder="🎯 Focus for this workout (optional) — e.g. hip rotation, strong turns…"
                       style={{
                         width: "100%", padding: "8px 12px",
@@ -5576,6 +5583,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                     value={paceInput}
                     onChange={e => handlePaceChange(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && handleApplyPace()}
+                    aria-label="100 pace (M:SS)"
                     placeholder="M:SS"
                     style={{ width: 58, fontFamily: "monospace", fontSize: 13, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }}
                   />
@@ -5991,7 +5999,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               POSTs to /api/scheduled-workouts with the current workout. */}
           {scheduleDate !== null && workout && (
             <div onClick={() => setScheduleDate(null)} className="modal-overlay" style={{ padding: 20 }}>
-              <div onClick={(e) => e.stopPropagation()} style={{
+              <div ref={scheduleDlgRef} role="dialog" aria-modal="true" aria-label="Schedule workout" onClick={(e) => e.stopPropagation()} style={{
                 background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
                 padding: 22, maxWidth: 420, width: "100%",
               }}>
@@ -6044,7 +6052,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               on the scheduled day via WeekView's ▶ Generate button. */}
           {intentDate !== null && (
             <div onClick={() => setIntentDate(null)} className="modal-overlay" style={{ padding: 20 }}>
-              <div onClick={(e) => e.stopPropagation()} style={{
+              <div ref={intentDlgRef} role="dialog" aria-modal="true" aria-label="Save as intent" onClick={(e) => e.stopPropagation()} style={{
                 background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
                 padding: 22, maxWidth: 460, width: "100%",
               }}>

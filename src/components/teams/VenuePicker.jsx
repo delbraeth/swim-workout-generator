@@ -113,22 +113,22 @@ export function VenuePicker({ value, onChange }) {
             </div>
           ) : (
             <div style={{ display: "grid", gap: 6, padding: 8, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 6 }}>
-              <input value={sName} onChange={e => setSName(e.target.value)} placeholder="Corrected name" style={inputStyle} />
+              <input value={sName} onChange={e => setSName(e.target.value)} placeholder="Corrected name" aria-label="Corrected venue name" style={inputStyle} />
               <div style={{ display: "flex", gap: 6 }}>
-                <select value={sIO} onChange={e => setSIO(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                <select value={sIO} onChange={e => setSIO(e.target.value)} aria-label="Indoor or outdoor" style={{ ...inputStyle, flex: 1 }}>
                   <option value="">Indoor/outdoor (no change)</option>
                   <option value="indoor">🏟 Indoor</option>
                   <option value="outdoor">🌤 Outdoor</option>
                   <option value="unknown">Unknown</option>
                 </select>
-                <select value={sCourse} onChange={e => setSCourse(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                <select value={sCourse} onChange={e => setSCourse(e.target.value)} aria-label="Course" style={{ ...inputStyle, flex: 1 }}>
                   <option value="">Course (no change)</option>
                   <option value="SCY">SCY</option>
                   <option value="SCM">SCM</option>
                   <option value="LCM">LCM</option>
                 </select>
               </div>
-              <input value={sNote} onChange={e => setSNote(e.target.value)} placeholder="Note for the reviewer (optional)" style={inputStyle} />
+              <input value={sNote} onChange={e => setSNote(e.target.value)} placeholder="Note for the reviewer (optional)" aria-label="Note for the reviewer" style={inputStyle} />
               <div style={{ display: "flex", gap: 6 }}>
                 <button type="button" onClick={submitSuggest} disabled={sBusy} style={{ padding: "5px 11px", fontSize: 12, background: "var(--color-primary)", color: "var(--color-bg)", border: "none", borderRadius: 5, cursor: sBusy ? "wait" : "pointer", fontWeight: 700 }}>{sBusy ? "…" : "Send for review"}</button>
                 <button type="button" onClick={() => { setSuggesting(false); setSMsg(null); }} style={{ padding: "5px 9px", fontSize: 12, background: "var(--color-border)", color: "#cbd5e1", border: "none", borderRadius: 5, cursor: "pointer" }}>Cancel</button>
@@ -145,7 +145,7 @@ export function VenuePicker({ value, onChange }) {
       ) : mode === "search" ? (
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ display: "flex", gap: 6 }}>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search venues…" onKeyDown={e => { if (e.key === "Enter") runSearch(); }} style={inputStyle} />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search venues…" aria-label="Search venues" onKeyDown={e => { if (e.key === "Enter") runSearch(); }} style={inputStyle} />
             <button type="button" onClick={runSearch} disabled={busy} style={{ padding: "5px 11px", fontSize: 12, background: "var(--color-primary)", color: "var(--color-bg)", border: "none", borderRadius: 5, cursor: "pointer", fontWeight: 700 }}>Go</button>
             <button type="button" onClick={() => { setMode("idle"); setResults(null); }} style={{ padding: "5px 9px", fontSize: 12, background: "var(--color-border)", color: "#cbd5e1", border: "none", borderRadius: 5, cursor: "pointer" }}>×</button>
           </div>
@@ -162,10 +162,10 @@ export function VenuePicker({ value, onChange }) {
         </div>
       ) : (
         <div style={{ display: "grid", gap: 6, padding: 8, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 6 }}>
-          <input value={cName} onChange={e => setCName(e.target.value)} placeholder="Venue name (e.g. Mason Rec Center)" style={inputStyle} />
-          <input value={cAddr} onChange={e => setCAddr(e.target.value)} placeholder={mapkitOn ? "Address (geocoded for weather)" : "Address"} style={inputStyle} />
+          <input value={cName} onChange={e => setCName(e.target.value)} placeholder="Venue name (e.g. Mason Rec Center)" aria-label="Venue name" style={inputStyle} />
+          <input value={cAddr} onChange={e => setCAddr(e.target.value)} placeholder={mapkitOn ? "Address (geocoded for weather)" : "Address"} aria-label="Address" style={inputStyle} />
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <select value={cIO} onChange={e => setCIO(e.target.value)} style={{ ...inputStyle, width: "auto", flex: 1 }}>
+            <select value={cIO} onChange={e => setCIO(e.target.value)} aria-label="Indoor or outdoor" style={{ ...inputStyle, width: "auto", flex: 1 }}>
               <option value="indoor">🏟 Indoor pool</option>
               <option value="outdoor">🌤 Outdoor pool (weather)</option>
               <option value="unknown">Unknown</option>

@@ -1,6 +1,7 @@
 // src/components/teams/TeamsView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
 import { csrfHeaders, fetchEventWeatherBatch } from "../../lib/api.js";
+import { useDialogA11yWhenOpen } from "../shell/useDialogA11y.js";
 import { EVENT_KINDS, eventKindEmoji } from "../../lib/eventKinds.js";
 import { GroupRow } from "../groups/GroupRow.jsx";
 import { TeamRosterTab } from "./TeamRosterTab.jsx";
@@ -38,6 +39,8 @@ import { WeatherChip } from "./WeatherChip.jsx";
       // R-J: when remove fails with primary_on_groups, hold the conflict
       // info so the UI can prompt for per-group primary transfer.
       const [removeConflict, setRemoveConflict] = React.useState(null);          // { coachSub, groups: [...] }
+      // A11y — the coach-removal-blocked modal is an inline .modal-overlay in an IIFE.
+      const removeConflictDlgRef = useDialogA11yWhenOpen(removeConflict !== null, () => { setRemoveConflict(null); setTransferPlan({}); });
       const [transferPlan,   setTransferPlan]   = React.useState({});            // { group_id: new_primary_sub }
       // Setforge rebrand 2026-05-20 — team detail tabs (REBRAND_SCOPE §8.2).
       // Members & Coaches / Groups / Events. Default = members.
@@ -578,7 +581,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
                 {editingName ? (
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flex: 1 }}>
-                    <input value={renameVal} onChange={e => setRenameVal(e.target.value)} autoFocus
+                    <input value={renameVal} onChange={e => setRenameVal(e.target.value)} autoFocus aria-label="Team name"
                       onKeyDown={e => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") { setEditingName(false); setRenameVal(detail.name); } }}
                       style={{ flex: 1, padding: "6px 10px", fontSize: 16, fontWeight: 700, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6 }} />
                     <button onClick={handleRename} style={{ padding: "5px 11px", background: "var(--color-positive)", color: "var(--color-bg)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
@@ -719,7 +722,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                       </div>
                     ) : (
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <select value={addCoachSub} onChange={e => setAddCoachSub(e.target.value)}
+                        <select value={addCoachSub} onChange={e => setAddCoachSub(e.target.value)} aria-label="Coach to add"
                           style={{ flex: 2, minWidth: 180, padding: "6px 10px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, cursor: "pointer" }}>
                           <option value="">— pick a coach —</option>
                           {candidates.map(c => (
@@ -731,7 +734,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                           ))}
                         </select>
                         {/* R-J: role on add — coach (default) or admin */}
-                        <select value={addCoachRole} onChange={e => setAddCoachRole(e.target.value)}
+                        <select value={addCoachRole} onChange={e => setAddCoachRole(e.target.value)} aria-label="Coach role"
                           style={{ padding: "6px 10px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6, cursor: "pointer" }}>
                           <option value="coach">Coach</option>
                           <option value="admin">Admin</option>
@@ -766,10 +769,10 @@ import { WeatherChip } from "./WeatherChip.jsx";
                 <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6, padding: 10, marginBottom: 10 }}>
                   <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Group name</label>
                   <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
-                    placeholder="e.g. Tuesday Sprint"
+                    placeholder="e.g. Tuesday Sprint" aria-label="Group name"
                     style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, marginBottom: 8 }} />
                   <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Default pool mode (optional)</label>
-                  <select value={newGroupPool} onChange={e => setNewGroupPool(e.target.value)}
+                  <select value={newGroupPool} onChange={e => setNewGroupPool(e.target.value)} aria-label="Default pool mode"
                     style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, marginBottom: 10 }}>
                     <option value="">— inherit / unspecified —</option>
                     <option value="25y">25 yd (SCY)</option>
@@ -821,19 +824,19 @@ import { WeatherChip } from "./WeatherChip.jsx";
                     <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Event name</label>
                       <input value={newEventName} onChange={e => setNewEventName(e.target.value)}
-                        placeholder="e.g. Cincinnati Invite"
+                        placeholder="e.g. Cincinnati Invite" aria-label="Event name"
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                     </div>
                     <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Type</label>
-                      <select value={newEventKind} onChange={e => setNewEventKind(e.target.value)}
+                      <select value={newEventKind} onChange={e => setNewEventKind(e.target.value)} aria-label="Event type"
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
                         {EVENT_KINDS.map(k => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}
                       </select>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Date</label>
-                      <input type="date" value={newEventDate} onChange={e => setNewEventDate(e.target.value)}
+                      <input type="date" value={newEventDate} onChange={e => setNewEventDate(e.target.value)} aria-label="Event date"
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                     </div>
                   </div>
@@ -841,13 +844,13 @@ import { WeatherChip } from "./WeatherChip.jsx";
                     <VenuePicker value={newEventVenue} onChange={setNewEventVenue} />
                     <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Start time (optional)</label>
-                      <input type="time" value={newEventTime} onChange={e => setNewEventTime(e.target.value)}
+                      <input type="time" value={newEventTime} onChange={e => setNewEventTime(e.target.value)} aria-label="Start time"
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                     </div>
                   </div>
                   <div style={{ marginBottom: 8 }}>
                     <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>For</label>
-                    <select value={newEventGroup} onChange={e => setNewEventGroup(e.target.value)}
+                    <select value={newEventGroup} onChange={e => setNewEventGroup(e.target.value)} aria-label="Event for group"
                       style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
                       <option value="">Whole team</option>
                       {(groups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -857,7 +860,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                     <div>
                       <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Repeat</label>
-                      <select value={newEventRepeat} onChange={e => setNewEventRepeat(e.target.value)}
+                      <select value={newEventRepeat} onChange={e => setNewEventRepeat(e.target.value)} aria-label="Repeat"
                         style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
                         <option value="none">Doesn’t repeat</option>
                         <option value="daily">Daily</option>
@@ -868,7 +871,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                     {newEventRepeat !== "none" && (
                       <div>
                         <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Occurrences (max 52)</label>
-                        <input type="number" min={1} max={52} value={newEventCount} onChange={e => setNewEventCount(e.target.value)}
+                        <input type="number" min={1} max={52} value={newEventCount} onChange={e => setNewEventCount(e.target.value)} aria-label="Occurrences"
                           style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                       </div>
                     )}
@@ -892,28 +895,28 @@ import { WeatherChip } from "./WeatherChip.jsx";
                       return (
                         <div key={ev.id} style={{ padding: "8px 10px", background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 6 }}>
                           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-                            <input value={editEventName} onChange={e => setEditEventName(e.target.value)} placeholder="Event name"
+                            <input value={editEventName} onChange={e => setEditEventName(e.target.value)} placeholder="Event name" aria-label="Event name"
                               onKeyDown={e => { if (e.key === "Enter") handleSaveEditEvent(); if (e.key === "Escape") cancelEditEvent(); }}
                               autoFocus
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
-                            <select value={editEventKind} onChange={e => setEditEventKind(e.target.value)}
+                            <select value={editEventKind} onChange={e => setEditEventKind(e.target.value)} aria-label="Event type"
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
                               {EVENT_KINDS.map(k => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}
                             </select>
-                            <input type="date" value={editEventDate} onChange={e => setEditEventDate(e.target.value)}
+                            <input type="date" value={editEventDate} onChange={e => setEditEventDate(e.target.value)} aria-label="Event date"
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8, alignItems: "start" }}>
                             <VenuePicker value={editEventVenue} onChange={setEditEventVenue} />
                             <div>
                               <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>Start time</label>
-                              <input type="time" value={editEventTime} onChange={e => setEditEventTime(e.target.value)}
+                              <input type="time" value={editEventTime} onChange={e => setEditEventTime(e.target.value)} aria-label="Start time"
                                 style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                             </div>
                           </div>
                           <div style={{ marginBottom: 8 }}>
                             <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 3 }}>For</label>
-                            <select value={editEventGroup} onChange={e => setEditEventGroup(e.target.value)}
+                            <select value={editEventGroup} onChange={e => setEditEventGroup(e.target.value)} aria-label="Event for group"
                               style={{ width: "100%", padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }}>
                               <option value="">Whole team</option>
                               {(groups || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -1020,7 +1023,10 @@ import { WeatherChip } from "./WeatherChip.jsx";
                               <div style={{ fontSize: 12, color: "var(--color-text-dim)", fontStyle: "italic" }}>This team has no active groups. Create a group first.</div>
                             ) : (
                               <>
+                                {/* Inline disclosure (not a modal) — autoFocus moves the keyboard
+                                    user onto the picker when it expands; aria-label names it. */}
                                 <select value={anchorTargetGroupId} onChange={e => setAnchorTargetGroupId(e.target.value)}
+                                  autoFocus aria-label={`Anchor group for ${ev.name}`}
                                   style={{ padding: "5px 9px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, marginRight: 8, minWidth: 200 }}>
                                   <option value="">— pick a group —</option>
                                   {anchorGroupsList.map(g => (
@@ -1078,7 +1084,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
               <h3 style={{ color: "var(--color-text)", marginTop: 0, fontSize: 14 }}>Create team</h3>
               <div style={{ marginBottom: 10 }}>
                 <label style={{ display: "block", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Name</label>
-                <input value={createName} onChange={e => setCreateName(e.target.value)} placeholder="e.g. Cincinnati Masters"
+                <input value={createName} onChange={e => setCreateName(e.target.value)} placeholder="e.g. Cincinnati Masters" aria-label="Team name"
                   style={{ width: "100%", padding: "6px 10px", fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 6 }} />
               </div>
               <div style={{ marginBottom: 12 }}>
@@ -1118,7 +1124,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
             return (
               <div onClick={() => { setRemoveConflict(null); setTransferPlan({}); }}
                 className="modal-overlay" style={{ padding: 20 }}>
-                <div onClick={(e) => e.stopPropagation()}
+                <div ref={removeConflictDlgRef} role="dialog" aria-modal="true" aria-label="Coach removal blocked — transfer primary first" onClick={(e) => e.stopPropagation()}
                   style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 22, maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
                   <div style={{ color: "var(--color-warn)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Coach removal blocked</div>
                   <div style={{ color: "var(--color-text)", fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Transfer primary first</div>
@@ -1130,6 +1136,7 @@ import { WeatherChip } from "./WeatherChip.jsx";
                       <span style={{ flex: 1, color: "var(--color-text)", fontSize: 13, fontWeight: 600 }}>{g.name}</span>
                       <select value={transferPlan[g.id] || ""}
                         onChange={(e) => setTransferPlan(prev => ({ ...prev, [g.id]: e.target.value }))}
+                        aria-label={`New primary coach for ${g.name}`}
                         style={{ flex: 1, padding: "5px 8px", fontSize: 12, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, cursor: "pointer" }}>
                         <option value="">— new primary —</option>
                         {eligible.map(c => (

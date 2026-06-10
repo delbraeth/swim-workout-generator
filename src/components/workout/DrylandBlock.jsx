@@ -49,7 +49,7 @@ import { DRYLAND_EXPLAINERS } from "../../lib/constants.js";
                     <input type="number" min="1" value={e.sets} onChange={ev => updEx(i, "sets", Number(ev.target.value) || 1)} title="sets" style={{ ...inp, width: 44 }} />
                     <span style={{ color: "#9a7b4f" }}>×</span>
                     <input value={e.reps} onChange={ev => updEx(i, "reps", ev.target.value)} placeholder="reps / hold" title="reps or hold" style={{ ...inp, width: 92 }} />
-                    <input value={e.name} onChange={ev => updEx(i, "name", ev.target.value)} placeholder="exercise" style={{ ...inp, flex: 1, minWidth: 120 }} />
+                    <input value={e.name} onChange={ev => updEx(i, "name", ev.target.value)} placeholder="exercise" aria-label="Exercise name" style={{ ...inp, flex: 1, minWidth: 120 }} />
                     <input value={e.rest || ""} onChange={ev => updEx(i, "rest", ev.target.value || null)} placeholder="rest" title="rest (optional)" style={{ ...inp, width: 64 }} />
                     <button onClick={() => rmEx(i)} title="Remove exercise" style={{ background: "transparent", border: "none", color: "#a3702c", cursor: "pointer", fontSize: 14 }}>✕</button>
                   </div>

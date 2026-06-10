@@ -57,11 +57,11 @@ import { csrfHeaders } from "../../lib/api.js";
           <div className="card" style={{ borderRadius: 8, padding: 12, marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Create invite</div>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr auto", gap: 8, alignItems: "center" }}>
-              <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (e.g., for Sarah)"
+              <input value={note} onChange={e => setNote(e.target.value)} aria-label="Invite note" placeholder="Note (e.g., for Sarah)"
                 style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 4, color: "var(--color-text)", padding: "6px 8px", fontSize: 12 }} />
-              <input type="number" value={maxUses} onChange={e => setMaxUses(e.target.value)} min={1} max={100} placeholder="Max uses"
+              <input type="number" value={maxUses} onChange={e => setMaxUses(e.target.value)} min={1} max={100} aria-label="Max uses" placeholder="Max uses"
                 style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 4, color: "var(--color-text)", padding: "6px 8px", fontSize: 12 }} />
-              <input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
+              <input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} aria-label="Expiry date"
                 style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 4, color: "var(--color-text)", padding: "6px 8px", fontSize: 12 }} />
               <button onClick={create} style={{ background: "var(--color-primary)", color: "var(--color-bg)", border: "none", borderRadius: 4, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Create</button>
             </div>

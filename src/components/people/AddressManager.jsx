@@ -69,11 +69,11 @@ import { API_BASE, csrfHeaders } from "../../lib/api.js";
           )}
           {data.can_write && (adding ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
-              <input value={form.line1} onChange={e => upd("line1", e.target.value)} placeholder="Street address" maxLength={160} style={inputStyle} />
+              <input value={form.line1} onChange={e => upd("line1", e.target.value)} placeholder="Street address" aria-label="Street address" maxLength={160} style={inputStyle} />
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <input value={form.city} onChange={e => upd("city", e.target.value)} placeholder="City" maxLength={80} style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
-                <input value={form.region} onChange={e => upd("region", e.target.value)} placeholder="State" maxLength={80} style={{ ...inputStyle, width: 70 }} />
-                <input value={form.postal_code} onChange={e => upd("postal_code", e.target.value)} placeholder="ZIP" maxLength={20} style={{ ...inputStyle, width: 80 }} />
+                <input value={form.city} onChange={e => upd("city", e.target.value)} placeholder="City" aria-label="City" maxLength={80} style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
+                <input value={form.region} onChange={e => upd("region", e.target.value)} placeholder="State" aria-label="State" maxLength={80} style={{ ...inputStyle, width: 70 }} />
+                <input value={form.postal_code} onChange={e => upd("postal_code", e.target.value)} placeholder="ZIP" aria-label="ZIP" maxLength={20} style={{ ...inputStyle, width: 80 }} />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={add} disabled={busy} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "var(--color-primary)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{busy ? "Saving…" : "Save address"}</button>

@@ -8,6 +8,7 @@ import { generateWorkout, WORKOUT_TYPES } from "../../lib/engine.js";
 import { IntentForm } from "./IntentForm.jsx";
 import { IntentPreviewOverlay } from "./IntentPreviewOverlay.jsx";
 import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
+import { useDialogA11yWhenOpen } from "../shell/useDialogA11y.js";
 
     const { useState, useCallback, useMemo, useEffect } = React;
 
@@ -45,6 +46,9 @@ import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
       const [list,      setList]      = React.useState(null);
       const [err,       setErr]       = React.useState(null);
       const [copyTarget, setCopyTarget] = React.useState(null); // { sw, date }
+      // A11y — the copy-week picker is an inline .modal-overlay rendered in an IIFE, so
+      // it uses the isOpen-aware dialog hook (focus-trap / Escape / focus-restore).
+      const copyDlgRef = useDialogA11yWhenOpen(copyTarget !== null, () => setCopyTarget(null));
       // Phase 2a — intent form + preview state.
       const [intentForm, setIntentForm] = React.useState(null);  // { date, intent, editingId } | null
       const [intentPreview, setIntentPreview] = React.useState(null); // { sw, workout } | null
@@ -376,7 +380,7 @@ import { MarkPracticeDoneModal } from "./MarkPracticeDoneModal.jsx";
             })();
             return (
               <div onClick={() => setCopyTarget(null)} className="modal-overlay" style={{ padding: 20 }}>
-                <div onClick={(e) => e.stopPropagation()} style={{
+                <div ref={copyDlgRef} role="dialog" aria-modal="true" aria-label="Copy workout to another day" onClick={(e) => e.stopPropagation()} style={{
                   background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 12,
                   padding: 22, maxWidth: 420, width: "100%",
                 }}>

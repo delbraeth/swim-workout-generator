@@ -89,6 +89,7 @@ import { useDialogA11y } from "./useDialogA11y.js";
                 <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Subject</label>
                 <input value={subject} maxLength={255}
                   onChange={e => setSubject(e.target.value)}
+                  aria-label="Subject"
                   placeholder="One-line summary"
                   style={{
                     width: "100%", boxSizing: "border-box",
@@ -100,6 +101,7 @@ import { useDialogA11y } from "./useDialogA11y.js";
                 <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Details</label>
                 <textarea value={body} rows={6} maxLength={10000}
                   onChange={e => setBody(e.target.value)}
+                  aria-label="Feedback details"
                   placeholder="What happened? What did you expect? Steps to reproduce if it's a bug."
                   style={{
                     width: "100%", boxSizing: "border-box",

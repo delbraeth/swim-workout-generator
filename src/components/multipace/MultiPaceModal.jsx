@@ -102,7 +102,7 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
             {source === "plan" && lanePlansForTarget && lanePlansForTarget.length > 0 && (
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 11, color: "var(--color-text-muted)", display: "block", marginBottom: 5 }}>Plan</label>
-                <select value={planId || ""} onChange={(e) => setPlanId(Number(e.target.value) || null)}
+                <select value={planId || ""} onChange={(e) => setPlanId(Number(e.target.value) || null)} aria-label="Lane plan"
                   style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 13 }}>
                   {lanePlansForTarget.map(p => (
                     <option key={p.id} value={p.id}>{p.name}{p.is_default ? " (default)" : ""}</option>
@@ -138,9 +138,11 @@ import { useDialogA11y } from "../shell/useDialogA11y.js";
                     <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                       <input value={row.lane_label} onChange={(e) => updateManual(i, "lane_label", e.target.value)}
                         placeholder={`Lane ${i + 1}`}
+                        aria-label="Lane label"
                         style={{ flex: 2, padding: "7px 9px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 13 }} />
                       <input value={row.pace} onChange={(e) => updateManual(i, "pace", e.target.value)}
                         placeholder="1:30"
+                        aria-label="Lane pace per 100"
                         style={{ flex: 1, padding: "7px 9px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 13, fontFamily: "ui-monospace, SFMono-Regular, monospace" }} />
                       <button onClick={() => removeManual(i)} disabled={manual.length <= 1}
                         title="Remove lane"

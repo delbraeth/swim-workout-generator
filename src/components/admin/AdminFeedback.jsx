@@ -126,6 +126,7 @@ import { csrfHeaders } from "../../lib/api.js";
                         rows={2}
                         value={noteVal(f.id)}
                         onChange={e => setNoteDrafts(d => ({ ...d, [f.id]: e.target.value }))}
+                        aria-label="Admin note"
                         placeholder="Admin note (internal)…"
                         style={{
                           flex: 1, padding: "6px 8px", fontSize: 12,

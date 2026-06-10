@@ -136,6 +136,7 @@ import { API_BASE } from "../../lib/api.js";
                         <td colSpan={8} style={{ padding: "8px 16px", background: "rgba(239,68,68,0.06)" }}>
                           <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-muted)", display: "block", marginBottom: 4 }}>Rejection reason (shown to author)</label>
                           <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={2}
+                            aria-label="Rejection reason"
                             placeholder="e.g. Intervals don't match the stroke / set is mis-categorized / etc."
                             style={{ width: "100%", padding: 6, border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 13, background: "var(--color-bg)", color: "var(--color-text)" }} />
                           <div style={{ marginTop: 6, display: "flex", gap: 8, justifyContent: "flex-end" }}>

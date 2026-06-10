@@ -110,6 +110,7 @@ import { DOB_MAX_TODAY, DOB_MIN } from "../../lib/constants.js";
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <input type="date" value={dobDraft} onChange={e => setDobDraft(e.target.value)}
+                  aria-label="Date of birth"
                   min={DOB_MIN} max={DOB_MAX_TODAY()}
                   style={{ flex: 1, padding: "6px 10px", fontSize: 13, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5 }} />
                 <button onClick={submitDob} disabled={busy || !dobDraft}
@@ -122,7 +123,7 @@ import { DOB_MAX_TODAY, DOB_MIN } from "../../lib/constants.js";
             <>
               <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                 <input value={code} onChange={e => { setCode(e.target.value); setPreview(null); setErr(null); }}
-                  placeholder="Paste 10-character code"
+                  placeholder="Paste 10-character code" aria-label="Join code"
                   onKeyDown={e => { if (e.key === "Enter") { preview ? doRedeem() : doPreview(); } }}
                   style={{ flex: 1, padding: "6px 10px", fontSize: 13, fontFamily: "monospace", letterSpacing: "0.08em", background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 5, textTransform: "lowercase" }} />
                 {!preview && (

@@ -134,6 +134,7 @@ import { LESSON_MIN, LESSON_MAX } from "../../lib/engine.js";
               if (boundKey && editingBound === boundKey) {
                 return (
                   <input key={v} type="number" value={boundDraft} autoFocus
+                    aria-label={boundKey === "min" ? "Minimum yardage" : "Maximum yardage"}
                     onChange={e => setBoundDraft(e.target.value)}
                     onBlur={() => commitBound(boundKey, boundDraft)}
                     onKeyDown={e => { if (e.key === "Enter") commitBound(boundKey, boundDraft); if (e.key === "Escape") { setEditingBound(null); setBoundDraft(""); } }}

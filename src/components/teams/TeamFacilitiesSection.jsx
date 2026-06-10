@@ -93,21 +93,21 @@ import { FacilityMap } from "./FacilityMap.jsx";
       // Shared field inputs for both the add form and the inline edit form.
       const facilityFields = (f, updFn) => (
         <React.Fragment>
-          <input value={f.name} onChange={e => updFn("name", e.target.value)} placeholder="Facility name (e.g. Lincoln HS Natatorium)" maxLength={120} style={inputStyle} />
+          <input value={f.name} onChange={e => updFn("name", e.target.value)} placeholder="Facility name (e.g. Lincoln HS Natatorium)" aria-label="Facility name" maxLength={120} style={inputStyle} />
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <select value={f.course} onChange={e => updFn("course", e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+            <select value={f.course} onChange={e => updFn("course", e.target.value)} aria-label="Course" style={{ ...inputStyle, flex: 1 }}>
               {FACILITY_COURSES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
             </select>
-            <input value={f.lanes} onChange={e => updFn("lanes", e.target.value.replace(/\D/g, "").slice(0, 3))} placeholder="Lanes" inputMode="numeric" style={{ ...inputStyle, width: 80 }} />
+            <input value={f.lanes} onChange={e => updFn("lanes", e.target.value.replace(/\D/g, "").slice(0, 3))} placeholder="Lanes" aria-label="Lanes" inputMode="numeric" style={{ ...inputStyle, width: 80 }} />
             <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--color-text-dim)" }}>
               <input type="checkbox" checked={f.is_primary} onChange={e => updFn("is_primary", e.target.checked)} /> Primary
             </label>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <input value={f.line1} onChange={e => updFn("line1", e.target.value)} placeholder="Address (optional)" maxLength={160} style={{ ...inputStyle, flex: 2, minWidth: 160 }} />
-            <input value={f.city} onChange={e => updFn("city", e.target.value)} placeholder="City" maxLength={80} style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
-            <input value={f.region} onChange={e => updFn("region", e.target.value)} placeholder="State" maxLength={80} style={{ ...inputStyle, width: 70 }} />
-            <input value={f.postal_code} onChange={e => updFn("postal_code", e.target.value)} placeholder="ZIP" maxLength={20} style={{ ...inputStyle, width: 80 }} />
+            <input value={f.line1} onChange={e => updFn("line1", e.target.value)} placeholder="Address (optional)" aria-label="Address" maxLength={160} style={{ ...inputStyle, flex: 2, minWidth: 160 }} />
+            <input value={f.city} onChange={e => updFn("city", e.target.value)} placeholder="City" aria-label="City" maxLength={80} style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
+            <input value={f.region} onChange={e => updFn("region", e.target.value)} placeholder="State" aria-label="State" maxLength={80} style={{ ...inputStyle, width: 70 }} />
+            <input value={f.postal_code} onChange={e => updFn("postal_code", e.target.value)} placeholder="ZIP" aria-label="ZIP" maxLength={20} style={{ ...inputStyle, width: 80 }} />
           </div>
         </React.Fragment>
       );

@@ -53,7 +53,7 @@
               30-min read-only session. Audit-logged. The user will NOT be notified.
             </div>
             <input type="text" value={query} onChange={e => { setQuery(e.target.value); setPicked(null); }}
-              autoFocus placeholder="Search by email, name, initials, or sub…"
+              autoFocus aria-label="Search users" placeholder="Search by email, name, initials, or sub…"
               style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-border-strong)", background: "var(--color-card)", color: "var(--color-text)", fontSize: 13, marginBottom: 12 }} />
             {users === null ? (
               <div style={{ color: "var(--color-text-dim)", fontSize: 12 }}>Loading users…</div>

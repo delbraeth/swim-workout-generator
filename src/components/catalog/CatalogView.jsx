@@ -196,6 +196,7 @@ import { FeedbackModal } from "../shell/FeedbackModal.jsx";
               type="text" value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => { if (e.key === "Escape") setSearchQuery(""); }}
+              aria-label="Search catalog"
               placeholder="e.g. CSS, IM, sprint…"
               style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-border)",
                        background: "var(--color-bg)", color: "var(--color-text)", fontSize: 12, width: 220 }}

@@ -76,9 +76,9 @@
             <button onClick={allOff} style={{ fontSize: 10, padding: "4px 8px", background: "transparent", border: "1px solid var(--color-border)", borderRadius: 4, color: "var(--color-text-dim)", cursor: "pointer" }}>none</button>
           </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
-            <input value={filterType} onChange={e => setFilterType(e.target.value)} placeholder="exact event_type (overrides chips, e.g. auth.login.success)"
+            <input value={filterType} onChange={e => setFilterType(e.target.value)} aria-label="Filter by event type" placeholder="exact event_type (overrides chips, e.g. auth.login.success)"
               style={{ flex: 1, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 4, color: "var(--color-text)", padding: "6px 8px", fontSize: 12 }} />
-            <input value={filterUser} onChange={e => setFilterUser(e.target.value)} placeholder="user_sub (full Apple sub)"
+            <input value={filterUser} onChange={e => setFilterUser(e.target.value)} aria-label="Filter by user sub" placeholder="user_sub (full Apple sub)"
               style={{ flex: 2, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 4, color: "var(--color-text)", padding: "6px 8px", fontSize: 12 }} />
             <button onClick={() => { setFilterType(""); setFilterUser(""); allOn(); }} style={{ fontSize: 12, padding: "6px 10px", background: "var(--color-border)", border: "none", borderRadius: 4, color: "#cbd5e1", cursor: "pointer" }}>
               Reset

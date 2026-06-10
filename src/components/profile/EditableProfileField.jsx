@@ -34,6 +34,7 @@
                 type={type}
                 value={draft}
                 autoFocus
+                aria-label={label}
                 maxLength={maxLength}
                 placeholder={placeholder}
                 onChange={e => setDraft(e.target.value)}

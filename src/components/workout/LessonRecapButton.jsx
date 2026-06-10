@@ -52,6 +52,7 @@ import { csrfHeaders } from "../../lib/api.js";
               </div>
               <textarea value={note} onChange={e => setNote(e.target.value)}
                 placeholder="Optional note to the parent (e.g. what went well, what to practice)…"
+                aria-label="Note to the parent"
                 rows={3} maxLength={1000}
                 style={{ width: "100%", boxSizing: "border-box", fontSize: 13, padding: "8px 10px", borderRadius: 6,
                   border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)",

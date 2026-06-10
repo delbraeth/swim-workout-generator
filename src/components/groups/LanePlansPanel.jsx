@@ -150,7 +150,7 @@ import { csrfHeaders } from "../../lib/api.js";
           {editingId && draft && (
             <div style={{ padding: 10, background: "var(--color-bg)", border: "1px solid var(--color-warn)", borderRadius: 5, marginBottom: 6 }}>
               <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-                <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder="Plan name (e.g. Tuesday config)"
+                <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder="Plan name (e.g. Tuesday config)" aria-label="Plan name"
                   style={{ flex: 1, padding: "5px 9px", fontSize: 12, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 4 }} />
                 <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#cbd5e1", cursor: "pointer" }}>
                   <input type="checkbox" checked={!!draft.is_default} onChange={e => setDraft(d => ({ ...d, is_default: e.target.checked }))} />
@@ -161,9 +161,9 @@ import { csrfHeaders } from "../../lib/api.js";
                 <div key={lIdx} className="card" style={{ padding: 8, borderRadius: 4, marginBottom: 6 }}>
                   <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                     <span style={{ fontSize: 10, color: "var(--color-text-dim)", padding: "5px 0" }}>#{lane.idx + 1}</span>
-                    <input value={lane.label} onChange={e => updateDraftLane(lIdx, { label: e.target.value })} placeholder="Lane label" maxLength={40}
+                    <input value={lane.label} onChange={e => updateDraftLane(lIdx, { label: e.target.value })} placeholder="Lane label" aria-label="Lane label" maxLength={40}
                       style={{ flex: 1, padding: "4px 8px", fontSize: 11, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 3 }} />
-                    <input value={lane.target_pace_100 || ""} onChange={e => updateDraftLane(lIdx, { target_pace_100: e.target.value })} placeholder="pace e.g. 2:00" maxLength={8}
+                    <input value={lane.target_pace_100 || ""} onChange={e => updateDraftLane(lIdx, { target_pace_100: e.target.value })} placeholder="pace e.g. 2:00" aria-label="Lane pace per 100" maxLength={8}
                       style={{ width: 80, padding: "4px 8px", fontSize: 11, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 3 }} />
                     <button onClick={() => removeLane(lIdx)} title="Remove lane"
                       style={{ padding: "3px 8px", background: "transparent", color: "var(--color-destructive-text)", border: "1px solid #ef4444", borderRadius: 3, fontSize: 10, cursor: "pointer" }}>×</button>
@@ -177,7 +177,7 @@ import { csrfHeaders } from "../../lib/api.js";
                     ))}
                     {lane.members.length === 0 && <span style={{ fontSize: 10, color: "var(--color-text-dim)", fontStyle: "italic" }}>No swimmers yet</span>}
                   </div>
-                  <select value="" onChange={e => { addMemberToLane(lIdx, e.target.value); e.target.value = ""; }}
+                  <select value="" onChange={e => { addMemberToLane(lIdx, e.target.value); e.target.value = ""; }} aria-label="Add swimmer to this lane"
                     style={{ width: "100%", padding: "4px 8px", fontSize: 11, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-border-strong)", borderRadius: 3 }}>
                     <option value="">+ Add swimmer to this lane</option>
                     {memberOptions.map(m => (
