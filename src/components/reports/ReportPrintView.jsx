@@ -126,7 +126,9 @@ import { setIdToName } from "../../lib/format.js";
         return <div>Export not available for this report.</div>;
       };
 
-      return (
+      // Portal to <body> so the `body.reports-print-active > *:not(.reports-print-overlay)`
+      // print rule can isolate it — rendered inside #root, that rule blanked the print.
+      return ReactDOM.createPortal(
         <div className="reports-print-overlay" style={pageStyle}>
           <button className="screen-only" onClick={onClose}
             style={{ position: "absolute", top: 12, right: 14, padding: "6px 12px", borderRadius: 6, border: "1px solid #888", background: "#f5f5f5", color: "#000", fontSize: 12, fontWeight: 700, cursor: "pointer", zIndex: 10001 }}>
@@ -140,6 +142,7 @@ import { setIdToName } from "../../lib/format.js";
           <div style={{ marginTop: 24, paddingTop: 8, borderTop: "1pt solid #888", fontSize: "9pt", color: "#666", textAlign: "center" }}>
             © 2026 Competition Aquatics, LLC · setforge.io
           </div>
-        </div>
+        </div>,
+        document.body
       );
     }

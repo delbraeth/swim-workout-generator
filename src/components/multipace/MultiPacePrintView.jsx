@@ -27,7 +27,10 @@ import { computeSubstitutionsForSwimmer, rescaleBlocksForPace } from "../../lib/
       if (mode === "matrix") {
         // Matrix: one row per set across all blocks, N columns for the
         // per-lane interval. Block headers separate the sections.
-        return (
+        // Portal to <body> so the print-CSS rule `body.multipace-active >
+        // *:not(.multipace-overlay)` can actually isolate it — rendered inside
+        // #root, that rule display:none'd #root and blanked the print.
+        return ReactDOM.createPortal(
           <div className="multipace-overlay" style={{ position: "fixed", inset: 0, zIndex: 10000, background: "#fff", color: "#000", padding: "0.5in", overflow: "auto" }}>
             <button className="screen-only" onClick={onClose}
               style={{ position: "absolute", top: 12, right: 14, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 12, fontWeight: 700, cursor: "pointer", zIndex: 10001 }}>
@@ -90,12 +93,13 @@ import { computeSubstitutionsForSwimmer, rescaleBlocksForPace } from "../../lib/
                 </tbody>
               </table>
             </div>
-          </div>
+          </div>,
+          document.body
         );
       }
 
       // Per-lane mode: one page per lane.
-      return (
+      return ReactDOM.createPortal(
         <div className="multipace-overlay" style={{ position: "fixed", inset: 0, zIndex: 10000, background: "#fff", color: "#000", overflow: "auto" }}>
           <button className="screen-only" onClick={onClose}
             style={{ position: "fixed", top: 12, right: 14, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 12, fontWeight: 700, cursor: "pointer", zIndex: 10001 }}>
@@ -206,6 +210,7 @@ import { computeSubstitutionsForSwimmer, rescaleBlocksForPace } from "../../lib/
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body
       );
     }
