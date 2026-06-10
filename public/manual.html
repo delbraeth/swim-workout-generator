@@ -307,6 +307,15 @@
     <a href="#account">Profile (Account / Curation / Subscription)</a>
     <a href="#notifications">🔔 Browser notifications</a>
     <a href="#compliance">🛡 Compliance credentials (coaches)</a>
+
+    <div class="nav-section">Triathlete</div>
+    <a href="#triathlete">🔱 Triathlete Mode</a>
+    <a href="#tri-css">CSS &amp; pacing</a>
+    <a href="#tri-periodization">Race calendar &amp; periodization</a>
+    <a href="#tri-export">TrainingPeaks export</a>
+    <a href="#tri-mixed-squad">Coach: mixed squads</a>
+
+    <div class="nav-section">Coach &amp; Admin</div>
     <a href="#admin">Admin (admins only)</a>
     <a href="#teams">Teams (coaches)</a>
     <a href="#swimmers">Managed Swimmers (coaches)</a>
@@ -1435,6 +1444,65 @@ MAIN SET — DISTANCE 100S REPEAT UNIT  (1,200 yds)  ×3 rounds, 30s rest betwee
 
       <h4>Cancellation + refunds</h4>
       <p>Cancel anytime from <strong>Manage subscription</strong> → Customer Portal. Cancellation takes effect at the end of the current billing period (you keep coach access until then). For the refund policy on partial periods, see <a href="/terms.html#subscriptions-and-billing">Terms § Subscriptions and billing</a>.</p>
+    </section>
+
+    <!-- ══ TRIATHLETE ══ -->
+    <section id="triathlete">
+      <h2>🔱 Triathlete Mode</h2>
+      <p>If you train for triathlons, turn on <strong>👤 Profile → Account → “I’m a triathlete”</strong>. The flag reshapes the whole app around the swim leg of a triathlon — freestyle-focused, open-water-aware, and paced off your CSS instead of pool PRs. It’s purely your own setting; flip it off anytime and everything returns to the standard pool view.</p>
+      <table>
+        <thead><tr><th>With Triathlete Mode on…</th></tr></thead>
+        <tbody>
+          <tr><td>The workout-type picker hides the stroke-specialty types (back / breast / fly / IM) and the Lesson type — it’s a freestyle sport.</td></tr>
+          <tr><td>Race events show the <strong>triathlon swim legs</strong> (Sprint 750&nbsp;m, Olympic 1.5&nbsp;K, 70.3 1.9&nbsp;K, Ironman 3.8&nbsp;K) instead of pool stroke events.</td></tr>
+          <tr><td>Generated workouts draw from a dedicated <strong>tri set library</strong> — open-water sighting, CSS pyramids, broken race-distance, drafting/pack-start — instead of stroke variety.</td></tr>
+          <tr><td>Your send-offs are paced off your <strong>CSS</strong> (see below), and a 🔱 TrainingPeaks export button appears on every workout.</td></tr>
+        </tbody>
+      </table>
+      <p>In a metres pool the tri sets are authored metric-native (clean 100/200/300&nbsp;m), so nothing looks auto-converted.</p>
+
+      <h3 id="tri-css">Critical Swim Speed (CSS) &amp; pacing</h3>
+      <p>CSS is the triathlete’s pace anchor — your sustainable threshold pace per 100, the swim equivalent of your bike/run FTP. Set it in <strong>Profile → Account → 🔱 Triathlete → Critical Swim Speed</strong> from a <strong>400 + 200 time trial</strong> (best effort, full recovery between):</p>
+      <div class="callout tip">
+        <div class="callout-icon">🧮</div>
+        <div class="callout-body"><strong>CSS&nbsp;/&nbsp;100 = (400&nbsp;time − 200&nbsp;time) ÷ 2.</strong> Enter both trial times and the app computes it. Tap <strong>“Use as my generator pace”</strong> to make CSS your base pace for every generate.</div>
+      </div>
+      <p>Once CSS drives your pace, each set targets a <strong>CSS-relative zone</strong> rather than one flat pace — so easy work is genuinely easy and threshold work sits right at CSS:</p>
+      <table>
+        <thead><tr><th>Zone</th><th>Target (per 100)</th></tr></thead>
+        <tbody>
+          <tr><td>Recovery / easy</td><td>CSS&nbsp;+&nbsp;9&nbsp;s</td></tr>
+          <tr><td>Aerobic</td><td>CSS&nbsp;+&nbsp;4&nbsp;s</td></tr>
+          <tr><td>Threshold</td><td>≈ CSS</td></tr>
+          <tr><td>VO2</td><td>CSS&nbsp;−&nbsp;2&nbsp;s</td></tr>
+          <tr><td>Over / sprint</td><td>CSS&nbsp;−&nbsp;4&nbsp;s</td></tr>
+        </tbody>
+      </table>
+      <p>Re-test your CSS every few weeks and update it as you get fitter.</p>
+
+      <h3 id="tri-periodization">Race calendar &amp; auto-periodization</h3>
+      <p>In the 🔱 Triathlete section, build a <strong>race calendar</strong> — add each race with a name, date, and an <strong>A / B / C</strong> priority. The generator periodizes automatically toward your next <strong>A-race</strong>, shifting the <a href="#training-phase">training phase</a> as it approaches:</p>
+      <table>
+        <thead><tr><th>Weeks to your A-race</th><th>Phase</th></tr></thead>
+        <tbody>
+          <tr><td>More than ~12 weeks</td><td>🌱 Base</td></tr>
+          <tr><td>~5–12 weeks</td><td>🔨 Build</td></tr>
+          <tr><td>~2–5 weeks</td><td>⛰️ Peak</td></tr>
+          <tr><td>Race week (≤ 2 weeks)</td><td>📉 Taper</td></tr>
+        </tbody>
+      </table>
+      <p>As each A-race passes, the plan rolls to the next one. A manually-picked training phase still overrides the auto-derived one. The Profile panel shows a live “Periodizing toward <em>&lt;race&gt;</em> · N wk out · phase” readout.</p>
+
+      <h3 id="tri-export">Export to TrainingPeaks</h3>
+      <p>On any generated workout, the <strong>🔱 TrainingPeaks</strong> button copies a TP-ready version to your clipboard: the planned <strong>distance (in metres) and duration</strong> for TP’s planned fields, plus a clean structured body. Paste it into a TrainingPeaks swim workout’s description and set the planned distance/duration from the header — SetForge authors your swim leg, TrainingPeaks holds your multi-sport plan.</p>
+
+      <h3 id="tri-mixed-squad">Coach: mixed squads</h3>
+      <p>Coaching a lane that mixes triathletes and pool swimmers? When you assign a practice to a group, each swimmer who has their own triathlete flag on <strong>automatically sees a freestyle version</strong> of the set in <a href="#run-mode">Assigned to me</a> — strokes swapped to free, on the <strong>same send-offs and structure</strong> as the rest of the lane, so nobody desyncs at the wall. You author one practice; pool swimmers get it as written.</p>
+      <ul>
+        <li>Generating for a group shows a <strong>🔱 Mixed-squad view</strong> toggle — a two-column <em>pool | triathlete</em> lane sheet (same clock, two answer keys) to read from the deck.</li>
+        <li>Triathletes in a group carry a <strong>🔱 tri badge</strong> in the roster so you can see who gets the variant.</li>
+        <li>A swimmer’s lane pace still sets their send-off; the tri variant only swaps the <em>content</em> (stroke → freestyle), never the timing.</li>
+      </ul>
     </section>
 
     <!-- ══ ADMIN ══ -->
