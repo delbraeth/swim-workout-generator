@@ -2,7 +2,7 @@
 // Swimmer-facing RSVP: upcoming team events with a going/maybe/out control.
 // Reads /api/events/upcoming (carries my_rsvp + status), writes PUT /api/rsvp.
 // Cancelled events show struck-through + CANCELLED and freeze RSVP. React global.
-import { csrfHeaders } from "../../lib/api.js";
+import { csrfHeaders, fetchEventWeatherBatch } from "../../lib/api.js";
 import { eventKindEmoji } from "../../lib/eventKinds.js";
 import { WeatherChip } from "../teams/WeatherChip.jsx";
 
@@ -26,13 +26,10 @@ export function RsvpEventsPanel() {
       const evs = r.ok ? await r.json() : [];
       setEvents(evs);
       // Batch the forecast for all outdoor events in ONE call (vs one fetch per chip).
+      // fetchEventWeatherBatch carries a retry — in batched mode a failed call used to
+      // silently blank EVERY chip (the per-chip fallback is dead by design).
       const outdoor = evs.filter(e => e.status !== "cancelled" && e.venue && e.venue.indoor_outdoor === "outdoor").map(e => e.id);
-      if (outdoor.length) {
-        try {
-          const wr = await fetch(`/api/events/weather?ids=${outdoor.map(encodeURIComponent).join(",")}`, { cache: "no-store" });
-          if (wr.ok) setWxMap(await wr.json());
-        } catch (_) {}
-      }
+      if (outdoor.length) setWxMap(await fetchEventWeatherBatch(outdoor));
     } catch (_) { setEvents([]); }
     try { const r = await fetch("/api/me/practices/upcoming", { cache: "no-store" }); setPractices(r.ok ? await r.json() : []); }
     catch (_) { setPractices([]); }

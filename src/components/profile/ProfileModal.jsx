@@ -466,11 +466,15 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
       };
 
       const [myShares, setMyShares] = React.useState(null);
+      // Lazy: shares render only in the Account tab — don't spend a request (30/min
+      // platform cap) on every modal open for a list most users have empty. Fetch
+      // once, the first time the Account tab is actually shown.
       React.useEffect(() => {
+        if (tab !== "account" || myShares !== null) return;
         let off = false;
         fetch("/api/me/shares", { cache: "no-store" }).then(r => r.ok ? r.json() : []).then(j => { if (!off) setMyShares(Array.isArray(j) ? j : []); }).catch(() => { if (!off) setMyShares([]); });
         return () => { off = true; };
-      }, []);
+      }, [tab, myShares]);
       const revokeShare = async (id) => {
         try { const res = await fetch(`/api/share/${encodeURIComponent(id)}`, { method: "DELETE", headers: csrfHeaders() }); if (res.ok) setMyShares(s => (s || []).filter(x => x.id !== id)); } catch (_) {}
       };
@@ -733,7 +737,10 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                 </div>
                 )}
 
-                {tab === "account" && !triathlete && (
+                {/* NOT gated on the triathlete flag: the profile's factors keep shaping the
+                    rest floor (warmup/drill stroke sets) for triathletes too — hiding an
+                    ACTIVE control left them unable to view or change it (code review fix). */}
+                {tab === "account" && (
                 <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
                     🏊 Pace profile

@@ -1,6 +1,6 @@
 // src/components/teams/TeamsView.jsx — extracted from src/app.jsx (SPA-split Phase 3).
 // React is a runtime global. Shared helpers/components imported below (freevars-driven).
-import { csrfHeaders } from "../../lib/api.js";
+import { csrfHeaders, fetchEventWeatherBatch } from "../../lib/api.js";
 import { EVENT_KINDS, eventKindEmoji } from "../../lib/eventKinds.js";
 import { GroupRow } from "../groups/GroupRow.jsx";
 import { TeamRosterTab } from "./TeamRosterTab.jsx";
@@ -156,13 +156,11 @@ import { WeatherChip } from "./WeatherChip.jsx";
       }, []);
       // Batch the forecast for all outdoor events in ONE call (vs one fetch per
       // WeatherChip on the events list). 429-avoidance (rate-limit review 2026-06-08).
+      // fetchEventWeatherBatch retries once — a failed batch used to blank every chip.
       const loadEventWx = React.useCallback(async (evs) => {
         const outdoor = (evs || []).filter(e => e.status !== "cancelled" && e.venue && e.venue.indoor_outdoor === "outdoor").map(e => e.id);
         if (!outdoor.length) { setEventWx({}); return; }
-        try {
-          const wr = await fetch(`/api/events/weather?ids=${outdoor.map(encodeURIComponent).join(",")}`, { cache: "no-store" });
-          if (wr.ok) setEventWx(await wr.json());
-        } catch (_) {}
+        setEventWx(await fetchEventWeatherBatch(outdoor));
       }, []);
       const loadEvents = React.useCallback(async (teamId) => {
         if (!teamId) { setEvents(null); return; }

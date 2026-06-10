@@ -2201,6 +2201,17 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
           .catch(() => null);
       }, []);
 
+      // Debounced variant for save BURSTS (ProfileModal fires one onProfileChange per
+      // toggle/save — a tri setup session is ~6 saves). Coalesce to ONE bootstrap GET
+      // 1.5s after the last save: the modal is optimistic so the UI is already right,
+      // and the 30 req/min platform cap makes per-save composite refetches the exact
+      // dup-fetch pattern behind the 2026-06 429 cascade.
+      const _bootstrapDebounceRef = React.useRef(null);
+      const refreshBootstrapDebounced = useCallback(() => {
+        clearTimeout(_bootstrapDebounceRef.current);
+        _bootstrapDebounceRef.current = setTimeout(() => { refreshBootstrap(); }, 1500);
+      }, [refreshBootstrap]);
+
       useEffect(() => {
         if (!authenticated) return;
         let cancelled = false;
@@ -5859,11 +5870,11 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
                 refreshBootstrap();
               }}
               onProfileChange={() => {
-                // Burst mitigation — was 8 parallel GETs (me, settings,
-                // disfavorites, disfavor-sets, effective-disfavorites,
-                // favorites, favorite-sets, effective-favorites). Replaced
-                // with a single bootstrap re-fetch which covers all of them.
-                refreshBootstrap();
+                // Burst mitigation, round 2 — was 8 parallel GETs, then one
+                // bootstrap GET PER SAVE (a tri setup session = ~6 composite
+                // refetches). Now debounced: one refetch 1.5s after the last
+                // save in a burst. The modal is optimistic in the meantime.
+                refreshBootstrapDebounced();
               }}
               onPaceUpdate={(newPace) => {
                 // J — LevelRow pushes a preset pace up to App when a level

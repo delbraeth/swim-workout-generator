@@ -5759,7 +5759,7 @@ export async function dbListGroupMembers(groupId) {
     "       COALESCE(mp.`preferred_name`, up.`preferred_name`) AS preferred_name, " +
     "       COALESCE(mp.`dob`, up.`dob`)             AS dob, " +
     "       COALESCE(mp.`gender`, up.`gender`) AS gender, " +
-    "       st.`extra` AS settings_extra " +   // 🔱 to surface each member's triathlete flag
+    "       JSON_EXTRACT(st.`extra`, '$.triathlete') AS tri_flag " +   // 🔱 one boolean, NOT the whole extra blob — this query runs in hot paths (group detail, fanout, RSVP checks) over remote TLS
     "FROM `group_members` gm " +
     "LEFT JOIN `coach_managed_swimmers` m ON m.`id` = gm.`member_managed_id` " +
     "LEFT JOIN `users` u                  ON u.`sub` = gm.`member_swimmer_sub` " +
@@ -5783,15 +5783,10 @@ export async function dbListGroupMembers(groupId) {
     is_minor:            isMinor(r.dob),
     is_coppa_protected:  isCoppaProtected(r.dob),
     gender:              r.gender,
-    // 🔱 Mixed-squad: surface the member's own triathlete identity (read-only) so the
-    // coach can see who gets the tri variant. Managed members (no sub/settings) → false.
-    is_triathlete:       (() => {
-      if (!r.settings_extra) return false;
-      try {
-        const ex = typeof r.settings_extra === "string" ? JSON.parse(r.settings_extra) : r.settings_extra;
-        return ex && ex.triathlete === true;
-      } catch (_) { return false; }
-    })(),
+    // 🔱 Mixed-squad: the member's own triathlete identity (read-only) so the coach
+    // can see who gets the tri variant. Managed members (no sub/settings) → false.
+    // JSON_EXTRACT returns JSON-literal true as driver-dependent true/"true"/1.
+    is_triathlete:       r.tri_flag === true || r.tri_flag === "true" || r.tri_flag === 1,
   }));
 }
 

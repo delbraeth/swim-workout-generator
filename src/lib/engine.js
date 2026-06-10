@@ -161,10 +161,12 @@ export const PHASES = {
     };
 
 // 🔱 Race-date periodization. Days-until-A-race → training PHASE: build the base far out,
-// add intensity approaching, taper into race week. Boundaries (days out): taper ≤14,
-// peak 15–35, build 36–84, base >84. Returns a PHASES id, or null for no/invalid/past
-// date. Pure (today passed in) so it's deterministic + unit-testable.
-export const RACE_PHASE_DAYS = { taper: 14, peak: 35, build: 84 };  // upper bound (inclusive) per phase
+// add intensity approaching, taper into race week. Boundaries MIRROR lib/season.js
+// suggestedPhaseFromWeeksOut (base ≥12wk · build 8–11 · peak 4–7 · taper 0–3) — the
+// same date must never get two different phase labels from the meet-anchor banner vs
+// the personal race calendar. Change BOTH together. Returns a PHASES id, or null for
+// no/invalid/past date. Pure (today passed in) so it's deterministic + unit-testable.
+export const RACE_PHASE_DAYS = { taper: 27, peak: 55, build: 83 };  // upper bound (inclusive) per phase, days
 export function phaseForRaceDate(raceDateISO, todayISO) {
       if (!raceDateISO || !todayISO) return null;
       const race  = Date.parse(`${raceDateISO}T00:00:00`);
