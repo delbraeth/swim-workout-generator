@@ -529,6 +529,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
               return (
                 <div style={{ display: "flex", borderBottom: "1px solid var(--color-border)" }}>
                   {tabBtn("account",      "Account")}
+                  {tabBtn("tri",          "🔱 Tri")}
                   {tabBtn("curation",     "Curation")}
                   {tabBtn("subscription", "Subscription")}
                 </div>
@@ -747,8 +748,8 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                 </div>
                 )}
 
-                {tab === "account" && (
-                <div style={{ padding: "18px 20px", borderTop: "1px solid var(--color-card)" }}>
+                {tab === "tri" && (
+                <div style={{ padding: "18px 20px" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
                     🔱 Triathlete
                   </div>
