@@ -3827,7 +3827,7 @@ export async function dbListTeamDefaultsForUser(userSub) {
   if (!userSub) return [];
   const rows = await pool.query(
     "SELECT DISTINCT t.`id`, t.`name`, " +
-    "       t.`default_pace_base`, t.`default_disfavor_mode`, t.`default_equipment_modes` " +
+    "       t.`default_pace_base`, t.`default_disfavor_mode`, t.`default_equipment_modes`, t.`default_pace_profile` " +
     "  FROM `group_members` gm " +
     "  JOIN `groups` g ON g.`id` = gm.`group_id` AND g.`archived` = 0 " +
     "  JOIN `teams`  t ON t.`id` = g.`team_id` " +
@@ -3837,12 +3837,17 @@ export async function dbListTeamDefaultsForUser(userSub) {
     [userSub]
   );
   return rows
-    .filter(r => r.default_pace_base != null || r.default_disfavor_mode != null || r.default_equipment_modes != null)
+    .filter(r => r.default_pace_base != null || r.default_disfavor_mode != null || r.default_equipment_modes != null || r.default_pace_profile != null)
     .map(r => {
       let equipment = null;
       if (r.default_equipment_modes != null) {
         try { equipment = typeof r.default_equipment_modes === "string" ? JSON.parse(r.default_equipment_modes) : r.default_equipment_modes; }
         catch (_) { equipment = null; }
+      }
+      let paceProfile = null;   // mig 067 — feeds resolveStrokeFactors' team tier client-side
+      if (r.default_pace_profile != null) {
+        try { paceProfile = typeof r.default_pace_profile === "string" ? JSON.parse(r.default_pace_profile) : r.default_pace_profile; }
+        catch (_) { paceProfile = null; }
       }
       return {
         team_id:                  r.id,
@@ -3850,6 +3855,7 @@ export async function dbListTeamDefaultsForUser(userSub) {
         default_pace_base:        r.default_pace_base,
         default_disfavor_mode:    r.default_disfavor_mode,
         default_equipment_modes:  equipment,
+        default_pace_profile:     paceProfile,
       };
     });
 }
@@ -5095,13 +5101,18 @@ export async function dbSdifImport({ coachSub, teamId = null, rows = [], commit 
       if (outcome === "slower_skip") timesSkipped++; else timesToWrite++;
       times.push({ event: t.event, course: t.course, eventLabel: t.eventLabel, timeText: t.timeText, timeSecs: t.timeSecs, outcome, existingSecs: cur ?? null });
     }
-    preview.push({ name: sw.name, first: sw.first, last: sw.last, uss: sw.uss, dob: sw.dob, sex: sw.sex, status: m ? "matched" : "new", managed_id: m ? m.id : null, times });
+    // A NEW swimmer without a birthdate can't be created (dob is required for the
+    // COPPA/minor machinery) — surface it at PREVIEW time as its own status instead
+    // of letting commit throw dob_required per row after a clean-looking preview.
+    const status = m ? "matched" : (sw.dob ? "new" : "skipped_no_dob");
+    preview.push({ name: sw.name, first: sw.first, last: sw.last, uss: sw.uss, dob: sw.dob, sex: sw.sex, status, managed_id: m ? m.id : null, times });
   }
 
   const totals = {
     swimmers: preview.length,
     newSwimmers: preview.filter(p => p.status === "new").length,
     matched: preview.filter(p => p.status === "matched").length,
+    skippedNoDob: preview.filter(p => p.status === "skipped_no_dob").length,
     timesToWrite, timesSkipped, eventsSkipped: eventsSkipped.length,
   };
 
@@ -5112,6 +5123,10 @@ export async function dbSdifImport({ coachSub, teamId = null, rows = [], commit 
   const errors = [];
   for (const p of preview) {
     let managedId = p.managed_id;
+    if (p.status === "skipped_no_dob") {
+      errors.push({ name: p.name, error: "no birthdate in SDIF file — add this swimmer manually, then re-import for times" });
+      continue;
+    }
     if (p.status === "new") {
       try {
         const cr = await dbCreateManagedSwimmer({ ownerSub: coachSub, team_id: teamId, first_name: p.first || null, last_name: p.last || null, dob: p.dob, gender: p.sex || null, usa_swimming_id: p.uss || null });

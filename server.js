@@ -1010,13 +1010,14 @@ app.post("/api/generate", requireAuth, writeLimiter, async (req, res) => {
     const usrpt     = !!b.usrpt;
     const raceGoals = racePace ? await dbResolveRaceGoals({ userSub: req.userSub, course: poolMode }) : {};
     const youthMode = !!b.youthMode;   // Eval #5 — Learn-to-Swim youth bank (native/iOS path)
+    const triathlete = b.triathlete === true;   // 🔱 tri mains + open-water content (native/iOS path)
 
     const workout = engineGenerate({
       typeId, maxYards, poolMode, equipment, sectionBias, includedSections,
       recoveryMode, phase, userMin, sectionSources, lanesPaceSecs,
       racePace, raceEvent, raceKind, usrpt, raceGoals,
       ...curation,
-      youthMode,
+      youthMode, triathlete,
     });
 
     // Engine failure sentinel (e.g. required equipment can't be satisfied).
@@ -1071,6 +1072,7 @@ app.post("/api/regenerate-section", requireAuth, writeLimiter, async (req, res) 
       maxYards, equipment, poolMode, userMin, recoveryMode, phase,
       sectionSource, disfavorMode, lanesPaceSecs,
       ...curation,
+      triathlete: b.triathlete === true,   // 🔱 re-roll main from the tri pool (native/iOS path)
     });
 
     // regenerateSection returns { workout, error }.
@@ -1601,11 +1603,18 @@ app.get("/api/workouts", requireAuth, async (req, res) => {
   }
 });
 
-// Allowed enum values for workout entries — kept here (not imported) because
-// server.js is the validation boundary for /api/log-workout.
+// Allowed enum values for workout entries. Static floor below; the check also
+// accepts any id in the engine's live WORKOUT_TYPES (single source of truth) so
+// new engine types can't silently break /api/log-workout again — this set had
+// drifted twice ("lesson", then "open_water" → 400 on save).
 const VALID_WORKOUT_TYPES = new Set([
   "im", "distance", "sprint", "endurance", "technique", "mixed", "back", "breast", "fly",
+  "lesson", "open_water",
 ]);
+function isValidWorkoutType(t) {
+  if (VALID_WORKOUT_TYPES.has(t)) return true;
+  try { return engineWorkoutTypes().some(wt => wt.id === t); } catch (_) { return false; }
+}
 const VALID_POOL_MODES   = new Set(["25y", "25m", "50m"]);
 const REQUIRED_SECTIONS  = ["warmup", "drill", "main", "cooldown"];
 
@@ -1622,7 +1631,7 @@ function validateWorkoutEntry(entry) {
   // legacy set) but strict on length so nothing can overflow the column.
   if (entry.id.length > 32)                            return "entry.id too long (max 32 chars)";
   if (!/^[A-Za-z0-9_-]+$/.test(entry.id))              return "entry.id has invalid characters";
-  if (!VALID_WORKOUT_TYPES.has(entry.type))            return `entry.type must be one of: ${[...VALID_WORKOUT_TYPES].join(", ")}`;
+  if (!isValidWorkoutType(entry.type))                 return `entry.type must be one of: ${[...VALID_WORKOUT_TYPES].join(", ")}`;
   if (!Number.isFinite(entry.totalYards) || entry.totalYards <= 0)
                                                        return "entry.totalYards must be a positive number";
   if (!VALID_POOL_MODES.has(entry.poolMode))           return `entry.poolMode must be one of: ${[...VALID_POOL_MODES].join(", ")}`;

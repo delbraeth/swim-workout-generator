@@ -178,6 +178,14 @@ export function phaseForRaceDate(raceDateISO, todayISO) {
       return "base";
     }
 
+// Today's date as ISO yyyy-mm-dd in the user's LOCAL timezone. The race-date helpers
+// parse dates at local midnight, so "today" must be local too — toISOString() is UTC
+// and flips a day early every evening for users west of UTC (dropping a race on
+// race-day evening). Single source for all race/periodization "today" math.
+export function localTodayYmd(d = new Date()) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+
 // Whole days from today → race (negative = past), or null if either date is invalid.
 export function daysUntilRace(raceDateISO, todayISO) {
       if (!raceDateISO || !todayISO) return null;
@@ -341,15 +349,19 @@ const _TRI_ZONE_LABEL = { easy: "easy aerobic", aerobic: "aerobic", threshold: "
 export function triVariantOfSet(set, sectionKey = "main") {
       if (!set) return set;
       const desc = set.desc || "";
-      // Swap ONLY when a non-free stroke is clearly named. Freestyle sets, "choice", and
-      // unspecified/free drills are left as-is (tri does them as written) — avoids
-      // mis-swapping a freestyle drill into "free in place of stroke".
-      const stroke = /\bback/i.test(desc) ? "backstroke"
-                   : /\bbreast/i.test(desc) ? "breaststroke"
-                   : /\bfly\b|butterfly/i.test(desc) ? "butterfly"
-                   : /\bIM\b|medley/i.test(desc) ? "IM"
-                   : null;
-      if (!stroke) return set;
+      // Classify via the SHARED stroke classifier (setStrokeKey: __engineMeta.stroke
+      // for engine sets, else strokeKeyOf's IM-first desc parse) so the tri-swap and
+      // the pace-factor path can never disagree about a set's stroke. Conservative
+      // guards: an explicit "freestyle" mention (e.g. "Freestyle — ... back-to-back")
+      // or a dolphin-kick cue ("on back" body position, not backstroke) means leave
+      // the set as written — a missed swap is harmless; a wrong swap is nonsense.
+      if (/freestyle/i.test(desc) || /dolphin/i.test(desc)) return set;
+      // A desc naming 3+ strokes is an all-strokes/IM-style set even without an "IM"
+      // token ("2 each: fly, back, breast, free") — label it IM, not the first match.
+      const _nStrokes = [/butterfly|\bfly\b/i, /\bback/i, /breast/i, /\bfree\b/i].filter(re => re.test(desc)).length;
+      const stroke = _nStrokes >= 3 ? "IM"
+        : { back: "backstroke", breast: "breaststroke", fly: "butterfly", im: "IM" }[setStrokeKey(set)];
+      if (!stroke) return set;   // free / unrecognized — tri does it as written
       // Preserve the set's MODALITY — a stroke kick stays a (free) kick, a stroke drill
       // stays a (free) drill; only a stroke SWIM becomes a freestyle swim at the same zone.
       const isKick  = /\bkick/i.test(desc);
@@ -7829,8 +7841,11 @@ export function regenerateSection({
         // 🔱 Triathlete — re-roll the main from tri content (the ×2/×3 expansion below
         // gives the fixed tri sets the size range to hit the section target).
         if (triathlete && typeId !== "open_water") {   // 🌊 OW type keeps its own pool (basePool already OW-tagged)
+          // CONCAT (not replace) — mirrors generateWorkout: tri sets are preferred via the
+          // post-budget filter below, but the regular pool stays available so a short
+          // workout's regen can't hard-fail when no tri set fits the section budget.
           const _triMains = getBankOptions("main", "tri", poolMode, ugcOverlay, _lessonOpts);
-          if (_triMains.length) basePool = _triMains;
+          if (_triMains.length) basePool = _triMains.concat(basePool);
         }
         // C: in recovery mode, only consider easy/aerobic mains, no repeat variants.
         if (recoveryMode) {
@@ -7901,6 +7916,17 @@ export function regenerateSection({
             ? "No option for this section fits the remaining yardage and your equipment selection."
             : "No option for this section fits the remaining yardage budget." };
         }
+      }
+
+      // 🔱 Triathlete main regen — prefer tri-tagged candidates among those that FIT
+      // (mirrors generateWorkout's budget-aware tri filter). Only narrow when the tri
+      // pool still contains a NOVEL option — the novelty gate below would otherwise
+      // fail a regen the full pool could satisfy (e.g. the one fitting tri set is the
+      // very set being re-rolled). Fall back to the full valid pool in that case.
+      if (triathlete && sectionKey === "main" && typeId !== "open_water") {
+        const _curFp = sectionFingerprint(current);
+        const _triValid = validAll.filter(o => o.types && o.types.includes("tri"));
+        if (_triValid.some(o => sectionFingerprint(o) !== _curFp)) validAll = _triValid;
       }
 
       // Prefer type-matched warmups on regen (same logic as generateWorkout)

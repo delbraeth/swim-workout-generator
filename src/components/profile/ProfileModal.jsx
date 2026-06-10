@@ -4,7 +4,7 @@ import { csrfHeaders } from "../../lib/api.js";
 import { GOAL_METRICS, LEVEL_PRESETS } from "../../lib/constants.js";
 import { AddressManager } from "../people/AddressManager.jsx";
 import { ClaimManagedSection } from "../people/ClaimManagedSection.jsx";
-import { COOLDOWN_OPTIONS, DRILL_OPTIONS, MAIN_OPTIONS, WARMUP_OPTIONS, PHASES, phaseForRaceDate, daysUntilRace, nextRaceByPriority } from "../../lib/engine.js";
+import { COOLDOWN_OPTIONS, DRILL_OPTIONS, MAIN_OPTIONS, WARMUP_OPTIONS, PHASES, phaseForRaceDate, daysUntilRace, nextRaceByPriority, localTodayYmd } from "../../lib/engine.js";
 import { BenchmarksSection } from "./BenchmarksSection.jsx";
 import { EditableProfileField } from "./EditableProfileField.jsx";
 import { GoalRow } from "./GoalRow.jsx";
@@ -434,7 +434,9 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
       const saveRaceCal = async (cal) => {
         setRaceCal(cal); setRaceBusy(true);   // optimistic
         try {
-          const res = await fetch("/api/settings/extra", { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ race_calendar: cal }) });
+          // race_date: null retires the legacy single-date key on every calendar save —
+          // otherwise _seedCal resurrects a "ghost" A-race after the user deletes all rows.
+          const res = await fetch("/api/settings/extra", { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ race_calendar: cal, race_date: null }) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           if (onProfileChange) onProfileChange();
         } catch (_) {} finally { setRaceBusy(false); }
@@ -808,7 +810,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                           </button>
                         </div>
                         {(() => {
-                          const today = new Date().toISOString().slice(0, 10);
+                          const today = localTodayYmd();   // local tz — race dates parse at local midnight
                           const nextA = nextRaceByPriority(raceCal, today, "A");
                           if (!nextA) return null;
                           const d = daysUntilRace(nextA.date, today);

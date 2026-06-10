@@ -102,7 +102,7 @@
       generateEngineForSection, generateWorkout, getBankOptions, getOverlayRowsForTuple, inferBlockZone,
       inferSetZone, pick, regenerateSection, scaleInterval, LESSON_MIN, LESSON_MAX,
       parseIntervalSecs, paceRestFloorSecs, factorFor, setStrokeKey, resolveStrokeFactors,
-      cssZonePaceSecs, phaseForRaceDate, triVariantOfWorkout, nextRaceByPriority,
+      cssZonePaceSecs, phaseForRaceDate, triVariantOfWorkout, nextRaceByPriority, localTodayYmd,
     } from "./lib/engine.js";
     import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
 import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
@@ -2404,11 +2404,10 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         if (s.sliderMin) setSliderMin(s.sliderMin);
         if (s.sliderMax) { setSliderMax(s.sliderMax); setMaxYards(v => Math.min(v, s.sliderMax)); }
         if (s.paceInput) { setPaceInput(s.paceInput); setPaceIsSet(true); }
-        // #3 pace profile — effective stroke factors for the rest floor.
-        // settings.extra.pace_profile = { preset, factors }; dbGetSettings spreads
-        // `extra` so it arrives as s.pace_profile. Folds team default + own override
-        // (roster-push writes it like pace_base). Falls back to code defaults.
-        strokeFactorsRef.current = resolveStrokeFactors(s.pace_profile || null, null);
+        // #3 pace profile — setPaceProfile feeds the strokeFactors effect (single
+        // writer, defined next to strokeFactorsRef) which folds team default + own
+        // override. Don't write the ref here: a direct write with team=null was how
+        // the team-default tier ended up dead.
         setPaceProfile(s.pace_profile || null);
         setAllowGuardianRsvp(s.allow_guardian_rsvp === true);   // D1 consent
         setTriathlete(s.triathlete === true);                   // multi-sport identifier
@@ -2842,6 +2841,21 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // current value without re-memoizing. Defaults to STROKE_PACE_FACTOR.
       const strokeFactorsRef = React.useRef(resolveStrokeFactors(null, null));
 
+      // Single writer for the effective stroke factors: own profile (highest) folded
+      // over the team default (mig 067 — first team with a profile when in several),
+      // recomputed whenever either source changes. Replaces the old applySettings
+      // direct write, which passed team=null and left the team tier unreachable.
+      React.useEffect(() => {
+        const teamProfile = (teamDefaults || []).map(t => t.default_pace_profile).find(Boolean) || null;
+        strokeFactorsRef.current = resolveStrokeFactors(paceProfile || null, teamProfile);
+      }, [paceProfile, teamDefaults]);
+
+      // 🔱 The triathlete's SAVED CSS (settings.extra.css_secs) is the zone anchor when
+      // valid — not paceInput, which defaults to 2:00 and may never have been touched.
+      // Ref (mirrors strokeFactorsRef) so the [] -dep rescale callback reads it live.
+      const cssSecsRef = React.useRef(null);
+      React.useEffect(() => { cssSecsRef.current = (typeof cssSecs === "number" && cssSecs >= 30 && cssSecs <= 300) ? cssSecs : null; }, [cssSecs]);
+
       // Scale a set's interval to the swimmer's pace, THEN clamp it UP to a
       // makeable floor (#2): never less than userSecs × dist/100 × strokeFactor +
       // minRest. The floor uses the swimmer's EFFECTIVE stroke factors, so a
@@ -2849,10 +2863,12 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const rescaleSetForPace = useCallback((s, ratio, userSecs, triMode = false, sectionKey = "main") => {
         // 🔱 Triathlete CSS-relative zones: instead of one uniform ratio, target each
         // set's CSS-relative zone (easy CSS+9, aerobic +4, threshold ≈CSS, over −4).
-        // cssZonePaceSecs trusts an explicit set.zone, else infers (continuous reps only).
+        // Anchor = the saved CSS when set, else the pace input. cssZonePaceSecs trusts
+        // an explicit set.zone, else infers (continuous reps only).
         let effRatio = ratio, effSecs = userSecs;
         if (triMode) {
-          effSecs  = cssZonePaceSecs(userSecs, s, sectionKey);
+          const anchor = cssSecsRef.current ?? userSecs;
+          effSecs  = cssZonePaceSecs(anchor, s, sectionKey);
           effRatio = effSecs / PACE_BASELINE_SECS;
         }
         const scaled = scaleInterval(s.interval, effRatio);
@@ -3129,9 +3145,13 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // The effective race is the soonest FUTURE A-race in the race calendar (so the plan rolls
       // to the next A as one passes), falling back to the legacy single race_date. A manually-
       // picked phase still wins; the race date only fills in when no manual phase is chosen.
-      const _todayISO = new Date().toISOString().slice(0, 10);
-      const _nextARace = nextRaceByPriority(raceCalendar, _todayISO, "A");
-      const _effectiveRaceDate = (_nextARace && _nextARace.date) || raceDate;
+      // Gated on the triathlete flag — the only UI exposing the calendar lives on the Tri tab,
+      // so a non-tri user must never have generation silently phase-biased by an invisible date.
+      // localTodayYmd (not toISOString) — race dates parse at LOCAL midnight; UTC-today would
+      // flip phase boundaries a day early every evening and drop a race on race-day evening.
+      const _todayISO = localTodayYmd();
+      const _nextARace = triathlete ? nextRaceByPriority(raceCalendar, _todayISO, "A") : null;
+      const _effectiveRaceDate = triathlete ? ((_nextARace && _nextARace.date) || raceDate) : null;
       const raceDerivedPhase = phaseForRaceDate(_effectiveRaceDate, _todayISO);
       const effectivePhase =
         (applySuggestedPhase && generateForTarget?.suggested_phase)
@@ -3354,7 +3374,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
           const userSecs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-          if (userSecs && userSecs >= 30 && userSecs <= 300 && (userSecs !== PACE_BASELINE_SECS || triathlete)) {
+          if (userSecs && userSecs >= 30 && userSecs <= 300 && (userSecs !== PACE_BASELINE_SECS || (triathlete && cssSecsRef.current != null))) {   // 🔱 baseline rescale only with a real CSS anchor
             const ratio = userSecs / PACE_BASELINE_SECS;   // 🔱 triathlete: run even at base pace so CSS-zone offsets apply
             const newBlocks = newWorkout.blocks.map(b => ({
               ...b,
@@ -3512,7 +3532,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         const parts = paceInput.trim().split(":");
         if (parts.length === 2) {
           const userSecs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-          if (userSecs && userSecs >= 30 && userSecs <= 300 && (userSecs !== PACE_BASELINE_SECS || triathlete)) {
+          if (userSecs && userSecs >= 30 && userSecs <= 300 && (userSecs !== PACE_BASELINE_SECS || (triathlete && cssSecsRef.current != null))) {   // 🔱 baseline rescale only with a real CSS anchor
             const ratio = userSecs / PACE_BASELINE_SECS;   // 🔱 triathlete: run even at base pace so CSS-zone offsets apply
             const newBlocks = regenWorkout.blocks.map((b, bi) => {
               const origBlock = workout.blocks[bi];

@@ -86,6 +86,7 @@ export function SdifImportModal({ teamId, onClose, onImported }) {
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--color-text-muted)", marginBottom: 10, padding: "8px 10px", background: "var(--color-bg)", borderRadius: 6 }}>
               <span><strong style={{ color: "var(--color-positive)" }}>{t.newSwimmers}</strong> new swimmers</span>
               <span><strong style={{ color: "var(--color-text)" }}>{t.matched}</strong> matched</span>
+              {t.skippedNoDob > 0 && <span style={{ color: "var(--color-warn)" }}><strong>{t.skippedNoDob}</strong> skipped — no birthdate in file (add manually, then re-import)</span>}
               <span><strong style={{ color: "var(--color-primary)" }}>{t.timesToWrite}</strong> times to write</span>
               {t.timesSkipped > 0 && <span><strong>{t.timesSkipped}</strong> kept (existing faster)</span>}
               {t.eventsSkipped > 0 && <span><strong>{t.eventsSkipped}</strong> untracked-event rows</span>}
@@ -95,7 +96,10 @@ export function SdifImportModal({ teamId, onClose, onImported }) {
                 <div key={i} style={{ borderBottom: "1px solid var(--color-border)", paddingBottom: 6 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                     <span style={{ color: "var(--color-text)", fontWeight: 700, fontSize: 13 }}>{s.name}</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: s.status === "new" ? "rgba(34,197,94,0.18)" : "var(--color-border)", color: s.status === "new" ? "var(--color-positive)" : "var(--color-text-muted)" }}>{s.status === "new" ? "NEW" : "MATCHED"}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 3,
+                      background: s.status === "new" ? "rgba(34,197,94,0.18)" : s.status === "skipped_no_dob" ? "rgba(245,158,11,0.18)" : "var(--color-border)",
+                      color: s.status === "new" ? "var(--color-positive)" : s.status === "skipped_no_dob" ? "var(--color-warn)" : "var(--color-text-muted)" }}>
+                      {s.status === "new" ? "NEW" : s.status === "skipped_no_dob" ? "NO BIRTHDATE — SKIPPED" : "MATCHED"}</span>
                     {s.dob && <span style={{ color: "var(--color-text-dim)", fontSize: 11 }}>{s.dob}</span>}
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>

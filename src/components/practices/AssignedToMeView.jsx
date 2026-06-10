@@ -128,13 +128,15 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                 // applied to the assigned workout. Coach-side workout content
                 // doesn't carry sub annotations; the swimmer's view computes
                 // them at render time.
-                const subs = a.workout ? computeSubstitutionsForSwimmer(a.workout, myConstraints) : [];
-                const subCount = subs.length;
                 // 🔱 Mixed-squad: if the viewer is a triathlete, render the tri VARIANT of the
                 // assigned practice — same send-offs/structure as their lane, strokes swapped to
                 // freestyle. Computed at view time from their own flag; pool swimmers see the base.
                 const displayWorkout = (viewerTriathlete && a.workout) ? triVariantOfWorkout(a.workout) : a.workout;
                 const isTriVariant = !!(displayWorkout && displayWorkout._triVariant);
+                // Constraint substitutions run on the DISPLAYED workout (the tri variant when
+                // active) so the guidance can't reference strokes the variant already replaced.
+                const subs = displayWorkout ? computeSubstitutionsForSwimmer(displayWorkout, myConstraints) : [];
+                const subCount = subs.length;
                 return (
                   <div key={a.id} style={{ background: "var(--color-card)", border: `1px solid ${meta.color}`, borderRadius: 10, overflow: "hidden" }}>
                     <button onClick={() => setExpandedId(isExpanded ? null : a.id)}
@@ -186,7 +188,7 @@ import { WorkoutBlock } from "../workout/WorkoutBlock.jsx";
                             </div>
                             <ul style={{ margin: 0, paddingLeft: 18, color: "var(--color-text)", lineHeight: 1.6 }}>
                               {subs.map((s, i) => {
-                                const block = a.workout.blocks?.[s.block_idx];
+                                const block = displayWorkout.blocks?.[s.block_idx];
                                 const sectName = block?.section || "section";
                                 if (s.kind === "stroke_sub") {
                                   return (
