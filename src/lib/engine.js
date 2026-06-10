@@ -1750,12 +1750,12 @@ export const MAIN_OPTIONS = [
           { id: "s_tri_cp4", reps: 1, dist: 200, desc: "Freestyle — at CSS pace, finish strong", interval: "On 4:00", focus: "Close at threshold", zone: "threshold" },
           { id: "s_tri_cp5", reps: 1, dist: 100, desc: "Easy — flush", interval: "No interval — swim easy", focus: "Recover", zone: "easy" },
         ]},
-      { label: "🔱 Broken Race 1500", totalYards: 1400, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Broken Race 1500", totalYards: 1800, types: ["tri"], strokes: [], sets: [
           { id: "s_tri_br1", reps: 1, dist: 100, desc: "Freestyle — build to race pace", interval: "On 2:00", focus: "Prime", zone: "aerobic" },
           { id: "s_tri_br2", reps: 5, dist: 300, desc: "Freestyle — Olympic-leg race pace, ~15s rest (rehearse the 1500 broken)", interval: "On 6:00", focus: "Race-distance pace with micro-recoveries", zone: "threshold" },
           { id: "s_tri_br3", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Sighting & Drafting Skills", totalYards: 1175, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri"], strokes: [], sets: [
           { id: "s_tri_sd1", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length (eyes up, hips down)", interval: "On 4:15", focus: "Smooth sighting mechanics", zone: "easy" },
           { id: "s_tri_sd2", reps: 6, dist: 100, desc: "Freestyle — odd: sight every 6 strokes / even: bilateral breathe by 3", interval: "On 2:00", focus: "Sighting + both-sides breathing for OW awareness", zone: "aerobic" },
           { id: "s_tri_sd3", reps: 3, dist: 75, desc: "Freestyle — draft: 25 hard (on the feet) / 50 settle", interval: "On 1:40", focus: "Surge to catch a draft, then hold it cheap", zone: "vo2" },
@@ -3475,6 +3475,31 @@ export const DRILL_OPTIONS_50M = [
     ];
 
 export const MAIN_OPTIONS_50M = [
+      // 🔱 Triathlete main sets (types:["tri"]) — metric-native for long-course (50m) pools.
+      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri"], strokes: [], sets: [
+          { id: "s_tri50_pk1", reps: 1, dist: 200, desc: "Freestyle — easy, long and relaxed", interval: "On 4:30", focus: "Loosen before the surge", zone: "easy" },
+          { id: "s_tri50_pk2", reps: 4, dist: 50, desc: "Freestyle — FAST first 25 (race-start sprint) then settle to race pace", interval: "On 1:25", focus: "Rehearse the chaotic fast start, then find rhythm", zone: "anaerobic" },
+          { id: "s_tri50_pk3", reps: 1, dist: 800, desc: "Freestyle — race pace, sighting every 6–8 strokes, no walls", interval: "On 18:00", focus: "Hold pace after the start spike — open-water sustain", zone: "threshold" },
+          { id: "s_tri50_pk4", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
+        ]},
+      { label: "🔱 CSS Pyramid", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+          { id: "s_tri50_cp1", reps: 1, dist: 200, desc: "Freestyle — at CSS pace, smooth", interval: "On 4:30", focus: "Settle into threshold", zone: "threshold" },
+          { id: "s_tri50_cp2", reps: 1, dist: 300, desc: "Freestyle — at CSS pace, hold the split", interval: "On 6:30", focus: "Threshold sustain", zone: "threshold" },
+          { id: "s_tri50_cp3", reps: 1, dist: 400, desc: "Freestyle — at CSS pace, the long one", interval: "On 8:30", focus: "Hold CSS under fatigue", zone: "threshold" },
+          { id: "s_tri50_cp4", reps: 1, dist: 200, desc: "Freestyle — at CSS pace, finish strong", interval: "On 4:30", focus: "Close at threshold", zone: "threshold" },
+          { id: "s_tri50_cp5", reps: 1, dist: 100, desc: "Easy — flush", interval: "No interval — swim easy", focus: "Recover", zone: "easy" },
+        ]},
+      { label: "🔱 Broken Race 1500", totalYards: 1800, types: ["tri"], strokes: [], sets: [
+          { id: "s_tri50_br1", reps: 1, dist: 100, desc: "Freestyle — build to race pace", interval: "On 2:10", focus: "Prime", zone: "aerobic" },
+          { id: "s_tri50_br2", reps: 5, dist: 300, desc: "Freestyle — Olympic-leg race pace, ~15s rest (rehearse the 1500 broken)", interval: "On 6:40", focus: "Race-distance pace with micro-recoveries", zone: "threshold" },
+          { id: "s_tri50_br3", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
+        ]},
+      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri"], strokes: [], sets: [
+          { id: "s_tri50_sd1", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length (eyes up, hips down)", interval: "On 4:45", focus: "Smooth sighting mechanics", zone: "easy" },
+          { id: "s_tri50_sd2", reps: 6, dist: 100, desc: "Freestyle — odd: sight every 6 strokes / even: bilateral breathe by 3", interval: "On 2:10", focus: "Sighting + both-sides breathing for OW awareness", zone: "aerobic" },
+          { id: "s_tri50_sd3", reps: 3, dist: 75, desc: "Freestyle — draft: 25 hard (on the feet) / 50 settle", interval: "On 1:50", focus: "Surge to catch a draft, then hold it cheap", zone: "vo2" },
+          { id: "s_tri50_sd4", reps: 1, dist: 100, desc: "Easy — close", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
+        ]},
       { label: "Distance Threshold", totalYards: 1200, types: ["distance"], strokes: [], sets: [
           { id: "s_khqbh5", reps: 3, dist: 400, desc: "Freestyle — threshold pace (RPE 7-8/10)", interval: "On 9:00", focus: "Hold pace across long-course 400s" },
         ]},
@@ -5008,6 +5033,33 @@ export const MAIN_OPTIONS_SCM = [
           { id: "s_3sgt4s", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:05", focus: "Open up" },
           { id: "s_89oe2d", reps: 1, dist: 1000, desc: "Freestyle — sighting every 6-8 strokes (open water simulation)", interval: "On 23:05", focus: "Practice open-water mechanics with sighting" },
           { id: "s_9xlk3q", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down" },
+        ]},
+      // ── Triathlete main sets (types:["tri"]) — METRIC-NATIVE copies of the yards tri
+      // pack (clean 50/100/300m distances vs auto-converted 90/175/275m). For metric
+      // pools the "tri" bank chain finds these first; 25y still uses the yards copies. ──
+      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri"], strokes: [], sets: [
+          { id: "s_trim_pk1", reps: 1, dist: 200, desc: "Freestyle — easy, long and relaxed", interval: "On 4:15", focus: "Loosen before the surge", zone: "easy" },
+          { id: "s_trim_pk2", reps: 4, dist: 50, desc: "Freestyle — FAST first 25 (race-start sprint) then settle to race pace", interval: "On 1:20", focus: "Rehearse the chaotic fast start, then find rhythm", zone: "anaerobic" },
+          { id: "s_trim_pk3", reps: 1, dist: 800, desc: "Freestyle — race pace, sighting every 6–8 strokes, no walls", interval: "On 17:00", focus: "Hold pace after the start spike — open-water sustain", zone: "threshold" },
+          { id: "s_trim_pk4", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
+        ]},
+      { label: "🔱 CSS Pyramid", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+          { id: "s_trim_cp1", reps: 1, dist: 200, desc: "Freestyle — at CSS pace, smooth", interval: "On 4:15", focus: "Settle into threshold", zone: "threshold" },
+          { id: "s_trim_cp2", reps: 1, dist: 300, desc: "Freestyle — at CSS pace, hold the split", interval: "On 6:05", focus: "Threshold sustain", zone: "threshold" },
+          { id: "s_trim_cp3", reps: 1, dist: 400, desc: "Freestyle — at CSS pace, the long one", interval: "On 8:00", focus: "Hold CSS under fatigue", zone: "threshold" },
+          { id: "s_trim_cp4", reps: 1, dist: 200, desc: "Freestyle — at CSS pace, finish strong", interval: "On 4:15", focus: "Close at threshold", zone: "threshold" },
+          { id: "s_trim_cp5", reps: 1, dist: 100, desc: "Easy — flush", interval: "No interval — swim easy", focus: "Recover", zone: "easy" },
+        ]},
+      { label: "🔱 Broken Race 1500", totalYards: 1800, types: ["tri"], strokes: [], sets: [
+          { id: "s_trim_br1", reps: 1, dist: 100, desc: "Freestyle — build to race pace", interval: "On 2:05", focus: "Prime", zone: "aerobic" },
+          { id: "s_trim_br2", reps: 5, dist: 300, desc: "Freestyle — Olympic-leg race pace, ~15s rest (rehearse the 1500 broken)", interval: "On 6:20", focus: "Race-distance pace with micro-recoveries", zone: "threshold" },
+          { id: "s_trim_br3", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
+        ]},
+      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri"], strokes: [], sets: [
+          { id: "s_trim_sd1", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length (eyes up, hips down)", interval: "On 4:30", focus: "Smooth sighting mechanics", zone: "easy" },
+          { id: "s_trim_sd2", reps: 6, dist: 100, desc: "Freestyle — odd: sight every 6 strokes / even: bilateral breathe by 3", interval: "On 2:05", focus: "Sighting + both-sides breathing for OW awareness", zone: "aerobic" },
+          { id: "s_trim_sd3", reps: 3, dist: 75, desc: "Freestyle — draft: 25 hard (on the feet) / 50 settle", interval: "On 1:45", focus: "Surge to catch a draft, then hold it cheap", zone: "vo2" },
+          { id: "s_trim_sd4", reps: 1, dist: 100, desc: "Easy — close", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
       { label: "Aerobic Step-Up", totalYards: 1100, types: ["endurance"], strokes: [], sets: [
           { id: "s_d674dy", reps: 1, dist: 100, desc: "Freestyle — RPE 5/10", interval: "On 2:20", focus: "Easy" },
