@@ -126,6 +126,41 @@ export const DRYLAND_OPTIONS = [
         { name: "Flutter kicks", sets: 3, reps: "30s", rest: "30s" },
         { name: "Superman holds", sets: 3, reps: "20s hold", rest: "30s" },
       ]},
+      { id: "dl_ankle", name: "Ankle & Kick Mobility", placement: "pre", exercises: [
+        { name: "Kneeling ankle sit", sets: 2, reps: "45s hold", rest: "15s" },
+        { name: "Ankle circles (each way)", sets: 1, reps: "10 each way", rest: null },
+        { name: "Toe + heel walks", sets: 2, reps: "15m each", rest: null },
+        { name: "Ankle rocks", sets: 1, reps: "10 each", rest: null },
+        { name: "Seated dorsiflexion lifts", sets: 2, reps: "12", rest: "15s" },
+      ]},
+      { id: "dl_balance", name: "Stability & Balance", placement: "pre", exercises: [
+        { name: "Single-leg balance (eyes closed)", sets: 2, reps: "30s each leg", rest: "15s" },
+        { name: "Single-leg RDL reach", sets: 2, reps: "8 each leg", rest: "20s" },
+        { name: "Bird dog", sets: 2, reps: "8 each side", rest: "20s" },
+        { name: "Side plank (each side)", sets: 2, reps: "30s hold", rest: "20s" },
+        { name: "Single-leg glute bridge", sets: 2, reps: "8 each leg", rest: "20s" },
+      ]},
+      { id: "dl_starts", name: "Starts & Turns (legs)", placement: "pre", exercises: [
+        { name: "Streamline jumps", sets: 3, reps: "6", rest: "45s" },
+        { name: "Tuck jumps", sets: 3, reps: "6", rest: "45s" },
+        { name: "Lateral bounds", sets: 3, reps: "6 each side", rest: "45s" },
+        { name: "Wall sit", sets: 2, reps: "40s hold", rest: "30s" },
+        { name: "Broad jumps", sets: 2, reps: "5", rest: "60s" },
+      ]},
+      { id: "dl_posture", name: "Posture Reset", placement: "pre", exercises: [
+        { name: "Wall angels", sets: 2, reps: "10", rest: "20s" },
+        { name: "Chin tucks", sets: 2, reps: "10", rest: null },
+        { name: "Thoracic extensions (roller or chair)", sets: 2, reps: "8", rest: "20s" },
+        { name: "Cat-cow", sets: 1, reps: "10", rest: null },
+        { name: "Pec / doorway stretch", sets: 1, reps: "30s hold", rest: null },
+      ]},
+      { id: "dl_hips", name: "Hip Strength & Rotation", placement: "post", exercises: [
+        { name: "Clamshells", sets: 2, reps: "15 each side", rest: "20s" },
+        { name: "Fire hydrants", sets: 2, reps: "12 each side", rest: "20s" },
+        { name: "Glute bridge march", sets: 2, reps: "10 each leg", rest: "30s" },
+        { name: "Hip 90/90 switches", sets: 1, reps: "8 each", rest: null },
+        { name: "Side-lying leg raises", sets: 2, reps: "12 each side", rest: "20s" },
+      ]},
     ];
 
 export const DRYLAND_EXPLAINERS = {
@@ -178,6 +213,23 @@ export const DRYLAND_EXPLAINERS = {
       "Plank shoulder taps": "In a plank, tap each hand to the opposite shoulder without letting the hips rock; anti-rotation core stability.",
       "Flutter kicks": "Lie on your back, low back pressed down, and make small fast scissoring kicks; mirrors and strengthens the freestyle kick.",
       "Superman holds": "Lie face-down and lift the arms, chest, and legs off the floor and hold; strengthens the lower back and posterior chain.",
+      "Kneeling ankle sit": "Kneel and sit back on your heels with the tops of the feet flat on the floor; stretches the ankles into the pointed-toe position a good kick needs.",
+      "Ankle circles (each way)": "Seated or standing on one leg, draw slow circles with the foot in both directions; loosens the ankle for a supple, whippy kick.",
+      "Toe + heel walks": "Walk on tiptoes, then on your heels; wakes up the calves and shins and builds ankle control at both ends of its range.",
+      "Seated dorsiflexion lifts": "Seated with heels planted, lift the toes and forefoot as high as you can and lower slowly; strengthens the shin muscles that balance a big kick.",
+      "Single-leg balance (eyes closed)": "Stand on one leg, find your balance, then close your eyes and hold; sharpens the body awareness behind streamlines, starts, and turns.",
+      "Single-leg RDL reach": "Standing on one leg, hinge at the hip and reach toward the floor while the back leg lifts behind you, then stand tall; balance plus hamstring and glute strength.",
+      "Single-leg glute bridge": "Lie on your back, one foot planted and the other leg extended; drive the hips up through the planted heel. Builds one-sided glute power for kicks and push-offs.",
+      "Tuck jumps": "Jump straight up and pull both knees toward the chest, landing softly; explosive leg power for starts.",
+      "Lateral bounds": "Bound sideways from one leg to the other, sticking each landing; builds the lateral leg power and control used driving off the blocks and walls.",
+      "Wall sit": "Slide your back down a wall until the thighs are parallel and hold; isometric leg strength that mirrors the loaded position of a start or turn push-off.",
+      "Wall angels": "Stand with back, head, and arms against a wall and slide the arms up and down like a snow angel without losing contact; opens the chest and trains overhead posture.",
+      "Chin tucks": "Draw the chin straight back (making a 'double chin') without tilting the head, hold a beat, release; resets head position for a neutral, low-drag bodyline.",
+      "Thoracic extensions (roller or chair)": "With a foam roller (or chair back) across the upper back, hands behind head, arch the upper spine over it; restores the upper-back extension a long streamline needs.",
+      "Clamshells": "Lie on your side with knees bent and stacked; keeping the feet together, open the top knee like a clamshell. Strengthens the hip rotators that stabilize the kick.",
+      "Fire hydrants": "On all fours, lift one bent knee out to the side without rotating the torso; hip strength and control through rotation.",
+      "Glute bridge march": "Hold the top of a glute bridge and march, lifting one foot at a time without letting the hips drop; anti-rotation hip and core stability.",
+      "Side-lying leg raises": "Lie on your side and lift the top leg up and slightly back, slow and controlled; strengthens the outer hip for a stable, even kick.",
     };
 
 export const REST_OPTIONS = [
