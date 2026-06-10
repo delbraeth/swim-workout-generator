@@ -339,18 +339,26 @@ const _TRI_ZONE_LABEL = { easy: "easy aerobic", aerobic: "aerobic", threshold: "
 export function triVariantOfSet(set, sectionKey = "main") {
       if (!set) return set;
       const desc = set.desc || "";
-      const isStroke = /\bback|\bbreast|\bfly\b|butterfly|\bIM\b|medley/i.test(desc);
-      const isFree   = /free/i.test(desc) && !isStroke;
-      if (isFree || (!isStroke && !/drill/i.test(desc))) return set;  // already free / no stroke to swap
+      // Swap ONLY when a non-free stroke is clearly named. Freestyle sets, "choice", and
+      // unspecified/free drills are left as-is (tri does them as written) — avoids
+      // mis-swapping a freestyle drill into "free in place of stroke".
       const stroke = /\bback/i.test(desc) ? "backstroke"
                    : /\bbreast/i.test(desc) ? "breaststroke"
                    : /\bfly\b|butterfly/i.test(desc) ? "butterfly"
                    : /\bIM\b|medley/i.test(desc) ? "IM"
-                   : "stroke";
+                   : null;
+      if (!stroke) return set;
+      // Preserve the set's MODALITY — a stroke kick stays a (free) kick, a stroke drill
+      // stays a (free) drill; only a stroke SWIM becomes a freestyle swim at the same zone.
+      const isKick  = /\bkick/i.test(desc);
+      const isDrill = /\bdrill/i.test(desc);
       const zone = (set.zone && _TRI_ZONE_LABEL[set.zone]) ? set.zone : inferSetZone(set, sectionKey);
       const label = _TRI_ZONE_LABEL[zone] || "aerobic";
+      const lead = isDrill ? "Freestyle drill / technique"
+                 : isKick ? "Freestyle / flutter kick"
+                 : `Freestyle — ${label}`;
       // Skeleton untouched — only desc/zone change. Same interval keeps the lane in sync.
-      return { ...set, desc: `Freestyle — ${label} (tri: swim free in place of ${stroke}, same send-off)`, zone, _triSwapped: true };
+      return { ...set, desc: `${lead} (tri: free in place of ${stroke}, same send-off)`, zone, _triSwapped: true };
 }
 
 // Block-level wrapper. Returns a NEW block with the tri variant applied to its sets, or
