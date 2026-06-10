@@ -185,6 +185,25 @@ export function daysUntilRace(raceDateISO, todayISO) {
       return Math.round((race - today) / 86400000);
     }
 
+// 🔱 Race calendar — an array of { name, date (ISO yyyy-mm-dd), priority: "A"|"B"|"C" }.
+// Returns the SOONEST FUTURE race of the given priority (default "A"), or null. Periodization
+// targets the next A-race, so as one race passes the plan automatically rolls to the next.
+// Pure (today passed in) → deterministic + unit-testable.
+export const RACE_PRIORITIES = ["A", "B", "C"];
+export function nextRaceByPriority(calendar, todayISO, priority = "A") {
+      if (!Array.isArray(calendar) || !todayISO) return null;
+      const today = Date.parse(`${todayISO}T00:00:00`);
+      if (Number.isNaN(today)) return null;
+      let best = null, bestT = Infinity;
+      for (const r of calendar) {
+        if (!r || r.priority !== priority || !r.date) continue;
+        const t = Date.parse(`${r.date}T00:00:00`);
+        if (Number.isNaN(t) || t < today) continue;      // skip past / invalid
+        if (t < bestT) { bestT = t; best = r; }
+      }
+      return best;
+    }
+
 export function inferSetZone(set, sectionKey) {
       if (!set) return "aerobic";
       const text = `${set.desc || ""} ${set.focus || ""}`.toLowerCase();

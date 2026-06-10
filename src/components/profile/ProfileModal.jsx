@@ -4,7 +4,7 @@ import { csrfHeaders } from "../../lib/api.js";
 import { GOAL_METRICS, LEVEL_PRESETS } from "../../lib/constants.js";
 import { AddressManager } from "../people/AddressManager.jsx";
 import { ClaimManagedSection } from "../people/ClaimManagedSection.jsx";
-import { COOLDOWN_OPTIONS, DRILL_OPTIONS, MAIN_OPTIONS, WARMUP_OPTIONS, PHASES, phaseForRaceDate, daysUntilRace } from "../../lib/engine.js";
+import { COOLDOWN_OPTIONS, DRILL_OPTIONS, MAIN_OPTIONS, WARMUP_OPTIONS, PHASES, phaseForRaceDate, daysUntilRace, nextRaceByPriority } from "../../lib/engine.js";
 import { BenchmarksSection } from "./BenchmarksSection.jsx";
 import { EditableProfileField } from "./EditableProfileField.jsx";
 import { GoalRow } from "./GoalRow.jsx";
@@ -24,7 +24,7 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
 
     const { useState, useCallback, useEffect } = React;
 
-    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile, appAllowGuardianRsvp, appTriathlete, appCssSecs, appRaceDate }) {
+    export function ProfileModal({ onClose, onProfileChange, onPaceUpdate, authMode, onSendFeedback, onStartTour, appEffectiveMe, appViewAsRole, appSetViewAsRole, appViewAsParent, appSetViewAsParent, appMe, appGoals, appFavorites, appDisfavorites, appFavoriteSets, appDisfavorSets, appMyConstraints, appSessions, appTeamDefaults, appTeamCalendars, appBillingStatus, appLevel, appNextEvent, appPhase, appDisfavorMode, appEngineDisfavorites, appEngineFavorites, appFeatureFlags, appPaceProfile, appAllowGuardianRsvp, appTriathlete, appCssSecs, appRaceDate, appRaceCalendar }) {
       const dialogRef = useDialogA11y(onClose);
       // Phase 6 visibility (union across the user's teams; undefined ⇒ all-on).
       const ff = appFeatureFlags || {};
@@ -420,18 +420,34 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
         } catch (_) {} finally { setCssBusy(false); }
       };
 
-      // 🔱 A-race date → training-phase periodization. settings.extra.race_date (ISO yyyy-mm-dd).
-      const [raceDate, setRaceDate] = React.useState(typeof appRaceDate === "string" ? appRaceDate : "");
+      // 🔱 Race calendar → training-phase periodization (settings.extra.race_calendar, A/B/C).
+      // Seeds from the legacy single race_date when the calendar is empty (migrates on first save).
+      const _seedCal = () => (Array.isArray(appRaceCalendar) && appRaceCalendar.length)
+        ? appRaceCalendar
+        : (typeof appRaceDate === "string" && appRaceDate ? [{ name: "A race", date: appRaceDate, priority: "A" }] : []);
+      const [raceCal, setRaceCal]   = React.useState(_seedCal);
       const [raceBusy, setRaceBusy] = React.useState(false);
-      React.useEffect(() => { setRaceDate(typeof appRaceDate === "string" ? appRaceDate : ""); }, [appRaceDate]);
-      const saveRaceDate = async (val) => {
-        setRaceDate(val); setRaceBusy(true);   // optimistic
+      const [newRaceName, setNewRaceName] = React.useState("");
+      const [newRaceDate, setNewRaceDate] = React.useState("");
+      const [newRacePrio, setNewRacePrio] = React.useState("A");
+      React.useEffect(() => { setRaceCal(_seedCal()); }, [appRaceCalendar, appRaceDate]);
+      const saveRaceCal = async (cal) => {
+        setRaceCal(cal); setRaceBusy(true);   // optimistic
         try {
-          const res = await fetch("/api/settings/extra", { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ race_date: val || null }) });
+          const res = await fetch("/api/settings/extra", { method: "POST", headers: { "Content-Type": "application/json", ...csrfHeaders() }, body: JSON.stringify({ race_calendar: cal }) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           if (onProfileChange) onProfileChange();
         } catch (_) {} finally { setRaceBusy(false); }
       };
+      const addRace = () => {
+        const name = newRaceName.trim();
+        if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(newRaceDate)) return;
+        const cal = [...raceCal, { name: name.slice(0, 80), date: newRaceDate, priority: newRacePrio }]
+          .sort((a, b) => a.date.localeCompare(b.date));
+        setNewRaceName(""); setNewRaceDate(""); setNewRacePrio("A");
+        saveRaceCal(cal);
+      };
+      const removeRace = (idx) => saveRaceCal(raceCal.filter((_, i) => i !== idx));
       const toggleGuardianRsvp = async () => {
         const next = !guardianRsvp;
         setGuardianRsvp(next); setGuardianRsvpBusy(true);   // optimistic
@@ -772,33 +788,53 @@ import { ProfileGenderRow } from "./ProfileGenderRow.jsx";
                         )}
                       </div>
                       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-card)" }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)", marginBottom: 4 }}>A-race date</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)", marginBottom: 4 }}>Race calendar</div>
                         <div style={{ fontSize: 11, color: "var(--color-text-dim)", marginBottom: 8, lineHeight: 1.5 }}>
-                          Set your goal race and the generator periodizes automatically — Base early, then Build, Peak, and Taper into race week.
+                          Tag your races <strong>A / B / C</strong> by priority. The generator periodizes toward your next <strong>A-race</strong> (Base → Build → Peak → Taper) and rolls to the next A as each passes.
                         </div>
-                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                          <input type="date" value={raceDate} disabled={raceBusy} onChange={e => saveRaceDate(e.target.value)}
+                        {(() => {
+                          const today = new Date().toISOString().slice(0, 10);
+                          const nextA = nextRaceByPriority(raceCal, today, "A");
+                          if (!nextA) return null;
+                          const d = daysUntilRace(nextA.date, today);
+                          const P = PHASES[phaseForRaceDate(nextA.date, today)];
+                          return (
+                            <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>
+                              Periodizing toward <strong style={{ color: "var(--color-text)" }}>{nextA.name}</strong>
+                              {d != null && <> · {d === 0 ? "race day" : `${Math.ceil(d / 7)} wk out`}</>}
+                              {P && <> · <strong style={{ color: P.color }}>{P.emoji} {P.label}</strong></>}
+                            </div>
+                          );
+                        })()}
+                        {raceCal.length > 0 && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+                            {raceCal.map((r, i) => {
+                              const PRIO = { A: "var(--color-destructive-text)", B: "var(--color-warn)", C: "var(--color-text-muted)" };
+                              return (
+                                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                                  <span style={{ width: 18, textAlign: "center", fontWeight: 800, color: PRIO[r.priority] || "var(--color-text-muted)" }}>{r.priority}</span>
+                                  <span style={{ flex: 1, color: "var(--color-text)" }}>{r.name}</span>
+                                  <span style={{ fontFamily: "monospace", color: "var(--color-text-muted)" }}>{r.date}</span>
+                                  <button onClick={() => removeRace(i)} disabled={raceBusy} title="Remove"
+                                    style={{ border: "none", background: "transparent", color: "var(--color-text-dim)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>✕</button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                          <input value={newRaceName} onChange={e => setNewRaceName(e.target.value)} placeholder="Race name" maxLength={80}
+                            style={{ flex: "1 1 120px", minWidth: 100, padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
+                          <input type="date" value={newRaceDate} onChange={e => setNewRaceDate(e.target.value)}
                             style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }} />
-                          {raceDate && (() => {
-                            const today = new Date().toISOString().slice(0, 10);
-                            const d = daysUntilRace(raceDate, today);
-                            if (d == null) return null;
-                            if (d < 0) return <span style={{ fontSize: 12, color: "var(--color-text-dim)" }}>race has passed — clear or update</span>;
-                            const ph = phaseForRaceDate(raceDate, today);
-                            const P = ph && PHASES[ph];
-                            return (
-                              <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                                {d === 0 ? "race day" : `${Math.ceil(d / 7)} wk out`}
-                                {P && <> · <strong style={{ color: P.color }}>{P.emoji} {P.label}</strong></>}
-                              </span>
-                            );
-                          })()}
-                          {raceDate && (
-                            <button onClick={() => saveRaceDate("")} disabled={raceBusy}
-                              style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid var(--color-border-strong)", background: "transparent", color: "var(--color-text-dim)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                              Clear
-                            </button>
-                          )}
+                          <select value={newRacePrio} onChange={e => setNewRacePrio(e.target.value)}
+                            style={{ padding: "5px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--color-border-strong)", background: "var(--color-bg)", color: "var(--color-text)" }}>
+                            <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+                          </select>
+                          <button onClick={addRace} disabled={raceBusy || !newRaceName.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(newRaceDate)}
+                            style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: (raceBusy || !newRaceName.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(newRaceDate)) ? "var(--color-border)" : "var(--color-primary)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                            + Add
+                          </button>
                         </div>
                       </div>
                     </div>

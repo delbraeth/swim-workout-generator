@@ -1943,6 +1943,31 @@ app.post("/api/settings/extra", checkOrigin, requireAuth, requireCsrf, writeLimi
         return res.status(400).json({ error: "race_date must be YYYY-MM-DD" });
       }
     }
+    // 🔱 Validate race_calendar if present (A/B/C race list). Array (≤30) of
+    // { name (1-80), date YYYY-MM-DD, priority A|B|C }; null/[] clears.
+    if ("race_calendar" in patch && patch.race_calendar !== null) {
+      const cal = patch.race_calendar;
+      if (!Array.isArray(cal)) {
+        return res.status(400).json({ error: "race_calendar must be an array" });
+      }
+      if (cal.length > 30) {
+        return res.status(400).json({ error: "race_calendar max length is 30" });
+      }
+      for (const [i, r] of cal.entries()) {
+        if (!r || typeof r !== "object" || Array.isArray(r)) {
+          return res.status(400).json({ error: `race_calendar[${i}] must be an object` });
+        }
+        if (typeof r.name !== "string" || r.name.length < 1 || r.name.length > 80) {
+          return res.status(400).json({ error: `race_calendar[${i}].name must be a 1-80 char string` });
+        }
+        if (typeof r.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) {
+          return res.status(400).json({ error: `race_calendar[${i}].date must be YYYY-MM-DD` });
+        }
+        if (!["A", "B", "C"].includes(r.priority)) {
+          return res.status(400).json({ error: `race_calendar[${i}].priority must be A, B, or C` });
+        }
+      }
+    }
     // Validate engine_section_sources if present (S3 — template engine
     // per-section toggle state). Object with optional keys warmup/drill/
     // main/cooldown, each value ∈ "bank" | "engine" | "mix". Anything

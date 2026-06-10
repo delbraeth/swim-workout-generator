@@ -102,7 +102,7 @@
       generateEngineForSection, generateWorkout, getBankOptions, getOverlayRowsForTuple, inferBlockZone,
       inferSetZone, pick, regenerateSection, scaleInterval, LESSON_MIN, LESSON_MAX,
       parseIntervalSecs, paceRestFloorSecs, factorFor, setStrokeKey, resolveStrokeFactors,
-      cssZonePaceSecs, phaseForRaceDate, triVariantOfWorkout,
+      cssZonePaceSecs, phaseForRaceDate, triVariantOfWorkout, nextRaceByPriority,
     } from "./lib/engine.js";
     import { API_BASE, csrf, csrfHeaders } from "./lib/api.js";
 import { DRYLAND_OPTIONS, LEVEL_PRESETS, ZONE_ORDER } from "./lib/constants.js";
@@ -1498,7 +1498,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       const [allowGuardianRsvp, setAllowGuardianRsvp] = useState(false);  // D1 — swimmer opt-in for guardian RSVP
       const [triathlete, setTriathlete]   = useState(false);   // multi-sport — self-identifier; gates tri race events
       const [cssSecs, setCssSecs]         = useState(null);    // Critical Swim Speed (sec/100) for triathletes
-      const [raceDate, setRaceDate]       = useState("");      // 🔱 A-race date (ISO yyyy-mm-dd) → auto-periodization
+      const [raceDate, setRaceDate]       = useState("");      // 🔱 legacy single A-race date (ISO) → periodization fallback
+      const [raceCalendar, setRaceCalendar] = useState([]);    // 🔱 A/B/C race calendar; next A-race drives periodization
       // Triathlete mode hides stroke-specialty + IM types — if one was selected, clear it.
       useEffect(() => {
         if (triathlete && ["back", "breast", "fly", "im", "lesson"].includes(selectedType)) setSelectedType(null);
@@ -2410,7 +2411,8 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setAllowGuardianRsvp(s.allow_guardian_rsvp === true);   // D1 consent
         setTriathlete(s.triathlete === true);                   // multi-sport identifier
         setCssSecs(typeof s.css_secs === "number" ? s.css_secs : null);   // CSS pace anchor
-        setRaceDate(typeof s.race_date === "string" ? s.race_date : "");   // 🔱 A-race periodization date
+        setRaceDate(typeof s.race_date === "string" ? s.race_date : "");   // 🔱 legacy A-race periodization date
+        setRaceCalendar(Array.isArray(s.race_calendar) ? s.race_calendar : []);   // 🔱 A/B/C race calendar
         if (s.initials)  setInitialsDraft(normalizeInitials(s.initials));
         // Q: next-event countdown lives in settings.extra; dbGetSettings
         // spreads extra into the top-level response.
@@ -3121,10 +3123,14 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
       // (eval 2026-06-06): if the coach opts in, the active anchor's
       // suggested_phase takes precedence for THIS generation only — turning the
       // taper from advisory (badge) into something that actually drives Generate.
-      // 🔱 Race-date periodization: when an A-race date is set, derive the phase from
-      // weeks-out (Base→Build→Peak→Taper). A manually-picked phase still wins; the race
-      // date only fills in when no manual phase is chosen.
-      const raceDerivedPhase = phaseForRaceDate(raceDate, new Date().toISOString().slice(0, 10));
+      // 🔱 Race-date periodization: derive the phase from weeks-out (Base→Build→Peak→Taper).
+      // The effective race is the soonest FUTURE A-race in the race calendar (so the plan rolls
+      // to the next A as one passes), falling back to the legacy single race_date. A manually-
+      // picked phase still wins; the race date only fills in when no manual phase is chosen.
+      const _todayISO = new Date().toISOString().slice(0, 10);
+      const _nextARace = nextRaceByPriority(raceCalendar, _todayISO, "A");
+      const _effectiveRaceDate = (_nextARace && _nextARace.date) || raceDate;
+      const raceDerivedPhase = phaseForRaceDate(_effectiveRaceDate, _todayISO);
       const effectivePhase =
         (applySuggestedPhase && generateForTarget?.suggested_phase)
         || generateForTarget?.current_phase
@@ -3427,7 +3433,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
         setOpenSwapKey(null);
         setEditIntervalKey(null);
         setEditDescKey(null);
-      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, lessonYouth, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap, triathlete, raceDate]);
+      }, [selectedType, maxYards, equipment, favorites, poolMode, paceInput, sliderMin, pinnedSections, workout, recentMainLabels, sessionRecentLabels, recoveryMode, phase, favoriteSets, effectivePhase, generateForTarget, sectionBias, sectionSources, recentEngineTemplates, disfavorites, engineDisfavorites, disfavorSets, effectiveDisfavorLabels, effectiveDisfavorSetIds, effectiveEngineDisfavorites, disfavorMode, engineFavorites, effectiveFavoriteLabels, effectiveFavoriteSetIds, effectiveEngineFavorites, multiLaneMode, manualLanesPace, includedSections, lessonMySetsOnly, lessonLevelChoice, lessonYouth, racePace, raceEvent, raceUsrpt, raceGoals, raceKindMap, triathlete, raceDate, raceCalendar]);
 
       // Regenerate one section in place, holding the other three fixed.
       // On failure (no valid alternative), keep the workout untouched and
@@ -5872,6 +5878,7 @@ import { equipmentForSet, getEquivalents, makeDrylandBlock, makeEntryId, minYard
               appTriathlete={triathlete}
               appCssSecs={cssSecs}
               appRaceDate={raceDate}
+              appRaceCalendar={raceCalendar}
               appTeamCalendars={teamCalendars}
               appBillingStatus={billingStatus}
               appFeatureFlags={featureFlags}
