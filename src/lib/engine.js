@@ -18,6 +18,8 @@ export const WORKOUT_TYPES = [
         selBg: "#0d9488", border: "#5eead4", badge: "#ccfbf1", badgeText: "#115e59" },
       { id: "mixed",     label: "Mixed",            emoji: "🔀", description: "Sprints, distance, and drills combined",
         selBg: "#ea580c", border: "#fdba74", badge: "#ffedd5", badgeText: "#9a3412" },
+      { id: "open_water", label: "Open Water",      emoji: "🌊", description: "Open-water skills in the pool — sighting, no-wall swims, drafting, pack starts (triathlete)",
+        selBg: "#0369a1", border: "#7dd3fc", badge: "#e0f2fe", badgeText: "#075985" },
       { id: "back",      label: "Specialty Back",   emoji: "🔙", description: "Backstroke focus across drills and main set",
         selBg: "#0891b2", border: "#67e8f9", badge: "#cffafe", badgeText: "#155e75" },
       { id: "breast",    label: "Specialty Breast", emoji: "🐸", description: "Breaststroke focus across drills and main set",
@@ -1815,7 +1817,7 @@ export const MAIN_OPTIONS = [
       // ── Triathlete main sets (types:["tri"]) — merged into the pool ONLY when the
       // triathlete flag is on (engine `triathlete` option). Freestyle, open-water +
       // CSS + race-distance. Authored in yards; getBankOptions converts to metric. ──
-      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tri_pk1", reps: 1, dist: 200, desc: "Freestyle — easy, long and relaxed", interval: "On 4:00", focus: "Loosen before the surge", zone: "easy" },
           { id: "s_tri_pk2", reps: 4, dist: 50, desc: "Freestyle — FAST first 25 (race-start sprint) then settle to race pace", interval: "On 1:15", focus: "Rehearse the chaotic fast start, then find rhythm", zone: "anaerobic" },
           { id: "s_tri_pk3", reps: 1, dist: 800, desc: "Freestyle — race pace, sighting every 6–8 strokes, no walls", interval: "On 16:00", focus: "Hold pace after the start spike — open-water sustain", zone: "threshold" },
@@ -1833,7 +1835,7 @@ export const MAIN_OPTIONS = [
           { id: "s_tri_br2", reps: 5, dist: 300, desc: "Freestyle — Olympic-leg race pace, ~15s rest (rehearse the 1500 broken)", interval: "On 6:00", focus: "Race-distance pace with micro-recoveries", zone: "threshold" },
           { id: "s_tri_br3", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tri_sd1", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length (eyes up, hips down)", interval: "On 4:15", focus: "Smooth sighting mechanics", zone: "easy" },
           { id: "s_tri_sd2", reps: 6, dist: 100, desc: "Freestyle — odd: sight every 6 strokes / even: bilateral breathe by 3", interval: "On 2:00", focus: "Sighting + both-sides breathing for OW awareness", zone: "aerobic" },
           { id: "s_tri_sd3", reps: 3, dist: 75, desc: "Freestyle — draft: 25 hard (on the feet) / 50 settle", interval: "On 1:40", focus: "Surge to catch a draft, then hold it cheap", zone: "vo2" },
@@ -1856,7 +1858,7 @@ export const MAIN_OPTIONS = [
           { id: "s_tn03y1", reps: 3, dist: 400, desc: "Freestyle — at CSS / threshold, even splits", interval: "On 7:30", focus: "Sustained threshold", zone: "threshold" },
           { id: "s_tn03y2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Open-Water 1500 Straight", totalYards: 1500, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water 1500 Straight", totalYards: 1500, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn04y0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:00", focus: "Open up", zone: "aerobic" },
           { id: "s_tn04y1", reps: 1, dist: 1300, desc: "Freestyle — continuous, sight every 6–8 strokes (open-water sim), no walls", interval: "On 26:00", focus: "Open-water mechanics + pacing", zone: "aerobic" },
           { id: "s_tn04y2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
@@ -1899,22 +1901,22 @@ export const MAIN_OPTIONS = [
           { id: "s_tn11y1", reps: 6, dist: 150, desc: "Freestyle — at CSS / threshold pace", interval: "On 2:50", focus: "Threshold repeatability", zone: "threshold" },
           { id: "s_tn11y2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Surge & Settle 100s", totalYards: 1000, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Surge & Settle 100s", totalYards: 1000, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn12y0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:00", focus: "Open up", zone: "aerobic" },
           { id: "s_tn12y1", reps: 8, dist: 100, desc: "Freestyle — 25 surge (race-start effort) / 75 settle to race pace", interval: "On 1:55", focus: "Surge control + recovery", zone: "aerobic" },
           { id: "s_tn12y2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Bilateral Breathing Set", totalYards: 900, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Bilateral Breathing Set", totalYards: 900, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn13y0", reps: 1, dist: 200, desc: "Freestyle — easy, smooth and symmetric", interval: "On 4:15", focus: "Loosen up", zone: "easy" },
           { id: "s_tn13y1", reps: 6, dist: 100, desc: "Freestyle — breathe by 3, then 5, then 7 (rotating) for open-water awareness", interval: "On 2:00", focus: "Both-sides breathing", zone: "aerobic" },
           { id: "s_tn13y2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Open-Water Skills 800", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water Skills 800", totalYards: 1200, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn14y0", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length", interval: "On 4:15", focus: "Sighting mechanics", zone: "easy" },
           { id: "s_tn14y1", reps: 1, dist: 800, desc: "Freestyle — continuous, sight every 6 strokes, no walls, surge to pass", interval: "On 16:00", focus: "Open-water race skills", zone: "threshold" },
           { id: "s_tn14y2", reps: 1, dist: 200, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Fartlek 1000", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Fartlek 1000", totalYards: 1200, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn15y0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:00", focus: "Open up", zone: "aerobic" },
           { id: "s_tn15y1", reps: 1, dist: 1000, desc: "Freestyle — fartlek: alternate 50 strong / 50 easy by feel, continuous", interval: "On 20:00", focus: "Pace variation by feel", zone: "aerobic" },
           { id: "s_tn15y2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
@@ -3659,7 +3661,7 @@ export const DRILL_OPTIONS_50M = [
 
 export const MAIN_OPTIONS_50M = [
       // 🔱 Triathlete main sets (types:["tri"]) — metric-native for long-course (50m) pools.
-      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tri50_pk1", reps: 1, dist: 200, desc: "Freestyle — easy, long and relaxed", interval: "On 4:30", focus: "Loosen before the surge", zone: "easy" },
           { id: "s_tri50_pk2", reps: 4, dist: 50, desc: "Freestyle — FAST first 25 (race-start sprint) then settle to race pace", interval: "On 1:25", focus: "Rehearse the chaotic fast start, then find rhythm", zone: "anaerobic" },
           { id: "s_tri50_pk3", reps: 1, dist: 800, desc: "Freestyle — race pace, sighting every 6–8 strokes, no walls", interval: "On 18:00", focus: "Hold pace after the start spike — open-water sustain", zone: "threshold" },
@@ -3677,7 +3679,7 @@ export const MAIN_OPTIONS_50M = [
           { id: "s_tri50_br2", reps: 5, dist: 300, desc: "Freestyle — Olympic-leg race pace, ~15s rest (rehearse the 1500 broken)", interval: "On 6:40", focus: "Race-distance pace with micro-recoveries", zone: "threshold" },
           { id: "s_tri50_br3", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tri50_sd1", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length (eyes up, hips down)", interval: "On 4:45", focus: "Smooth sighting mechanics", zone: "easy" },
           { id: "s_tri50_sd2", reps: 6, dist: 100, desc: "Freestyle — odd: sight every 6 strokes / even: bilateral breathe by 3", interval: "On 2:10", focus: "Sighting + both-sides breathing for OW awareness", zone: "aerobic" },
           { id: "s_tri50_sd3", reps: 3, dist: 75, desc: "Freestyle — draft: 25 hard (on the feet) / 50 settle", interval: "On 1:50", focus: "Surge to catch a draft, then hold it cheap", zone: "vo2" },
@@ -3700,7 +3702,7 @@ export const MAIN_OPTIONS_50M = [
           { id: "s_tn03l1", reps: 3, dist: 400, desc: "Freestyle — at CSS / threshold, even splits", interval: "On 8:25", focus: "Sustained threshold", zone: "threshold" },
           { id: "s_tn03l2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Open-Water 1500 Straight", totalYards: 1500, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water 1500 Straight", totalYards: 1500, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn04l0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:15", focus: "Open up", zone: "aerobic" },
           { id: "s_tn04l1", reps: 1, dist: 1300, desc: "Freestyle — continuous, sight every 6–8 strokes (open-water sim), no walls", interval: "On 29:05", focus: "Open-water mechanics + pacing", zone: "aerobic" },
           { id: "s_tn04l2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
@@ -3743,22 +3745,22 @@ export const MAIN_OPTIONS_50M = [
           { id: "s_tn11l1", reps: 6, dist: 150, desc: "Freestyle — at CSS / threshold pace", interval: "On 3:10", focus: "Threshold repeatability", zone: "threshold" },
           { id: "s_tn11l2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Surge & Settle 100s", totalYards: 1000, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Surge & Settle 100s", totalYards: 1000, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn12l0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:15", focus: "Open up", zone: "aerobic" },
           { id: "s_tn12l1", reps: 8, dist: 100, desc: "Freestyle — 25 surge (race-start effort) / 75 settle to race pace", interval: "On 2:10", focus: "Surge control + recovery", zone: "aerobic" },
           { id: "s_tn12l2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Bilateral Breathing Set", totalYards: 900, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Bilateral Breathing Set", totalYards: 900, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn13l0", reps: 1, dist: 200, desc: "Freestyle — easy, smooth and symmetric", interval: "On 4:45", focus: "Loosen up", zone: "easy" },
           { id: "s_tn13l1", reps: 6, dist: 100, desc: "Freestyle — breathe by 3, then 5, then 7 (rotating) for open-water awareness", interval: "On 2:15", focus: "Both-sides breathing", zone: "aerobic" },
           { id: "s_tn13l2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Open-Water Skills 800", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water Skills 800", totalYards: 1200, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn14l0", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length", interval: "On 4:45", focus: "Sighting mechanics", zone: "easy" },
           { id: "s_tn14l1", reps: 1, dist: 800, desc: "Freestyle — continuous, sight every 6 strokes, no walls, surge to pass", interval: "On 17:55", focus: "Open-water race skills", zone: "threshold" },
           { id: "s_tn14l2", reps: 1, dist: 200, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Fartlek 1000", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Fartlek 1000", totalYards: 1200, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn15l0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:15", focus: "Open up", zone: "aerobic" },
           { id: "s_tn15l1", reps: 1, dist: 1000, desc: "Freestyle — fartlek: alternate 50 strong / 50 easy by feel, continuous", interval: "On 22:25", focus: "Pace variation by feel", zone: "aerobic" },
           { id: "s_tn15l2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
@@ -5325,7 +5327,7 @@ export const MAIN_OPTIONS_SCM = [
       // ── Triathlete main sets (types:["tri"]) — METRIC-NATIVE copies of the yards tri
       // pack (clean 50/100/300m distances vs auto-converted 90/175/275m). For metric
       // pools the "tri" bank chain finds these first; 25y still uses the yards copies. ──
-      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water Pack Start", totalYards: 1300, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_trim_pk1", reps: 1, dist: 200, desc: "Freestyle — easy, long and relaxed", interval: "On 4:15", focus: "Loosen before the surge", zone: "easy" },
           { id: "s_trim_pk2", reps: 4, dist: 50, desc: "Freestyle — FAST first 25 (race-start sprint) then settle to race pace", interval: "On 1:20", focus: "Rehearse the chaotic fast start, then find rhythm", zone: "anaerobic" },
           { id: "s_trim_pk3", reps: 1, dist: 800, desc: "Freestyle — race pace, sighting every 6–8 strokes, no walls", interval: "On 17:00", focus: "Hold pace after the start spike — open-water sustain", zone: "threshold" },
@@ -5343,7 +5345,7 @@ export const MAIN_OPTIONS_SCM = [
           { id: "s_trim_br2", reps: 5, dist: 300, desc: "Freestyle — Olympic-leg race pace, ~15s rest (rehearse the 1500 broken)", interval: "On 6:20", focus: "Race-distance pace with micro-recoveries", zone: "threshold" },
           { id: "s_trim_br3", reps: 1, dist: 200, desc: "Easy choice — cool", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Sighting & Drafting Skills", totalYards: 1125, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_trim_sd1", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length (eyes up, hips down)", interval: "On 4:30", focus: "Smooth sighting mechanics", zone: "easy" },
           { id: "s_trim_sd2", reps: 6, dist: 100, desc: "Freestyle — odd: sight every 6 strokes / even: bilateral breathe by 3", interval: "On 2:05", focus: "Sighting + both-sides breathing for OW awareness", zone: "aerobic" },
           { id: "s_trim_sd3", reps: 3, dist: 75, desc: "Freestyle — draft: 25 hard (on the feet) / 50 settle", interval: "On 1:45", focus: "Surge to catch a draft, then hold it cheap", zone: "vo2" },
@@ -5366,7 +5368,7 @@ export const MAIN_OPTIONS_SCM = [
           { id: "s_tn03m1", reps: 3, dist: 400, desc: "Freestyle — at CSS / threshold, even splits", interval: "On 7:55", focus: "Sustained threshold", zone: "threshold" },
           { id: "s_tn03m2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Open-Water 1500 Straight", totalYards: 1500, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water 1500 Straight", totalYards: 1500, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn04m0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:05", focus: "Open up", zone: "aerobic" },
           { id: "s_tn04m1", reps: 1, dist: 1300, desc: "Freestyle — continuous, sight every 6–8 strokes (open-water sim), no walls", interval: "On 27:20", focus: "Open-water mechanics + pacing", zone: "aerobic" },
           { id: "s_tn04m2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
@@ -5409,22 +5411,22 @@ export const MAIN_OPTIONS_SCM = [
           { id: "s_tn11m1", reps: 6, dist: 150, desc: "Freestyle — at CSS / threshold pace", interval: "On 3:00", focus: "Threshold repeatability", zone: "threshold" },
           { id: "s_tn11m2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Surge & Settle 100s", totalYards: 1000, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Surge & Settle 100s", totalYards: 1000, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn12m0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:05", focus: "Open up", zone: "aerobic" },
           { id: "s_tn12m1", reps: 8, dist: 100, desc: "Freestyle — 25 surge (race-start effort) / 75 settle to race pace", interval: "On 2:00", focus: "Surge control + recovery", zone: "aerobic" },
           { id: "s_tn12m2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Bilateral Breathing Set", totalYards: 900, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Bilateral Breathing Set", totalYards: 900, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn13m0", reps: 1, dist: 200, desc: "Freestyle — easy, smooth and symmetric", interval: "On 4:30", focus: "Loosen up", zone: "easy" },
           { id: "s_tn13m1", reps: 6, dist: 100, desc: "Freestyle — breathe by 3, then 5, then 7 (rotating) for open-water awareness", interval: "On 2:05", focus: "Both-sides breathing", zone: "aerobic" },
           { id: "s_tn13m2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Open-Water Skills 800", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Open-Water Skills 800", totalYards: 1200, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn14m0", reps: 1, dist: 200, desc: "Freestyle — easy, sight 3× each length", interval: "On 4:30", focus: "Sighting mechanics", zone: "easy" },
           { id: "s_tn14m1", reps: 1, dist: 800, desc: "Freestyle — continuous, sight every 6 strokes, no walls, surge to pass", interval: "On 16:50", focus: "Open-water race skills", zone: "threshold" },
           { id: "s_tn14m2", reps: 1, dist: 200, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
         ]},
-      { label: "🔱 Fartlek 1000", totalYards: 1200, types: ["tri"], strokes: [], sets: [
+      { label: "🔱 Fartlek 1000", totalYards: 1200, types: ["tri", "open_water"], strokes: [], sets: [
           { id: "s_tn15m0", reps: 1, dist: 100, desc: "Freestyle — easy warm-up", interval: "On 2:05", focus: "Open up", zone: "aerobic" },
           { id: "s_tn15m1", reps: 1, dist: 1000, desc: "Freestyle — fartlek: alternate 50 strong / 50 easy by feel, continuous", interval: "On 21:00", focus: "Pace variation by feel", zone: "aerobic" },
           { id: "s_tn15m2", reps: 1, dist: 100, desc: "Easy choice — flush", interval: "No interval — swim easy", focus: "Cool down", zone: "easy" },
@@ -7212,10 +7214,12 @@ export function generateWorkout({
       const _drillListRaw    = getBankOptions("drill",    typeId, poolMode, ugcOverlay, _lessonOpts);
       const _kickListRaw     = getBankOptions("kick",     typeId, poolMode, ugcOverlay, _lessonOpts);
       let   _mainListRaw     = getBankOptions("main",     typeId, poolMode, ugcOverlay, _lessonOpts);
-      if (triathlete) {   // 🔱 prefer tri content: tri mains first, regular pool as budget fallback
+      if (triathlete && typeId !== "open_water") {   // 🔱 prefer tri content: tri mains first, regular pool as budget fallback
         const _triMains = getBankOptions("main", "tri", poolMode, ugcOverlay, _lessonOpts);
         if (_triMains.length) _mainListRaw = _triMains.concat(_mainListRaw);
       }
+      // 🌊 Open Water is its own tri-relevant type — `_mainListRaw` is already the OW-tagged
+      // pool, so the general tri-merge above is skipped to keep the main OW-specific.
 
       // Phase 3 PSC slice 2/3 — hard-exclude step 0. Per
       // PER_SWIMMER_CONSTRAINTS_SCOPE.md §3.4: drop options before weight
@@ -7824,7 +7828,7 @@ export function regenerateSection({
         let basePool = getBankOptions("main", typeId, poolMode, ugcOverlay, _lessonOpts);
         // 🔱 Triathlete — re-roll the main from tri content (the ×2/×3 expansion below
         // gives the fixed tri sets the size range to hit the section target).
-        if (triathlete) {
+        if (triathlete && typeId !== "open_water") {   // 🌊 OW type keeps its own pool (basePool already OW-tagged)
           const _triMains = getBankOptions("main", "tri", poolMode, ugcOverlay, _lessonOpts);
           if (_triMains.length) basePool = _triMains;
         }
